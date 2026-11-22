@@ -5,7 +5,7 @@ order: 9
 lastUpdated: 2026-11-03
 ---
 
-Monitor your instance in your existing stack. For individual requests and conversations inside Archestra, use [Logs](/docs/admin/logs).
+Monitor your instance in your existing stack. For individual requests and conversations inside Archestra, use [Logs](/docs/insights/logs).
 
 | Need | Set up |
 | --- | --- |

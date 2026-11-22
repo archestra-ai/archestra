@@ -825,18 +825,20 @@ describe("ConnectPage (no connect request)", () => {
   it.each([
     true,
     false,
-  ])("shows the Statistics link only to log admins (%s)", (allowed) => {
+  ])("shows the Statistics link only to client connection admins (%s)", (allowed) => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
-          data: permissions.log?.includes("admin") ? allowed : false,
+          data: permissions.clientConnection?.includes("admin")
+            ? allowed
+            : false,
         }) as ReturnType<typeof useHasPermissions>,
     );
     mockOrganization({});
     render(<ConnectionPage />);
     const link = screen.queryByRole("link", { name: "Statistics" });
     if (allowed) {
-      expect(link).toHaveAttribute("href", "/connections/logs");
+      expect(link).toHaveAttribute("href", "/adoption");
     } else {
       expect(link).not.toBeInTheDocument();
     }

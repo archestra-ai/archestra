@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /**
- * With `--enable-source-maps` (scripts/start-production.sh), Node parses a
+ * With `--enable-source-maps` (scripts/start-production.mjs), Node parses a
  * bundle chunk's source map the first time a stack trace passes through that
  * chunk. On a fresh process that already serves requests, this blocks the
  * event loop for hundreds of milliseconds. Each server calls this from its

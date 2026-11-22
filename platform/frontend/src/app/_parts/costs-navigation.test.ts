@@ -1,22 +1,22 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { getCostsNavigationUrl } from "./costs-navigation";
+import { getCostControlsNavigationUrl } from "./costs-navigation";
 
-describe("getCostsNavigationUrl", () => {
-  it("opens Limits when that is the only permitted organization view", () => {
+describe("getCostControlsNavigationUrl", () => {
+  it("opens Exports when that is the only permitted view", () => {
     expect(
-      getCostsNavigationUrl({
-        "/llm/costs": false,
-        "/llm/limits": true,
+      getCostControlsNavigationUrl({
+        "/llm/limits": false,
+        "/llm/cost-exports": true,
       }),
-    ).toBe("/llm/limits");
+    ).toBe("/llm/cost-exports");
   });
 
   it.each([
-    { "/llm/costs": true, "/llm/limits": false },
-    { "/llm/costs": true, "/llm/limits": true },
+    { "/llm/limits": true, "/llm/cost-exports": false },
+    { "/llm/limits": true, "/llm/cost-exports": true },
     undefined,
-  ])("opens Costs when it is available or permissions are loading", (permissions) => {
-    expect(getCostsNavigationUrl(permissions)).toBe("/llm/costs");
+  ])("opens Limits when it is available or permissions are loading", (permissions) => {
+    expect(getCostControlsNavigationUrl(permissions)).toBe("/llm/limits");
   });
 });

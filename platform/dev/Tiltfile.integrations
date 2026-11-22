@@ -98,7 +98,7 @@ if os.name != 'nt':
       'backend',
       'frontend',
       'shared',
-      'docker-banner.sh',
+      'docker/scripts',
       'docker/prev-static-assets',
       # The Dockerfile's archestra-cli-release stage reads this file.
       'archestra-cli/release.lock.json',

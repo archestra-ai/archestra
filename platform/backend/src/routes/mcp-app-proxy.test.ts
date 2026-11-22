@@ -27,13 +27,14 @@ import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { AppDataModel, AppModel, UserTokenModel } from "@/models";
+import { AppDataModel, AppModel, UserModel, UserTokenModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   appConnectorAudienceRef,
   buildConnectorResourceUri,
 } from "@/services/apps/app-connector-resource";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { buildAppUiResource } from "./mcp-app-gateway.utils";
@@ -1026,6 +1027,41 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     expect(response.statusCode).toBe(401);
     // No valid token → RFC 9728 challenge so the client can discover the AS.
     expect(response.headers["www-authenticate"]).toContain("resource_metadata");
+  });
+
+  test("rejects a user token of a viewer the identity provider deactivated", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    const { value } = await UserTokenModel.create(
+      user.id,
+      created.organizationId,
+    );
+    app = await buildBearerApp();
+    const listTools = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/mcp/app/${created.id}`,
+        headers: bearer(value),
+        payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+      });
+
+    expect((await listTools()).statusCode).toBe(200);
+
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(user.id);
+    expect((await listTools()).statusCode).toBe(401);
+
+    await UserModel.setSoftDeleted({ userId: user.id, softDeleted: null });
+    softDeletedUsers.invalidate(user.id);
+    expect((await listTools()).statusCode).toBe(200);
   });
 
   test("a user token cannot reach an app its viewer may not see", async ({

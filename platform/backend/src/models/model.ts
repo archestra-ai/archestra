@@ -303,15 +303,14 @@ class ModelModel {
           canonicalNames.has(ollamaAvailabilityName(model.modelId) ?? ""),
       );
     } else {
-      const models = await ModelModel.findByProviderModelIds(
-        [
+      // Runs at least twice per proxied request: a prepared query for the
+      // hidden match only, not every alias's full catalog row.
+      [hidden] = await ModelModel.hiddenByProviderAndModelIds.get().execute({
+        provider: params.provider,
+        modelIds: [
           ...new Set([modelId, ...providerAliases, ...(params.aliases ?? [])]),
-        ].map((id) => ({
-          provider: params.provider,
-          modelId: id,
-        })),
-      );
-      hidden = [...models.values()].find((model) => model.ignored);
+        ],
+      });
     }
     if (hidden) {
       throw new ApiError(
@@ -1969,6 +1968,22 @@ class ModelModel {
   > {
     return { llmModelRowCount: await ModelModel.countAll() };
   }
+
+  private static readonly hiddenByProviderAndModelIds = new PreparedQuery(
+    (database) =>
+      database
+        .select({ modelId: schema.modelsTable.modelId })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, sql.placeholder("provider")),
+            sql`${schema.modelsTable.modelId} = ANY(${sql.placeholder("modelIds")}::text[])`,
+            eq(schema.modelsTable.ignored, true),
+          ),
+        )
+        .limit(1)
+        .prepare("archestra_model_hidden_by_provider_and_ids"),
+  );
 
   private static readonly byProviderAndModel = new PreparedQuery((database) =>
     database

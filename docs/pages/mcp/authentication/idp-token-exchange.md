@@ -48,7 +48,7 @@ Every downstream token names a person and an app, and your identity provider's c
 2. **MCP server's client:** the server's exchange client, when it sets one. See [Give a Server Its Own Exchange Client](#give-a-server-its-own-exchange-client).
 3. **Identity provider's client:** the app in your identity provider's settings, otherwise.
 
-To see which one a call used, open it in the [MCP Gateway logs](/docs/admin/logs) and check **Token issued to**.
+To see which one a call used, open it in the [MCP Gateway logs](/docs/insights/logs) and check **Token issued to**.
 
 ### Give a Server Its Own Exchange Client
 

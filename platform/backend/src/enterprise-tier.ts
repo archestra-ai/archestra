@@ -95,7 +95,7 @@ class EnterpriseTierService {
       // Deferred import avoids a module-load cycle:
       // enterprise-tier → models/user → @/auth → better-auth → enterprise-tier.
       const { default: UserModel } = await import("@/models/user");
-      this.userCount = await UserModel.countAll();
+      this.userCount = await UserModel.countNotSoftDeleted();
     } catch (err) {
       // On first attempt before DB is reachable we err on the side of
       // small-team-active so that fresh deployments don't lose features.

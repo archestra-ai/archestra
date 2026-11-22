@@ -71,7 +71,8 @@ describe("RolePicker", () => {
       data: {
         agent: ["read", "create", "delete"],
         log: ["read"],
-        guardrailsYell: ["read"],
+        guardrailsLog: ["read"],
+        clientConnection: ["read"],
         mcpGateway: ["read", "create", "delete"],
       },
     } as unknown as ReturnType<typeof useAllPermissions>);

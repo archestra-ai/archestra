@@ -101,6 +101,7 @@ export { default as LlmOauthClientModel } from "./llm-oauth-client";
 export { default as LlmProviderApiKeyModel } from "./llm-provider-api-key";
 export { default as LlmProviderApiKeyModelLinkModel } from "./llm-provider-api-key-model";
 export { default as LlmUsageRollupModel } from "./llm-usage-rollup";
+export { default as LogFeedModel } from "./log-feed";
 export { default as ManagedOauthClientModel } from "./managed-oauth-client";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpCatalogSkillModel } from "./mcp-catalog-skill";

@@ -403,7 +403,12 @@ async function drain() {
       timeBudgetMs: 30_000,
       throttleRatio: 0,
     });
-    if (result.recomputed === 0 && result.rolled === 0) return;
+    if (
+      result.recomputed === 0 &&
+      result.rolled === 0 &&
+      result.refreshed === 0
+    )
+      return;
   }
   throw new Error("rollup did not drain");
 }

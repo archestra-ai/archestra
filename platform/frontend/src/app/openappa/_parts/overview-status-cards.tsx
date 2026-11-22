@@ -60,7 +60,7 @@ export function OverviewStatusCards() {
     guardrailsPolicy: ["read"],
   });
   const { data: canReadYells } = useHasPermissions({
-    guardrailsYell: ["read"],
+    guardrailsLog: ["read"],
   });
   if (!canReadSettings && !canReadPolicy && !canReadYells) return null;
   return (
@@ -281,7 +281,7 @@ function YellsCard() {
       action={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" asChild>
-            <Link href="/consults/logs?type=yell&yellStatus=unresolved">
+            <Link href="/logs?type=guardrails&record=yell">
               Review yells <ArrowRight />
             </Link>
           </Button>

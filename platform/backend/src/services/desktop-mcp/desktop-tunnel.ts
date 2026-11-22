@@ -8,6 +8,7 @@ import {
 } from "@/services/archestra-cli/served-program";
 import type { KeyedNotifier } from "@/services/pg-notify-hub";
 import { sharedNotifyHub } from "@/services/shared-notify-hub";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import {
   ApiError,
   type DesktopDevice,
@@ -79,6 +80,12 @@ class DesktopTunnelService {
     }
     if (this.tunnelIdForDevice(device.id) !== params.tunnelId) {
       throw new ApiError(403, "This device key is for a different tunnel.");
+    }
+    if (await softDeletedUsers.isSoftDeleted(device.userId)) {
+      throw new ApiError(
+        403,
+        "The identity provider deactivated this device's user.",
+      );
     }
     return device;
   }

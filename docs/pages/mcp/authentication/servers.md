@@ -43,7 +43,7 @@ Set the tool's account where you [choose its tools](/docs/mcp/gateway#choose-its
 
 - Nobody's account fits? The call fails with a link to install one. Follow it, and try again.
 - A personal install serves only its owner. A team install works only in agents and gateways the team can use.
-- To check which account a call used, see **Identity** in the [MCP Gateway logs](/docs/admin/logs).
+- To check which account a call used, see **Identity** in the [MCP Gateway logs](/docs/insights/logs).
 
 <span id="identity-provider-token-exchange"></span>
 
@@ -55,4 +55,4 @@ Give every person their own account in every server, with no installs: on each c
 
 - Sign-in expired? Your client asks you to sign in again, then the tool call finishes. Claude Code opens the page from a prompt. Cursor is the exception: its agent shows the link in its reply. You can also click **Re-authenticate** on the install.
 - Changed the OAuth scopes? Reconnect to get tokens with the new scopes.
-- Every call records its account. See **Identity** in the [MCP Gateway logs](/docs/admin/logs).
+- Every call records its account. See **Identity** in the [MCP Gateway logs](/docs/insights/logs).

@@ -1,6 +1,6 @@
 # Controlled Archestra / LiteLLM proxy comparison
 
-[Measured 2026-10-26 results and caveats](evidence/2026-10-26/RESULTS.md).
+[Latest results, measured 2026-11-21](evidence/2026-11-21/sensitivity/SENSITIVITY.md). [October 2026 results and caveats](evidence/2026-10-26/RESULTS.md).
 
 
 Run on the existing `ubuntu-24.04-16core` GitHub-hosted runner, using the existing

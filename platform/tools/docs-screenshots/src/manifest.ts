@@ -703,8 +703,30 @@ export const SHOTS: Shot[] = [
     },
   },
   {
+    asset: "automated_screenshots/insights-adoption_usage",
+    fixedTime: true,
+    // The seeded calls fall in the same thirty days as Costs.
+    route: () => {
+      const [start, end] = USAGE_TIMEFRAME.replace("custom:", "").split("_");
+      return `/adoption?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`;
+    },
+    viewport: { width: 1440, height: 900 },
+    prepare: async (page) => {
+      await page.getByRole("region", { name: "Connection summary" }).waitFor();
+      await page.waitForLoadState("networkidle");
+    },
+  },
+  {
+    asset: "automated_screenshots/insights-logs_client-connections",
+    route: () => "/logs?type=connections",
+    viewport: { width: 1440, height: 760 },
+    prepare: async (page) => {
+      await page.getByText("Priya Raman").first().waitFor();
+    },
+  },
+  {
     asset: "automated_screenshots/platform-openappa_yells",
-    route: () => "/consults/logs?type=yell",
+    route: () => "/logs?type=guardrails&record=yell",
     prepare: async (page) => {
       await page
         .getByText("Blocked from opening an issue in acme/sdk")

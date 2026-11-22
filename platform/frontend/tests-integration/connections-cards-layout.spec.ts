@@ -3,13 +3,33 @@ import { test } from "./fixtures";
 
 const now = new Date().toISOString();
 
-test.describe("Agent connections layout", () => {
+test.describe("Adoption layout", () => {
   test.beforeEach(async ({ mswControl }) => {
     await mswControl.registerMany([
       {
         method: "get",
         url: "/api/connected-clients/adoption",
-        body: { since: now, until: now, members: MEMBERS },
+        body: {
+          since: now,
+          until: now,
+          memberCount: MEMBERS.length,
+          members: MEMBERS,
+        },
+      },
+      {
+        method: "get",
+        url: "/api/connected-clients/adoption/members",
+        body: {
+          data: MEMBERS,
+          pagination: {
+            currentPage: 1,
+            limit: 25,
+            total: MEMBERS.length,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false,
+          },
+        },
       },
       {
         method: "get",
@@ -56,7 +76,7 @@ test.describe("Agent connections layout", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto("/connections/logs?view=users");
+    await page.goto("/adoption?view=coverage");
     const table = page.getByRole("table");
     const parent = table
       .getByRole("row")
@@ -99,7 +119,7 @@ test.describe("Agent connections layout", () => {
 });
 
 async function cardBoxes(page: Page) {
-  await page.goto("/connections/logs");
+  await page.goto("/adoption");
   const summary = page.getByRole("region", { name: "Connection summary" });
   const boxes = [];
   for (const title of ["Users", "Active users", "Calls"]) {

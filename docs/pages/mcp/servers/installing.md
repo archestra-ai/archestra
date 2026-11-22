@@ -42,4 +42,4 @@ An agent or gateway can override this for each tool. See [Credential Resolution]
 - No account to use? The tool returns an error with a setup link. Follow it, then try again.
 - Credential rejected, or OAuth scopes changed? Click **Re-authenticate**.
 - **Uninstall** on a card removes only your personal install. Team and organization installs stay until an admin removes them.
-- Which account ran a call? See **Identity** in the [MCP Gateway logs](/docs/admin/logs).
+- Which account ran a call? See **Identity** in the [MCP Gateway logs](/docs/insights/logs).

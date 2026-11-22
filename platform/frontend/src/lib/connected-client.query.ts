@@ -15,6 +15,7 @@ import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 const {
   disconnectConnectedClient,
   getAgentAdoption,
+  getAgentAdoptionMembers,
   getAgentAdoptionUsage,
   getConnectedClientLog,
   getConnectedClients,
@@ -37,6 +38,10 @@ export type AgentAdoptionStatus = AgentAdoptionMember["status"];
 export type AdoptionWindow = { startDate?: string; endDate?: string };
 export type AgentAdoptionUsage =
   archestraApiTypes.GetAgentAdoptionUsageResponses["200"];
+/** A page of the members list: window, filters, sort and page. */
+export type AdoptionMembersQuery = NonNullable<
+  archestraApiTypes.GetAgentAdoptionMembersData["query"]
+>;
 
 const connectedClientKeys = {
   all: ["connected-clients"] as const,
@@ -47,6 +52,8 @@ const connectedClientKeys = {
     [...connectedClientKeys.all, "log", query] as const,
   adoption: (window: AdoptionWindow) =>
     [...connectedClientKeys.all, "adoption", window] as const,
+  members: (query: AdoptionMembersQuery) =>
+    [...connectedClientKeys.all, "adoption", "members", query] as const,
   usage: (window: AdoptionWindow, userId?: string) =>
     [
       ...connectedClientKeys.all,
@@ -140,7 +147,10 @@ export function useConnectionLog(query: ConnectionLogQuery) {
   });
 }
 
-/** Every member with the agents they set up and their agents' last traffic. */
+/**
+ * How many members there are, and the members with agents or traffic: the
+ * agents they set up and their agents' last traffic.
+ */
 export function useAgentAdoption(window: AdoptionWindow) {
   return useQuery({
     queryKey: connectedClientKeys.adoption(window),
@@ -148,6 +158,44 @@ export function useAgentAdoption(window: AdoptionWindow) {
       const response = await getAgentAdoption({ query: window });
       throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? null;
+    },
+  });
+}
+
+/**
+ * One page of every member, as the adoption summary describes them. A new
+ * page, filter or sort keeps the rows on screen until the answer lands.
+ */
+export function useAgentAdoptionMembers(query: AdoptionMembersQuery) {
+  return useQuery({
+    queryKey: connectedClientKeys.members(query),
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const response = await getAgentAdoptionMembers({ query });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data ?? null;
+    },
+  });
+}
+
+/** Every member matching the query, every page of them, for an export. */
+export function useExportAgentAdoptionMembers() {
+  return useMutation({
+    mutationFn: async (
+      query: Omit<AdoptionMembersQuery, "limit" | "offset">,
+    ) => {
+      const members: AgentAdoptionMember[] = [];
+      for (let offset = 0; ; offset += EXPORT_PAGE_SIZE) {
+        const response = await getAgentAdoptionMembers({
+          query: { ...query, limit: EXPORT_PAGE_SIZE, offset },
+        });
+        if (response.error) {
+          handleApiError(response.error);
+          throw toApiError(response.error);
+        }
+        members.push(...response.data.data);
+        if (!response.data.pagination.hasNext) return members;
+      }
     },
   });
 }
@@ -165,3 +213,6 @@ export function useAgentAdoptionUsage(window: AdoptionWindow, userId?: string) {
     },
   });
 }
+
+/** The members list's largest page. */
+const EXPORT_PAGE_SIZE = 1000;

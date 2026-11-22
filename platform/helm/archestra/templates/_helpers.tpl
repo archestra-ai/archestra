@@ -1642,20 +1642,30 @@ volumeMounts:
 {{- end }}
 
 {{/*
-Vault secrets command wrapper for the main container.
-Sources /vault/secrets/env before exec'ing the given entrypoint command.
-Usage: Pass the desired entrypoint as the argument.
+Vault secrets command wrapper for the platform's containers: with-vault-env.mjs
+adds the secrets the vault-secrets init container wrote to /vault/secrets/env
+to the environment, then becomes the given command. Node, not a shell: the
+Kubernetes image has none.
+Usage: pass the command as one space-separated string.
 */}}
 {{- define "archestra-platform.vaultSecretsCommand" -}}
-command: ["/bin/sh", "-c"]
-args:
-  - |
-    if [ -f /vault/secrets/env ]; then
-      set -a
-      . /vault/secrets/env
-      set +a
-    fi
-    exec {{ . }}
+command: ["node", "/app/with-vault-env.mjs"]
+args: {{ splitList " " . | toJson }}
+{{- end }}
+
+{{/*
+The platform container's command under Vault secret injection:
+archestra.initContainers.vaultSecrets.entrypoint, or the Node entrypoint, which
+both images have. /docker-entrypoint.sh, the old default, maps to it too: the
+Kubernetes image has no shell to run that script.
+*/}}
+{{- define "archestra-platform.vaultEntrypoint" -}}
+{{- $entrypoint := .Values.archestra.initContainers.vaultSecrets.entrypoint | default "" | trim -}}
+{{- if or (not $entrypoint) (eq $entrypoint "/docker-entrypoint.sh") -}}
+node /app/entrypoint.mjs
+{{- else -}}
+{{ $entrypoint }}
+{{- end -}}
 {{- end }}
 
 {{/*

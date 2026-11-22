@@ -755,6 +755,13 @@ export const RouteId = {
   GetOrganizationMemberOptions: "getOrganizationMemberOptions",
   GetOrganizationMember: "getOrganizationMember",
   DeletePendingSignupMember: "deletePendingSignupMember",
+  ScimGetServiceProviderConfig: "scimGetServiceProviderConfig",
+  ScimListUsers: "scimListUsers",
+  ScimGetUser: "scimGetUser",
+  ScimCreateUser: "scimCreateUser",
+  ScimReplaceUser: "scimReplaceUser",
+  ScimPatchUser: "scimPatchUser",
+  ScimDeleteUser: "scimDeleteUser",
   CompleteOnboarding: "completeOnboarding",
 
   // Appearance Settings Routes
@@ -1154,6 +1161,10 @@ export const RouteId = {
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
   UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 
+  // Unified Logs
+  GetLogEvents: "getLogEvents",
+  GetLogStats: "getLogStats",
+
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
   GetAuditLog: "getAuditLog",
@@ -1218,6 +1229,7 @@ export const RouteId = {
   GetConnectedClientLog: "getConnectedClientLog",
   GetAgentAdoption: "getAgentAdoption",
   GetAgentAdoptionUsage: "getAgentAdoptionUsage",
+  GetAgentAdoptionMembers: "getAgentAdoptionMembers",
 
   // MCP App Routes
   GetApps: "getApps",

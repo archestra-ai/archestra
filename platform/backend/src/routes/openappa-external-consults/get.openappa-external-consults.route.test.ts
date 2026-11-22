@@ -148,7 +148,7 @@ describe("GET /api/openappa/external-consults", () => {
     ]);
   });
 
-  test("a log:read caller sees only their own consults, in json and jsonl", async ({
+  test("a guardrailsLog:read caller sees only their own consults, in json and jsonl", async ({
     makeUser,
     makeMember,
   }) => {
@@ -200,7 +200,7 @@ describe("GET /api/openappa/external-consults", () => {
     makeCustomRole,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { log: ["read", "admin"] },
+      permission: { guardrailsLog: ["read", "admin"] },
     });
     caller = await makeUser();
     await makeMember(caller.id, organizationId, { role: role.role });
@@ -220,7 +220,7 @@ describe("GET /api/openappa/external-consults", () => {
     makeCustomRole,
   }) => {
     const logReader = await makeCustomRole(organizationId, {
-      permission: { log: ["read"] },
+      permission: { guardrailsLog: ["read"] },
     });
     const bytes = {
       rawResponse: Buffer.from('{"version":1}'),
@@ -289,7 +289,7 @@ describe("GET /api/openappa/external-consults", () => {
     );
   });
 
-  test("a caller without log:read is refused", async ({
+  test("a caller without guardrailsLog:read is refused", async ({
     makeUser,
     makeMember,
   }) => {

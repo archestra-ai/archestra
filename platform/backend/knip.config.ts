@@ -14,6 +14,9 @@ const config: KnipConfig = {
     // pass calls them redundant; the production pass needs them.
     // Container/Helm entrypoint; referenced outside the TypeScript module graph.
     "scripts/migrate-with-lock.mjs!",
+    // Starts the server in the image (package.json `start`, Helm, the
+    // container's start scripts).
+    "scripts/start-production.mjs!",
     // Operator-run concurrent DDL, also shipped in the production image.
     "scripts/create-statistics-index.mjs!",
     // GitHub Actions runs these CLIs to propose stable client version updates.

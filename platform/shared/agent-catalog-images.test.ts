@@ -23,6 +23,18 @@ describe("resolveAgentCatalogId", () => {
     ).toBe("codex");
   });
 
+  test("leaves a standalone archestra-<id>-runtime command on a custom image", () => {
+    for (const command of [
+      "archestra-claude-code-runtime",
+      "archestra-codex-runtime",
+      "archestra-unknown",
+    ]) {
+      expect(
+        resolveAgentCatalogId({ image: "x", command: [command] }),
+      ).toBeNull();
+    }
+  });
+
   test("answers null for a custom runtime and anything that is not a runtime", () => {
     expect(
       resolveAgentCatalogId({

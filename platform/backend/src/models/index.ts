@@ -25,6 +25,7 @@ export { default as AgentPinModel } from "./agent-pin";
 export { default as AgentRunModel } from "./agent-run";
 export { default as AgentRunInputModel } from "./agent-run-input";
 export { default as AgentRunTranscriptModel } from "./agent-run-transcript";
+export { default as AgentRuntimeUserAccountModel } from "./agent-runtime-user-account";
 export { default as AgentSkillModel } from "./agent-skill";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";

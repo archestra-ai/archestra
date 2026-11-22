@@ -1,6 +1,7 @@
 import { azureModelEvidence } from "@archestra/shared/azure-models";
 import { describe, expect, test } from "@/test";
 import type { CreateModel } from "@/types";
+import AgentModel from "./agent";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
 import ModelModel from "./model";
@@ -1108,6 +1109,82 @@ describe("ModelModel", () => {
   });
 
   describe("deleteOrphanedModels", () => {
+    test("clears the models it deletes from the model each agent sets for a connection, and keeps the rest", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const [retired, kept] = await Promise.all(
+        ["retired-plan-model", "kept-plan-model"].map((modelId) =>
+          ModelModel.create({
+            externalId: `openai/${modelId}`,
+            provider: "openai",
+            modelId,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            lastSyncedAt: new Date(),
+          }),
+        ),
+      );
+      const [retiring, staying] = await Promise.all(
+        [retired, kept].map(async (model) => {
+          const key = await makeLlmProviderApiKey(org.id, secret.id, {
+            provider: "openai",
+          });
+          await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+            key.id,
+            [{ id: model.id, modelId: model.modelId }],
+            "openai",
+          );
+          return key;
+        }),
+      );
+      const runtime = {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_chat" as const,
+        backend: "kubernetes" as const,
+        steerMode: "pipe" as const,
+        privileged: false,
+        environment: null,
+        credentials: [],
+        ttlHours: null,
+        idleTimeoutMinutes: null,
+      };
+      const both = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        runtime: {
+          ...runtime,
+          connectionModels: {
+            [retiring.id]: retired.id,
+            [staying.id]: kept.id,
+          },
+        },
+      });
+      const onlyRetired = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        runtime: {
+          ...runtime,
+          connectionModels: { [retiring.id]: retired.id },
+        },
+      });
+
+      await LlmProviderApiKeyModel.delete(retiring.id);
+      expect(await ModelModel.deleteOrphanedModels()).toBe(1);
+
+      expect((await AgentModel.findById(both.id))?.runtime).toMatchObject({
+        connectionModels: { [staying.id]: kept.id },
+      });
+      const cleared = (await AgentModel.findById(onlyRetired.id))?.runtime;
+      expect(cleared).toMatchObject({ image: runtime.image });
+      expect(cleared).not.toHaveProperty("connectionModels");
+    });
+
     test("deletes provider-synced models used by chat after their last API key is deleted", async ({
       makeOrganization,
       makeSecret,

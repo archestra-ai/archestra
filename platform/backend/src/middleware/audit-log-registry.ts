@@ -298,6 +298,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
+  "/api/agents/:id/runtime/account": {
+    resourceType: "agent",
+    action: "agent.updated",
+    onlyWhenChanged: true,
+  },
   "/api/agents/:id/runtime/claude-code/account": {
     resourceType: "agent",
     action: "agent.updated",

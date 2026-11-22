@@ -1186,6 +1186,7 @@ class A2AV2Router {
       await preflightAgentRuntimeModelCompatibility({
         runtime,
         agent: params.agent,
+        agentId: params.agent.id,
         organizationId: params.actor.organizationId,
         userId: params.actor.kind === "user" ? params.actor.id : "system",
       });

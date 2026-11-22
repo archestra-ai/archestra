@@ -15,6 +15,8 @@ describe("resolveAgentRuntime", () => {
     // 503, not by silently running the Agent in the foreground.
     expect(resolveAgentRuntime(agentWithRuntime)).toEqual({
       ...runtime,
+      // A stored runtime that names no lock runs only its own way.
+      accountLock: "own",
       agentId: "agent-1",
       organizationId: "organization-1",
       environmentId: "environment-1",

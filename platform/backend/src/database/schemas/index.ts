@@ -80,6 +80,7 @@ export {
   agentRunTranscriptChunksTable,
   agentRunTranscriptsTable,
 } from "./agent-run-transcript";
+export { default as agentRuntimeUserAccountsTable } from "./agent-runtime-user-account";
 export { default as agentSkillsTable } from "./agent-skill";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
 export { default as agentTeamsTable } from "./agent-team";

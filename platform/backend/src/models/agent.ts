@@ -23,6 +23,7 @@ import {
   TimeInMs,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   urlSlugify,
+  withClaudeAccountItRuns,
 } from "@archestra/shared";
 import {
   and,
@@ -80,6 +81,7 @@ import {
   type AgentListItem,
   type AgentOption,
   type AgentRuntime,
+  type AgentRuntimeAccountLock,
   type AgentScope,
   type AgentScopeFilter,
   type AgentToolRef,
@@ -91,6 +93,7 @@ import {
   type McpServerAgentUsage,
   type NetworkPolicy,
   NetworkPolicyInputSchema,
+  OWN_ACCOUNT_ONLY,
   type ReadinessAgent,
   type SortingQuery,
   type UpdateAgent,
@@ -1591,9 +1594,13 @@ class AgentModel {
 
   /**
    * Runtime Agents that run on the organization's default model: those with
-   * no model/key pair of their own, or a pair that resolution skips (half of
-   * it missing, or the model no longer linked to the key). This narrow query
-   * supports validating a proposed default without loading relations.
+   * no API key of their own, a pair that resolution skips (the model no
+   * longer linked to the key), or an API key without a model on an agent
+   * saved before people could choose its account (no `accountLock`), whose
+   * runs take the default. An agent saved since that stores its API key
+   * without a model is not one of them: its model is each person's to pick
+   * among that key's models. This narrow query supports validating a
+   * proposed default without loading relations.
    */
   static async findRuntimeAgentsInheritingOrganizationDefault(
     organizationId: string,
@@ -1615,17 +1622,23 @@ class AgentModel {
           notDeleted(agents),
           or(
             isNull(agents.llmApiKeyId),
-            isNull(agents.modelId),
-            notExists(
-              db
-                .select({ id: links.id })
-                .from(links)
-                .where(
-                  and(
-                    eq(links.apiKeyId, agents.llmApiKeyId),
-                    eq(links.modelId, agents.modelId),
+            and(
+              isNull(agents.modelId),
+              sql`(${agents.runtime} -> 'accountLock') IS NULL`,
+            ),
+            and(
+              isNotNull(agents.modelId),
+              notExists(
+                db
+                  .select({ id: links.id })
+                  .from(links)
+                  .where(
+                    and(
+                      eq(links.apiKeyId, agents.llmApiKeyId),
+                      eq(links.modelId, agents.modelId),
+                    ),
                   ),
-                ),
+              ),
             ),
           ),
         ),
@@ -5602,12 +5615,40 @@ class AgentModel {
     scope?: AgentScope;
     /** Teams for a team-scoped clone; defaults to the source's teams. */
     teams?: string[];
+    /**
+     * The account lock the copy's runtime names, by the rule a new agent on
+     * that runtime follows; the caller decides it. Null lets each person
+     * choose their account. Left out, the copy names no lock and runs only
+     * the way its settings say.
+     */
+    accountLock?: AgentRuntimeAccountLock | null;
   }): Promise<Agent> {
     const { sourceId, userId } = params;
 
     const sourceAgent = await AgentModel.findById(sourceId, userId, true);
     if (!sourceAgent) {
       throw new Error("Source agent not found");
+    }
+    // The source's account lock is never copied: the copy has no key of its
+    // own yet, so its new owner must be able to give it an account. The
+    // models it sets for the connections it leaves open go with its key. A
+    // source saved before people could choose starts the copy on the Claude
+    // account it ran on.
+    let copiedRuntime: AgentRuntime | null = null;
+    if (sourceAgent.runtime) {
+      const {
+        accountLock: sourceLock,
+        connectionModels: _sourceConnectionModels,
+        ...stored
+      } = structuredClone(sourceAgent.runtime);
+      const runtime = withClaudeAccountItRuns({
+        runtime: stored,
+        savedBeforeChoosing: sourceLock === undefined,
+      });
+      copiedRuntime =
+        params.accountLock === undefined
+          ? runtime
+          : { ...runtime, accountLock: params.accountLock };
     }
 
     const cloneScope = params.scope ?? sourceAgent.scope;
@@ -5654,9 +5695,7 @@ class AgentModel {
           // the clone route checks the caller may configure it and read the
           // credentials it names. Shared values stay in the source's secret
           // bag (`runtimeSecretId`, not copied), so the copy needs its own.
-          runtime: sourceAgent.runtime
-            ? structuredClone(sourceAgent.runtime)
-            : null,
+          runtime: copiedRuntime,
         },
         cloneScope === "personal" ? userId : undefined,
         // Copy the source's assignments verbatim below; don't let create's
@@ -6056,6 +6095,14 @@ class AgentModel {
             ttlHours: row.runtime.ttlHours,
             maxCostUsd: row.runtime.maxCostUsd ?? null,
             idleTimeoutMinutes: row.runtime.idleTimeoutMinutes,
+            claudeAuthentication:
+              row.runtime.claudeCode?.authentication ?? null,
+            // "own" for a runtime that names no lock, so opening it to each
+            // person's choice (null) shows as a change.
+            accountLock:
+              row.runtime.accountLock === undefined
+                ? OWN_ACCOUNT_ONLY
+                : row.runtime.accountLock,
           }
         : null,
       // A reference id is safe to audit and changes on every shared-secret

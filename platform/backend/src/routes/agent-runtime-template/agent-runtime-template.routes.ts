@@ -11,14 +11,16 @@ import { assertAgentRuntimeTiersExist } from "@/services/agent-runtime/agent-con
 import {
   applyAgentRuntimeToAgents,
   assertCanUseAgentRuntime,
+  assertRuntimeAccountSettings,
   countAgentsBehindRuntime,
   listAgentRuntimeAccess,
+  withRuntimeAccountNames,
 } from "@/services/agent-runtime/agent-runtime-access";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   AgentRuntimeAccessSchema,
-  AgentRuntimeTemplateSchema,
   AgentRuntimeTemplateSummarySchema,
+  AgentRuntimeTemplateViewSchema,
   BuiltInRuntimeSummarySchema,
   RuntimeTemplateEditorSettingsSchema,
   SaveRuntimeTemplateSettingsSchema,
@@ -38,9 +40,10 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      const settings =
-        await AgentRuntimeTemplateModel.getSettings(organizationId);
+    async ({ organizationId, user }, reply) => {
+      // Anyone may list the runtimes; a runtime's account rule goes only to
+      // someone who may use or configure it.
+      const settings = await readSettings(organizationId, user.id);
       return reply.send(
         settings.templates.map(({ runtime, ...template }) => ({
           ...template,
@@ -61,9 +64,8 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(BuiltInRuntimeSummarySchema)),
       },
     },
-    async ({ organizationId }, reply) => {
-      const { builtIns } =
-        await AgentRuntimeTemplateModel.getSettings(organizationId);
+    async ({ organizationId, user }, reply) => {
+      const { builtIns } = await readSettings(organizationId, user.id);
       return reply.send(
         PopularAgentIdSchema.options.flatMap((id) => {
           const builtIn = builtIns[id];
@@ -160,7 +162,7 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId }, reply) =>
-      reply.send(await AgentRuntimeTemplateModel.getSettings(organizationId)),
+      reply.send(await readSettings(organizationId)),
   );
 
   fastify.put(
@@ -169,7 +171,7 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.SaveRuntimeTemplateSettings,
         description:
-          "Save custom templates, the maintained templates' settings, and the combined runtime order. Settings start new agents; apply them to existing agents separately. The revision prevents overwriting concurrent edits.",
+          "Save custom templates, the maintained templates' settings, and the combined runtime order. Settings start new agents; apply them to existing agents separately. A runtime's account rule (accounts) is the exception: it holds for every agent of the runtime from the moment it is saved. The revision prevents overwriting concurrent edits.",
         tags: ["Organization"],
         body: SaveRuntimeTemplateSettingsSchema,
         response: constructResponseSchema(RuntimeTemplateEditorSettingsSchema),
@@ -184,6 +186,12 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       const previous =
         await AgentRuntimeTemplateModel.getSettings(organizationId);
+      await assertRuntimeAccountSettings({
+        organizationId,
+        userId: user.id,
+        settings: body,
+        previous,
+      });
       const previousImages = new Map(
         previous.templates.map(({ id, runtime }) => [id, runtime.image.trim()]),
       );
@@ -216,10 +224,13 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
       }
       return reply.send(
-        await AgentRuntimeTemplateModel.saveSettings({
+        await withRuntimeAccountNames({
           organizationId,
-          settings: body,
-          popularAgentOverrides: body.popularAgentOverrides,
+          settings: await AgentRuntimeTemplateModel.saveSettings({
+            organizationId,
+            settings: body,
+            popularAgentOverrides: body.popularAgentOverrides,
+          }),
         }),
       );
     },
@@ -234,7 +245,7 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Read a template's starting configuration when creating or editing an agent.",
         tags: ["Agents"],
         params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(AgentRuntimeTemplateSchema),
+        response: constructResponseSchema(AgentRuntimeTemplateViewSchema),
       },
     },
     async ({ organizationId, user, params }, reply) => {
@@ -248,9 +259,28 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         runtime: template.runtime,
       });
-      return reply.send(template);
+      // The names of this runtime's account rule alone, not every runtime's.
+      const [named] = (
+        await withRuntimeAccountNames({
+          organizationId,
+          settings: { templates: [template], builtIns: {} },
+        })
+      ).templates;
+      return reply.send(named);
     },
   );
 };
 
 export default agentRuntimeTemplateRoutes;
+
+/**
+ * The stored settings as a response carries them. With `viewerId`, without
+ * the account rule of a runtime that person may neither use nor configure.
+ */
+async function readSettings(organizationId: string, viewerId?: string) {
+  return withRuntimeAccountNames({
+    organizationId,
+    settings: await AgentRuntimeTemplateModel.getSettings(organizationId),
+    ...(viewerId && { viewer: { userId: viewerId } }),
+  });
+}

@@ -588,6 +588,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Saved credentials: the routes below without a role action check the
   // caller's grant on the one credential they name.
   [RouteId.GetAgentRuntimePreflight]: {},
+  [RouteId.GetAgentRuntimeAccount]: {},
+  [RouteId.UpdateAgentRuntimeAccount]: {},
+  [RouteId.ClearAgentRuntimeAccount]: {},
   [RouteId.GetClaudeCodeAccount]: {},
   [RouteId.StartClaudeCodeSignIn]: {},
   [RouteId.CompleteClaudeCodeSignIn]: {},

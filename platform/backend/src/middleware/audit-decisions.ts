@@ -122,6 +122,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "per-user pin on an agent; personal preference, not an access change",
   },
+  agentRuntimeUserAccountsTable: {
+    audited: false,
+    reason:
+      "a person's own account choice for their runs of an agent; writes are recorded by the agent runtime account route",
+  },
   a2aRemoteAgentsTable: { audited: true, model: A2aRemoteAgentModel },
   a2aRemoteAgentTeamsTable: {
     audited: false,

@@ -39,6 +39,7 @@ function Harness({
 
 describe("AgentNetworkPolicyField", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(useHasPermissions).mockReturnValue({ data: true } as never);
     vi.mocked(useK8sCapabilities).mockReturnValue({
       data: {
@@ -86,5 +87,51 @@ describe("AgentNetworkPolicyField", () => {
       expect(combobox).toBeDisabled();
     }
     expect(screen.getByLabelText("Allowed domains")).toBeDisabled();
+  });
+
+  test("asks nothing of the cluster for someone who cannot update environments, and says nothing about it", () => {
+    // Reading what the cluster enforces takes the same permission. Without
+    // it the read is refused, so it is not made: no data comes back.
+    vi.mocked(useHasPermissions).mockReturnValue({ data: false } as never);
+    vi.mocked(useK8sCapabilities).mockReturnValue({ data: undefined } as never);
+    render(<Harness initial={CUSTOM} onChange={vi.fn()} />);
+
+    expect(useK8sCapabilities).toHaveBeenCalledWith(false);
+    expect(useK8sCapabilities).not.toHaveBeenCalledWith(true);
+    // The stored policy still shows, read-only.
+    expect(screen.getByLabelText("Allowed domains")).toBeDisabled();
+    // No finding about the cluster is stated to someone who has none.
+    expect(
+      screen.queryByText("Network policy enforcement not verified"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Domain allowlists unavailable"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Network policy enforcement test failed"),
+    ).not.toBeInTheDocument();
+  });
+
+  test.each([
+    [
+      { supportsFqdn: true, enforcementStatus: "unknown" },
+      "Network policy enforcement not verified",
+    ],
+    [
+      { supportsFqdn: false, enforcementStatus: "verified-enforced" },
+      "Domain allowlists unavailable",
+    ],
+    [
+      { supportsFqdn: true, enforcementStatus: "verified-not-enforced" },
+      "Network policy enforcement test failed",
+    ],
+  ])("reads the cluster for someone who can update environments, and says what it found: %o", (networkPolicy, notice) => {
+    vi.mocked(useK8sCapabilities).mockReturnValue({
+      data: { networkPolicy },
+    } as never);
+    render(<Harness initial={CUSTOM} onChange={vi.fn()} />);
+
+    expect(useK8sCapabilities).toHaveBeenCalledWith(true);
+    expect(screen.getByText(notice)).toBeInTheDocument();
   });
 });

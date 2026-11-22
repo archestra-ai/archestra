@@ -40,7 +40,11 @@ export function AgentNetworkPolicyField({
   const { data: canUpdateEnvironments } = useHasPermissions({
     environment: ["update"],
   });
-  const { data: capabilities } = useK8sCapabilities();
+  // What the cluster enforces is read with the same permission that changes
+  // the policy. Someone without it sees the policy as it is stored: nothing
+  // is asked of the cluster for them, and nothing is said about it.
+  const canInspectCluster = canUpdateEnvironments === true;
+  const { data: capabilities } = useK8sCapabilities(canInspectCluster);
   // The textareas keep what was typed (blank lines, a half-typed entry); the
   // policy handed up is the parsed list.
   const [domainsText, setDomainsText] = useState(
@@ -126,6 +130,7 @@ export function AgentNetworkPolicyField({
           enforcementStatus={
             capabilities?.networkPolicy.enforcementStatus ?? null
           }
+          clusterKnown={canInspectCluster}
           baselineLoaded={true}
           disabled={locked}
         />

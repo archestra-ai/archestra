@@ -26,12 +26,14 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentRuntimeAccountRow } from "@/components/agent-runtime-account-row";
 import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime-credentials-dialog";
 import { AgentSavedSetupBanner } from "@/components/agent-saved-setup-banner";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { AudienceChip } from "@/components/audience-chip";
 import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
-import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { AgentRuntimeBadge } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -81,6 +83,7 @@ import {
   notYoursToChange,
 } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
+import { useAgentRunBlock } from "@/lib/hooks/use-agent-run-block";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { agentAction, getAgentActionModel } from "./agent-actions-model";
@@ -275,6 +278,9 @@ function AgentDetails({
   });
   const connectAction = agentAction(actionModel, "connect");
   const chatAction = agentAction(actionModel, "chat");
+  // What stops the reader's runs of this agent now: every control that
+  // starts one shows it instead of acting.
+  const runBlock = useAgentRunBlock(agent.id, chatAction.startsRun === true);
   const cloneAction = agentAction(actionModel, "clone");
   const exportAction = agentAction(actionModel, "export");
   const historyAction = agentAction(actionModel, "history");
@@ -595,9 +601,15 @@ function AgentDetails({
               />
             </span>
           )}
-          {hasAgentRuntime && (
+          {hasAgentRuntime && agent.runtime && (
+            // Named, and linked to its settings, for the people who
+            // administer runtimes; the icon for everyone else.
             <span className="hidden sm:contents">
-              <RuntimeCapableIndicator variant="icon" runtime={agent.runtime} />
+              <AgentRuntimeBadge
+                runtime={agent.runtime}
+                appearance="icon"
+                fallback="icon"
+              />
             </span>
           )}
           {kind === "mcp_gateway" && environmentName && (
@@ -681,7 +693,20 @@ function AgentDetails({
               </Button>
             </>
           )}
-          {chatAction.visible && chatAction.href && (
+          {chatAction.visible && chatAction.href && runBlock && (
+            <span className="hidden sm:inline-flex">
+              <ButtonWithTooltip
+                variant="outline"
+                size="sm"
+                disabled
+                disabledText={runBlock}
+              >
+                <TerminalSquare className="h-4 w-4" />
+                <span>{chatAction.label}</span>
+              </ButtonWithTooltip>
+            </span>
+          )}
+          {chatAction.visible && chatAction.href && !runBlock && (
             <Button
               variant="outline"
               size="sm"
@@ -710,12 +735,23 @@ function AgentDetails({
                 chatAction.href &&
                 chatAction.startsRun && (
                   <>
-                    <DropdownMenuItem className="sm:hidden" asChild>
-                      <Link href={chatAction.href}>
-                        <TerminalSquare className="size-4" />
-                        <span>{chatAction.label}</span>
-                      </Link>
-                    </DropdownMenuItem>
+                    {runBlock ? (
+                      <div className="sm:hidden">
+                        <KebabItem
+                          icon={<TerminalSquare className="h-4 w-4" />}
+                          label={chatAction.label}
+                          reason={runBlock}
+                          onSelect={() => {}}
+                        />
+                      </div>
+                    ) : (
+                      <DropdownMenuItem className="sm:hidden" asChild>
+                        <Link href={chatAction.href}>
+                          <TerminalSquare className="size-4" />
+                          <span>{chatAction.label}</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator className="sm:hidden" />
                   </>
                 )}
@@ -772,6 +808,21 @@ function AgentDetails({
               chatAction.visible && chatAction.href ? chatAction.href : null
             }
             onShowA2a={showConnect ? () => setA2aOpen(true) : undefined}
+            runBlock={runBlock}
+            account={
+              hasAgentRuntime &&
+              chatAction.visible &&
+              runtimeEnabled &&
+              agent.runtime ? (
+                <AgentRuntimeAccountRow
+                  agentId={agent.id}
+                  runtime={agent.runtime}
+                  agentClaudeModel={agent.runtime.claudeCode?.model}
+                  declarations={agent.runtime.credentials ?? []}
+                  canEditAgent={canEdit}
+                />
+              ) : null
+            }
           />
         </div>
       )}
@@ -816,6 +867,7 @@ function AgentDetails({
               kind === "agent" &&
               !isBuiltIn && (
                 <AgentSchedulesSection
+                  runBlock={runBlock}
                   agentId={agent.id}
                   agentName={agent.name}
                 />

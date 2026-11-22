@@ -12,6 +12,7 @@ import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { channelDisplayName } from "@/app/settings/messaging-channels/_parts/channel-details-dialog";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { ChannelIcon } from "@/components/channel-icon";
 import { SettingsLink } from "@/components/settings-link";
 import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
@@ -43,6 +44,8 @@ export function AgentWorkSources({
   runtimeAvailable,
   chatHref,
   onShowA2a,
+  account,
+  runBlock,
 }: {
   agentId: string;
   hasRuntime: boolean;
@@ -51,15 +54,19 @@ export function AgentWorkSources({
   chatHref: string | null;
   /** Opens the A2A connection details; unset when the reader may not see them. */
   onShowA2a?: () => void;
+  /** What the reader's own runs are paid with, shown first under the heading. */
+  account?: ReactNode;
+  /** Why the reader's runs cannot start now: chat says it instead of opening. */
+  runBlock?: string | null;
 }) {
   const appName = useAppName();
   const { data: canReadChannels } = useHasPermissions({
     organizationSettings: ["read"],
   });
-  // The setup section above says what is missing. Every route here still
-  // works before then (setting up a channel or a laptop is preparation, and
-  // chat explains what is missing), so they stay at full strength and only
-  // the caption says runs wait.
+  // The setup section above, and the account card here, say what is missing.
+  // Setting up a channel or a laptop is preparation, so those routes stay at
+  // full strength before then. Chat waits: its button says why instead of
+  // opening (`runBlock`), and the caption says runs wait.
   const preflight = useAgentRuntimePreflight(agentId, hasRuntime);
   const awaitingSetup = hasRuntime && preflight.data?.ready === false;
   return (
@@ -70,11 +77,12 @@ export function AgentWorkSources({
             {hasRuntime ? "Give it work" : "Where people use it"}
           </h2>
           {awaitingSetup && (
-            <span className="text-[13px] text-muted-foreground">
-              Runs start once setup above is done.
+            <span className="fade-in animate-in text-[13px] text-muted-foreground duration-200 motion-reduce:animate-none">
+              Runs start once setup is done.
             </span>
           )}
         </div>
+        {account}
         {/* The ways that are a click away are equal cards; handoff needs a
             one-time setup and a sample to explain it, so it gets a strip of
             its own rather than stretching one card beside half-empty ones. */}
@@ -84,9 +92,15 @@ export function AgentWorkSources({
             title={`In ${appName} chat`}
             action={
               chatHref ? (
-                <Button size="sm" asChild>
-                  <Link href={chatHref}>Open in chat</Link>
-                </Button>
+                runBlock ? (
+                  <ButtonWithTooltip size="sm" disabled disabledText={runBlock}>
+                    <span>Open in chat</span>
+                  </ButtonWithTooltip>
+                ) : (
+                  <Button size="sm" asChild>
+                    <Link href={chatHref}>Open in chat</Link>
+                  </Button>
+                )
               ) : null
             }
           >

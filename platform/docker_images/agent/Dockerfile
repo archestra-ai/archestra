@@ -220,12 +220,12 @@ RUN --network=none \
 
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.311 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.323 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.311","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.323","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -408,14 +408,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=aa32f87a8e487f80487e75b294943f93a7dce747acde366d3f11baf88381ffa0 ;; \
-      arm64) grok_arch=arm64; checksum=29bba0ee6618fe6fe158602a5649f4659aa4a9f7c2dd99e82932932c96e9ac9b ;; \
+      amd64) grok_arch=x64; checksum=23295740bc3a5120f3aee7f6fc872dea23dd21e34d02d61b7a2a9169c098b74e ;; \
+      arm64) grok_arch=arm64; checksum=bfea7596bc36024e1d190a747be6a7b8fe73f70e1c6b6baabc14ca84684df5f0 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.84" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.84.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.87" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.87.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -469,13 +469,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=5e82d04da0b22fdaf710b3b0e35a613f365b4ca8e54e02eb3200b3f19e5176fb7c957cb7591b290b5baaefee3e9802605b54f63ab65a727bc981eeaf47841c60 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=80c0dd5e0b699b12926f9e437f18adcf030748d26fa0106d6c4c3578268dcdfd430944190bd29fb5d40996231fa57a8d241bcbdcd1d812a985f9991933d28783 ;; \
+      amd64) copilot_arch=x64; copilot_checksum=baf941fb7845c2b720d8897e8bf6a60fd8e5ac3a8dd671b430a440b1791309769536e5b7f104b52cb6f33768cd8fa0957ee53f746b6e96a53ddea2736dc25705 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=732e8bec74bc03419c1e4acba437734bacb96f0fe4d60424099c9fee6c6bde349c7d75b7d83ec2af568a168999c0d38384813c096ba405fb50020ef9501e9687 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.111)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.112)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

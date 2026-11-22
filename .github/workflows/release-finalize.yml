@@ -46,7 +46,7 @@ jobs:
       contents: write # List draft releases (push access only).
       actions: write # Read the release run; the sweep dispatches this workflow on each request's branch.
       attestations: read # Verify the published digests' attestations.
-    uses: archestra-ai/.github/.github/workflows/release-finalize.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
+    uses: archestra-ai/.github/.github/workflows/release-finalize.yml@5f8d553efc22e1ae4781bd198c3bca8e0bf3e969 # v1.45.4
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

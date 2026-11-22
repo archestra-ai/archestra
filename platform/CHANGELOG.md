@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0-rc.44](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.43...platform-v1.5.0-rc.44) (2026-11-22)
+
+
+### Documentation
+
+* **release:** a release PR needs a platform/ commit on any branch, not only after a stable cut ([#11120](https://github.com/archestra-ai/archestra/issues/11120)) ([373ec2a](https://github.com/archestra-ai/archestra/commit/373ec2a708c41e2de90c3fa12c356ffed1166788))
+
 ## [1.5.0-rc.43](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.42...platform-v1.5.0-rc.43) (2026-11-22)
 
 

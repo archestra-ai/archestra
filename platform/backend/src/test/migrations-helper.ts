@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { AGENT_RUNTIME_USER_ACCOUNTS_SQL } from "../database/agent-runtime-user-accounts-sql";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,7 +19,9 @@ export const SNAPSHOT_PATH_ENV = "ARCHESTRA_TEST_PGLITE_SNAPSHOT_PATH";
 
 /**
  * Read all migration `.sql` files in deterministic (filename) order, followed
- * by the runtime-created cache table (see KEYV_CACHE_TABLE_SQL).
+ * by the tables created at runtime: the cache table (see KEYV_CACHE_TABLE_SQL)
+ * and the Agent Runtime account choice table, which a startup upgrade creates
+ * on this branch.
  * Cached after first read since the files do not change during a test run.
  */
 export function getMigrationsSql(): string[] {
@@ -35,6 +38,7 @@ export function getMigrationsSql(): string[] {
       fs.readFileSync(path.join(migrationsDir, file), "utf8"),
     ),
     KEYV_CACHE_TABLE_SQL,
+    AGENT_RUNTIME_USER_ACCOUNTS_SQL,
   ];
 
   return cachedMigrationsSql;

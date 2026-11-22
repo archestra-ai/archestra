@@ -1,8 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, expect, test } from "vitest";
 import db from "@/database";
-import { AGENT_RUNTIME_USER_ACCOUNTS_STATEMENTS } from "@/database/agent-runtime-user-accounts-sql";
+import {
+  AGENT_RUNTIME_USER_ACCOUNTS_SQL,
+  AGENT_RUNTIME_USER_ACCOUNTS_STATEMENTS,
+} from "@/database/agent-runtime-user-accounts-sql";
 import startupMigrationsTable from "@/database/schemas/startup-migration";
 import AgentRuntimeUserAccountModel from "@/models/agent-runtime-user-account";
 import { ensureAgentRuntimeUserAccountsTable } from "./user-accounts-table";
@@ -14,6 +17,14 @@ afterEach(async () => {
   for (const statement of AGENT_RUNTIME_USER_ACCOUNTS_STATEMENTS) {
     await db.execute(sql.raw(statement));
   }
+});
+
+test("runs the statements of migration 0659_agent_runtime_user_accounts on main, byte for byte", () => {
+  // Version 1.5 runs that migration on a database this branch upgraded. It
+  // creates nothing there only while both create the same table.
+  expect(
+    createHash("sha256").update(AGENT_RUNTIME_USER_ACCOUNTS_SQL).digest("hex"),
+  ).toBe("5ad91a55652d7e4bfab0e7cabe1906635ac8d8e698e571289f81b27848e7a4ce");
 });
 
 test("creates the table once, on a database that lacks it", async () => {

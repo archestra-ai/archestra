@@ -307,6 +307,29 @@ test("declares a new key personally and stores the value for the caller", async 
   expect(preflight.configured).toContain("MY_CLI_TOKEN");
 });
 
+test("adds the declaration to what the agent stores, its Claude account included", async ({
+  makeAgent,
+}) => {
+  // Saved before people could choose its account: a custom image that stored
+  // a Claude subscription, which its runs never used.
+  const target = await makeRuntimeAgent(
+    makeAgent,
+    runtimeConfig({
+      allowAgentSuppliedCredentialValues: true,
+      claudeCode: { authentication: "subscription" },
+    }),
+  );
+
+  await transfer(target.id);
+
+  const stored = (await AgentModel.findById(target.id))?.runtime;
+  expect(stored).toMatchObject({
+    claudeCode: { authentication: "subscription" },
+    credentials: [expect.objectContaining({ key: "MY_CLI_TOKEN" })],
+  });
+  expect(stored).not.toHaveProperty("accountLock");
+});
+
 test("keeps the stored value personal to the caller", async ({
   makeAgent,
   makeMember,

@@ -149,7 +149,11 @@ describe("Claude subscription secret lifecycle", () => {
     await expect(
       manager.requireConnection({
         ...other,
-        runtime: { ...other.runtime, command: ["custom-runtime"] },
+        runtime: {
+          ...other.runtime,
+          command: ["custom-runtime"],
+          claudeCode: undefined,
+        },
         runtimeScope: "changed-tests",
       }),
     ).rejects.toMatchObject({ statusCode: 400 });
@@ -481,6 +485,7 @@ function runtime(agent: {
 }): ResolvedAgentRuntime {
   return {
     agentId: agent.id,
+    accountLock: null,
     organizationId: agent.organizationId,
     secretId: null,
     environmentId: null,

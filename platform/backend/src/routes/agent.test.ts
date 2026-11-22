@@ -351,7 +351,11 @@ describe("agent routes", () => {
         });
 
         expect(response.statusCode).toBe(200);
-        expect(response.json().runtime).toEqual(runtime);
+        // A new agent that names no lock is stored as "each person chooses".
+        expect(response.json().runtime).toEqual({
+          ...runtime,
+          accountLock: null,
+        });
       } finally {
         sandboxInstalled.mockRestore();
       }

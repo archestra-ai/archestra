@@ -92,6 +92,14 @@ export async function resolveConversationLlmSelectionForAgent(params: {
    * /chat surfaces). Non-/chat A2A callers pass false. See the doc comment.
    */
   includeMemberChatDefault?: boolean;
+  /**
+   * Resolve the organization's default and the fallback among company
+   * connections only: keys nobody owns that hold an API key. For the company
+   * API key of an Agent Runtime agent with no connection set or chosen,
+   * which never runs on the acting person's own key or subscription. With a
+   * provider, among that provider's company connections only.
+   */
+  companyConnectionsOnly?: boolean | { provider: SupportedProvider };
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId } = params;
   const includeMemberChatDefault = params.includeMemberChatDefault ?? true;
@@ -136,6 +144,7 @@ export async function resolveConversationLlmSelectionForAgent(params: {
   const availableModels = await getAvailableRankedModels({
     organizationId,
     userId,
+    companyConnectionsOnly: params.companyConnectionsOnly,
   });
   // The member and organization defaults name a key somebody chose; the acting
   // user may not be allowed to use it. The send path would never run through
@@ -667,8 +676,20 @@ async function withResolvedKey(
 async function getAvailableRankedModels(params: {
   organizationId: string;
   userId: string;
+  companyConnectionsOnly?: boolean | { provider: SupportedProvider };
 }) {
   const { organizationId, userId } = params;
+  if (params.companyConnectionsOnly) {
+    return LlmProviderApiKeyModelLinkModel.getRankedModelsForApiKeys(
+      await LlmProviderApiKeyModel.findUsableCompanyKeyIds({
+        organizationId,
+        userId,
+        ...(params.companyConnectionsOnly !== true && {
+          provider: params.companyConnectionsOnly.provider,
+        }),
+      }),
+    );
+  }
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
   const keys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
     organizationId,

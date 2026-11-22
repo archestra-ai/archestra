@@ -13,13 +13,33 @@ import {
   A2AProtocolTaskState,
 } from "./a2a-protocol";
 
-const { executeA2AMessage, resumeAgentRun, runTaskInAgentRuntime } = vi.hoisted(
-  () => ({
-    executeA2AMessage: vi.fn(),
-    resumeAgentRun: vi.fn(),
-    runTaskInAgentRuntime: vi.fn(),
-  }),
-);
+const {
+  executeA2AMessage,
+  resumeAgentRun,
+  runTaskInAgentRuntime,
+  compactedContexts,
+} = vi.hoisted(() => ({
+  executeA2AMessage: vi.fn(),
+  resumeAgentRun: vi.fn(),
+  runTaskInAgentRuntime: vi.fn(),
+  /** The contexts the manager compacted, in order. */
+  compactedContexts: [] as string[],
+}));
+
+// Compaction runs as it is; the test only learns which contexts it ran for.
+vi.mock("./a2a-context-compaction", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./a2a-context-compaction")>();
+  return {
+    ...actual,
+    applyA2AContextCompaction: (
+      params: Parameters<typeof actual.applyA2AContextCompaction>[0],
+    ) => {
+      compactedContexts.push(params.contextId);
+      return actual.applyA2AContextCompaction(params);
+    },
+  };
+});
 
 vi.mock("@/agents/a2a-executor.ts", () => ({
   executeA2AMessage,
@@ -284,6 +304,58 @@ describe("A2AManager full task mode", () => {
       }),
     );
     expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+  });
+
+  test("a task run of a runtime agent does not compact its context's history, which a foreground message does", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      name: "runtime-agent",
+      runtime: {
+        image: "example.invalid/runtime-agent:test",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    mockExecutorText("foreground answer");
+    runTaskInAgentRuntime.mockResolvedValue({
+      messageId: crypto.randomUUID(),
+      text: "background answer",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "background answer" }],
+      },
+    });
+    const manager = fullManager();
+    // The context's first turn leaves history behind.
+    const first = await sendMessage({ manager, agentId: agent.id });
+    const contextId = first.message?.contextId;
+    expect(contextId).toBeTruthy();
+    compactedContexts.length = 0;
+
+    // The container takes the turn's own text: the history is not compacted.
+    const tasked = await sendMessage({
+      manager,
+      agentId: agent.id,
+      contextId,
+      taskRun: { createTask: true, detached: false },
+    });
+    expect(tasked.task?.status.state).toBe(A2AProtocolTaskState.Completed);
+    expect(runTaskInAgentRuntime).toHaveBeenCalled();
+    expect(compactedContexts).toEqual([]);
+
+    // A foreground message builds its request from that history.
+    await sendMessage({ manager, agentId: agent.id, contextId });
+    expect(compactedContexts).toEqual([contextId]);
   });
 
   test("blocking tasked run walks SUBMITTED -> WORKING -> COMPLETED with artifact, events, and timestamps", async ({

@@ -1463,6 +1463,239 @@ describe("buildAgentRunLaunchSpec", () => {
     });
   }
 
+  describe("a custom image that declares Claude Code", () => {
+    test("runs on the acting person's connected Claude subscription", async ({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    }) => {
+      const setup = await makeConfiguredAgent({
+        provider: "anthropic",
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      vi.mocked(claudeCodeAccountManager.requireConnection).mockResolvedValue(
+        "connected",
+      );
+      const configuredRuntime = customClaudeRuntime(setup.agent, {
+        authentication: "subscription",
+      });
+
+      const { spec } = await buildAgentRunLaunchSpec(
+        launchParams({ setup, runtime: configuredRuntime, actor: "user" }),
+      );
+
+      expect(spec.env.ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH).toBe("subscription");
+      expect(spec.env.ANTHROPIC_BASE_URL).toBe(
+        `https://platform.example.test/v1/anthropic/${setup.agent.id}`,
+      );
+      expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toMatch(/^arch_/);
+      expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
+        `X-Archestra-Virtual-Key: ${spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN}`,
+      );
+      expect(spec.secretEnv.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(spec.secretEnv.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    });
+
+    test("ignores a declared subscription token and refuses it where nothing replaces it", async ({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    }) => {
+      const setup = await makeConfiguredAgent({
+        provider: "anthropic",
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      vi.mocked(claudeCodeAccountManager.requireConnection).mockResolvedValue(
+        "connected",
+      );
+      await UserCredentialModel.upsert({
+        organizationId: setup.agent.organizationId,
+        userId: setup.user.id,
+        agentId: setup.agent.id,
+        key: "CLAUDE_CODE_OAUTH_TOKEN",
+        value: "pasted-subscription-token",
+      });
+      const withPastedToken = (
+        authentication: "provider" | "subscription",
+      ) => ({
+        ...customClaudeRuntime(setup.agent, { authentication }),
+        credentials: [
+          {
+            key: "CLAUDE_CODE_OAUTH_TOKEN",
+            scope: "per_user" as const,
+            label: "Claude Code subscription token",
+            required: false,
+          },
+        ],
+      });
+
+      const { spec } = await buildAgentRunLaunchSpec(
+        launchParams({
+          setup,
+          runtime: withPastedToken("subscription"),
+          actor: "user",
+        }),
+      );
+      expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toMatch(/^arch_/);
+      expect(JSON.stringify(spec)).not.toContain("pasted-subscription-token");
+
+      await expect(
+        buildAgentRunLaunchSpec(
+          launchParams({
+            setup,
+            runtime: withPastedToken("provider"),
+            actor: "user",
+          }),
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: expect.stringContaining(
+          "Remove the CLAUDE_CODE_OAUTH_TOKEN credential from this runtime",
+        ),
+      });
+    });
+
+    test("asks the person to connect a Claude account first", async ({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    }) => {
+      const setup = await makeConfiguredAgent({
+        provider: "anthropic",
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      const configuredRuntime = customClaudeRuntime(setup.agent, {
+        authentication: "subscription",
+      });
+
+      await expect(
+        buildAgentRunLaunchSpec(
+          launchParams({ setup, runtime: configuredRuntime, actor: "user" }),
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        code: "AGENT_RUNTIME_CREDENTIALS_REQUIRED",
+        missing: [{ key: "CLAUDE_CODE_ACCOUNT" }],
+      });
+    });
+
+    test("needs a run acting as a signed-in person", async ({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    }) => {
+      const setup = await makeConfiguredAgent({
+        provider: "anthropic",
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      const configuredRuntime = customClaudeRuntime(setup.agent, {
+        authentication: "subscription",
+      });
+
+      await expect(
+        buildAgentRunLaunchSpec(
+          launchParams({ setup, runtime: configuredRuntime, actor: "system" }),
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: expect.stringContaining("signed-in user"),
+      });
+    });
+
+    test("bills the agent's provider key when set to provider authentication", async ({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    }) => {
+      const setup = await makeConfiguredAgent({
+        provider: "anthropic",
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      const configuredRuntime = customClaudeRuntime(setup.agent, {
+        authentication: "provider",
+      });
+
+      const { spec } = await buildAgentRunLaunchSpec(
+        launchParams({ setup, runtime: configuredRuntime, actor: "user" }),
+      );
+
+      expect(spec.env.ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH).toBeUndefined();
+      expect(spec.env.ARCHESTRA_AGENT_RUNTIME_MODEL).toBe("selected-model");
+      expect(spec.secretEnv.ANTHROPIC_API_KEY).toMatch(/^arch_/);
+      expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
+    });
+
+    test("stays on the provider path when the image declares no Claude Code settings", async ({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    }) => {
+      const setup = await makeConfiguredAgent({
+        provider: "anthropic",
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      const configuredRuntime = runtime(setup.agent, "anthropic");
+      configuredRuntime.command = ["custom-agent"];
+
+      const { spec } = await buildAgentRunLaunchSpec(
+        launchParams({ setup, runtime: configuredRuntime, actor: "user" }),
+      );
+
+      expect(spec.env.ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH).toBeUndefined();
+      expect(spec.secretEnv.ANTHROPIC_API_KEY).toMatch(/^arch_/);
+      expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
+      expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toBeUndefined();
+    });
+  });
+
   test("does not inject a Claude subscription token into a custom runtime", async ({
     makeOrganization,
     makeAdmin,
@@ -1517,7 +1750,9 @@ describe("buildAgentRunLaunchSpec", () => {
       }),
     ).rejects.toMatchObject({
       statusCode: 409,
-      message: expect.stringContaining("only be injected"),
+      message: expect.stringContaining(
+        "Remove the CLAUDE_CODE_OAUTH_TOKEN credential",
+      ),
     });
   });
 });
@@ -1592,6 +1827,7 @@ function runtime(
 ): ResolvedAgentRuntime {
   return {
     agentId: agent.id,
+    accountLock: null,
     organizationId: agent.organizationId,
     environmentId: null,
     secretId: null,
@@ -1607,5 +1843,44 @@ function runtime(
     ttlHours: null,
     maxCostUsd: null,
     idleTimeoutMinutes: null,
+  };
+}
+
+function customClaudeRuntime(
+  agent: Agent,
+  claudeCode: NonNullable<ResolvedAgentRuntime["claudeCode"]>,
+): ResolvedAgentRuntime {
+  return {
+    ...runtime(agent, "anthropic"),
+    command: ["custom-agent"],
+    claudeCode,
+  };
+}
+
+function launchParams(params: {
+  setup: { agent: Agent; user: User };
+  runtime: ResolvedAgentRuntime;
+  actor: "user" | "system";
+}): Parameters<typeof buildAgentRunLaunchSpec>[0] {
+  const { agent, user } = params.setup;
+  return {
+    runtime: params.runtime,
+    limits: resolveAgentRunLimits({ runtime: params.runtime, tiers: TIERS }),
+    taskId: crypto.randomUUID(),
+    runId: crypto.randomUUID(),
+    agentId: agent.id,
+    actor:
+      params.actor === "user"
+        ? { id: user.id, kind: "user", organizationId: agent.organizationId }
+        : {
+            id: "system",
+            kind: "system",
+            organizationId: agent.organizationId,
+          },
+    organizationId: agent.organizationId,
+    runtimeScope: "agent-tests",
+    effectiveNetworkPolicy: { source: "built_in", policy: null },
+    appName: "Archestra",
+    runMode: "one_shot",
   };
 }

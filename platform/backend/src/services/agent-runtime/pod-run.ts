@@ -148,7 +148,7 @@ async function startAgentRunSession(params: {
     task = promptWithContract(task, contract);
   }
 
-  const { spec, virtualApiKeyId, gatewayTokenId } =
+  const { spec, virtualApiKeyId, gatewayTokenId, boundLlm } =
     await buildAgentRunLaunchSpec({
       runtime: params.runtime,
       taskId: params.taskId,
@@ -224,8 +224,12 @@ async function startAgentRunSession(params: {
         prompt: params.task ?? "Run",
         organizationId: params.organizationId,
         userId: params.titleUserId,
-        modelId: params.modelId,
-        llmApiKeyId: params.llmApiKeyId,
+        // On the account the run is bound to: the agent's own pair is not
+        // what a run uses where its runtime, or the person, sets another.
+        // A run on a person's Claude subscription binds no provider key and
+        // keeps the agent's own pair.
+        modelId: boundLlm ? boundLlm.modelId : params.modelId,
+        llmApiKeyId: boundLlm ? boundLlm.llmApiKeyId : params.llmApiKeyId,
       })
         .then((title) =>
           AgentRunModel.updateTitleIfCurrent({

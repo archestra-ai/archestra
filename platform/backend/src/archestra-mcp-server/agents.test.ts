@@ -27,6 +27,8 @@ import {
   ToolModel,
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { makeKeyWithModel } from "@/routes/agent-runtime/agent-runtime-account.test-helpers";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -1232,12 +1234,15 @@ describe("agent runtime and model tools", () => {
     expect(result.isError).toBe(false);
     expect((result.content[0] as any).text).toContain("Runtime: Claude Code");
     const created = await findCreated(result);
-    expect(created?.runtime).toEqual(
-      buildAgentCatalogRuntime({
+    // A new agent names "each person chooses", as one saved from the page
+    // does: the caller here may configure the runtime.
+    expect(created?.runtime).toEqual({
+      ...buildAgentCatalogRuntime({
         id: "claude-code",
         image: config.agentRuntime.catalogImages["claude-code"],
       }),
-    );
+      accountLock: null,
+    });
     expect(created?.accessAllTools).toBe(true);
     expect(created?.systemPrompt).toContain("You are Claude Code");
   });
@@ -1445,6 +1450,7 @@ describe("agent runtime and model tools", () => {
     expect((await findCreated(result))?.runtime).toEqual({
       ...buildCustomAgentRuntime({ image: "example.test/agent:1" }),
       inferenceProtocol: "openai_chat",
+      accountLock: null,
     });
   });
 

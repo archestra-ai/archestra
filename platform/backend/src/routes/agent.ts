@@ -74,8 +74,15 @@ import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
   assertAgentRuntimeModelCompatibility,
   assertCanBindRuntimeCredentials,
+  canStoreAgentModelSelection,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
+import {
+  agentCopyAccountLock,
+  assertAccountLockWrite,
+  runtimeConnectionFor,
+  withStoredAccountLock,
+} from "@/services/agent-runtime/agent-runtime-access";
 import { applyAgentRuntimeLock } from "@/services/agent-runtime/agent-runtime-lock";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
@@ -792,7 +799,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.runtime = await applyAgentRuntimeLock({
           organizationId,
           userId: user.id,
-          runtime: body.runtime,
+          runtime: withStoredAccountLock({
+            runtime: body.runtime,
+            previous: null,
+          }),
         });
       }
       await requireAgentRuntimePermission({
@@ -841,11 +851,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // A model and its API key are a pair: persist both or neither.
+      const runtimeConnection = await runtimeConnectionFor({
+        organizationId,
+        runtime: body.runtime ?? null,
+      });
+      await assertAccountLockWrite({
+        organizationId,
+        userId: user.id,
+        previous: null,
+        runtime: body.runtime ?? null,
+        account: body,
+      });
+      // A model and its API key are a pair: persist both or neither. An
+      // Agent Runtime agent may store its API key alone, which leaves the
+      // model to each person; on a runtime that fixes its agents'
+      // connection, a model alone runs on it.
       if (
-        !isModelSelectionComplete({
+        !canStoreAgentModelSelection({
           modelId: body.modelId,
-          apiKeyId: body.llmApiKeyId,
+          llmApiKeyId: body.llmApiKeyId,
+          runtime: body.runtime,
+          runtimeConnection,
         })
       ) {
         throw new ApiError(
@@ -862,6 +888,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         selectsModel: true,
+        runtimeConnection,
       });
 
       const environmentId = await resolveNewAgentEnvironmentId({
@@ -1286,6 +1313,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // The copy starts without the source's account lock and key (the model
+      // drops them), so copying needs no more than using the runtime. Its
+      // lock follows what a new agent of the caller's on that runtime would
+      // store.
+      const accountLock = await agentCopyAccountLock({
+        organizationId,
+        runtime: sourceAgent.runtime,
+      });
       await requireAgentRuntimePermission({
         agentType: sourceAgent.agentType,
         runtime: sourceAgent.runtime,
@@ -1310,6 +1345,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scope: "personal",
         teams: [],
         initialGrants,
+        accountLock,
       });
 
       return reply.send(clonedAgent);
@@ -2190,7 +2226,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.runtime = await applyAgentRuntimeLock({
           organizationId,
           userId: user.id,
-          runtime: body.runtime,
+          runtime: withStoredAccountLock({
+            runtime: body.runtime,
+            previous: existingAgent.runtime,
+          }),
           previous: existingAgent.runtime,
         });
       }
@@ -2250,6 +2289,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const runtimeConnection = await runtimeConnectionFor({
+        organizationId,
+        runtime:
+          body.runtime !== undefined ? body.runtime : existingAgent.runtime,
+      });
+      await assertAccountLockWrite({
+        organizationId,
+        userId: user.id,
+        previous: existingAgent,
+        runtime: body.runtime,
+        account: body,
+      });
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
       if (existingAgent.builtInAgentConfig) {
@@ -2296,9 +2347,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? body.llmApiKeyId
             : existingAgent.llmApiKeyId;
         if (
-          !isModelSelectionComplete({
+          !canStoreAgentModelSelection({
             modelId: mergedModelId,
-            apiKeyId: mergedApiKeyId,
+            llmApiKeyId: mergedApiKeyId,
+            runtime:
+              body.runtime !== undefined ? body.runtime : existingAgent.runtime,
+            runtimeConnection,
           })
         ) {
           throw new ApiError(
@@ -2330,6 +2384,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // limits change does not choose a model.
           selectsModel:
             body.modelId !== undefined || body.llmApiKeyId !== undefined,
+          runtimeConnection,
         });
       }
 

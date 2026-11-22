@@ -1832,6 +1832,7 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
 
     const runtime = {
       agentId: agent.id,
+      accountLock: null,
       organizationId: agent.organizationId,
       secretId: null,
       environmentId: null,

@@ -5,8 +5,10 @@ import {
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
+  AgentRuntimeUserAccountModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  OrganizationModel,
 } from "@/models";
 import { expect, test, vi } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -55,6 +57,7 @@ test("background drain waits for a failed launch's title request, logged in the 
   });
   const runtime: ResolvedAgentRuntime = {
     agentId: agent.id,
+    accountLock: null,
     organizationId: org.id,
     environmentId: null,
     secretId: null,
@@ -158,4 +161,132 @@ test("background drain waits for a failed launch's title request, logged in the 
     releaseResponse();
     await drainBackgroundWork();
   }
+});
+
+test("titles a run on the model it is bound to, not on what the agent itself stores", async ({
+  makeOrganization,
+  makeAdmin,
+  makeMember,
+  makeSecret,
+  makeLlmProviderApiKey,
+  makeAgent,
+}) => {
+  config.agentRuntime.platformBaseUrl = "https://platform.example.test";
+  vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+  vi.spyOn(backend, "assertReady").mockResolvedValue();
+  const org = await makeOrganization();
+  const user = await makeAdmin();
+  await makeMember(user.id, org.id, { role: "admin" });
+  const secret = await makeSecret({ secret: { apiKey: "test-upstream-key" } });
+  const keyWithModel = async (modelId: string) => {
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    const model = await ModelModel.create({
+      externalId: `openai/${modelId}`,
+      provider: "openai",
+      modelId,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    return { key, model };
+  };
+  // The organization's default, which an agent that stores no connection
+  // falls back to.
+  const fallback = await keyWithModel("default-model");
+  await OrganizationModel.patch(org.id, {
+    defaultModelId: fallback.model.id,
+    defaultLlmApiKeyId: fallback.key.id,
+  });
+  // The agent leaves its connection to each person, and this person picked
+  // their own.
+  const picked = await keyWithModel("picked-model");
+  const agent = await makeAgent({
+    organizationId: org.id,
+    authorId: user.id,
+    agentType: "agent",
+  });
+  await AgentRuntimeUserAccountModel.upsert({
+    agentId: agent.id,
+    userId: user.id,
+    authentication: "provider",
+    llmApiKeyId: picked.key.id,
+    modelId: picked.model.id,
+  });
+  const runtime: ResolvedAgentRuntime = {
+    agentId: agent.id,
+    accountLock: null,
+    organizationId: org.id,
+    environmentId: null,
+    secretId: null,
+    image: "test-agent:latest",
+    command: null,
+    inferenceProtocol: "openai_chat",
+    backend: "kubernetes",
+    steerMode: "pipe",
+    privileged: false,
+    environment: null,
+    credentials: null,
+    ttlHours: null,
+    maxCostUsd: null,
+    idleTimeoutMinutes: null,
+  };
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: user.id,
+  });
+  const task = await A2ATaskModel.createForRun({
+    contextId: context.id,
+    agentId: agent.id,
+  });
+  let titleModel: string | undefined;
+  server.use(
+    http.post(
+      "http://127.0.0.1:9000/v1/openai/:agentId/chat/completions",
+      async ({ request }) => {
+        titleModel = ((await request.json()) as { model?: string }).model;
+        return HttpResponse.json({
+          id: "title-response",
+          object: "chat.completion",
+          created: 1,
+          model: titleModel,
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "Picked model run" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        });
+      },
+    ),
+  );
+  vi.spyOn(backend, "launch").mockRejectedValue(new Error("launch stopped"));
+  vi.spyOn(backend, "teardown").mockResolvedValue();
+
+  await expect(
+    runTaskInAgentRuntime({
+      runtime,
+      taskId: task.id,
+      agentId: agent.id,
+      actor: { kind: "user", id: user.id, organizationId: org.id },
+      organizationId: org.id,
+      runMode: "one_shot",
+      task: "Title this run",
+      modelId: agent.modelId,
+      llmApiKeyId: agent.llmApiKeyId,
+    }),
+  ).rejects.toThrow("launch stopped");
+  await drainBackgroundWork();
+
+  expect(titleModel).toBe("picked-model");
+  expect((await AgentRunModel.findByTaskId(task.id))?.title).toBe(
+    "Picked model run",
+  );
 });

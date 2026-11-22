@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { isVaultReference } from "@archestra/shared";
+import {
+  isVaultReference,
+  runtimeSupportsClaudeSubscription,
+} from "@archestra/shared";
 import { z } from "zod";
 import logger from "@/logging";
 import {
@@ -301,10 +304,10 @@ class ClaudeCodeAccountManager {
   }
 
   private async placement(params: AccountOwner) {
-    if (params.runtime.command?.[0] !== "archestra-claude-code")
+    if (!runtimeSupportsClaudeSubscription(params.runtime))
       throw new ApiError(
         400,
-        "Claude subscriptions are only available in the Claude Code runtime.",
+        "Claude subscriptions are only available in a runtime that runs Claude Code.",
       );
     const [organization, environment] = await Promise.all([
       OrganizationModel.getById(params.runtime.organizationId),

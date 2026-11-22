@@ -1,14 +1,10 @@
 import { randomBytes } from "node:crypto";
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
-  isCodexRuntimeCommand,
   isDefaultBrandedAppName,
-  providerDisplayNames,
   type ResourcePermissionGrant,
   RUN_ID_HEADER,
   resolveClaudeContextVariant,
-  SUBSCRIPTION_CREDENTIALS,
-  type SubscriptionCredentialKind,
   type SupportedProvider,
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
@@ -42,18 +38,21 @@ import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import type {
   AgentRunInput,
+  AgentRuntimeAccountLock,
   EffectiveNetworkPolicy,
   ResolvedAgentRuntime,
 } from "@/types";
 import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
-import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
+import {
+  type AgentRuntimeRunAccount,
+  assertRunHonoursAccountLock,
+  withResolvedClaudeAccount,
+} from "./account-resolution";
 import type { AgentRunLaunchSpec } from "./backends";
 import { resolveAgentRuntimeCredentials } from "./credentials";
 import { taskWithAgentRunInputs } from "./input-files";
-import {
-  getClaudeCodeCloudProvider,
-  preflightAgentRuntimeModelCompatibility,
-} from "./model-compatibility";
+import { preflightAgentRuntimeModelCompatibility } from "./model-compatibility";
+import { bindRunProviderKey } from "./preflight";
 import {
   AGENT_RUNTIME_OAUTH_CLIENT_ID,
   AGENT_RUNTIME_STEER_FIFO,
@@ -104,6 +103,12 @@ export async function buildAgentRunLaunchSpec(params: {
   spec: AgentRunLaunchSpec;
   virtualApiKeyId: string | null;
   gatewayTokenId: string | null;
+  /**
+   * The provider key and model the run is bound to, for the calls made
+   * beside it, such as its title. Null on a person's Claude subscription,
+   * which binds no provider key.
+   */
+  boundLlm: { llmApiKeyId: string; modelId: string | null } | null;
 }> {
   const platformBaseUrl = config.agentRuntime.platformBaseUrl.replace(
     /\/+$/,
@@ -194,23 +199,26 @@ export async function buildAgentRunLaunchSpec(params: {
         ? serviceAccountUserId(params.actor.id)
         : (actorUserId ?? undefined),
   });
-  const { llm, selectedModel, usesClaudeCodeSubscription } =
-    await preflightAgentRuntimeModelCompatibility({
-      runtime: params.runtime,
-      agent,
-      organizationId: params.organizationId,
-      userId: actorUserId ?? "system",
-    });
-
-  const claudeCodeCloudProvider = getClaudeCodeCloudProvider({
+  const {
+    llm,
+    selectedModel,
+    usesClaudeCodeSubscription,
+    claudeCodeCloudProvider,
+    account,
+    accountLock,
+    companyConnectionId,
+    inputs,
+  } = await preflightAgentRuntimeModelCompatibility({
     runtime: params.runtime,
-    provider: llm.selectedProvider,
+    agent,
+    agentId: params.agentId,
+    organizationId: params.organizationId,
+    userId: actorUserId ?? "system",
   });
   const isClaudeCodeBedrock = claudeCodeCloudProvider === "bedrock";
   const isClaudeCodeRuntime =
     params.runtime.command?.[0] === "archestra-claude-code" ||
     params.runtime.command?.[0] === "archestra-claude-code-runtime";
-  const isCodexRuntime = isCodexRuntimeCommand(params.runtime.command?.[0]);
   if (credentials.env.CLAUDE_CODE_OAUTH_TOKEN) {
     throw new ApiError(
       409,
@@ -225,7 +233,7 @@ export async function buildAgentRunLaunchSpec(params: {
   }
   if (usesClaudeCodeSubscription && actorUserId) {
     await claudeCodeAccountManager.requireConnection({
-      runtime: params.runtime,
+      runtime: withResolvedClaudeAccount(params.runtime, inputs.runtime),
       userId: actorUserId,
       runtimeScope: params.runtimeScope,
     });
@@ -234,22 +242,38 @@ export async function buildAgentRunLaunchSpec(params: {
   // key in CLAUDE_CODE_OAUTH_TOKEN (and X-Archestra-Virtual-Key); the proxy
   // swaps it for the user's connected Claude subscription token server-side so
   // the raw OAuth token never enters the runtime pod.
-  const virtualKey = usesClaudeCodeSubscription
-    ? await VirtualApiKeyModel.create({
-        organizationId: params.organizationId,
-        name: `agent-run-${params.taskId.slice(0, 8)}`,
-        keyType: "passthrough",
-        ...virtualKeyVisibility(params.actor),
-      })
+  if (usesClaudeCodeSubscription) {
+    await assertRunHonoursAccountLock({
+      lock: accountLock,
+      companyConnectionId,
+      claudeSubscription: true,
+      boundKeyId: null,
+      provider: llm.selectedProvider,
+      runtimeCommand: params.runtime.command?.[0],
+    });
+  }
+  const bound = usesClaudeCodeSubscription
+    ? {
+        virtualKey: await VirtualApiKeyModel.create({
+          organizationId: params.organizationId,
+          name: `agent-run-${params.taskId.slice(0, 8)}`,
+          keyType: "passthrough",
+          ...virtualKeyVisibility(params.actor),
+        }),
+        providerApiKeyId: null,
+      }
     : await createProviderBackedVirtualKey({
         organizationId: params.organizationId,
         actor: params.actor,
         taskId: params.taskId,
         provider: llm.selectedProvider,
         model: llm.selectedModel,
-        agentLlmApiKeyId: agent.llmApiKeyId,
-        requiredSubscriptionKind: isCodexRuntime ? "chatgpt" : null,
+        companyConnectionId,
+        account,
+        accountLock,
+        runtimeCommand: params.runtime.command?.[0],
       });
+  const { virtualKey } = bound;
   const virtualKeyValue = virtualKey?.value ?? "";
   if (params.runtime.maxCostUsd && virtualKey) {
     try {
@@ -465,6 +489,9 @@ export async function buildAgentRunLaunchSpec(params: {
   return {
     virtualApiKeyId: virtualKey?.virtualKey.id ?? null,
     gatewayTokenId: accountToken?.id ?? null,
+    boundLlm: bound.providerApiKeyId
+      ? { llmApiKeyId: bound.providerApiKeyId, modelId: llm.modelId }
+      : null,
     spec: {
       poolScope: `${params.organizationId}:${params.runtime.environmentId ?? "default"}`,
       taskId: params.taskId,
@@ -572,105 +599,47 @@ async function createProviderBackedVirtualKey(params: {
   taskId: string;
   provider: SupportedProvider;
   model: string;
-  agentLlmApiKeyId: string | null;
-  requiredSubscriptionKind: SubscriptionCredentialKind | null;
-}): Promise<Awaited<ReturnType<typeof VirtualApiKeyModel.create>>> {
+  companyConnectionId: string | null;
+  account: AgentRuntimeRunAccount;
+  accountLock: AgentRuntimeAccountLock | null;
+  runtimeCommand: string | null | undefined;
+}): Promise<{
+  virtualKey: Awaited<ReturnType<typeof VirtualApiKeyModel.create>>;
+  /** The provider key the run is bound to. */
+  providerApiKeyId: string;
+}> {
   if (params.actor.kind === "serviceAccount")
     await resolveOauthServiceAccount({
       serviceAccountId: params.actor.id,
       organizationId: params.organizationId,
     });
-  const actorUserId = params.actor.kind === "user" ? params.actor.id : null;
-  const requiredSubscription =
-    params.requiredSubscriptionKind && actorUserId
-      ? await LlmProviderApiKeyModel.findPersonalSubscriptionKey({
-          organizationId: params.organizationId,
-          userId: actorUserId,
-          kind: params.requiredSubscriptionKind,
-        })
-      : null;
-  if (params.requiredSubscriptionKind && !requiredSubscription) {
-    throw new ApiError(
-      409,
-      `Connect your own ${SUBSCRIPTION_CREDENTIALS[params.requiredSubscriptionKind].label} before starting this Agent. The maintained runtime never falls back to usage-based API billing.`,
-    );
-  }
-  const resolvedProviderCredential = requiredSubscription
-    ? {
-        authRequired: undefined,
-        chatApiKeyId: requiredSubscription.apiKey.id,
-      }
-    : await resolveProviderApiKey({
-        organizationId: params.organizationId,
-        userId:
-          params.actor.kind === "serviceAccount"
-            ? serviceAccountUserId(params.actor.id)
-            : (actorUserId ?? undefined),
-        provider: params.provider,
-        agentLlmApiKeyId: params.agentLlmApiKeyId ?? undefined,
-        modelName: params.model,
-      });
-  if (resolvedProviderCredential.authRequired) {
-    throw new ApiError(
-      409,
-      `Connect your own ${resolvedProviderCredential.authRequired.providerLabel} before starting this Agent's Agent Runtime. Subscription credentials are never shared between users.`,
-    );
-  }
-  const providerApiKey = resolvedProviderCredential.chatApiKeyId
-    ? await LlmProviderApiKeyModel.findById(
-        resolvedProviderCredential.chatApiKeyId,
-      )
-    : null;
-  if (!providerApiKey) {
-    throw new ApiError(
-      409,
-      `No ${providerDisplayNames[params.provider]} credential is available for this Agent and user, so the Agent Runtime run cannot use its selected model.`,
-    );
-  }
-
-  if (requiredSubscription && params.requiredSubscriptionKind) {
-    // The runtime uses the actor's subscription, which may have been synced
-    // before the selected model was released (or before another user's key).
-    // Refresh that connection rather than bypassing the router's model links.
-    const hasSelectedModel = async () => {
-      const models = await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
-        providerApiKey.id,
-      );
-      return models.some(
-        (model) =>
-          model.provider === params.provider &&
-          model.modelId === params.model &&
-          ModelModel.supportsTextChat(model),
-      );
-    };
-    if (!(await hasSelectedModel())) {
-      await modelSyncService.syncModelsForApiKey({
-        apiKeyId: providerApiKey.id,
-        provider: providerApiKey.provider,
-        apiKeyValue: requiredSubscription.apiKeyValue,
-      });
-      if (!(await hasSelectedModel())) {
-        throw new ApiError(
-          409,
-          `The selected model "${params.model}" is not available through your ${SUBSCRIPTION_CREDENTIALS[params.requiredSubscriptionKind].label}. Choose a model supported by that connection.`,
-        );
-      }
-    }
-  }
-
-  return VirtualApiKeyModel.create({
+  const providerApiKey = await bindRunProviderKey({
     organizationId: params.organizationId,
-    name: `agent-run-${params.taskId.slice(0, 8)}`,
-    // Personal scope is what attributes the session's LLM spend to the human
-    // it acts as rather than to the organization at large.
-    ...virtualKeyVisibility(params.actor),
-    providerApiKeys: [
-      {
-        provider: params.provider,
-        providerApiKeyId: providerApiKey.id,
-      },
-    ],
+    actor: params.actor,
+    provider: params.provider,
+    model: params.model,
+    companyConnectionId: params.companyConnectionId,
+    account: params.account,
+    accountLock: params.accountLock,
+    runtimeCommand: params.runtimeCommand,
   });
+
+  return {
+    virtualKey: await VirtualApiKeyModel.create({
+      organizationId: params.organizationId,
+      name: `agent-run-${params.taskId.slice(0, 8)}`,
+      // Personal scope is what attributes the session's LLM spend to the
+      // human it acts as rather than to the organization at large.
+      ...virtualKeyVisibility(params.actor),
+      providerApiKeys: [
+        {
+          provider: params.provider,
+          providerApiKeyId: providerApiKey.id,
+        },
+      ],
+    }),
+    providerApiKeyId: providerApiKey.id,
+  };
 }
 
 async function resolveGatewayToken(params: {

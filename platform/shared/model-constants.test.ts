@@ -16,7 +16,9 @@ import {
   requiresOpenAiResponsesApi,
   resolveClaudeContextVariant,
   SMALL_MODEL_MAX_PARAMETERS,
+  startingClaudeAuthentication,
   stripClaudeContextVariantSuffix,
+  withClaudeAccountItRuns,
 } from "./model-constants";
 
 describe("anthropicThinksByDefault", () => {
@@ -526,5 +528,68 @@ describe("getAgentRuntimeAllowedProtocols", () => {
         message: expect.stringContaining("requires the Anthropic API"),
       });
     }
+  });
+});
+
+describe("withClaudeAccountItRuns", () => {
+  const custom = {
+    command: ["custom-claude-entrypoint"],
+    claudeCode: { authentication: "subscription" as const, model: "opus" },
+  };
+  const maintained = { ...custom, command: ["archestra-claude-code"] };
+
+  test("an agent saved before people could choose ran a custom image on its provider connection, whatever it stored", () => {
+    expect(
+      withClaudeAccountItRuns({ runtime: custom, savedBeforeChoosing: true }),
+    ).toEqual({
+      ...custom,
+      claudeCode: { authentication: "provider", model: "opus" },
+    });
+  });
+
+  test("the maintained runtime, and an agent saved with its accounts, run what they store", () => {
+    expect(
+      withClaudeAccountItRuns({
+        runtime: maintained,
+        savedBeforeChoosing: true,
+      }),
+    ).toBe(maintained);
+    expect(
+      withClaudeAccountItRuns({ runtime: custom, savedBeforeChoosing: false }),
+    ).toBe(custom);
+  });
+});
+
+describe("startingClaudeAuthentication", () => {
+  const custom = {
+    command: ["custom-claude-entrypoint"],
+    claudeCode: { authentication: "subscription" as const },
+  };
+
+  test("a custom image's stored subscription starts nobody on one without a rule", () => {
+    expect(
+      startingClaudeAuthentication({ runtime: custom, ruleKind: null }),
+    ).toBe("provider");
+  });
+
+  test("the maintained runtime starts new agents on what it stores, and a rule's kind wins everywhere", () => {
+    expect(
+      startingClaudeAuthentication({
+        runtime: { ...custom, command: ["archestra-claude-code"] },
+        ruleKind: null,
+      }),
+    ).toBe("subscription");
+    expect(
+      startingClaudeAuthentication({
+        runtime: custom,
+        ruleKind: "subscription",
+      }),
+    ).toBe("subscription");
+    expect(
+      startingClaudeAuthentication({
+        runtime: { ...custom, claudeCode: { authentication: "subscription" } },
+        ruleKind: "key",
+      }),
+    ).toBe("provider");
   });
 });

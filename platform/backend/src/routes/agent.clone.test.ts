@@ -1048,7 +1048,7 @@ describe("clone agent route", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     const cloned = response.json() as Agent;
-    expect(cloned.runtime).toEqual(runtime);
+    expect(cloned.runtime).toEqual({ ...runtime, accountLock: null });
     const [clonedRow] = await db
       .select({ runtimeSecretId: schema.agentsTable.runtimeSecretId })
       .from(schema.agentsTable)

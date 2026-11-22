@@ -1,0 +1,43 @@
+name: Set up skopeo
+description: >-
+  Builds a pinned skopeo from source and installs it in /usr/local/bin, ahead
+  of the runner's packaged one (/usr/bin) on PATH.
+
+# Ubuntu 24.04 packages skopeo 1.13, built against a newer image library that
+# records each zstd layer as an annotation on the image's index entry. Docker
+# Hardened Images ship zstd layers, so every release image built on one has
+# them, and "copy --all --preserve-digests" then refuses the index it would
+# have to change ("Manifest list must be converted to type ... Instructed to
+# preserve digests"). skopeo 1.24 copies it unchanged. release-publisher's
+# action of the same name builds the same version for the same reason.
+#
+# go install verifies every module against skopeo's go.sum and the Go checksum
+# database. No module cache is restored: this runs in jobs that hold registry
+# credentials.
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: "1.25.7" # skopeo's go.mod
+        cache: false
+
+    - name: Build skopeo
+      shell: bash
+      env:
+        SKOPEO_MODULE: go.podman.io/skopeo/cmd/skopeo
+        SKOPEO_VERSION: v1.24.1
+        # A static build: OpenPGP in Go instead of gpgme, no storage drivers
+        # that need C libraries. These jobs only talk to registries.
+        SKOPEO_TAGS: containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper
+        CGO_ENABLED: "0"
+        GOTOOLCHAIN: local
+        GOFLAGS: -trimpath
+      run: |
+        set -euo pipefail
+        bin="$RUNNER_TEMP/skopeo-bin"
+        GOBIN="$bin" go install -tags "$SKOPEO_TAGS" "$SKOPEO_MODULE@$SKOPEO_VERSION"
+        sudo install -m 0755 "$bin/skopeo" /usr/local/bin/skopeo
+        [ "$(command -v skopeo)" = /usr/local/bin/skopeo ]
+        skopeo --version

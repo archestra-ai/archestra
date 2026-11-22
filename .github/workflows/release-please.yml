@@ -824,6 +824,11 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # The runner's skopeo cannot copy an index whose image has zstd layers
+      # with its digest preserved.
+      - name: Set up skopeo
+        uses: $/.github/actions/setup-skopeo
+
       # Real release digests, already public, staged like a release stages them.
       - name: Stage the published images
         shell: bash

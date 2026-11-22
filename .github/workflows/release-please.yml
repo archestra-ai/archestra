@@ -745,7 +745,7 @@ jobs:
     permissions:
       id-token: write # Sign the build provenance attestation.
       attestations: write # Store the build provenance attestation.
-    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@8cd509dfed770de0e1611904f9d297db7b2c7618 # v1.44.1
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@6a057a74a0b093c79f29e74871de23f7b6712893 # v1.45.2
     with:
       subjects: ${{ needs.release-subjects.outputs.subjects }}
 
@@ -767,7 +767,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@8cd509dfed770de0e1611904f9d297db7b2c7618 # v1.44.1
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@6a057a74a0b093c79f29e74871de23f7b6712893 # v1.45.2
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -888,7 +888,7 @@ jobs:
     permissions:
       id-token: write # Sign the build provenance attestation.
       attestations: write # Store the build provenance attestation.
-    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@8cd509dfed770de0e1611904f9d297db7b2c7618 # v1.44.1
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@6a057a74a0b093c79f29e74871de23f7b6712893 # v1.45.2
     with:
       subjects: ${{ needs.publisher-smoke.outputs.subjects }}
 
@@ -901,7 +901,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@8cd509dfed770de0e1611904f9d297db7b2c7618 # v1.44.1
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@6a057a74a0b093c79f29e74871de23f7b6712893 # v1.45.2
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

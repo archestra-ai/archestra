@@ -12,7 +12,6 @@ import { CredentialAccess } from "@/services/credential-access";
 import { CredentialResolutionBatch } from "@/services/credentials";
 import { GitHubReconnectRequiredError } from "@/services/github-user-connection";
 import type {
-  AgentRuntime,
   AgentRuntimeCredentialDeclaration,
   MissingAgentRuntimeCredential,
   ResolvedAgentRuntime,
@@ -425,12 +424,15 @@ export async function declarePersonalRuntimeCredential(params: {
   const credentials = [...(params.runtime.credentials ?? []), declaration];
   // Persist the declaration before the value: `setAgentRuntimeCredential`
   // refuses an undeclared key, and a stored value under a key the Agent does
-  // not declare would never be injected anyway.
+  // not declare would never be injected anyway. It is added to what the agent
+  // stores: a run reads some stored settings as they run, which must not be
+  // written back.
+  const stored = await AgentModel.findById(params.runtime.agentId);
+  if (!stored?.runtime) {
+    throw new ApiError(404, "Agent not found");
+  }
   await AgentModel.update(params.runtime.agentId, {
-    runtime: {
-      ...stripResolvedFields(params.runtime),
-      credentials,
-    },
+    runtime: { ...stored.runtime, credentials },
   });
 
   return {
@@ -708,13 +710,6 @@ async function deleteSecretQuietly(secretId: string): Promise<void> {
       "Failed to delete replaced Agent Runtime credential secret",
     );
   }
-}
-
-/** `ResolvedAgentRuntime` carries server-only associations the column does not. */
-function stripResolvedFields(runtime: ResolvedAgentRuntime): AgentRuntime {
-  const { agentId, organizationId, environmentId, secretId, ...stored } =
-    runtime;
-  return stored;
 }
 
 // Claude Code owns subscription authentication. Legacy pasted tokens must not

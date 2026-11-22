@@ -631,6 +631,86 @@ export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
   return command === "archestra-claude-code";
 }
 
+type ClaudeSubscriptionRuntime = {
+  command?: readonly string[] | null;
+  claudeCode?: { authentication: "provider" | "subscription" } | null;
+};
+
+/**
+ * Whether a runtime can run on a person's own Claude subscription: the
+ * maintained Claude Code runtime. A custom image is never offered it.
+ */
+export function runtimeSupportsClaudeSubscription(
+  runtime: ClaudeSubscriptionRuntime,
+): boolean {
+  return isClaudeCodeRuntimeCommand(runtime.command?.[0]);
+}
+
+/**
+ * Whether a runtime's settings ask for the person's Claude subscription: the
+ * maintained Claude Code runtime does unless set to provider authentication.
+ * Callers still apply the Bedrock and Vertex exception.
+ */
+export function runtimeRequestsClaudeSubscription(
+  runtime: ClaudeSubscriptionRuntime,
+): boolean {
+  return (
+    runtimeSupportsClaudeSubscription(runtime) &&
+    runtime.claudeCode?.authentication !== "provider"
+  );
+}
+
+/**
+ * An agent's runtime with the Claude account its runs read. An agent saved
+ * before people could choose its account stores no `accountLock`. On any
+ * image but the maintained Claude Code runtime, such an agent always ran on
+ * its provider connection, whatever Claude account it stored: it still does,
+ * and what it stores stays as it is, until someone saves its accounts.
+ */
+export function withClaudeAccountItRuns<
+  Runtime extends ClaudeSubscriptionRuntime,
+>(params: {
+  runtime: Runtime;
+  /** The agent was saved before people could choose its account. */
+  savedBeforeChoosing: boolean;
+}): Runtime {
+  const { runtime } = params;
+  if (
+    !params.savedBeforeChoosing ||
+    isClaudeCodeRuntimeCommand(runtime.command?.[0]) ||
+    runtime.claudeCode?.authentication !== "subscription"
+  ) {
+    return runtime;
+  }
+  return {
+    ...runtime,
+    claudeCode: { ...runtime.claudeCode, authentication: "provider" },
+  };
+}
+
+/**
+ * The Claude account a new agent starts on, from the settings of the runtime
+ * it is created on. A kind the runtime's account rule names is the account.
+ * Without a rule, the maintained Claude Code runtime starts new agents on the
+ * account its settings store. A custom image ran every agent on its provider
+ * connection whatever Claude account its settings stored, so there a stored
+ * subscription starts nobody on one.
+ */
+export function startingClaudeAuthentication(params: {
+  runtime: ClaudeSubscriptionRuntime;
+  /** The account kind the runtime's rule names, if it names one. */
+  ruleKind: "subscription" | "key" | null | undefined;
+}): "provider" | "subscription" | undefined {
+  if (params.ruleKind) {
+    return params.ruleKind === "subscription" ? "subscription" : "provider";
+  }
+  const authentication = params.runtime.claudeCode?.authentication;
+  return authentication === "subscription" &&
+    !isClaudeCodeRuntimeCommand(params.runtime.command?.[0])
+    ? "provider"
+    : authentication;
+}
+
 /** Whether a runtime command invokes the maintained Codex runtime. */
 export function isCodexRuntimeCommand(command?: string | null): boolean {
   return command === "archestra-codex" || command === "archestra-codex-runtime";

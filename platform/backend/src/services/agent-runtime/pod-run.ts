@@ -3,6 +3,7 @@ import {
   DEFAULT_APP_NAME,
   followAgentCatalogImage,
   toPlaceholderTitle,
+  withClaudeAccountItRuns,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
@@ -35,7 +36,7 @@ import type {
   AgentRunRecord,
   ResolvedAgentRuntime,
 } from "@/types";
-import { ApiError } from "@/types";
+import { ApiError, OWN_ACCOUNT_ONLY } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
   prepareAgentRuntimeBackendDriver,
@@ -374,11 +375,20 @@ export function resolveAgentRuntime(
     return null;
   }
   return {
-    ...agent.runtime,
+    // An agent saved before people could choose its account runs on the
+    // Claude account it always ran on.
+    ...withClaudeAccountItRuns({
+      runtime: agent.runtime,
+      savedBeforeChoosing: agent.runtime.accountLock === undefined,
+    }),
     image: followAgentCatalogImage({
       image: agent.runtime.image,
       catalogImages: config.agentRuntime.catalogImages,
     }),
+    accountLock:
+      agent.runtime.accountLock === undefined
+        ? OWN_ACCOUNT_ONLY
+        : agent.runtime.accountLock,
     agentId: agent.id,
     organizationId: agent.organizationId,
     environmentId: agent.environmentId,

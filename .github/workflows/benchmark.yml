@@ -122,6 +122,10 @@ jobs:
           set -euo pipefail
           get() { kubectl get deployment archestra-platform -n archestra -o jsonpath="$1"; }
           PLATFORM_IMAGE=$(get '{.spec.template.spec.containers[0].image}')
+          # Staging runs the Kubernetes image (platform-slim), which has no
+          # shell or apk for the runner's RUN steps; the docker run image of
+          # the same tag holds the same code.
+          PLATFORM_IMAGE="${PLATFORM_IMAGE/platform-slim:/platform:}"
           PLATFORM_SA=$(get '{.spec.template.spec.serviceAccountName}')
           [ -n "${PLATFORM_SA}" ] || PLATFORM_SA=default
           if [ -z "${PLATFORM_IMAGE}" ]; then

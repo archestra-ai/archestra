@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.43" # x-release-please-version
+  imageTag: "1.5.0-rc.44" # x-release-please-version
 
   # Which build of the image the chart runs, as a suffix on imageTag.
   # `slim` (the default) is the Kubernetes image: no bundled PostgreSQL and no
@@ -776,7 +776,7 @@ archestra:
     enabled: true
 
     # Base image for MCP server containers
-    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.43" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.44" # x-release-please-version
     # (released charts pin it to its digest; see releaseImageDigests)
     baseImage: ""
 

@@ -55,7 +55,16 @@ export function useEnvironments(enabled = true) {
   });
 }
 
+/**
+ * What the cluster can do. Reading it takes `environment:update`, and the
+ * hook checks that itself: for anyone else no request is sent, whatever the
+ * caller passes, so nobody is shown a refusal for a read that was never
+ * theirs to make. They get no data, and what depends on it stays neutral.
+ */
 export function useK8sCapabilities(enabled = true) {
+  const { data: canInspectCluster } = useHasPermissions({
+    environment: ["update"],
+  });
   return useQuery({
     queryKey: environmentKeys.k8sCapabilities(),
     queryFn: async () => {
@@ -63,7 +72,7 @@ export function useK8sCapabilities(enabled = true) {
       throwOnApiError(error);
       return data ?? null;
     },
-    enabled,
+    enabled: enabled && canInspectCluster === true,
     staleTime: 60 * 1000,
   });
 }

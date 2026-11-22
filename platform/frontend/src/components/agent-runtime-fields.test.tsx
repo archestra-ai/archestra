@@ -344,6 +344,11 @@ describe("AgentRuntimeFields", () => {
     vi.mocked(useFeature).mockImplementation((flag) =>
       flag === "agentRuntime" ? true : undefined,
     );
+    // Someone who may read credentials is offered the organization's.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
     const user = userEvent.setup();
 
     render(
@@ -670,16 +675,39 @@ describe("AgentRuntimeFields", () => {
     expect(
       supportsClaudeCodeSubscription({
         command: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic",
       }),
     ).toBe(true);
     expect(
       supportsClaudeCodeSubscription({
         command: ["archestra-claude-code-runtime"],
+        inferenceProtocol: "anthropic",
       }),
     ).toBe(true);
     expect(
       supportsClaudeCodeSubscription({
         command: ["custom-claude-entrypoint"],
+        inferenceProtocol: "anthropic",
+      }),
+    ).toBe(true);
+    expect(
+      supportsClaudeCodeSubscription({
+        command: ["custom-entrypoint"],
+        inferenceProtocol: "openai_chat",
+      }),
+    ).toBe(false);
+    expect(
+      supportsClaudeCodeSubscription({
+        command: ["archestra-codex"],
+        inferenceProtocol: "anthropic",
+      }),
+    ).toBe(false);
+    // A maintained runtime's standalone wrapper is that runtime, not a custom image.
+    expect(
+      isClaudeCodeRuntimeConfig({
+        command: ["archestra-opencode-runtime"],
+        inferenceProtocol: "anthropic",
+        claudeCode: { authentication: "subscription" },
       }),
     ).toBe(false);
   });

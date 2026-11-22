@@ -37,6 +37,12 @@ const NEEDS_CLAUDE_ACCOUNT: Preflight = {
   ],
   misconfigured: [],
   incompatible: null,
+  accountError: null,
+  accountErrorFromChoice: false,
+  accountErrorFromModel: false,
+  accountErrorFromConnection: false,
+  companyAccountIsPlan: false,
+  missingSubscription: null,
 };
 
 const READY: Preflight = {
@@ -45,6 +51,12 @@ const READY: Preflight = {
   missing: [],
   misconfigured: [],
   incompatible: null,
+  accountError: null,
+  accountErrorFromChoice: false,
+  accountErrorFromModel: false,
+  accountErrorFromConnection: false,
+  companyAccountIsPlan: false,
+  missingSubscription: null,
 };
 
 test("spaces the setup track like the rest of the agent overview, and clears it once the account is connected", async ({

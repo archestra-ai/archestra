@@ -68,7 +68,7 @@
     "searchText": "copy file between chat and open app, transfer attachment into app file store, export app output to chat files panel, open file in app, save app result, download, project files, rename destination, overwrite existing file"
   },
   "create_agent": {
-    "definitionHash": "2444476ae628b41ecb4d481d97172b488397d2da75f4ee346d615e3efdfef40a",
+    "definitionHash": "aad21fcd931d638b1f61d43013df9f4f23a01bdd25c7f3aaa2e6dd975ceef231",
     "searchText": "create new AI agent assistant, set name description system prompt, model API key, assign MCP tools, knowledge bases connectors, sub-agent delegation, labels emoji icon, suggested prompts, container runtime Claude Code Codex custom image, network egress policy, sharing permissions grants users teams"
   },
   "create_guardrails_repository": {
@@ -180,7 +180,7 @@
     "searchText": "save sandbox file to persistent conversation files, export container output, persist generated file, copy file from sandbox disk, make file downloadable for user, attachments, overwrite existing file, MIME type, binary or text output"
   },
   "edit_agent": {
-    "definitionHash": "5cb96071a3a911c5c200e20a67f72373a8d86d97ee7dab799560698285389184",
+    "definitionHash": "df9eee125d05df832acbe5dddf5abab02cb1b10aad1c3578472b502f9913c38b",
     "searchText": "update modify configure existing AI agent settings, rename, change system prompt, description, icon, labels, assign tools, add subagent delegation, knowledge bases, connectors, suggested prompts, LLM model and API key, container runtime Claude Code Codex image, outbound network egress policy allowed domains"
   },
   "edit_app": {

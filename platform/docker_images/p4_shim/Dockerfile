@@ -10,9 +10,9 @@
 # The official `p4` binary needs glibc, so this image uses Debian 13.
 # The published image needs only Node, glibc and tini. Keep apt and the shell
 # in a throwaway stage, then copy the process reaper into the runtime image.
-FROM dhi.io/debian-base:trixie-debian13-dev@sha256:1aa0a2307eea88ae00d07c7b3c8e804187ee272ccc89cde7b51667b3b065fb1d AS tini-build
+FROM dhi.io/debian-base:trixie-debian13-dev@sha256:3a0f849e7ecad5433a8a517e4606794dc65941b275177c7f44002c3fc322d7a8 AS tini-build
 RUN apt-get update && apt-get install -y --no-install-recommends tini
-FROM dhi.io/node:24.22.3-debian13@sha256:927ecf24d99ce7bffe8abd063177242bdfe79a4f41aa6c5ad548f3be0a31f030
+FROM dhi.io/node:24.22.3-debian13@sha256:b1f27e02fbc8c2178892d39affd54dc2bd4e2215100b47a79c6f6038858eba72
 COPY --from=tini-build /usr/bin/tini /usr/bin/tini
 
 # Explicit world-readable mode: COPY preserves the build context's file mode,

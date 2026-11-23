@@ -537,7 +537,7 @@ async function buildMaintainedIndex(params: {
     );
   }
 
-  logger.info({ table: index.table, indexName: index.name }, "Building index");
+  logger.debug({ table: index.table, indexName: index.name }, "Building index");
   await client.query(
     `CREATE INDEX ${concurrently ? "CONCURRENTLY " : ""}"${index.name}" ` +
       `ON "${index.table}" (${quoteColumns(index.columns)})` +

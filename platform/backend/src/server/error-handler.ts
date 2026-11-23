@@ -290,6 +290,9 @@ export function handleServerError(
       // classifyErrorForTracking: 502/504 upstream failures are dropped as
       // noise, and a secrets-backend outage is grouped by root cause.
       this.log.error(logPayload, "HTTP 50x request error occurred");
+    } else if (statusCode === 401) {
+      // A signed-out browser gets one for every API call its page makes.
+      this.log.debug(logPayload, "HTTP 40x request error occurred");
     } else if (statusCode >= 400) {
       this.log.info(logPayload, "HTTP 40x request error occurred");
     } else {

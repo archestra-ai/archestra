@@ -18,7 +18,8 @@ import {
  * Every request is logged at `debug` when it arrives and when it completes.
  * A response with a 4xx or 5xx status is also logged at `info`, so failed
  * requests stay visible at the default level without one log line per
- * successful request.
+ * successful request. A 401 stays at `debug`: a signed-out browser gets one
+ * for every API call its page makes.
  */
 export function registerRequestLogging(fastify: FastifyInstance) {
   fastify.addHook("onRequest", (request, _reply, done) => {
@@ -39,7 +40,10 @@ export function registerRequestLogging(fastify: FastifyInstance) {
         statusCode: reply.statusCode,
         responseTime: reply.elapsedTime,
       };
-      if (reply.statusCode >= MIN_LOGGED_ERROR_STATUS) {
+      if (
+        reply.statusCode >= MIN_LOGGED_ERROR_STATUS &&
+        reply.statusCode !== UNAUTHENTICATED_STATUS
+      ) {
         request.log.info(fields, "request completed");
       } else {
         request.log.debug(fields, "request completed");
@@ -54,6 +58,7 @@ export function registerRequestLogging(fastify: FastifyInstance) {
 // ===================================================================
 
 const MIN_LOGGED_ERROR_STATUS = 400;
+const UNAUTHENTICATED_STATUS = 401;
 
 /**
  * Excludes noisy or sensitive endpoints from access logs:

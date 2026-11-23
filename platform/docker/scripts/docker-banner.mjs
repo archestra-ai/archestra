@@ -11,8 +11,9 @@
 
 import { setTimeout as sleep } from "node:timers/promises";
 
-const BANNER_WAIT_MS = 180_000;
-const SETTLE_MS = 5_000;
+// BANNER_WAIT_SECONDS=0 prints at once, to look at the banner from a checkout.
+const BANNER_WAIT_MS = Number(process.env.BANNER_WAIT_SECONDS ?? 180) * 1_000;
+const SETTLE_MS = BANNER_WAIT_MS > 0 ? 5_000 : 0;
 
 const env = process.env;
 const frontendUrl = env.ARCHESTRA_FRONTEND_URL || "http://localhost:3000";
@@ -40,34 +41,54 @@ const reset = "\x1b[0m";
 const columns = Math.max(40, process.stdout.columns || Number(env.COLUMNS) || 80);
 const bar = `${cyan}${"═".repeat(columns)}${reset}`;
 
-const lines = [
-  "",
-  bar,
-  "",
-  `${green}  Welcome to Archestra! <3 ${reset}`,
-  "",
-  `   > ${bold}Frontend:${reset} ${frontendUrl}`,
-  `   > ${bold}Backend:${reset}  ${backendUrl}`,
+// The Archestra mark, 30 columns by 14 rows. Quarter-block characters put four
+// pixels in a cell, so the diagonals step half a column at a time instead of a
+// whole one. A terminal narrower than the mark goes without it.
+const LOGO = [
+  "               ▄████▙▖",
+  "              ▟███▜███▖",
+  "             ▟███▘ ▜███▖",
+  "            ▟███▘   ▜███▖",
+  "           ▐███▌     ▜███▖",
+  "            ▜███▖     ▜███▖",
+  "             ▜███▖     ▜███▖",
+  "              ███▙      ▜███▖",
+  "        ▄▄▄▄▄▟███▌       ▜███▖",
+  "      ▟████████▛▘         ▜███▖",
+  "     ▟███▘                 ▜███▖",
+  "    ▟███▘                   ▜██▙",
+  "   ▟███▘        ▗▄▄▄▄▄▄▄▄▄▄▄███▛",
+  "  ▟███▘         ▐█████████████▀",
 ];
+
+const lines = ["", bar, ""];
+if (columns >= 34) {
+  lines.push(...LOGO.map((row) => `${bold}${row}${reset}`), "");
+}
+lines.push(
+  `  ${green}${bold}Welcome to Archestra!${reset}`,
+  "",
+  `  ${bold}Open${reset}    ${cyan}${frontendUrl}${reset}`,
+);
 if (tunnelUrl) {
   lines.push(
-    `   > ${bold}Tunnel:${reset}   ${tunnelUrl}`,
+    `  ${bold}Tunnel${reset}  ${cyan}${tunnelUrl}${reset}`,
     "",
-    `   ${blue}${bold}MS Teams Webhook:${reset} ${blue}${tunnelUrl}/api/webhooks/chatops/ms-teams${reset}`,
-    "   (Set this as the Messaging Endpoint in your Azure Bot Configuration)",
+    `  ${bold}MS Teams webhook${reset}  ${cyan}${tunnelUrl}/api/webhooks/chatops/ms-teams${reset}`,
+    "  (Set this as the Messaging Endpoint in your Azure Bot Configuration)",
   );
 } else if (env.ARCHESTRA_NGROK_AUTH_TOKEN) {
   lines.push(
-    `   > ${bold}Tunnel:${reset}   starting ngrok... (public URL appears on the MS Teams setup page once connected)`,
+    `  ${bold}Tunnel${reset}  starting ngrok... (public URL appears on the MS Teams setup page once connected)`,
   );
 }
 lines.push(
   "",
-  "   Our team is working hard to make Archestra great for you!",
-  "   Please reach out with any questions, requests, or feedback.",
+  "  Our team is working hard to make Archestra great for you!",
+  "  Please reach out with any questions, requests, or feedback.",
   "",
-  `   ${blue}Slack Community:${reset} https://archestra.ai/join-slack`,
-  `   ${blue}Give us a star on GitHub:${reset} https://github.com/archestra-ai/archestra`,
+  `  ${bold}Slack${reset}   ${blue}https://archestra.ai/join-slack${reset}`,
+  `  ${bold}GitHub${reset}  ${blue}https://github.com/archestra-ai/archestra${reset}  (a star helps)`,
   "",
   bar,
   "",

@@ -24,6 +24,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { getCostControlsNavigationUrl } from "@/app/_parts/costs-navigation";
+import { getModelProvidersNavigationUrl } from "@/app/_parts/model-providers-navigation";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import {
@@ -556,6 +557,12 @@ export function AppSidebar() {
               // Without the Overview, the item opens what the reader has:
               // Yells, or the Policy page for their MCP servers' rules.
               return { ...item, url: "/openappa/policy" };
+            }
+            if (item.url === "/llm/model-providers") {
+              return {
+                ...item,
+                url: getModelProvidersNavigationUrl(permissionMap),
+              };
             }
             if (item.url === "/llm/limits") {
               return {

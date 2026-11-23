@@ -45,6 +45,9 @@
 9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
 10.  **Never copy anything from Sentry into code, comments, tests, docs, commits, or PR text — and do not mention Sentry itself.** Sentry is for diagnosing the problem; describe the bug in neutral terms and cite no IDs, environments, URLs, user info, or stack snippets from there.
 11. If you think there is an important bit of information worth remembering between sessions, suggest adding it to AGENTS.md instead of memorizing it yourself. AGENTS.md is the single source of truth for all important information about the platform, its architecture, and its development practices.
+12. **No Rollout Flags Unless Asked** - Ship a feature on by default, in one release. Add a feature flag, an env toggle, or a split across releases only when the user asks for one: only staging deploys every release, and customers skip several versions at once.
+13. **Renamed Exports Break Spies** - After you change or rename an exported function, grep the tests for `vi.spyOn` and `vi.mock` on the old name and run those test files locally (Vitest on a single file is fine). A spy on an export that no longer exists fails only in the merge queue otherwise.
+14. **Plain Product Text** - Text a person reads in the product (chat notices, UI strings, errors) stays calm and plain: say what happens next in everyday words. Leave out internal component names and alarming verbs ("holds", "discards", "blocked by policy") unless the person has to act on them.
 
 ## Docs
 

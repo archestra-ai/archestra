@@ -143,6 +143,13 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p "test_*.py"
 
+      # The platform image's process supervisor, shutdown budget and backend
+      # pruning (platform/docker/scripts); Node's built-in test runner, no
+      # dependencies.
+      - name: Test the platform image's scripts
+        working-directory: platform
+        run: node --test docker/scripts/*.test.mjs
+
       # The rules each release applies when it attests these statements.
       - name: Validate the VEX document
         uses: archestra-ai/.github/actions/validate-vex@v1.33.0

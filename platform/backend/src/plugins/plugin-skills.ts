@@ -1,5 +1,3 @@
-import { isPermissionActionGranted } from "@archestra/shared";
-import { userHasPermission } from "@/auth";
 import type { RequestLookups } from "@/auth/request-lookups";
 import {
   PluginModel,
@@ -176,7 +174,7 @@ type PluginSkillListParams = {
   lookups?: RequestLookups;
 };
 
-/** undefined = plugin admin (all plugins); otherwise the visible id set. */
+/** undefined = reads every plugin (`*`); otherwise the visible plugin id set. */
 async function resolvePluginAccess(params: {
   organizationId: string;
   userId?: string;
@@ -187,40 +185,37 @@ async function resolvePluginAccess(params: {
       organizationId: params.organizationId,
     });
   }
-  const canRead = params.lookups
-    ? isPermissionActionGranted({
-        resource: "plugin",
-        grantedActions:
-          (
-            await params.lookups.permissions({
-              userId: params.userId,
-              organizationId: params.organizationId,
-            })
-          ).plugin ?? [],
-        requiredAction: "read",
-      })
-    : await userHasPermission(
-        params.userId,
-        params.organizationId,
-        "plugin",
-        "read",
-      );
-  if (!canRead) return [];
-  const isAdmin = await ResourcePermissions.allows({
+  // Grants decide plugin visibility: a read grant at `*` sees every plugin,
+  // and anyone else sees the specific plugins granted to them, sharing one
+  // memoized grant load when the caller passes RequestLookups.
+  const grants = await ResourcePermissions.resolveAll({
     userId: params.userId,
     organizationId: params.organizationId,
-    resource: "plugin",
-    scope: "*",
-    action: "update",
+    resources: ["plugin"],
     lookups: params.lookups,
   });
-  return isAdmin
-    ? undefined
-    : PluginTeamModel.getUserAccessiblePluginIds({
-        organizationId: params.organizationId,
-        userId: params.userId,
-        lookups: params.lookups,
-      });
+  if (
+    grants.some(
+      (grant) =>
+        grant.resource === "plugin" &&
+        grant.scope === "*" &&
+        grant.action === "read",
+    )
+  ) {
+    return undefined;
+  }
+  return Array.from(
+    new Set(
+      grants
+        .filter(
+          (grant) =>
+            grant.resource === "plugin" &&
+            grant.scope !== "*" &&
+            grant.action === "read",
+        )
+        .map((grant) => grant.scope),
+    ),
+  );
 }
 
 function tryParse(content: string) {

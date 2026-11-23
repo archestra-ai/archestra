@@ -1,5 +1,10 @@
-import { resourcePermissionPresetsFor } from "@archestra/shared";
+import {
+  type ResourcePermissionGrant,
+  resourcePermissionPresetsFor,
+} from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import config from "@/config";
+import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
   createFastifyInstance,
@@ -12,11 +17,19 @@ import ConversationModel from "@/models/conversation";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
+import { createEnvironment } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createRestrictedEnvironment } from "@/test/environments";
 import type { User } from "@/types";
 import resourcePermissionRoutes from "./resource-permission.routes";
+
+/** Drop the display name the GET response adds, so the grants can be sent back. */
+function keptGrants(
+  grants: Array<ResourcePermissionGrant & { name?: string }>,
+): ResourcePermissionGrant[] {
+  return grants.map(({ subject, actions }) => ({ subject, actions }));
+}
 
 describe("resource permission routes", () => {
   let app: FastifyInstanceWithZod;
@@ -1060,6 +1073,204 @@ describe("resource permission routes", () => {
         scope: localAgent.id,
       }),
     ).toEqual(before);
+  });
+
+  test("sharing a personal server refuses a name a shared server already has in the same environment", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "org",
+    });
+    const personal = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "personal",
+    });
+    const url = `/api/resource-permissions/mcpRegistry/${personal.id}`;
+    const current = await app.inject({ method: "GET", url });
+    expect(current.statusCode).toBe(200);
+    const before = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "mcpRegistry",
+      scope: personal.id,
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: current.json().revision,
+        grants: [
+          ...keptGrants(current.json().grants),
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.internal_code).toBe("catalog_name_conflict");
+    expect(response.json().error.message).toBe(
+      'An MCP server named "Weather" already exists in Default environment. Rename it first.',
+    );
+    expect(
+      await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "mcpRegistry",
+        scope: personal.id,
+      }),
+    ).toEqual(before);
+  });
+
+  test("narrowing a shared server to its author refuses a name the author's personal server has", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "personal",
+    });
+    const sharedServer = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "org",
+    });
+    const url = `/api/resource-permissions/mcpRegistry/${sharedServer.id}`;
+    const current = await app.inject({ method: "GET", url });
+    expect(current.statusCode).toBe(200);
+    const before = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "mcpRegistry",
+      scope: sharedServer.id,
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: current.json().revision,
+        grants: keptGrants(current.json().grants).filter(
+          (grant: { subject: { type: string } }) =>
+            grant.subject.type === "user",
+        ),
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json().error.internal_code).toBe("catalog_name_conflict");
+    expect(
+      await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "mcpRegistry",
+        scope: sharedServer.id,
+      }),
+    ).toEqual(before);
+  });
+
+  test("sharing a personal server is accepted when the shared server is in another environment", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const staging = await createEnvironment({
+      organizationId,
+      data: { name: "Staging" },
+    });
+    await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "org",
+      environmentId: staging.id,
+    });
+    const personal = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "personal",
+    });
+    const url = `/api/resource-permissions/mcpRegistry/${personal.id}`;
+    const current = await app.inject({ method: "GET", url });
+
+    const response = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: current.json().revision,
+        grants: [
+          ...keptGrants(current.json().grants),
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().grants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          subject: { type: "organization", id: "*" },
+        }),
+      ]),
+    );
+  });
+
+  test("a grants change on an already shared legacy duplicate is not refused", async ({
+    makeInternalMcpCatalog,
+    makeUser,
+    makeMember,
+  }) => {
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId);
+    const first = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "org",
+    });
+    const duplicate = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Weather",
+      authorId: user.id,
+      access: "org",
+    });
+    expect(first.id).not.toBe(duplicate.id);
+    const url = `/api/resource-permissions/mcpRegistry/${duplicate.id}`;
+    const current = await app.inject({ method: "GET", url });
+
+    const response = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision: current.json().revision,
+        grants: [
+          ...keptGrants(current.json().grants),
+          {
+            subject: { type: "user", id: reader.id },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const stored = await db
+      .select({ grants: schema.resourcePermissionPoliciesTable.grants })
+      .from(schema.resourcePermissionPoliciesTable)
+      .where(eq(schema.resourcePermissionPoliciesTable.scope, duplicate.id));
+    expect(stored[0]?.grants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ subject: { type: "user", id: reader.id } }),
+      ]),
+    );
   });
 
   test("read-only access cannot change grants or enumerate grant recipients", async ({

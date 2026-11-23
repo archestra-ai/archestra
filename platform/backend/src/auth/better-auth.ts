@@ -82,6 +82,8 @@ import { hashOauthClientSecret } from "./oauth-client-secret";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
 import { withSsoEmailReconciliation } from "./sso-email-reconciliation.ee";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
+import { withSsoSoftDeletedBlock } from "./sso-soft-deleted.ee";
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
 import { withSsoSubjectBinding } from "./sso-subject-binding.ee";
 
 // SPDX-SnippetEnd
@@ -379,6 +381,9 @@ export const auth = betterAuth({
       oauthAccessToken: schema.oauthAccessTokensTable,
       oauthRefreshToken: schema.oauthRefreshTokensTable,
       oauthConsent: schema.oauthConsentsTable,
+      oauthResource: schema.oauthResourcesTable,
+      oauthClientResource: schema.oauthClientResourcesTable,
+      oauthClientAssertion: schema.oauthClientAssertionsTable,
     },
   }),
 
@@ -554,6 +559,13 @@ export const auth = betterAuth({
     session: {
       create: {
         before: async (session) => {
+          // A user the identity provider deactivated (SCIM) cannot sign in by
+          // any method: password, SSO or impersonation.
+          if (await UserModel.getSoftDeleted(session.userId)) {
+            throw new APIError("FORBIDDEN", {
+              message: ACCOUNT_DEACTIVATED_MESSAGE,
+            });
+          }
           // If activeOrganizationId is not set, find the user's first organization
           if (!session.activeOrganizationId) {
             const membership = await MemberModel.getFirstMembershipForUser(
@@ -665,11 +677,18 @@ export const auth = betterAuth({
         },
       });
       const emailReconciliation = withSsoEmailReconciliation(ctx);
-      const internalAdapter =
+      const subjectBinding =
         withSsoSubjectBinding(
           ctx,
           emailReconciliation ?? ctx.context.internalAdapter,
         ) ?? emailReconciliation;
+      // Outermost, so a deactivated user is refused before any other check.
+      const internalAdapter =
+        withSsoSoftDeletedBlock(
+          ctx,
+          (subjectBinding ??
+            ctx.context.internalAdapter) as typeof ctx.context.internalAdapter,
+        ) ?? subjectBinding;
       if (adapter || internalAdapter)
         return {
           context: {
@@ -1224,10 +1243,60 @@ function shouldTrustAllOriginsForIdentityProviderRegistration(
   }
 }
 
+const ACCOUNT_DEACTIVATED_MESSAGE =
+  "Your account was deactivated in your identity provider. Contact your administrator.";
+
+/**
+ * Refuse a request to better-auth's own endpoints from a user the identity
+ * provider deactivated (SCIM, `user.soft_deleted`).
+ *
+ * The session hook already refuses a new session, and the API middleware
+ * refuses every other route. These endpoints need their own check because an
+ * API key acts here without a stored session, and the cookie of a deleted
+ * session stays valid until its cache expires.
+ */
+async function refuseSoftDeletedCaller(ctx: HookEndpointContext) {
+  const { path } = ctx;
+  const request = ctx.request as Request | undefined;
+  // A request from outside only: an in-process `auth.api` call, such as the
+  // session lookup below, carries no request.
+  if (!request || !path) return;
+  // These start or end a session. The session hook covers the ones that start
+  // one, and a stale cookie must not stop the next person from signing in.
+  if (
+    path.startsWith("/sign-in") ||
+    path.startsWith("/sign-up") ||
+    path.startsWith("/callback/") ||
+    isSsoCallbackPath(path) ||
+    isAuthSignOutPath(path)
+  )
+    return;
+  if (!request.headers.get("cookie") && !request.headers.get("authorization"))
+    return;
+
+  let userId: string | undefined;
+  try {
+    userId = (await auth.api.getSession({ headers: request.headers }))?.user.id;
+  } catch {
+    // Not a session or an API key, such as an OAuth client's own credentials.
+    return;
+  }
+  if (!userId || !(await UserModel.getSoftDeleted(userId))) return;
+  logger.info(
+    { userId, path },
+    "[auth:beforeHook] Request refused: the identity provider deactivated this user",
+  );
+  throw new APIError("FORBIDDEN", {
+    code: "ACCOUNT_DEACTIVATED",
+    message: ACCOUNT_DEACTIVATED_MESSAGE,
+  });
+}
+
 /**
  * Validates requests before they are processed by better-auth.
  *
  * Handles:
+ * - Refusing users the identity provider deactivated
  * - Blocking invitations when disabled via environment variable
  * - Email validation for invitation requests
  * - Invitation-only sign-up enforcement
@@ -1240,6 +1309,8 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   if (!path) {
     return ctx;
   }
+
+  await refuseSoftDeletedCaller(ctx);
 
   logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
   // SPDX-SnippetBegin
@@ -1674,10 +1745,26 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     // better-auth can proceed with normal sign-up (creates fresh user + account).
     if (status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS)) {
       const [existingUser] = await db
-        .select({ id: schema.usersTable.id })
+        .select({
+          id: schema.usersTable.id,
+          softDeleted: schema.usersTable.softDeleted,
+        })
         .from(schema.usersTable)
         .where(eq(schema.usersTable.email, invitation.email))
         .limit(1);
+
+      // Replacing the placeholder would bring back a user the identity
+      // provider deactivated (SCIM), as a new user with no `soft_deleted`.
+      if (existingUser?.softDeleted) {
+        logger.info(
+          { userId: existingUser.id },
+          "[auth:beforeHook] Sign-up refused: the identity provider deactivated this user",
+        );
+        throw new APIError("FORBIDDEN", {
+          code: "ACCOUNT_DEACTIVATED",
+          message: ACCOUNT_DEACTIVATED_MESSAGE,
+        });
+      }
 
       if (existingUser) {
         // Find another user for inviterId FK (the original will be cascade-deleted)

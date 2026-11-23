@@ -242,7 +242,9 @@ export function TabbedDialogShell<TSection extends string>({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
           <div
             className={cn(
-              "min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6",
+              // The gutter is always reserved, so content that grows past the
+              // dialog's height brings a scrollbar without moving the fields.
+              "min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 [scrollbar-gutter:stable]",
               contentClassName,
             )}
           >

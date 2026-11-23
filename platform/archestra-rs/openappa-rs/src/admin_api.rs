@@ -1,5 +1,5 @@
 use crate::{
-    State, batteries, declarations, deployments,
+    Sql, State, batteries, declarations, deployments,
     errors::{
         BindingFailure, Failure, failure, invalid_input, invariant, panicked, read_failure, storage,
     },
@@ -636,9 +636,10 @@ pub async fn get_openappa_status(
         let state = initialized().await?.encrypted(encryption)?;
         let session = SessionKey::new(&organization_id, &session_id);
         let lookup = state.clone();
-        let root = tokio::task::spawn_blocking(move || recorded_root(&lookup, &session))
-            .await
-            .map_err(panicked)??;
+        let root =
+            tokio::task::spawn_blocking(move || recorded_root(&Sql(&lookup.store), &session))
+                .await
+                .map_err(panicked)??;
         // An unstarted session has no status, and is no reason to publish.
         if root.is_none() {
             return Ok(None);

@@ -350,13 +350,14 @@ gh() {
 
 
 SCRIPTS = Path(__file__).resolve().parent
-DIGEST_A, DIGEST_B = "a" * 64, "b" * 64
+DIGEST_A, DIGEST_B, DIGEST_C = "a" * 64, "b" * 64, "c" * 64
 
 
 class PublisherHandoffTests(unittest.TestCase):
     GAR = "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public"
     STAGED = {
         "platform": f"ghcr.io/archestra-ai/ci/platform@sha256:{DIGEST_B}",
+        "platform-slim": f"ghcr.io/archestra-ai/ci/platform-slim@sha256:{DIGEST_C}",
         "mcp-server-base": f"ghcr.io/archestra-ai/ci/mcp-server-base@sha256:{DIGEST_A}",
     }
 
@@ -387,14 +388,18 @@ class PublisherHandoffTests(unittest.TestCase):
                 self.assertEqual(sorted(outputs["release-subjects.txt"].splitlines()), sorted([
                     f"{DIGEST_A}  {registry}/mcp-server-base",
                     f"{DIGEST_B}  docker.io/archestra/platform",
+                    # The Kubernetes image is a variant, attested under the repository.
+                    f"{DIGEST_C}  docker.io/archestra/platform",
                     f"{hashlib.sha256(b'chart').hexdigest()}  archestra-platform-1.4.0.tgz",
                 ]))
                 self.assertEqual(json.loads(outputs["release-images.json"]), {
                     f"{registry}/mcp-server-base": f"sha256:{DIGEST_A}",
                     "docker.io/archestra/platform": f"sha256:{DIGEST_B}",
+                    "docker.io/archestra/platform:slim": f"sha256:{DIGEST_C}",
                 })
                 self.assertEqual(json.loads(outputs["release-pins.json"]), {
                     "mcp-server-base": f"sha256:{DIGEST_A}", "platform": f"sha256:{DIGEST_B}",
+                    "platform-slim": f"sha256:{DIGEST_C}",
                 })
 
     def test_subjects_reject_references_that_do_not_match_their_image(self):
@@ -406,9 +411,10 @@ class PublisherHandoffTests(unittest.TestCase):
             ({**self.STAGED, "mcp-server-base": f"ghcr.io/archestra-ai/mcp-server-base@sha256:{DIGEST_A}"}, None),
             # A tag instead of a digest.
             ({**self.STAGED, "mcp-server-base": "ghcr.io/archestra-ai/ci/mcp-server-base:1.4.0"}, None),
-            # The platform and mcp-server-base ship with every release.
+            # Both platform images and mcp-server-base ship with every release.
             ({"mcp-server-base": self.STAGED["mcp-server-base"]}, None),
             ({"platform": self.STAGED["platform"]}, None),
+            ({k: v for k, v in self.STAGED.items() if k != "platform-slim"}, None),
             # Only the known public registries.
             (self.STAGED, "docker.io/archestra"),
         ):

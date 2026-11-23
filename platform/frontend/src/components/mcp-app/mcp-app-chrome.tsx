@@ -18,6 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { appRunUrl } from "@/lib/apps/app-run-url";
+import type { CompactToolState } from "@/lib/chat/chat-tools-display.utils";
 import { cn } from "@/lib/utils/tailwind";
 
 /** Ghost icon + text button shared by the app top bar's labeled actions. */
@@ -254,7 +255,7 @@ export function McpAppPill({
   /** App icon (e.g. an McpCatalogIcon); falls back to the generic app glyph. */
   icon?: React.ReactNode;
   /** Tool-call state for the status dot; omitted renders no dot. */
-  state?: "running" | "completed" | "error" | "denied";
+  state?: CompactToolState;
   /** Pressed = the app's inline render is expanded under the pill. */
   pressed?: boolean;
   /** Show a red status dot for an app runtime error. */
@@ -289,6 +290,8 @@ export function McpAppPill({
                   "absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-background",
                   dotState === "completed" && "bg-green-500",
                   dotState === "running" && "bg-blue-500 animate-pulse",
+                  dotState === "approval-requested" &&
+                    "bg-amber-500 animate-pulse",
                   dotState === "error" && "bg-destructive",
                   dotState === "denied" && "bg-orange-500",
                 )}

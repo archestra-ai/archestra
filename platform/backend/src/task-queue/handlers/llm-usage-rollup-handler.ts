@@ -9,7 +9,7 @@ import { llmUsageRollup } from "@/services/llm-usage-rollup";
 export async function handleLlmUsageRollup(): Promise<void> {
   try {
     const result = await llmUsageRollup.run();
-    if (result.recomputed > 0 || result.rolled > 0) {
+    if (result.recomputed > 0 || result.rolled > 0 || result.refreshed > 0) {
       logger.debug(result, "LLM usage rollup tick");
     }
   } catch (error) {

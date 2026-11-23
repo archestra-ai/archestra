@@ -3,6 +3,7 @@
 import {
   AGENT_CATALOG_NAMES,
   type AgentCatalogId,
+  agentRuntimeCanNameAccountKind,
   type archestraApiTypes,
   buildAgentCatalogRuntime,
   withAgentRuntimeDefaults,
@@ -14,8 +15,9 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useController, useForm, useWatch } from "react-hook-form";
+import type { AgentAccountLock } from "@/components/agent-account-ways-field";
 import { AgentIcon } from "@/components/agent-icon";
 import { CatalogAgentIcon } from "@/components/agent-pages/agent-catalog";
 import {
@@ -27,16 +29,21 @@ import {
   AgentRuntimeSteeringField,
   agentRuntimeSectionDescriptions,
   defaultAgentRuntime,
+  isClaudeCodeRuntimeConfig,
 } from "@/components/agent-runtime-fields";
 import { IdentityFields } from "@/components/identity-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import {
+  type RuntimeAccountsChange,
+  RuntimeAccountsField,
+  runtimeAccountsAfter,
+} from "@/components/settings/runtime-accounts-field";
 import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import { FieldDescription } from "@/components/ui/field-description";
 import {
   Form,
   FormControl,
@@ -46,20 +53,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import {
+  type RuntimeAccounts,
+  runtimeAccountsToSave,
   useAgentsBehindRuntime,
   useApplyAgentRuntimeToAgents,
+  useCountAgentsBehindRuntime,
 } from "@/lib/agent-runtime-templates.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
@@ -93,7 +95,8 @@ export function CustomRuntimeDialog({
   /** The runtime list is being saved. */
   isSaving: boolean;
   onClose: () => void;
-  onSave: (template: TemplateDraft) => void;
+  /** Saves the runtime and calls `onSaved` once it is stored. */
+  onSave: (template: TemplateDraft, onSaved: () => void) => void;
 }) {
   const appName = useAppName();
   const [section, setSection] = useState<Section>("general");
@@ -126,6 +129,71 @@ export function CustomRuntimeDialog({
   const icon = useWatch({ control: form.control, name: "icon" });
   const isDirty = form.formState.isDirty;
   const title = template ? `Edit ${template.name}` : "Add custom runtime";
+  const claudeRuntime = isClaudeCodeRuntimeConfig(runtime);
+  const accounts = useWatch({ control: form.control, name: "accounts" });
+  // Whether the runtime's rule can name one kind of account: its agents
+  // have two. An image that may run Claude Code has both cards before it
+  // declares that it does.
+  const namesKind = claudeRuntime || agentRuntimeCanNameAccountKind(runtime);
+  // The cards show the rule's kind and nothing else. A Claude account the
+  // runtime stores is no rule: it is what a new agent starts on, and on a
+  // custom image it declares that the image runs Claude Code.
+  const accountLock = namesKind ? (accounts?.kind ?? null) : null;
+  // Every card unticked. No setting says that, so it is held here and the
+  // runtime cannot be saved until one is ticked. It belongs to the cards it
+  // was said on: another command or protocol shows its own.
+  const [noAccount, setNoAccount] = useState(false);
+  const cardsOf = `${runtime.command?.[0] ?? ""}:${runtime.inferenceProtocol}`;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the cards the runtime shows change
+  useEffect(() => {
+    setNoAccount(false);
+  }, [cardsOf]);
+  // The Claude settings the runtime is stored with: what it was opened on,
+  // then what each save here wrote. One card ticked puts the runtime's Claude
+  // account on that kind; both ticked again puts these back as they were, so
+  // an edit that ends where it began changes nothing.
+  const [storedClaudeSettings, setStoredClaudeSettings] = useState(
+    () => runtime.claudeCode,
+  );
+  const changeAccounts = (change: RuntimeAccountsChange) => {
+    if (change.lock === "none") {
+      setNoAccount(true);
+      return;
+    }
+    setNoAccount(false);
+    if (claudeRuntime && change.lock !== accountLock) {
+      setRuntime(
+        withCustomRuntimeAccounts(runtime, change.lock, storedClaudeSettings),
+      );
+    }
+    form.setValue(
+      "accounts",
+      runtimeAccountsAfter({ previous: accounts, change, namesKind }),
+      { shouldDirty: true },
+    );
+  };
+  const save = ({ accounts: held, ...values }: TemplateDraft) => {
+    // Only what this runtime's cards can say is written: the kind where its
+    // agents have two, and no names. Cards nobody changed write nothing.
+    const saved = runtimeAccountsToSave(
+      held && { ...held, kind: namesKind ? held.kind : undefined },
+    );
+    onSave(saved ? { ...values, accounts: saved } : values, () => {
+      // What is on screen is now what is stored. The settings stay open, so
+      // the next edit starts from this save, as it would on opening them.
+      form.reset(form.getValues());
+      setStoredClaudeSettings(values.runtime.claudeCode);
+      void afterSave();
+    });
+  };
+  const existingAgents = useRef<HTMLDivElement>(null);
+  const afterSave = useShowAgentsBehindAfterSave({
+    runtimeId: savedScope,
+    onBehind: () => {
+      setSection("runtime");
+      showExistingAgents(existingAgents);
+    },
+  });
 
   return (
     <TabbedDialogShell
@@ -163,16 +231,23 @@ export function CustomRuntimeDialog({
         },
       ]}
       wrapForm={(children) => <Form {...form}>{children}</Form>}
-      onSubmit={(event) =>
-        void form.handleSubmit(onSave, (errors) => {
+      onSubmit={(event) => {
+        if (noAccount) {
+          event.preventDefault();
+          setSection("runtime");
+          return;
+        }
+        void form.handleSubmit(save, (errors) => {
           if (errors.name) setSection("general");
           else if (errors.runtime) setSection("runtime");
-        })(event)
-      }
+        })(event);
+      }}
       footer={
         <>
-          <DialogCancelButton>Cancel</DialogCancelButton>
-          <Button type="submit" disabled={isSaving}>
+          <DialogCancelButton>
+            {isDirty ? "Cancel" : "Close"}
+          </DialogCancelButton>
+          <Button type="submit" disabled={isSaving || noAccount}>
             <span>{template ? "Save runtime" : "Add runtime"}</span>
           </Button>
         </>
@@ -280,6 +355,14 @@ export function CustomRuntimeDialog({
               hideLabel
             />
           </SettingsSection>
+          <RuntimeAccountsSection
+            runtime={runtime}
+            claude={claudeRuntime}
+            lock={accountLock}
+            noneSelected={noAccount}
+            accounts={accounts}
+            onChange={changeAccounts}
+          />
           <SettingsSection
             title="Follow-up messages"
             description={agentRuntimeSectionDescriptions(appName).followUps}
@@ -308,6 +391,7 @@ export function CustomRuntimeDialog({
             <AgentRuntimeLimitFields value={runtime} onChange={setRuntime} />
           </SettingsSection>
           <ExistingAgentsSection
+            anchor={existingAgents}
             runtimeId={savedScope}
             name={template?.name ?? "this runtime"}
             settings="container, inference API, follow-up messages and limits"
@@ -348,34 +432,78 @@ export function BuiltInRuntimeDialog({
   /** The runtime list is being saved. */
   isSaving: boolean;
   onClose: () => void;
-  onSave: (value: BuiltInRuntime) => void;
+  /** Saves the runtime's settings and calls `onSaved` once they are stored. */
+  onSave: (value: BuiltInRuntime, onSaved: () => void) => void;
 }) {
   const name = AGENT_CATALOG_NAMES[id];
   const [section, setSection] = useState<Section>("general");
-  const [initial] = useState<AgentRuntimeConfig>(() =>
+  const [initial, setInitial] = useState<AgentRuntimeConfig>(() =>
     withAgentRuntimeDefaults({
       runtime: buildAgentCatalogRuntime({ id, image }),
       defaults: value?.settings,
     }),
   );
   const [runtime, setRuntime] = useState<AgentRuntimeConfig>(initial);
-  const isDirty = JSON.stringify(runtime) !== JSON.stringify(initial);
+  const claudeRuntime = !!runtime.claudeCode;
+  const namesKind = agentRuntimeCanNameAccountKind(runtime);
+  // The cards show the rule's kind and nothing else. A Claude account the
+  // runtime's settings store is no rule: it is what a new agent starts on.
+  const [accounts, setAccounts] = useState<RuntimeAccounts | undefined>(
+    value?.settings.accounts,
+  );
+  const isDirty =
+    JSON.stringify(runtime) !== JSON.stringify(initial) ||
+    JSON.stringify(runtimeAccountsToSave(accounts)) !==
+      JSON.stringify(runtimeAccountsToSave(value?.settings.accounts));
+  const accountLock = namesKind ? (accounts?.kind ?? null) : null;
+  // Every card unticked; see the custom runtime's editor.
+  const [noAccount, setNoAccount] = useState(false);
+  const changeAccounts = (change: RuntimeAccountsChange) => {
+    if (change.lock === "none") {
+      setNoAccount(true);
+      return;
+    }
+    setNoAccount(false);
+    setAccounts(
+      runtimeAccountsAfter({ previous: accounts, change, namesKind }),
+    );
+  };
 
-  const save = () =>
-    onSave({
-      settings: {
-        tier: runtime.tier ?? null,
-        maxTier: runtime.maxTier ?? null,
-        ttlHours: runtime.ttlHours,
-        maxCostUsd: runtime.maxCostUsd,
-        idleTimeoutMinutes: runtime.idleTimeoutMinutes,
-        ...(runtime.claudeCode && {
-          claudeCode: {
-            authentication: runtime.claudeCode.authentication,
-          },
-        }),
+  const save = () => {
+    const saved = runtimeAccountsToSave(accounts);
+    // The runtime's Claude account follows the kind its rule names. Where
+    // the rule names none, the one it stores stays as it was.
+    const claudeCode =
+      claudeRuntime && accountLock
+        ? { authentication: claudeAccount(accountLock) }
+        : value?.settings.claudeCode;
+    onSave(
+      {
+        settings: {
+          tier: runtime.tier ?? null,
+          maxTier: runtime.maxTier ?? null,
+          ttlHours: runtime.ttlHours,
+          maxCostUsd: runtime.maxCostUsd,
+          idleTimeoutMinutes: runtime.idleTimeoutMinutes,
+          ...(claudeCode && { claudeCode }),
+          ...(saved && { accounts: saved }),
+        },
       },
-    });
+      () => {
+        // What is on screen is now what is stored.
+        setInitial(runtime);
+        void afterSave();
+      },
+    );
+  };
+  const existingAgents = useRef<HTMLDivElement>(null);
+  const afterSave = useShowAgentsBehindAfterSave({
+    runtimeId: id,
+    onBehind: () => {
+      setSection("runtime");
+      showExistingAgents(existingAgents);
+    },
+  });
 
   return (
     <TabbedDialogShell
@@ -400,11 +528,20 @@ export function BuiltInRuntimeDialog({
           status: containerSummary(runtime),
         },
       ]}
-      onSubmit={save}
+      onSubmit={(event) => {
+        if (noAccount) {
+          event.preventDefault();
+          setSection("runtime");
+          return;
+        }
+        save();
+      }}
       footer={
         <>
-          <DialogCancelButton>Cancel</DialogCancelButton>
-          <Button type="submit" disabled={isSaving}>
+          <DialogCancelButton>
+            {isDirty ? "Cancel" : "Close"}
+          </DialogCancelButton>
+          <Button type="submit" disabled={isSaving || noAccount}>
             <span>Save runtime</span>
           </Button>
         </>
@@ -449,22 +586,14 @@ export function BuiltInRuntimeDialog({
               </p>
             </div>
           </SettingsSection>
-          {runtime.claudeCode && (
-            <SettingsSection
-              title="Claude account"
-              description="Whose account runs the model."
-            >
-              <ClaudeAccountField
-                value={runtime.claudeCode.authentication}
-                onChange={(authentication) =>
-                  setRuntime({
-                    ...runtime,
-                    claudeCode: { ...runtime.claudeCode, authentication },
-                  })
-                }
-              />
-            </SettingsSection>
-          )}
+          <RuntimeAccountsSection
+            runtime={runtime}
+            claude={claudeRuntime}
+            lock={accountLock}
+            noneSelected={noAccount}
+            accounts={accounts}
+            onChange={changeAccounts}
+          />
           <SettingsSection
             title="Limits"
             description="Run time, spend and tiers."
@@ -472,11 +601,10 @@ export function BuiltInRuntimeDialog({
             <AgentRuntimeLimitFields value={runtime} onChange={setRuntime} />
           </SettingsSection>
           <ExistingAgentsSection
+            anchor={existingAgents}
             runtimeId={id}
             name={name}
-            settings={
-              runtime.claudeCode ? "Claude account and limits" : "limits"
-            }
+            settings="limits"
             blockedReason={
               isDirty
                 ? "Updates use the saved settings. Save this runtime first."
@@ -521,15 +649,19 @@ function AccessSection({ scope }: { scope: string | null }) {
 // SPDX-SnippetEnd
 
 /**
- * Saving a runtime only changes agents created afterwards. This brings the
- * agents created before up to date, on request.
+ * A runtime's account rule holds for every agent on it as soon as it is
+ * saved. Its other settings only change agents created afterwards: this
+ * brings the agents created before up to date with those, on request.
  */
 function ExistingAgentsSection({
   runtimeId,
   name,
   settings,
   blockedReason,
+  anchor,
 }: {
+  /** Where the dialog scrolls to when it stays open for an update. */
+  anchor?: React.RefObject<HTMLDivElement | null>;
   runtimeId: string | null;
   name: string;
   /** The settings an update replaces, as a phrase. */
@@ -543,50 +675,52 @@ function ExistingAgentsSection({
   return (
     <SettingsSection
       title="Existing agents"
-      description="Saved changes only apply to agents created afterwards."
+      description="Accounts apply to every agent as soon as you save. Other changes only apply to agents created afterwards."
     >
-      {blockedReason ? (
-        <p className="text-sm text-muted-foreground">{blockedReason}</p>
-      ) : behind.isPending ? (
-        <Skeleton className="h-16 w-full" />
-      ) : behind.isError ? (
-        <p className="text-sm text-muted-foreground">
-          Couldn't check which agents use {name}.
-        </p>
-      ) : count === 0 ? (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          Every agent on {name} already uses these settings.
-        </p>
-      ) : (
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <p className="text-sm font-medium">
-              {agents(count ?? 0)} on {name} still use older settings
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Updating gives them the saved {settings}. Their own environment
-              variables, credentials and ports stay as they are.
-            </p>
+      <div ref={anchor}>
+        {blockedReason ? (
+          <p className="text-sm text-muted-foreground">{blockedReason}</p>
+        ) : behind.isPending ? (
+          <Skeleton className="h-16 w-full" />
+        ) : behind.isError ? (
+          <p className="text-sm text-muted-foreground">
+            Couldn't check which agents use {name}.
+          </p>
+        ) : count === 0 ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            Every agent on {name} already uses these settings.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">
+                {agents(count ?? 0)} on {name} still use older settings
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Updating gives them the saved {settings}. Their own environment
+                variables, credentials and ports stay as they are.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!runtimeId || apply.isPending}
+              onClick={() => {
+                if (runtimeId) apply.mutate(runtimeId);
+              }}
+            >
+              {apply.isPending ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <RefreshCw />
+              )}
+              <span>Update {agents(count ?? 0)}</span>
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!runtimeId || apply.isPending}
-            onClick={() => {
-              if (runtimeId) apply.mutate(runtimeId);
-            }}
-          >
-            {apply.isPending ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <RefreshCw />
-            )}
-            <span>Update {agents(count ?? 0)}</span>
-          </Button>
-        </div>
-      )}
+        )}
+      </div>
     </SettingsSection>
   );
 }
@@ -595,41 +729,58 @@ function ExistingAgentsSection({
 // Shared fields
 // ===================================================================
 
-function ClaudeAccountField({
-  value,
-  onChange,
-}: {
-  value: "provider" | "subscription";
-  onChange: (value: "provider" | "subscription") => void;
-}) {
-  const id = useId();
+/**
+ * The account rule a runtime sets for its agents, as a section of its
+ * settings: the cards an agent on it shows under the same heading.
+ */
+function RuntimeAccountsSection(
+  props: React.ComponentProps<typeof RuntimeAccountsField>,
+) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id} className="sr-only">
-        Claude account
-      </Label>
-      <Select
-        value={value}
-        onValueChange={(next) => onChange(next as "provider" | "subscription")}
-      >
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="subscription">
-            {CLAUDE_ACCOUNT_LABELS.subscription}
-          </SelectItem>
-          <SelectItem value="provider">
-            {CLAUDE_ACCOUNT_LABELS.provider}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-      <FieldDescription>
-        Each person signs in with their own Pro or Max plan, or runs are billed
-        to an LLM provider connection.
-      </FieldDescription>
-    </div>
+    <SettingsSection
+      title="Accounts that can run it"
+      description="The accounts every agent on this runtime can use."
+    >
+      <RuntimeAccountsField {...props} />
+    </SettingsSection>
   );
+}
+
+/**
+ * The custom runtime after a change of its cards. One card ticked puts its
+ * Claude account on that kind, which also declares that the image runs
+ * Claude Code. Both ticked puts back the Claude account the runtime is
+ * stored with (`opened`), or takes it away from a runtime stored with none.
+ */
+function withCustomRuntimeAccounts(
+  runtime: AgentRuntimeConfig,
+  lock: AgentAccountLock | null,
+  opened: AgentRuntimeConfig["claudeCode"],
+): AgentRuntimeConfig {
+  if (lock) {
+    return {
+      ...runtime,
+      claudeCode: {
+        ...(runtime.claudeCode ?? opened),
+        authentication: claudeAccount(lock),
+      },
+    };
+  }
+  const { claudeCode, ...rest } = runtime;
+  return opened
+    ? {
+        ...rest,
+        claudeCode: {
+          ...(claudeCode ?? opened),
+          authentication: opened.authentication,
+        },
+      }
+    : rest;
+}
+
+/** The Claude account a runtime's settings store for one ticked card. */
+function claudeAccount(lock: AgentAccountLock): "provider" | "subscription" {
+  return lock === "key" ? "provider" : "subscription";
 }
 
 function Permission({ children }: { children: string }) {
@@ -664,7 +815,28 @@ function containerSummary(value: AgentRuntimeConfig): string {
   return value.command?.length ? `${image}, ${value.command[0]}` : image;
 }
 
-const CLAUDE_ACCOUNT_LABELS = {
-  subscription: "Each person's Claude subscription",
-  provider: "A company API key",
-} as const;
+/**
+ * What a save does to the dialog: nothing closes it. Saving a runtime keeps
+ * its settings open, and where agents of this runtime still use older
+ * settings it brings the block that updates them into view.
+ */
+function useShowAgentsBehindAfterSave(params: {
+  /** Null for a runtime that is not saved yet: it has no agents. */
+  runtimeId: string | null;
+  onBehind: () => void;
+}) {
+  const countBehind = useCountAgentsBehindRuntime();
+  return async () => {
+    if (!params.runtimeId) return;
+    // A count that cannot be read moves nothing.
+    const behind = await countBehind(params.runtimeId).catch(() => 0);
+    if (behind > 0) params.onBehind();
+  };
+}
+
+/** Brings the existing-agents block into view once its section is shown. */
+function showExistingAgents(anchor: React.RefObject<HTMLDivElement | null>) {
+  requestAnimationFrame(() =>
+    anchor.current?.scrollIntoView({ block: "nearest" }),
+  );
+}

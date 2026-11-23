@@ -9,7 +9,14 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.40" # x-release-please-version
+  imageTag: "1.5.0-rc.44" # x-release-please-version
+
+  # Which build of the image the chart runs, as a suffix on imageTag.
+  # `slim` (the default) is the Kubernetes image: no bundled PostgreSQL and no
+  # quickstart tooling, so it is smaller and carries fewer packages to patch.
+  # Set "" for the full image (archestra/platform:<version>), which `docker run`
+  # uses. Ignored when `image` names a tag.
+  imageVariant: slim
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -189,6 +196,31 @@ archestra:
   #     azure.workload.identity/use: "true"
   podLabels: {}
 
+  # Run the web, worker, and migration pods as the image's non-root archestra
+  # user (UID 10001), as the restricted Pod Security level and OpenShift
+  # require. It adds runAsNonRoot, runAsUser, runAsGroup and fsGroup to
+  # podSecurityContext and drops all capabilities in containerSecurityContext;
+  # a value set there wins. fsGroup lets these users write the file-storage
+  # and diagnostics volumes, including files a root pod wrote before, on
+  # volume types that support ownership changes (NFS and hostPath do not:
+  # chown them to 10001 first). Set false on OpenShift, whose restricted SCC
+  # assigns its own non-root UID instead. The -slim image itself runs as 10001,
+  # so to run the pods as root, also set podSecurityContext.runAsUser: 0.
+  runAsNonRoot: true
+
+  # With runAsNonRoot, also run the web, worker, and migration containers and
+  # the chart's init containers with a read-only root filesystem. The chart
+  # mounts an emptyDir at each path the platform image writes: /tmp
+  # (the backend's temporary files), /run/archestra (the entrypoint's state),
+  # /app/data (Node diagnostic reports), /home/archestra (HOME: the skill marketplace, Dagger
+  # CLI, and kubectl caches), and /app/frontend/.next/cache (Next.js optimized
+  # images). A volume of your own mounted at one of these paths
+  # through extraVolumes and extraVolumeMounts, or the file-storage volume,
+  # replaces its emptyDir, for example to set a sizeLimit. Set false if a
+  # custom image or command writes anywhere else; readOnlyRootFilesystem in
+  # containerSecurityContext wins over this value.
+  readOnlyRootFilesystem: true
+
   # Pod-level securityContext for the web, worker, and migration pods.
   # RuntimeDefault applies the container runtime's default syscall filter,
   # which the platform image runs under unchanged.
@@ -203,9 +235,8 @@ archestra:
   # To harden further, add for example:
   #   capabilities:
   #     drop: ["ALL"]
-  # The platform image runs as root today, so runAsNonRoot is not supported
-  # yet, and readOnlyRootFilesystem needs writable emptyDir mounts (see
-  # extraVolumes) for /tmp, /var/log/supervisor, and /var/run.
+  # runAsNonRoot and readOnlyRootFilesystem above add the non-root and
+  # read-only settings; a value set here wins over them.
   containerSecurityContext:
     allowPrivilegeEscalation: false
 
@@ -522,8 +553,9 @@ archestra:
     #         key: value
     vaultSecrets:
       enabled: false
-      # Container entrypoint to exec after loading secrets (must match Dockerfile ENTRYPOINT)
-      entrypoint: /docker-entrypoint.sh
+      # Command the platform container runs after loading the secrets. Empty
+      # runs the image's Node entrypoint (node /app/entrypoint.mjs).
+      entrypoint: ""
       # Each entry: envVar (env var name), path (Vault API path after /v1/), key (key within secret data)
       secrets: []
 
@@ -656,7 +688,7 @@ archestra:
 
   # Memory inside the web container that is NOT available to the backend's V8
   # heap, because the same container also runs the Next.js server (and
-  # supervisord) under one memory limit.
+  # the supervisor) under one memory limit.
   #
   # The launcher sizes --max-old-space-size as a percentage of the container's
   # memory limit. Without this, that percentage is taken over memory the backend
@@ -668,7 +700,7 @@ archestra:
   # its ceiling, throws, and leaves a stack behind.
   #
   # Sized from a measured Next.js server (~150 MiB resident) plus headroom for
-  # growth under load and for supervisord. Only the web container sets this — the
+  # growth under load and for the supervisor. Only the web container sets this — the
   # workers run a single Node process and reserve nothing.
   webContainerReservedMemoryMib: 384
 
@@ -706,6 +738,35 @@ archestra:
   # release ship none, so the images follow their version tags.
   releaseImageDigests: {}
 
+  # Resources Archestra creates on startup, after database migrations, so an
+  # installation can be automated end to end without first minting an API key.
+  bootstrap:
+    # Service accounts with federated credentials (Enterprise license). A
+    # workload whose OIDC token matches a credential exactly (such as the
+    # Crossplane or Terraform provider with a projected Kubernetes token) can
+    # then sign in as the account. Missing accounts and credentials are created
+    # by name on every start; existing ones are never changed, so later edits
+    # in the UI, API or Terraform stick. Set `id` to a UUID to know the
+    # account's ID before the first install.
+    serviceAccounts: []
+    # - id: 6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10
+    #   name: crossplane
+    #   description: Crossplane provider
+    #   # Every role the account holds. Compose exactly the access it needs
+    #   # from granular roles (`fixed:<area>:reader` or `fixed:<area>:writer`,
+    #   # see the permissions reference), predefined roles (`member`,
+    #   # `editor`, `admin`) or custom role identifiers.
+    #   roles:
+    #     - fixed:agents:reader
+    #     - fixed:skills:writer
+    #   federatedCredentials:
+    #     - name: crossplane provider
+    #       issuer: https://oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE
+    #       audience: https://archestra.example.com
+    #       subject: system:serviceaccount:crossplane-system:provider-archestra
+    #       # Optional: other top-level claims that must match exactly.
+    #       claimConditions: {}
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Set to false to turn the Kubernetes orchestrator off: the platform loads
@@ -715,7 +776,7 @@ archestra:
     enabled: true
 
     # Base image for MCP server containers
-    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.40" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.44" # x-release-please-version
     # (released charts pin it to its digest; see releaseImageDigests)
     baseImage: ""
 

@@ -9,10 +9,16 @@ set -e
 #   backend starts at once and attaches to the cluster when its kubeconfig
 #   appears at KUBECONFIG_PATH
 # - initializes or upgrades the bundled PostgreSQL data directory when using the internal DB
-# - injects the resolved DATABASE_URL into supervisord's environment
-# - starts supervisord in the background so container signals can trigger graceful cleanup
+# - exports the resolved DATABASE_URL for the processes it starts
+# - starts supervisor.mjs (PostgreSQL when bundled, the backend, the frontend)
+#   in the background so container signals can trigger graceful cleanup
 # - stops the embedded KinD cluster on shutdown but keeps it, so the next start
 #   resumes it in seconds instead of creating a new one
+
+# The image starts as root; a Kubernetes securityContext or `docker run --user`
+# can start it as another user (the image's archestra user is UID 10001).
+RUN_AS_ROOT=false
+[ "$(id -u)" = "0" ] && RUN_AS_ROOT=true
 
 # Written when the background cluster setup fails, so cleanup exits non-zero.
 QUICKSTART_FAILED_FILE=/run/archestra/quickstart.failed
@@ -30,7 +36,7 @@ KIND_NETWORK="archestra-kind"
 # Must match a version supported by the KinD binary version compiled in the builder stage.
 # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0
 KIND_NODE_IMAGE="kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
-# Track the background cluster setup and supervisord for cleanup
+# Track the background cluster setup and the supervisor for cleanup
 PROVISION_PID=""
 SUPERVISOR_PID=""
 
@@ -49,7 +55,7 @@ cleanup() {
         kill "$PROVISION_PID" 2>/dev/null || true
     fi
 
-    # Stop supervisord gracefully before stopping the KinD cluster
+    # Stop the platform's processes gracefully before stopping the KinD cluster
     if [ -n "$SUPERVISOR_PID" ] && kill -0 "$SUPERVISOR_PID" 2>/dev/null; then
         echo "Stopping services..."
         kill -TERM "$SUPERVISOR_PID" 2>/dev/null || true
@@ -87,7 +93,12 @@ create_cluster() {
     # sign-off tips. pipefail keeps a failed create visible to the `if`.
     if (
         set -o pipefail
-        kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s 2>&1 \
+        # KUBECONFIG already names the file the backend watches, and kind
+        # writes its unrewritten 127.0.0.1 kubeconfig wherever KUBECONFIG
+        # points. Keep that copy away from the backend; connect_cluster
+        # publishes the rewritten one once the API answers.
+        kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --wait 120s \
+            --kubeconfig "${KUBECONFIG_PATH}.kind-create" 2>&1 \
             | grep -v \
                 -e "Overriding docker network due to KIND_EXPERIMENTAL_DOCKER_NETWORK" \
                 -e "Here be dragons" \
@@ -212,12 +223,12 @@ connect_cluster() {
 }
 
 # Joins the KinD network and exports the backend's Kubernetes settings, none
-# of which depend on the cluster existing yet. Fast, so it runs before
-# supervisord: the backend reads these once at startup.
+# of which depend on the cluster existing yet. Fast, so it runs before the
+# supervisor starts the backend, which reads these once at startup.
 configure_quickstart_backend() {
     # From a previous run, in the data volume: the backend must not attach to
     # the cluster before this run's API answers.
-    rm -f "${KUBECONFIG_PATH}" "${KUBECONFIG_PATH}.staged"
+    rm -f "${KUBECONFIG_PATH}" "${KUBECONFIG_PATH}.staged" "${KUBECONFIG_PATH}.kind-create"
 
     if ! docker network inspect "${KIND_NETWORK}" >/dev/null 2>&1; then
         docker network create --ipv6=false "${KIND_NETWORK}" >/dev/null || exit 1
@@ -266,7 +277,7 @@ configure_quickstart_backend() {
 
 # Brings up the embedded cluster, publishes its kubeconfig, then the Dagger
 # Engine and the Agent Sandbox controller. Runs in the background while
-# supervisord starts PostgreSQL, the backend and the frontend.
+# the supervisor starts PostgreSQL, the backend and the frontend.
 provision_cluster() {
     # Failures are handled explicitly: under set -e a stray failing command
     # would end this background job silently and leave the backend waiting.
@@ -389,11 +400,15 @@ if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
         export ARCHESTRA_AUTH_SECRET=$(cat "$SECRET_FILE")
         echo "Loaded existing ARCHESTRA_AUTH_SECRET from $SECRET_FILE"
     else
+        if ! mkdir -p /app/data 2>/dev/null || [ ! -w /app/data ]; then
+            echo "ERROR: ARCHESTRA_AUTH_SECRET is not set, and /app/data is not writable by user $(id -u) to keep a generated one."
+            echo "Set ARCHESTRA_AUTH_SECRET, or mount a volume at /app/data that this user can write."
+            exit 1
+        fi
         # Generate new random secret (64 characters)
         export ARCHESTRA_AUTH_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1)
 
         # Persist it
-        mkdir -p /app/data
         echo "$ARCHESTRA_AUTH_SECRET" > "$SECRET_FILE"
         chmod 600 "$SECRET_FILE"
         echo "Generated and saved new ARCHESTRA_AUTH_SECRET to $SECRET_FILE"
@@ -406,6 +421,11 @@ fi
 # For production, use external Kubernetes clusters without mounting the Docker socket.
 if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     echo "ARCHESTRA_QUICKSTART=true detected"
+    # The Kubernetes image (archestra/platform:<version>-slim) has no KinD.
+    if ! command -v kind >/dev/null 2>&1; then
+        echo "ERROR: This is the Kubernetes image (-slim), which has no quickstart. Use archestra/platform:${ARCHESTRA_VERSION}."
+        exit 1
+    fi
     echo "Quickstart mode enabled - starting the embedded KinD cluster in the background..."
 
     # Quickstart is meant for humans tailing `docker logs`, so default the
@@ -447,12 +467,12 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         echo "Add: -v /var/run/docker.sock:/var/run/docker.sock to your docker run command"
         exit 1
     fi
-    echo "WARNING: Docker socket mounted - this mode is for development only, not for production use."
-
-    if ! command -v kind >/dev/null 2>&1; then
-        echo "ERROR: KinD binary not found in this image."
+    if [ ! -w /var/run/docker.sock ]; then
+        echo "Quickstart mode needs write access to the Docker socket, which user $(id -u) does not have."
+        echo "Run the quickstart as root (the image's default user), or add the socket's group with --group-add."
         exit 1
     fi
+    echo "WARNING: Docker socket mounted - this mode is for development only, not for production use."
 fi
 
 rm -f "$QUICKSTART_FAILED_FILE"
@@ -477,7 +497,19 @@ fi
 # Parse DATABASE_URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
 EFFECTIVE_DATABASE_URL="${ARCHESTRA_DATABASE_URL:-$DATABASE_URL}"
 
+SUPERVISOR_ARGS=""
 if [ "$USE_EXTERNAL_DB" = "false" ]; then
+    # The Kubernetes image (archestra/platform:<version>-slim) bundles no PostgreSQL.
+    if ! command -v pg_ctl >/dev/null 2>&1; then
+        echo "ERROR: This is the Kubernetes image (-slim), which has no bundled PostgreSQL."
+        echo "Set ARCHESTRA_DATABASE_URL to your PostgreSQL database, or use archestra/platform:${ARCHESTRA_VERSION}."
+        exit 1
+    fi
+    if [ "$RUN_AS_ROOT" != "true" ]; then
+        echo "ERROR: The bundled PostgreSQL runs as its own system user, so the container must start as root to use it."
+        echo "Start the container as root (the image's default user), or set ARCHESTRA_DATABASE_URL to an external PostgreSQL database."
+        exit 1
+    fi
     echo "Using internal PostgreSQL database"
 
     # Use defaults for internal database
@@ -486,10 +518,7 @@ if [ "$USE_EXTERNAL_DB" = "false" ]; then
     POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
     EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
 
-    # Append postgres program to supervisord config. /etc survives a container
-    # restart, so append only once.
-    grep -q '^\[program:postgres\]' /etc/supervisord.conf \
-        || cat /etc/supervisord.postgres.conf >> /etc/supervisord.conf
+    SUPERVISOR_ARGS="--postgres"
 
     # The setup below prints several screens of initdb and server output on a
     # healthy start. Keep it out of `docker logs` unless a step fails, and send
@@ -569,14 +598,14 @@ else
     # The application uses EFFECTIVE_DATABASE_URL directly
 fi
 
-# Supervisord passes its own environment through unchanged. Exporting avoids
-# rewriting a config file and preserves every legal URL character verbatim.
+# The supervisor passes its environment to every process unchanged, so every
+# legal URL character survives verbatim.
 export DATABASE_URL="$EFFECTIVE_DATABASE_URL"
 
 # Normalize the keep-alive timeout before either server reads it.
 #
 # The backend validates this itself and falls back to the default on a bad
-# value, but supervisord hands the raw string to the Next.js server as
+# value, but the supervisor hands the raw string to the Next.js server as
 # KEEP_ALIVE_TIMEOUT, and that server treats anything unparsable as "unset" and
 # drops to Node's 5s default. Without this, one typo would leave the two servers
 # on wildly different windows — and silently put the *public-facing* one back on
@@ -602,23 +631,23 @@ unset keep_alive_ms keep_alive_invalid
 
 # ngrok tunneling (ARCHESTRA_NGROK_AUTH_TOKEN / ARCHESTRA_NGROK_DOMAIN) is now
 # handled in-process by the backend via the ngrok agent SDK — no binary download
-# or supervisord program is needed. See backend/src/ngrok-tunnel-manager.ts.
+# or separate process is needed. See backend/src/ngrok-tunnel-manager.ts.
 
 # Derive the supervisor limit from the same durations as the backend.
 ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS="$(node /app/shutdown-budget.mjs)"
 export ARCHESTRA_SERVER_SUPERVISOR_STOP_SECONDS
 
-# Start supervisord in foreground but allow signal handling
-# Run in background and wait so trap can catch signals
-/usr/bin/supervisord -c /etc/supervisord.conf &
+# Run the supervisor in the background and wait, so the trap can catch signals.
+# shellcheck disable=SC2086 # SUPERVISOR_ARGS is empty or one flag
+node /app/supervisor.mjs $SUPERVISOR_ARGS &
 SUPERVISOR_PID=$!
 
-# Wait for supervisord to exit (or for a signal)
+# Wait for the supervisor to exit (or for a signal)
 wait "$SUPERVISOR_PID"
-# Note: if supervisord is terminated by a signal, `wait` returns 128 + signal.
+# Note: if the supervisor is terminated by a signal, `wait` returns 128 + signal.
 # We intentionally propagate this composite exit code to `cleanup` for diagnostics.
 EXIT_CODE=$?
 
-# If we get here, supervisord exited on its own or was terminated by a signal.
+# If we get here, the supervisor exited on its own or was terminated by a signal.
 # Run cleanup with the raw exit code from `wait` (may be 128 + signal on signals).
 cleanup "$EXIT_CODE"

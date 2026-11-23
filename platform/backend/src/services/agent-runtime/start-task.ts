@@ -6,6 +6,7 @@ import {
   A2AProtocolRole,
   type A2AProtocolTask,
 } from "@/agents/a2a/a2a-protocol";
+import logger from "@/logging";
 import { A2ATaskModel } from "@/models";
 import type { A2ATask } from "@/types";
 import type { A2AAttachment } from "@/types/a2a-attachment";
@@ -67,6 +68,44 @@ export async function cancelDetachedAgentTask(params: {
     agentId: params.agentId,
     request: { id: params.taskId },
   });
+}
+
+/**
+ * Cancel every task a user still has in progress, such as their Agent Runtime
+ * runs, when the user may no longer act. A task that cannot be canceled is
+ * logged and skipped, so the caller's own change still goes through.
+ */
+export async function cancelUnfinishedTasksOfUser(params: {
+  userId: string;
+  organizationId: string;
+  statusReason: string;
+}): Promise<void> {
+  const tasks = await A2ATaskModel.findUnfinishedByActor({
+    actorKind: "user",
+    actorId: params.userId,
+  });
+  if (tasks.length === 0) return;
+  const manager = await taskManager.get();
+  for (const task of tasks) {
+    if (!task.agentId) continue;
+    try {
+      await manager.cancelTask({
+        actor: {
+          kind: "user",
+          id: params.userId,
+          organizationId: params.organizationId,
+        },
+        agentId: task.agentId,
+        request: { id: task.id },
+        statusReason: params.statusReason,
+      });
+    } catch (error) {
+      logger.warn(
+        { err: error, taskId: task.id, userId: params.userId },
+        "Could not cancel a task of a user who may no longer act",
+      );
+    }
+  }
 }
 
 // === Internal helpers ===

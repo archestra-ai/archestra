@@ -3,7 +3,12 @@
 import { Check, CircleCheck, Info, Lock } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { type UseFormReturn, useForm } from "react-hook-form";
+import {
+  type AccountFormValues,
+  AgentRuntimeAccountChoice,
+  type PendingAccountChange,
+} from "@/components/agent-runtime-account-choice";
 import type { AgentRuntimeConfig } from "@/components/agent-runtime-fields";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 
@@ -30,10 +35,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useProfile } from "@/lib/agent.query";
 import {
   useAgentRuntimePreflight,
   useSetMissingAgentRuntimeCredentials,
 } from "@/lib/agent-runtime.query";
+import {
+  useAgentRuntimeAccount,
+  useSaveAgentRuntimeAccount,
+} from "@/lib/agent-runtime-account.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
 import {
@@ -93,6 +103,7 @@ export function AgentRuntimeCredentialsDialog({
   githubConnected = false,
   requestedKeys = [],
   onlyKeys,
+  forAccount = false,
   onClose,
 }: {
   agentId: string;
@@ -111,10 +122,31 @@ export function AgentRuntimeCredentialsDialog({
    * credential. Without it the dialog gathers everything still missing.
    */
   onlyKeys?: string[];
+  /** Opened to choose the viewer's account, which must stay reachable. */
+  forAccount?: boolean;
   onClose: () => void;
 }) {
   const preflight = useAgentRuntimePreflight(agentId);
-  const definitions = useRuntimeCredentials();
+  // A dialog about named credentials stays about them; otherwise the viewer
+  // also chooses which account their own runs use.
+  const agentQuery = useProfile(agentId, { enabled: !onlyKeys });
+  const agent = agentQuery.data;
+  const accountRuntime = onlyKeys ? null : (agent?.runtime ?? null);
+  // A person who opened the dialog for their account and may not read
+  // credential definitions gets the account section alone: the credentials
+  // are nothing they can act on.
+  const { data: canReadCredentials } = useHasPermissions({
+    credential: ["read"],
+  });
+  const credentialsHidden = !!accountRuntime && canReadCredentials === false;
+  // Without the account section the dialog asks as main does, whatever the
+  // permission; with it, only once the permission says it may.
+  const definitions = useRuntimeCredentials(
+    !!onlyKeys ||
+      canReadCredentials === true ||
+      (canReadCredentials === false &&
+        (agentQuery.isError || (!!agent && !agent.runtime))),
+  );
   const [connecting, setConnecting] =
     useState<RuntimeCredentialDefinition | null>(null);
   const { data: canManageOrganization, isPending: permissionsPending } =
@@ -122,9 +154,14 @@ export function AgentRuntimeCredentialsDialog({
   const config = useConfig();
 
   const save = useSetMissingAgentRuntimeCredentials(agentId);
-  const form = useForm<{ values: Record<string, string> }>({
+  // One form for the dialog: the credential values and, with the account
+  // section, the account selection. Its submit stores both.
+  const form = useForm<
+    { values: Record<string, string> } & Partial<AccountFormValues>
+  >({
     defaultValues: { values: {} },
   });
+  const saveAccountChoice = useSaveAgentRuntimeAccount(agentId);
 
   const [failedKeys, setFailedKeys] = useState<string[]>([]);
   const configuredKeys = new Set(preflight.data?.configured ?? []);
@@ -177,13 +214,49 @@ export function AgentRuntimeCredentialsDialog({
   );
   const loading =
     preflight.isPending ||
-    definitions.isPending ||
+    (!credentialsHidden && definitions.isPending) ||
     config.isPending ||
     permissionsPending;
-  const loadFailed = preflight.isError || definitions.isError || config.isError;
-  const needsClaudeCodeAccount = missingKeys.has("CLAUDE_CODE_ACCOUNT");
+  const loadFailed =
+    preflight.isError ||
+    (!credentialsHidden && definitions.isError) ||
+    config.isError;
+  // The account section offers the Claude sign-in itself whenever it shows
+  // the choice; the credentials below offer it only when that section does
+  // not, so it appears once.
+  const account = useAgentRuntimeAccount(agentId, !!accountRuntime);
+  const accountChoiceShown =
+    !!accountRuntime && !!account.data && !account.data.lock;
+  const needsClaudeCodeAccount =
+    missingKeys.has("CLAUDE_CODE_ACCOUNT") && !accountChoiceShown;
   const complete =
     !loading && !loadFailed && missing.length === 0 && !needsClaudeCodeAccount;
+
+  // The account section reports a selection that differs from what is in
+  // effect; the dialog's one Save stores it with the credentials.
+  const [accountChange, setAccountChange] =
+    useState<PendingAccountChange | null>(null);
+  const accountPending = !!accountRuntime && !!accountChange?.pending;
+  const credentialsEditable =
+    !complete && !credentialsHidden && editable.length > 0;
+  const savePending = accountPending || credentialsEditable;
+  const saving = save.isPending || saveAccountChoice.isPending;
+  const saveAccount = () => {
+    if (!accountChange) return;
+    const { option } = accountChange;
+    // A failure is reported by the mutation and shows in the account
+    // section; the selection stays.
+    saveAccountChoice.mutate(accountChange.choice, {
+      // The section remounts on the saved choice; focus moves to the chosen
+      // option instead of falling to the page.
+      onSuccess: () =>
+        requestAnimationFrame(() =>
+          document
+            .querySelector<HTMLElement>(`[data-account-option="${option}"]`)
+            ?.focus({ preventScroll: true }),
+        ),
+    });
+  };
 
   // One credential asked for by name: the dialog is about it, so its name is
   // the title and its field needs no second label.
@@ -194,7 +267,10 @@ export function AgentRuntimeCredentialsDialog({
       ? missing[0]
       : undefined;
 
+  // The shortcut replaces the whole dialog, so a dialog opened to choose the
+  // viewer's account keeps its full form.
   const singleGitHubConnection =
+    !forAccount &&
     !loading &&
     !loadFailed &&
     !needsClaudeCodeAccount &&
@@ -313,58 +389,107 @@ export function AgentRuntimeCredentialsDialog({
   return (
     <StandardFormDialog
       open
-      title={single ? `Set up ${single.label}` : "Set up runtime credentials"}
+      title={
+        single
+          ? `Set up ${single.label}`
+          : accountRuntime
+            ? "Set up this agent for you"
+            : "Set up runtime credentials"
+      }
       description={
         single
           ? single.scope === "per_user"
             ? "This Agent needs it to run. It belongs to your account."
             : "This Agent needs it to run."
-          : "Add the missing credentials for this Agent. Personal credentials belong to your account."
+          : accountRuntime
+            ? complete || credentialsHidden
+              ? "Choose the account your runs of this agent use. It applies only to you."
+              : "Choose the account your runs use and add any missing credentials. Both belong to you."
+            : "Add the missing credentials for this Agent. Personal credentials belong to your account."
       }
       size="medium"
       isDirty={form.formState.isDirty}
       onOpenChange={(open) => {
-        if (!open && !save.isPending) onClose();
+        if (!open && !saving) onClose();
       }}
-      onSubmit={form.handleSubmit(({ values }) => {
-        save.mutate(
-          editable.map(({ key }) => ({ key, value: values[key].trim() })),
-          {
-            onSuccess: ({ saved, failed }) => {
-              setFailedKeys(failed);
-              for (const key of saved)
-                form.resetField(`values.${key}`, { defaultValue: "" });
+      onSubmit={(event) => {
+        const values = form.getValues().values;
+        // An account change with no credential typed in saves the account
+        // alone; anything typed is validated and saved with it.
+        if (
+          accountPending &&
+          (!credentialsEditable ||
+            !editable.some(({ key }) => values[key]?.trim()))
+        ) {
+          event.preventDefault();
+          saveAccount();
+          return;
+        }
+        void form.handleSubmit(({ values }) => {
+          if (accountPending) saveAccount();
+          save.mutate(
+            editable.map(({ key }) => ({ key, value: values[key].trim() })),
+            {
+              onSuccess: ({ saved, failed }) => {
+                setFailedKeys(failed);
+                for (const key of saved)
+                  form.resetField(`values.${key}`, { defaultValue: "" });
+              },
             },
-          },
-        );
-      })}
+          );
+        })(event);
+      }}
       footer={
         <>
           <Button
             type="button"
             variant="outline"
-            disabled={save.isPending}
+            disabled={saving}
             onClick={onClose}
           >
-            {complete ? "Done" : "Cancel"}
+            <span>{savePending ? "Cancel" : "Done"}</span>
           </Button>
-          {!complete && editable.length > 0 && (
+          {savePending && (
             <Button
               type="submit"
               disabled={
-                loading || loadFailed || save.isPending || editable.length === 0
+                saving ||
+                !!accountChange?.blocked ||
+                (credentialsEditable && (loading || loadFailed))
               }
             >
-              {save.isPending
-                ? "Saving…"
-                : single
-                  ? "Save"
-                  : "Save credentials"}
+              <span>
+                {saving
+                  ? "Saving…"
+                  : single || accountRuntime
+                    ? "Save"
+                    : "Save credentials"}
+              </span>
             </Button>
           )}
         </>
       }
     >
+      {accountRuntime && (
+        <section
+          aria-label="Account"
+          className="mb-6 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2.5"
+        >
+          <h3 className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+            Account
+          </h3>
+          <AgentRuntimeAccountChoice
+            agentId={agentId}
+            form={form as unknown as UseFormReturn<AccountFormValues>}
+            saving={saving}
+            savingChoice={saveAccountChoice.isPending}
+            saveError={
+              saveAccountChoice.isError ? saveAccountChoice.error.message : null
+            }
+            onPendingChange={setAccountChange}
+          />
+        </section>
+      )}
       {githubConnected && (
         <output className="mb-5 flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
           <CircleCheck
@@ -374,7 +499,7 @@ export function AgentRuntimeCredentialsDialog({
           <span>GitHub connected</span>
         </output>
       )}
-      {loading ? (
+      {credentialsHidden ? null : loading ? (
         <output>Checking missing credentials…</output>
       ) : loadFailed ? (
         <QueryLoadError
@@ -386,10 +511,12 @@ export function AgentRuntimeCredentialsDialog({
           }}
         />
       ) : complete ? (
-        <output>
-          All required credentials are configured. Return to your conversation
-          and retry the request.
-        </output>
+        accountRuntime ? null : (
+          <output>
+            All required credentials are configured. Return to your conversation
+            and retry the request.
+          </output>
+        )
       ) : (
         <Form {...form}>
           {single ? (

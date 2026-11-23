@@ -32,6 +32,7 @@ import {
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { makeKeyWithModel } from "@/routes/agent-runtime/agent-runtime-account.test-helpers";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
@@ -1535,12 +1536,15 @@ describe("agent runtime and model tools", () => {
     expect(result.isError).toBe(false);
     expect((result.content[0] as any).text).toContain("Runtime: Claude Code");
     const created = await findCreated(result);
-    expect(created?.runtime).toEqual(
-      buildAgentCatalogRuntime({
+    // A new agent names "each person chooses", as one saved from the page
+    // does: the caller here may configure the runtime.
+    expect(created?.runtime).toEqual({
+      ...buildAgentCatalogRuntime({
         id: "claude-code",
         image: config.agentRuntime.catalogImages["claude-code"],
       }),
-    );
+      accountLock: null,
+    });
     expect(created?.accessAllTools).toBe(true);
     expect(created?.systemPrompt).toContain("You are Claude Code");
   });
@@ -1594,6 +1598,233 @@ describe("agent runtime and model tools", () => {
     expect(
       (await AgentModel.findById(kept?.id as string))?.runtime,
     ).toMatchObject({ ttlHours: 6, idleTimeoutMinutes: 30 });
+  });
+
+  test("on the Claude Code runtime with no account named in its settings, the tools keep the agent's own Claude account and its lock", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const builder = await useOnlyClaudeCodeBuilder({
+      organizationId,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    });
+    // Locked by whoever built it: the runtime's setting is not an agent's
+    // lock, so a runtime rebuilt from the template must not replace this one.
+    const locked = await makeAgent({
+      organizationId,
+      authorId: builder.id,
+      agentType: "agent",
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "claude-code",
+          image: config.agentRuntime.catalogImages["claude-code"],
+        }),
+        claudeCode: { authentication: "subscription" },
+        accountLock: "subscription",
+      },
+    });
+    mockContext.userId = builder.id;
+
+    const edited = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: locked.id,
+      runtime: {
+        template: "claude-code",
+        claudeCode: { authentication: "subscription" },
+        ttlHours: 2,
+      },
+    });
+    const created = await findCreated(
+      await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+        name: "Own account",
+        runtime: {
+          template: "claude-code",
+          claudeCode: { authentication: "provider" },
+        },
+      }),
+    );
+
+    expect(edited.isError, JSON.stringify(edited.content)).not.toBe(true);
+    expect((await AgentModel.findById(locked.id))?.runtime).toMatchObject({
+      claudeCode: { authentication: "subscription" },
+      accountLock: "subscription",
+    });
+    // The runtime sets no account, so the one the caller named is kept.
+    expect(created?.runtime).toMatchObject({
+      claudeCode: { authentication: "provider" },
+      accountLock: null,
+    });
+  });
+
+  test("while the Claude Code runtime's rule names a kind, the tools write nothing of it on an agent", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const builder = await useOnlyClaudeCodeBuilder({
+      organizationId,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    });
+    const own = await makeAgent({
+      organizationId,
+      authorId: builder.id,
+      agentType: "agent",
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "claude-code",
+          image: config.agentRuntime.catalogImages["claude-code"],
+        }),
+        claudeCode: { authentication: "provider" },
+        accountLock: null,
+      },
+    });
+    await AgentRuntimeTemplateModel.saveSettings({
+      organizationId,
+      settings: {
+        revision: 0,
+        templates: [],
+        builtIns: {
+          "claude-code": { settings: { accounts: { kind: "subscription" } } },
+        },
+      },
+      popularAgentOverrides: null,
+    });
+    mockContext.userId = builder.id;
+
+    // A runtime rebuilt from the template keeps the agent's own account.
+    const edited = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: own.id,
+      runtime: { template: "claude-code", ttlHours: 2 },
+    });
+    const created = await findCreated(
+      await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+        name: "Under the rule",
+        runtime: { template: "claude-code" },
+      }),
+    );
+
+    expect(edited.isError, JSON.stringify(edited.content)).not.toBe(true);
+    expect((await AgentModel.findById(own.id))?.runtime).toMatchObject({
+      claudeCode: { authentication: "provider" },
+      accountLock: null,
+    });
+    // The rule holds for a new agent's runs, and is no lock of its own.
+    expect(created?.runtime).toMatchObject({ accountLock: null });
+  });
+
+  test("create_agent never stores the connection a runtime fixes: a model alone is checked against it, and a connection the caller names by the ordinary rules", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    // A company connection the caller was never granted themselves.
+    const fixed = await makeKeyWithModel({
+      organizationId,
+      provider: "anthropic",
+      modelId: "claude-sonnet-4-5",
+      adminsOnly: true,
+    });
+    const shared = await makeKeyWithModel({
+      organizationId,
+      provider: "anthropic",
+      modelId: "claude-haiku-4-5",
+    });
+    await AgentRuntimeTemplateModel.saveSettings({
+      organizationId,
+      settings: {
+        revision: 0,
+        templates: [],
+        builtIns: {
+          "claude-code": {
+            settings: { accounts: { llmApiKeyId: fixed.key.id } },
+          },
+        },
+      },
+      popularAgentOverrides: null,
+    });
+    const builder = await useOnlyClaudeCodeBuilder({
+      organizationId,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    });
+    mockContext.userId = builder.id;
+    const create = (name: string, account: object) =>
+      call(TOOL_CREATE_AGENT_SHORT_NAME, {
+        name,
+        runtime: { template: "claude-code" },
+        ...account,
+      });
+
+    const onRuntimeConnection = await findCreated(
+      await create("A model of the runtime's connection", {
+        modelId: fixed.model.id,
+      }),
+    );
+    const foreignModel = await create("A model of another connection", {
+      modelId: shared.model.id,
+    });
+    // The caller was granted no connection: naming one is refused as on a
+    // runtime that fixes none, the runtime's own included.
+    const named = await Promise.all(
+      [shared, fixed].map((connection) =>
+        create("A connection they name", {
+          llmApiKeyId: connection.key.id,
+          modelId: connection.model.id,
+        }),
+      ),
+    );
+
+    // The model runs on the runtime's connection, which the agent never
+    // stores, and neither does its runtime carry the runtime's rule.
+    expect(onRuntimeConnection).toMatchObject({
+      llmApiKeyId: null,
+      modelId: fixed.model.id,
+    });
+    expect(onRuntimeConnection?.runtime).not.toHaveProperty("accounts");
+    expect(foreignModel.isError).toBe(true);
+    expect(JSON.stringify(foreignModel.content)).toContain(
+      "The Claude Code runtime runs its agents on one connection, and the model you chose is not one of its models.",
+    );
+    for (const refused of named) {
+      expect(refused.isError).toBe(true);
+      expect(JSON.stringify(refused.content)).toContain(
+        "The selected model and API key must be linked and available to you",
+      );
+    }
+
+    // An agent that kept its own connection from before the rule: a model
+    // of the runtime's connection, sent alone, is checked against that
+    // connection, and the agent's own stays stored.
+    const kept = await makeAgent({
+      organizationId,
+      authorId: builder.id,
+      agentType: "agent",
+      runtime: buildAgentCatalogRuntime({
+        id: "claude-code",
+        image: config.agentRuntime.catalogImages["claude-code"],
+      }),
+      llmApiKeyId: shared.key.id,
+      modelId: shared.model.id,
+    });
+    const remodelled = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: kept.id,
+      modelId: fixed.model.id,
+    });
+    expect(remodelled.isError, JSON.stringify(remodelled.content)).not.toBe(
+      true,
+    );
+    expect(await AgentModel.findById(kept.id)).toMatchObject({
+      llmApiKeyId: shared.key.id,
+      modelId: fixed.model.id,
+    });
   });
 
   test("a caller who can use only one runtime can't move an agent to an image that is none of them", async ({
@@ -1751,6 +1982,7 @@ describe("agent runtime and model tools", () => {
     expect((await findCreated(result))?.runtime).toEqual({
       ...buildCustomAgentRuntime({ image: "example.test/agent:1" }),
       inferenceProtocol: "openai_chat",
+      accountLock: null,
     });
   });
 

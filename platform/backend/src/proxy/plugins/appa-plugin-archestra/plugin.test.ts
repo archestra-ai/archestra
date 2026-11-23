@@ -1,6 +1,5 @@
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
-import { TimeInMs } from "@archestra/shared";
 import { eq, sql } from "drizzle-orm";
 import { type MockInstance, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -1706,6 +1705,51 @@ describe("asking through the client's own question tool", () => {
           ]),
         );
       }
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("adds no guidance after the user's message in a plain-string Codex input", async () => {
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({ sessionId: "codex-string-guidance" });
+    trustedOf(context).request = {
+      session: {},
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "request_user_input" }],
+    };
+    context.headers = {
+      originator: "codex_cli_rs",
+      "x-archestra-native-question": "request_user_input",
+    };
+    context.interactionType = "openai:responses";
+    const request: { input: unknown } = { input: "hi" };
+    try {
+      await plugin.onSessionInit(context);
+      const lengths: number[] = [];
+      for (let pass = 0; pass < 2; pass++) {
+        await plugin.onBeforeModel({ ...context, request });
+        if (!Array.isArray(request.input))
+          throw new Error("expected the input to become a message list");
+        expect(request.input.at(-1)).toEqual({
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "hi" }],
+        });
+        expect(
+          request.input.slice(0, -1).map((item) => item.role),
+        ).not.toContain("user");
+        lengths.push(request.input.length);
+      }
+      expect(lengths[0]).toBeGreaterThan(1);
+      expect(lengths[1]).toBe(lengths[0]);
     } finally {
       await plugin.onCleanup(context);
     }
@@ -5578,62 +5622,6 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("a pre-upgrade paged card's claim grants nothing", async () => {
-    const offerId = "offer-inspectable-legacy";
-    const { plugin, context, trusted, askCard, answer } =
-      inspectableClaudeReview({
-        sessionId: "user:user|claude-inspectable-legacy",
-        offerId,
-      });
-    await stageInspectableReview(trusted.session, offerId);
-    const processResults = vi
-      .spyOn(appaService, "processProxyResults")
-      .mockResolvedValue({ toolResultUpdates: {} });
-
-    try {
-      await plugin.onSessionInit(context);
-      const issued = await askCard();
-      // Rewrite the issued claim into the shape the removed paged review
-      // wrote: a page binding instead of the inspectable markers.
-      const scope = createHash("sha256")
-        .update(
-          JSON.stringify([
-            trusted.session.organization_id,
-            trusted.session.caller_id ?? "",
-            trusted.session.session_id,
-            "",
-            issued.answerId,
-          ]),
-        )
-        .digest("base64url");
-      await cacheManager.set(
-        `${CacheKey.OpenAppaNativeQuestion}-${scope}`,
-        {
-          name: "AskUserQuestion",
-          offerIds: [offerId],
-          page: { page: 0, revision: 0, pageCount: 2, digest: "legacy" },
-        },
-        TimeInMs.Minute * 10,
-      );
-      const answered = await answer(
-        issued.answerId,
-        issued.card.question,
-        "Allow",
-      );
-      // Unverified: no ruling, no continuation, the review stays open.
-      expect(answered.resultText).toBeUndefined();
-      expect(
-        await peekHitlRuling({ session: trusted.session, offerId }),
-      ).toBeUndefined();
-      await expect(
-        getHitlReview({ session: trusted.session, offerId }),
-      ).resolves.toMatchObject({ offerId });
-    } finally {
-      processResults.mockRestore();
-      await plugin.onCleanup(context);
-    }
-  });
-
   test("an answer with an empty id claims nothing, caches nothing, and rules nothing", async () => {
     const offerId = "offer-inspectable-empty-id";
     const { plugin, context, trusted, askCard, answer } =
@@ -5763,44 +5751,6 @@ describe("asking through the client's own question tool", () => {
         delivered.card.question,
         "Deny",
       );
-      expect(denied.guidance).toContain("did not approve");
-      await expect(
-        consumeHitlRuling({ session: trusted.session, offerId }),
-      ).resolves.toBe("deny");
-    } finally {
-      processResults.mockRestore();
-      await plugin.onCleanup(context);
-    }
-  });
-
-  test("a card of the previous layout still denies, but its Approve shows the current card again", async () => {
-    const offerId = "offer-inspectable-previous";
-    const { plugin, context, trusted, askCard, answer } =
-      inspectableClaudeReview({
-        sessionId: "user:user|claude-inspectable-previous",
-        offerId,
-      });
-    await stageInspectableReview(trusted.session, offerId);
-    const processResults = vi
-      .spyOn(appaService, "processProxyResults")
-      .mockResolvedValue({ toolResultUpdates: {} });
-    // What a card issued before a deploy asked, and its labels.
-    const previousQuestion = "Approve the Bash command?";
-
-    try {
-      await plugin.onSessionInit(context);
-      const issued = await askCard();
-      const approved = await answer(
-        issued.answerId,
-        previousQuestion,
-        "Approve",
-      );
-      expect(approved.resultText).toContain("superseded");
-      expect(
-        await peekHitlRuling({ session: trusted.session, offerId }),
-      ).toBeUndefined();
-      const next = await askCard();
-      const denied = await answer(next.answerId, previousQuestion, "Deny");
       expect(denied.guidance).toContain("did not approve");
       await expect(
         consumeHitlRuling({ session: trusted.session, offerId }),
@@ -6498,160 +6448,6 @@ describe("asking through the client's own question tool", () => {
       expect(processResults).toHaveBeenCalledTimes(1);
     } finally {
       processResults.mockRestore();
-      await plugin.onCleanup(context);
-    }
-  });
-
-  test("reads a pending legacy question cache entry once, and only for its session", async () => {
-    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
-    const context = requestContext({
-      sessionId: "user:user|legacy-question",
-    });
-    const trusted = context.resources.get(
-      APPA_PLUGIN_TRUSTED_CONTEXT,
-    ) as AppaTrustedContext;
-    trusted.request = {
-      tools: {
-        control: { name: "archestra__execute_remedy_plan" },
-        notice: { name: "archestra__get_remedy_plans" },
-        askUser: { name: "archestra__ask_user" },
-        platformToolNames: new Set(),
-        namespaces: new Map(),
-      },
-      customTools: new Set(),
-      declaredTools: [{ name: "question" }],
-      session: {},
-    };
-    context.headers = { "x-opencode-session": "s" };
-    const legacyId = `call_aq1_${"a".repeat(16)}_${"b".repeat(22)}`;
-    const unrelatedId = `call_aq2_${"c".repeat(16)}`;
-    const priorSecret = config.openappa.offerSigningSecret;
-    config.openappa.offerSigningSecret = "legacy-question-secret";
-    const legacyKey = legacyNativeQuestionCacheKey(
-      trusted.session,
-      legacyId,
-      config.openappa.offerSigningSecret,
-    );
-    await cacheManager.set(
-      legacyKey,
-      { name: "question", offerIds: ["offer-legacy"] },
-      TimeInMs.Minute * 10,
-    );
-    await cacheManager.set(
-      legacyNativeQuestionCacheKey(
-        trusted.session,
-        unrelatedId,
-        config.openappa.offerSigningSecret,
-      ),
-      { name: "question", offerIds: ["offer-legacy"] },
-      TimeInMs.Minute * 10,
-    );
-    await stageHitlReview({
-      session: trusted.session,
-      review: { offerId: "offer-legacy", text: "Legacy review." },
-    });
-    const processResults = vi
-      .spyOn(appaService, "processProxyResults")
-      .mockResolvedValue({
-        toolResultUpdates: {},
-      });
-    const wrongSession = requestContext({
-      sessionId: "user:user|other-legacy-question",
-    });
-    const wrongTrusted = wrongSession.resources.get(
-      APPA_PLUGIN_TRUSTED_CONTEXT,
-    ) as AppaTrustedContext;
-    wrongTrusted.request = trusted.request;
-    wrongSession.headers = { "x-opencode-session": "s" };
-    const wrongPlugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
-    try {
-      await plugin.onSessionInit(context);
-      await wrongPlugin.onSessionInit(wrongSession);
-      await wrongPlugin.onToolResults({
-        ...wrongSession,
-        toolResults: [
-          {
-            id: legacyId,
-            name: "question",
-            content: openCodeAnswer("Legacy review.", "Approve"),
-            isError: false,
-          },
-        ],
-      });
-      config.openappa.offerSigningSecret = "";
-      await plugin.onToolResults({
-        ...context,
-        toolResults: [
-          {
-            id: legacyId,
-            name: "question",
-            content: openCodeAnswer("Legacy review.", "Approve"),
-            isError: false,
-          },
-        ],
-      });
-      config.openappa.offerSigningSecret = "legacy-question-secret";
-      await plugin.onToolResults({
-        ...context,
-        toolResults: [
-          {
-            id: unrelatedId,
-            name: "question",
-            content: openCodeAnswer("Legacy review.", "Approve"),
-            isError: false,
-          },
-        ],
-      });
-      await expect(
-        consumeHitlRuling({
-          session: trusted.session,
-          offerId: "offer-legacy",
-        }),
-      ).resolves.toBeUndefined();
-      expect(await cacheManager.get(legacyKey)).toEqual({
-        name: "question",
-        offerIds: ["offer-legacy"],
-      });
-
-      await plugin.onToolResults({
-        ...context,
-        toolResults: [
-          {
-            id: legacyId,
-            name: "question",
-            content: openCodeAnswer("Legacy review.", "Approve"),
-            isError: false,
-          },
-        ],
-      });
-      expect(await cacheManager.get(legacyKey)).toBeUndefined();
-      expect(
-        await consumeHitlRuling({
-          session: trusted.session,
-          offerId: "offer-legacy",
-        }),
-      ).toBe("approve");
-      await plugin.onToolResults({
-        ...context,
-        toolResults: [
-          {
-            id: legacyId,
-            name: "question",
-            content: openCodeAnswer("Legacy review.", "Approve"),
-            isError: false,
-          },
-        ],
-      });
-      await expect(
-        consumeHitlRuling({
-          session: trusted.session,
-          offerId: "offer-legacy",
-        }),
-      ).resolves.toBeUndefined();
-    } finally {
-      config.openappa.offerSigningSecret = priorSecret;
-      processResults.mockRestore();
-      await wrongPlugin.onCleanup(wrongSession);
       await plugin.onCleanup(context);
     }
   });
@@ -11115,34 +10911,6 @@ function hitlReviewContinuationKey(
   return `${CacheKey.OpenAppaHitlReviewContinuation}-${scope}` as AllowedCacheKey;
 }
 
-function legacyNativeQuestionCacheKey(
-  session: {
-    organization_id: string;
-    caller_id?: string;
-    session_id: string;
-    parent_id?: string;
-  },
-  id: string,
-  secret: string,
-): AllowedCacheKey {
-  const scope = createHmac("sha256", secret)
-    .update("archestra-native-question-v1\0")
-    .update(
-      JSON.stringify([
-        session.organization_id,
-        session.caller_id ?? "",
-        session.session_id,
-        session.parent_id ?? "",
-        "cache",
-        id,
-      ]),
-    )
-    .digest()
-    .subarray(0, 16)
-    .toString("base64url");
-  return `${CacheKey.OpenAppaNativeQuestion}-${scope}` as AllowedCacheKey;
-}
-
 function nativeQuestionCacheWrites(
   cacheSet: MockInstance<typeof cacheManager.set>,
 ): unknown[][] {
@@ -15579,7 +15347,7 @@ describe("soft-block emergency override", () => {
     trusted.runtimeTaskId = "task";
     await plugin.onSessionInit(context);
     const crossing = vi
-      .spyOn(appaService, "returnRuntimeValue")
+      .spyOn(appaService, "returnSubagentValue")
       .mockResolvedValue({
         kind: "held",
         reason: "your parent takes no return from this session",

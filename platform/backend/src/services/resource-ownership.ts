@@ -1,10 +1,8 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  type Resource,
   type ScopedResource,
 } from "@archestra/shared";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
-import { getPermissionsForUserContext } from "@/auth/utils";
 import {
   A2aRemoteAgentModel,
   AppAccessModel,
@@ -15,6 +13,7 @@ import {
   ProjectModel,
   SkillModel,
 } from "@/models";
+import { catalogNameAudienceOf } from "@/models/internal-mcp-catalog";
 import SkillTeamModel from "@/models/skill-team";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
 import { ApiError } from "@/types";
@@ -31,56 +30,23 @@ export async function transferResourceOwnership(params: {
 }): Promise<void> {
   const { kind, id, ownerId, userId, organizationId } = params;
   const scoped = SCOPED_RESOURCE_KINDS[kind];
-  if (scoped) {
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // A 403 before the row is loaded would disclose nothing; the scoped check
-    // itself answers 404 for a foreign or missing object.
-    await ResourcePermissions.authorizeOwnershipTransfer({
-      organizationId,
-      userId,
-      resource: scoped,
-      scope: id,
-      ownerId,
-    });
-    // SPDX-SnippetEnd
-  } else {
-    const resource = LEGACY_RESOURCE_FOR_KIND[kind as LegacyKind];
-    const permissions = await getPermissionsForUserContext({
-      userId,
-      organizationId,
-    });
-    const actions = permissions[resource] ?? [];
-    if (
-      !actions.includes("update") ||
-      (kind === "plugin" &&
-        !(await managesEveryObject({ kind, userId, organizationId })))
-    ) {
-      throw new ApiError(
-        403,
-        "You do not have permission to transfer this resource",
-      );
-    }
-  }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // A 403 before the row is loaded would disclose nothing; the scoped check
+  // itself answers 404 for a foreign or missing object.
+  await ResourcePermissions.authorizeOwnershipTransfer({
+    organizationId,
+    userId,
+    resource: scoped,
+    scope: id,
+    ownerId,
+  });
+  // SPDX-SnippetEnd
   const entry = await loadResource(params);
   if (!entry || entry.row.organizationId !== organizationId)
     throw new ApiError(404, "Resource not found");
   const { row, authorId, teamIds, scope } = entry;
-  if (!scoped) {
-    if (
-      authorId !== userId &&
-      !(await managesEveryObject({
-        kind: kind as "plugin" | "project",
-        userId,
-        organizationId,
-      }))
-    )
-      throw new ApiError(
-        403,
-        "Only the owner or a resource admin can transfer ownership",
-      );
-  }
   if (entry.managed)
     throw new ApiError(
       400,
@@ -95,28 +61,6 @@ export async function transferResourceOwnership(params: {
       400,
       "The new owner must be a user in this organization",
     );
-  if (!scoped) {
-    const resource = LEGACY_RESOURCE_FOR_KIND[kind as LegacyKind];
-    const recipientPermissions = await getPermissionsForUserContext({
-      userId: ownerId,
-      organizationId,
-    });
-    const recipient = recipientPermissions[resource] ?? [];
-    if (
-      !recipient.includes("read") ||
-      !recipient.includes("update") ||
-      (kind === "plugin" &&
-        !(await managesEveryObject({
-          kind,
-          userId: ownerId,
-          organizationId,
-        })))
-    )
-      throw new ApiError(
-        400,
-        "The new owner needs permission to manage the resource at its current visibility",
-      );
-  }
   if (kind === "app") {
     const target = { organizationId, scope, authorId, teamIds };
     await assertNoStaticPinsBrokenByTargetChange({
@@ -124,6 +68,24 @@ export async function transferResourceOwnership(params: {
       currentTarget: target,
       nextTarget: { ...target, authorId: ownerId },
     });
+  }
+  if (kind === "catalog") {
+    // Two members can each have a personal server of one name. A transfer
+    // would give both to one author, which the name rule does not allow.
+    const catalog = await InternalMcpCatalogModel.findNameCheckTarget(id);
+    if (
+      catalog &&
+      catalog.parentCatalogItemId === null &&
+      (await catalogNameAudienceOf(catalog)).kind === "personal"
+    )
+      await InternalMcpCatalogModel.assertRootNameAvailable({
+        name: catalog.name,
+        organizationId,
+        environmentId: catalog.environmentId,
+        audience: { kind: "personal", authorId: ownerId },
+        excludeId: id,
+        toolPrefix: catalog.toolPrefix,
+      });
   }
   try {
     const transferred = await entry.transfer({
@@ -143,62 +105,28 @@ export async function transferResourceOwnership(params: {
       );
     throw error;
   }
-  if (scoped) {
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    await ResourcePermissions.transferOwnerGrant({
-      organizationId,
-      resource: scoped,
-      scope: id,
-      previousOwnerId: authorId,
-      ownerId,
-    });
-    // SPDX-SnippetEnd
-  }
-}
-
-/** Kinds still authorized by role permissions alone. */
-type LegacyKind = "skill" | "plugin" | "project" | "app" | "catalog";
-const LEGACY_RESOURCE_FOR_KIND: Record<LegacyKind, Resource> = {
-  skill: "skill",
-  app: "app",
-  catalog: "mcpRegistry",
-  plugin: "plugin",
-  project: "project",
-};
-
-/**
- * Whether the user holds `update` on every object of this kind — the grant at
- * `*` that the retired `admin` role action became.
- */
-async function managesEveryObject(params: {
-  kind: "plugin" | "project";
-  userId: string;
-  organizationId: string;
-}): Promise<boolean> {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  return ResourcePermissions.allows({
-    userId: params.userId,
-    organizationId: params.organizationId,
-    resource: params.kind,
-    scope: "*",
-    action: "update",
+  await ResourcePermissions.transferOwnerGrant({
+    organizationId,
+    resource: scoped,
+    scope: id,
+    previousOwnerId: authorId,
+    ownerId,
   });
   // SPDX-SnippetEnd
 }
 
-/** Kinds whose access is a grant policy; the rest still use role permissions. */
+/** The grant policy that decides who may transfer each kind. */
 const SCOPED_RESOURCE_KINDS: Record<
   "skill" | "plugin" | "project" | "app" | "catalog" | "remoteAgent",
-  ScopedResource | null
+  ScopedResource
 > = {
   skill: "skill",
   app: "app",
   catalog: "mcpRegistry",
-  plugin: null,
+  plugin: "plugin",
   // A project's owner holds a direct grant on it like any scoped object, so
   // a transfer gives the new owner that grant too.
   project: "project",

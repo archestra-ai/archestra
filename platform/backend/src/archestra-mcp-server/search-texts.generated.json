@@ -68,7 +68,7 @@
     "searchText": "copy file between chat and open app, transfer attachment into app file store, export app output to chat files panel, open file in app, save app result, download, project files, rename destination, overwrite existing file"
   },
   "create_agent": {
-    "definitionHash": "2444476ae628b41ecb4d481d97172b488397d2da75f4ee346d615e3efdfef40a",
+    "definitionHash": "aad21fcd931d638b1f61d43013df9f4f23a01bdd25c7f3aaa2e6dd975ceef231",
     "searchText": "create new AI agent assistant, set name description system prompt, model API key, assign MCP tools, knowledge bases connectors, sub-agent delegation, labels emoji icon, suggested prompts, container runtime Claude Code Codex custom image, network egress policy, sharing permissions grants users teams"
   },
   "create_guardrails_repository": {
@@ -180,7 +180,7 @@
     "searchText": "save sandbox file to persistent conversation files, export container output, persist generated file, copy file from sandbox disk, make file downloadable for user, attachments, overwrite existing file, MIME type, binary or text output"
   },
   "edit_agent": {
-    "definitionHash": "5cb96071a3a911c5c200e20a67f72373a8d86d97ee7dab799560698285389184",
+    "definitionHash": "df9eee125d05df832acbe5dddf5abab02cb1b10aad1c3578472b502f9913c38b",
     "searchText": "update modify configure existing AI agent settings, rename, change system prompt, description, icon, labels, assign tools, add subagent delegation, knowledge bases, connectors, suggested prompts, LLM model and API key, container runtime Claude Code Codex image, outbound network egress policy allowed domains"
   },
   "edit_app": {
@@ -408,7 +408,7 @@
     "searchText": "list held peer messages inbox pending queued messages message IDs expiration time check incoming messages from other agents before reading message content"
   },
   "list_plugins": {
-    "definitionHash": "997e09c178c7df397bb60252276fd4684677128fd113e24bdcfa410d1c8ee46c",
+    "definitionHash": "45ac691f6a567f6b8e1b87cd7db262182bdf40d4899dd8ca309982d0b5eca89a",
     "searchText": "list plugins organization, browse available plugins, plugin id client platforms visibility file count, filter by access mine shared org others, my plugins, shared with team role user service account, filter by owner creator, find plugin id"
   },
   "list_projects": {
@@ -468,8 +468,8 @@
     "searchText": "preview run app assigned MCP tool server-side, test tool call with arguments, inspect real output response shape schema before writing app code, debug app authoring, check auth required, sample tool result"
   },
   "preview_guardrails_policy_change": {
-    "definitionHash": "c58978983ccc3019b6431b04fb1fcaf0fc27a7bcbed2cd9bcf83b21915481d42",
-    "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, check rules before publishing, text replacement edits, full rewrite, expected revision"
+    "definitionHash": "4c878d839bcfa31c38beccbe3eb4c8ca97a7427b56ece434ef6d57950f4e80d5",
+    "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, confirm unknown or unobserved MCP tools before previewing, allowUnknownTools, check rules before publishing, text replacement edits, full rewrite, expected revision"
   },
   "preview_guardrails_server_rules_change": {
     "definitionHash": "8c0a0fd16430d63653bc893e7065cb37d8d4cbb65dcd2fb4d4c52ca8c0d0269d",
@@ -640,8 +640,8 @@
     "searchText": "publish update guardrails policy organization.appa.toml, apply edits or full rewrite, save policy revision, open pull request or GitLab merge request via Git sync, diff changed lines, enable enforcement, AI safety rules configuration, optimistic concurrency expected revision"
   },
   "update_guardrails_validation": {
-    "definitionHash": "2d6b23b5ce076afe6a30f083fdf9e1adf334b2dea26e746ec82cf4d1b11feb5c",
-    "searchText": "save update guardrails validation files .appa OpenAPPA test suite, upsert or delete validation files by path, apply approved previewed changes, revision version conflict check, syntax check, Git sync pull request, save locally, commit guardrail tests"
+    "definitionHash": "41bb8456e1f529b971f6f8d3465c3a20b77a667fd03482c8b749d4bf2c700032",
+    "searchText": "save update guardrails validation files .appa OpenAPPA test suite, upsert delete files by path, apply approved previewed changes, run added edited validations immediately, record pass fail cannot-run results run history, deletion-only save, revision version conflict check, Git sync pull request"
   },
   "update_hook": {
     "definitionHash": "ddace8f7ca9f6310b73316dc3e3ddbd66958b6ac365994e2489531c5462d91dd",

@@ -1,42 +1,39 @@
 "use client";
 
-import { DEFAULT_CLAUDE_CODE_MODEL } from "@archestra/shared";
-import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { ModelSelector } from "@/components/chat/model-selector";
+import { CheckCircle2, ExternalLink, Loader2, Unplug } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ClaudeCodeSignInSteps } from "@/components/claude-code-sign-in-steps";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import {
   useClaudeCodeAccount,
-  useClaudeCodeModels,
   useClaudeCodeSignIn,
   useDisconnectClaudeCodeAccount,
 } from "@/lib/claude-code-account.query";
-import type { LlmModel } from "@/lib/llm-models.query";
 
 export function ClaudeCodeAccount({
   agentId,
-  model,
-  onModelChange,
-  variant = "card",
-  showDisconnectedNotice = true,
+  variant,
 }: {
   agentId: string;
-  showDisconnectedNotice?: boolean;
   /**
-   * `button` renders only the sign-in button, for a setup checklist row.
+   * `row` is a line of a list, `compact` a notice. `button` renders only the
+   * sign-in button, and nothing once connected or before that is known.
+   * `disconnect` renders only an icon that disconnects a connected account.
    * `inline` signs in right where it sits, inside another dialog, rather than
    * opening a dialog of its own.
    */
-  variant?: "card" | "row" | "compact" | "button" | "inline";
-  model?: string;
-  onModelChange?: (model: string) => void;
+  variant: "row" | "compact" | "button" | "disconnect" | "inline";
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
@@ -44,23 +41,8 @@ export function ClaudeCodeAccount({
   const [submitted, setSubmitted] = useState(false);
   const account = useClaudeCodeAccount(agentId, open);
   const connected = account.data?.state === "connected";
-  const discoveredModels = useClaudeCodeModels(
-    agentId,
-    connected && Boolean(onModelChange),
-  );
   const signIn = useClaudeCodeSignIn(agentId);
   const disconnect = useDisconnectClaudeCodeAccount(agentId);
-  const models = useMemo<LlmModel[]>(
-    () =>
-      (discoveredModels.data ?? []).map((entry) => ({
-        id: entry.value,
-        dbId: entry.value,
-        displayName: entry.displayName,
-        provider: "anthropic",
-        isFree: false,
-      })),
-    [discoveredModels.data],
-  );
   useEffect(() => {
     if (submitted && connected) {
       setOpen(false);
@@ -121,8 +103,6 @@ export function ClaudeCodeAccount({
           : variant === "row"
             ? "Sign in once for all your Claude Code agents."
             : "Sign in to use this agent.";
-
-  if (agentId && !connected && !showDisconnectedNotice) return null;
 
   if (!agentId)
     return (
@@ -272,17 +252,45 @@ export function ClaudeCodeAccount({
   }
 
   return (
-    <div className={variant === "button" ? "contents" : "space-y-4"}>
-      {variant === "button" ? (
-        <Button
-          type="button"
-          size="sm"
-          variant={connected ? "outline" : "default"}
-          onClick={openAccount}
-          disabled={account.isPending}
-        >
-          <span>{connected ? "Manage" : "Sign in with Claude"}</span>
-        </Button>
+    <div
+      className={
+        variant === "button" || variant === "disconnect"
+          ? "contents"
+          : "space-y-4"
+      }
+    >
+      {variant === "disconnect" ? (
+        // Disconnects at once: the click is the decision, and signing in
+        // again is one button away. In the card's text colour: it sits beside
+        // the model, not where the eye should land first.
+        connected && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Disconnect"
+                  disabled={disconnect.isPending}
+                  onClick={() => disconnect.mutate()}
+                >
+                  <Unplug />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Disconnect your Claude account</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
+      ) : variant === "button" ? (
+        // Nothing until the account has answered: a connected person never
+        // sees a sign-in flash by.
+        !account.isPending &&
+        !connected && (
+          <Button type="button" size="sm" onClick={openAccount}>
+            <span>Sign in</span>
+          </Button>
+        )
       ) : variant === "compact" ? (
         <InlineNotice
           variant={connected ? "success" : "warning"}
@@ -305,13 +313,7 @@ export function ClaudeCodeAccount({
           </Button>
         </InlineNotice>
       ) : (
-        <div
-          className={
-            variant === "row"
-              ? "flex flex-wrap items-center gap-3 p-3"
-              : "flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5"
-          }
-        >
+        <div className="flex flex-wrap items-center gap-3 p-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
             <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
           </div>
@@ -335,41 +337,6 @@ export function ClaudeCodeAccount({
             <span>{connected ? "Manage" : "Sign in"}</span>
             <ExternalLink className="size-3" />
           </Button>
-        </div>
-      )}
-      {connected && onModelChange && (
-        <div className="space-y-2">
-          <Label>Model</Label>
-          {discoveredModels.isPending ? (
-            <p className="text-sm text-muted-foreground">
-              Loading models from Claude Code…
-            </p>
-          ) : discoveredModels.isError ? (
-            <QueryLoadError
-              title="Could not load Claude Code models"
-              error={discoveredModels.error}
-              onRetry={() => void discoveredModels.refetch()}
-            />
-          ) : (
-            <div>
-              <ModelSelector
-                models={models}
-                selectedModel={model ?? DEFAULT_CLAUDE_CODE_MODEL}
-                onModelChange={(value) => {
-                  if (value) onModelChange(value);
-                }}
-                variant="outline"
-                suppressAutoSelect
-              />
-              {(!model || model === "default") && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {model === "default"
-                    ? "Claude chooses the model from your account settings. Choose a named model here to make it explicit."
-                    : "New runs use Opus unless you choose another model."}
-                </p>
-              )}
-            </div>
-          )}
         </div>
       )}
       <StandardDialog

@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-21
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -21,7 +21,7 @@ Admin holds every permission, including user management, roles, and organization
 
 ### Platform Admin
 
-Platform Admin holds every permission except `log:admin`, `guardrailsYell:admin`, `auditLog:admin`, and `member:impersonate`. It manages users, roles, settings, and resources, but sees only its own logs, yells, and audit records and cannot sign in as another member. Because of [No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), it cannot grant a role that holds the withheld permissions.
+Platform Admin holds every permission except `log:admin`, `guardrailsLog:admin`, `clientConnection:admin`, `auditLog:admin`, and `member:impersonate`. It manages users, roles, settings, and resources, but sees only its own logs, Guardrails records, client connections, and audit records and cannot sign in as another member. Because of [No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), it cannot grant a role that holds the withheld permissions.
 
 ### Editor
 
@@ -49,7 +49,8 @@ Full access to core resources, but cannot change organization settings or manage
 | Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |
 | LLM & MCP Logs | `read` |
-| Guardrails Yells | `read` |
+| Guardrails Logs | `read` |
+| Client Connections | `read` |
 | API Keys | `read`, `create`, `delete` |
 | OAuth Clients | `read`, `create` |
 | Users | `read` |
@@ -126,10 +127,12 @@ Each granular role grants one slice of the permissions below, so you can give a 
 | LLM Costs & Limits | Limit Writer | `fixed:llm-limits:writer` | `llmLimit:read`, `llmLimit:create`, `llmLimit:update`, `llmLimit:delete` |
 | LLM Costs & Limits | Cost Export Reader | `fixed:cost-exports:reader` | `costExport:read` |
 | LLM Costs & Limits | Cost Export Writer | `fixed:cost-exports:writer` | `costExport:read`, `costExport:create`, `costExport:update`, `costExport:delete` |
-| Logs & Audit | Log Reader | `fixed:logs:reader` | `log:read`, `guardrailsYell:read` |
-| Logs & Audit | Log Admin | `fixed:logs:admin` | `log:read`, `log:admin`, `guardrailsYell:read`, `guardrailsYell:admin` |
-| Logs & Audit | Yell Reader | `fixed:yells:reader` | `guardrailsYell:read` |
-| Logs & Audit | Yell Admin | `fixed:yells:admin` | `guardrailsYell:read`, `guardrailsYell:admin` |
+| Logs & Audit | Log Reader | `fixed:logs:reader` | `log:read`, `guardrailsLog:read`, `clientConnection:read` |
+| Logs & Audit | Log Admin | `fixed:logs:admin` | `log:read`, `log:admin`, `guardrailsLog:read`, `guardrailsLog:admin`, `clientConnection:read`, `clientConnection:admin` |
+| Logs & Audit | Guardrails Log Reader | `fixed:yells:reader` | `guardrailsLog:read` |
+| Logs & Audit | Guardrails Log Admin | `fixed:yells:admin` | `guardrailsLog:read`, `guardrailsLog:admin` |
+| Logs & Audit | Client Connection Reader | `fixed:client-connections:reader` | `clientConnection:read` |
+| Logs & Audit | Client Connection Admin | `fixed:client-connections:admin` | `clientConnection:read`, `clientConnection:admin` |
 | Logs & Audit | Audit Log Reader | `fixed:audit-log:reader` | `auditLog:read` |
 | Logs & Audit | Audit Log Admin | `fixed:audit-log:admin` | `auditLog:read`, `auditLog:admin` |
 | Users & Teams | User Reader | `fixed:users:reader` | `member:read` |
@@ -172,8 +175,8 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="skill:delete"></span>`skill:delete` | Permanently delete skills from the trash |
 | <span id="plugin:read"></span>`plugin:read` | View plugins and their file metadata |
 | <span id="plugin:create"></span>`plugin:create` | Create plugins |
-| <span id="plugin:update"></span>`plugin:update` | Modify plugin metadata and files |
-| <span id="plugin:delete"></span>`plugin:delete` | Delete plugins |
+| <span id="plugin:update"></span>`plugin:update` | No standalone effect; editing a plugin requires a Can edit or Full access grant on that plugin |
+| <span id="plugin:delete"></span>`plugin:delete` | No standalone effect; deleting a plugin requires a Full access grant on that plugin |
 | <span id="app:read"></span>`app:read` | Open Apps |
 | <span id="app:create"></span>`app:create` | Create new MCP Apps |
 | <span id="guardrailsPolicy:read"></span>`guardrailsPolicy:read` | View Guardrails policy, batteries, and coverage |
@@ -238,10 +241,12 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 
 | Permission | Description |
 |------------|-------------|
-| <span id="log:read"></span>`log:read` | View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization |
-| <span id="log:admin"></span>`log:admin` | View every LLM, MCP, and Guardrails consult log in your organization (also requires Read) |
-| <span id="guardrailsYell:read"></span>`guardrailsYell:read` | View and resolve the Guardrails yells of your own sessions |
-| <span id="guardrailsYell:admin"></span>`guardrailsYell:admin` | View and resolve every Guardrails yell in your organization (also requires Read) |
+| <span id="log:read"></span>`log:read` | View your own LLM proxy and MCP tool call logs in the active organization |
+| <span id="log:admin"></span>`log:admin` | View every LLM and MCP log in your organization (also requires Read) |
+| <span id="guardrailsLog:read"></span>`guardrailsLog:read` | View the Guardrails consults and yells of your own sessions, and resolve those yells |
+| <span id="guardrailsLog:admin"></span>`guardrailsLog:admin` | View and resolve every Guardrails consult and yell in your organization (also requires Read) |
+| <span id="clientConnection:read"></span>`clientConnection:read` | View the connection events of your own coding clients and agents |
+| <span id="clientConnection:admin"></span>`clientConnection:admin` | View every member's connection events, and Adoption: who has connected and how much each client is used (also requires Read) |
 | <span id="auditLog:read"></span>`auditLog:read` | View audit log records of your own administrative actions |
 | <span id="auditLog:admin"></span>`auditLog:admin` | View every audit event in your organization (also requires Read) |
 

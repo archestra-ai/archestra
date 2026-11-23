@@ -20,7 +20,8 @@ import {
   agentCatalogQueryKeys,
 } from "@/lib/agent-catalog.keys";
 import { makeAgent, makeAgentCatalog } from "@/mocks/data/agents";
-import { sessionSeed } from "@/mocks/data/auth";
+import { makeUserPermissions, sessionSeed } from "@/mocks/data/auth";
+import { configSeed, makeConfig } from "@/mocks/data/config";
 import { organizationSeed } from "@/mocks/data/organization";
 import { handlers } from "@/mocks/handlers";
 import {
@@ -434,4 +435,127 @@ it("ignores an invalid bookmarked runtime so the list remains usable", async () 
   expect(
     screen.getByRole("combobox", { name: "Filter by agent runtime" }),
   ).toHaveTextContent("All runtimes");
+});
+
+/** Three agents with a runtime each, and the requests their rows make. */
+function listRuntimeAgents(
+  permissions: ReturnType<typeof makeUserPermissions>,
+) {
+  const teamRuntime = {
+    id: "c0ffee00-0000-4000-8000-000000000001",
+    name: "Review workspace",
+    description: "",
+    icon: null,
+    hidden: false,
+    position: 0,
+    image: "registry.example.com/platform/review:v3",
+  };
+  const runtime = (image: string, command: string[] | null) => ({
+    image,
+    command,
+    inferenceProtocol: "openai_responses" as const,
+    backend: "kubernetes" as const,
+    steerMode: "pipe" as const,
+    privileged: false,
+    environment: null,
+    credentials: null,
+    ttlHours: null,
+    idleTimeoutMinutes: null,
+  });
+  const requests = { runtimes: 0, perRuntime: [] as string[] };
+  server.use(
+    http.get(`${origin}/api/config`, () =>
+      HttpResponse.json(makeConfig({ features: { agentRuntime: true } })),
+    ),
+    http.get(`${origin}/api/user/permissions`, () =>
+      HttpResponse.json(permissions),
+    ),
+    http.get(`${origin}/api/agent-runtime-templates`, () => {
+      requests.runtimes += 1;
+      return HttpResponse.json([teamRuntime]);
+    }),
+    // Nothing a row shows may ask about one runtime at a time.
+    http.get(`${origin}/api/agent-runtime-templates/:id`, ({ params }) => {
+      requests.perRuntime.push(String(params.id));
+      return HttpResponse.json(null);
+    }),
+    http.get(`${origin}/api/agent-catalog`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("pinned") === "true"
+          ? makeAgentCatalog()
+          : makeAgentCatalog({
+              agents: [
+                makeAgent({
+                  id: "on-built-in",
+                  name: "Codex helper",
+                  runtime: runtime(
+                    configSeed.features.agentRuntimeCatalogImages.codex,
+                    ["archestra-codex"],
+                  ),
+                }),
+                makeAgent({
+                  id: "on-custom",
+                  name: "Reviewer",
+                  runtime: runtime(teamRuntime.image, ["review-agent"]),
+                }),
+                makeAgent({
+                  id: "on-own-image",
+                  name: "Toolbox",
+                  runtime: runtime("ghcr.io/example/toolbox:latest", null),
+                }),
+              ],
+            }),
+      ),
+    ),
+  );
+  return { requests, teamRuntime };
+}
+
+it("names each agent's runtime in its row for someone who administers runtimes, from one read of the runtimes", async () => {
+  const { requests, teamRuntime } = listRuntimeAgents(makeUserPermissions());
+  renderPage({ defaultAgentId: null, personalChatAgentId: null });
+
+  const row = (name: string) =>
+    screen.getByRole("link", { name }).closest("tr") as HTMLElement;
+  expect(
+    await screen.findByRole("link", {
+      name: "Runtime: Codex, open its settings",
+    }),
+  ).toHaveAttribute("href", "/settings/agents/runtimes?edit=codex");
+  // A custom runtime's name comes with the list of them.
+  expect(
+    await within(row("Reviewer")).findByRole("link", {
+      name: "Runtime: Review workspace, open its settings",
+    }),
+  ).toHaveAttribute("href", `/settings/agents/runtimes?edit=${teamRuntime.id}`);
+  expect(
+    within(row("Toolbox")).getByRole("link", {
+      name: "Runtime: Custom image, open runtime settings",
+    }),
+  ).toHaveAttribute("href", "/settings/agents/runtimes");
+  // The badge takes the plain mark's place: the runtime shows once a row.
+  expect(within(row("Codex helper")).getAllByText("Codex")).toHaveLength(1);
+  expect(within(row("Reviewer")).queryByText("Runtime")).toBeNull();
+  // One list for the whole table, and nothing per row.
+  expect(requests.runtimes).toBe(1);
+  expect(requests.perRuntime).toEqual([]);
+});
+
+it("keeps the plain runtime mark in each row for someone who cannot open the runtime settings, and reads no runtimes for it", async () => {
+  const { requests } = listRuntimeAgents(
+    makeUserPermissions({ organizationSettings: [] }),
+  );
+  renderPage({ defaultAgentId: null, personalChatAgentId: null });
+
+  const row = (name: string) =>
+    screen.getByRole("link", { name }).closest("tr") as HTMLElement;
+  await screen.findByRole("link", { name: "Codex helper" });
+  // What they saw before: a maintained runtime by name, any other as
+  // "Runtime", and no link to settings they cannot open.
+  expect(within(row("Codex helper")).getByText("Codex")).toBeInTheDocument();
+  expect(within(row("Reviewer")).getByText("Runtime")).toBeInTheDocument();
+  expect(screen.queryByText("Review workspace")).toBeNull();
+  expect(screen.queryByRole("link", { name: /^Runtime: / })).toBeNull();
+  expect(requests.runtimes).toBe(0);
+  expect(requests.perRuntime).toEqual([]);
 });

@@ -173,6 +173,38 @@ export const ProviderEndpointSchema = z.enum([
 export type SupportedProviderEndpoint = z.infer<typeof ProviderEndpointSchema>;
 
 /**
+ * The `reasoning_effort` values a client can send on the OpenAI wire, from the
+ * shallowest to the deepest. Which of them a model accepts differs per model
+ * and per provider (GitHub Copilot answers an unlisted level with a 400), so
+ * the model catalogue reports the accepted subset per model.
+ */
+export const ReasoningEffortLevelSchema = z.enum([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+export type ReasoningEffortLevel = z.infer<typeof ReasoningEffortLevelSchema>;
+
+/**
+ * The known levels among `values`, deduplicated and in
+ * {@link ReasoningEffortLevelSchema} order. A provider's own spelling is kept
+ * only when it is one of ours: an unknown level is something no client of
+ * this catalogue can send.
+ */
+export function toReasoningEffortLevels(
+  values: readonly unknown[],
+): ReasoningEffortLevel[] {
+  const present = new Set(values);
+  return ReasoningEffortLevelSchema.options.filter((level) =>
+    present.has(level),
+  );
+}
+
+/**
  * True for providers that serve one model catalog over more than one wire
  * format, where the model id alone does not say which. Gates the per-model
  * surface lookup on the chat hot path so single-surface providers — every
@@ -600,6 +632,62 @@ export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
   );
 }
 
+export type ClaudeSubscriptionRuntime = {
+  command?: readonly string[] | null;
+  claudeCode?: { authentication: "provider" | "subscription" } | null;
+};
+
+/**
+ * An agent's runtime with the Claude account its runs read. An agent saved
+ * before people could choose its account stores no `accountLock`. On any
+ * image but the maintained Claude Code runtime, such an agent always ran on
+ * its provider connection, whatever Claude account it stored: it still does,
+ * and what it stores stays as it is, until someone saves its accounts.
+ */
+export function withClaudeAccountItRuns<
+  Runtime extends ClaudeSubscriptionRuntime,
+>(params: {
+  runtime: Runtime;
+  /** The agent was saved before people could choose its account. */
+  savedBeforeChoosing: boolean;
+}): Runtime {
+  const { runtime } = params;
+  if (
+    !params.savedBeforeChoosing ||
+    isClaudeCodeRuntimeCommand(runtime.command?.[0]) ||
+    runtime.claudeCode?.authentication !== "subscription"
+  ) {
+    return runtime;
+  }
+  return {
+    ...runtime,
+    claudeCode: { ...runtime.claudeCode, authentication: "provider" },
+  };
+}
+
+/**
+ * The Claude account a new agent starts on, from the settings of the runtime
+ * it is created on. A kind the runtime's account rule names is the account.
+ * Without a rule, the maintained Claude Code runtime starts new agents on the
+ * account its settings store. A custom image ran every agent on its provider
+ * connection whatever Claude account its settings stored, so there a stored
+ * subscription starts nobody on one.
+ */
+export function startingClaudeAuthentication(params: {
+  runtime: ClaudeSubscriptionRuntime;
+  /** The account kind the runtime's rule names, if it names one. */
+  ruleKind: "subscription" | "key" | null | undefined;
+}): "provider" | "subscription" | undefined {
+  if (params.ruleKind) {
+    return params.ruleKind === "subscription" ? "subscription" : "provider";
+  }
+  const authentication = params.runtime.claudeCode?.authentication;
+  return authentication === "subscription" &&
+    !isClaudeCodeRuntimeCommand(params.runtime.command?.[0])
+    ? "provider"
+    : authentication;
+}
+
 /** Whether a runtime command invokes the maintained Codex runtime or wrapper. */
 export function isCodexRuntimeCommand(command?: string | null): boolean {
   return command === "archestra-codex" || command === "archestra-codex-runtime";
@@ -758,30 +846,6 @@ export function getAgentRuntimeModelCompatibility(params: {
     };
   }
   return { compatible: true };
-}
-
-/**
- * Whether an Agent Runtime agent that follows the organization's default model
- * can run `provider`/`modelId` as that default. A Claude Code runtime not set
- * to provider authentication runs a default it can't use from a provider on
- * the person's own Claude subscription instead, except a Bedrock model, which
- * it runs with provider billing (so that one must be a Claude model).
- */
-export function getAgentRuntimeDefaultModelCompatibility(
-  params: Parameters<typeof getAgentRuntimeModelCompatibility>[0] & {
-    claudeCodeAuthentication?: "provider" | "subscription" | null;
-  },
-): { compatible: true } | { compatible: false; message: string } {
-  const { claudeCodeAuthentication, ...model } = params;
-  if (
-    isClaudeCodeRuntimeCommand(params.runtimeCommand?.[0]) &&
-    (claudeCodeAuthentication === "subscription" ||
-      (claudeCodeAuthentication !== "provider" &&
-        params.provider !== "bedrock"))
-  ) {
-    return { compatible: true };
-  }
-  return getAgentRuntimeModelCompatibility(model);
 }
 
 export function getProvidersWithOptionalApiKey(params?: {

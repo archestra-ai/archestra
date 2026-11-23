@@ -2,7 +2,7 @@
 title: Subagents
 description: Let an agent delegate work to its own copy, your agents, built-in subagents, or external A2A agents
 order: 5
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -55,3 +55,18 @@ What to know:
 - The parent names the answer's shape when it delegates. Every field must be bounded: a number in a range, a yes or no, or a fixed list of values. Free text is never accepted.
 - An answer that does not match is withheld. The parent gets an error, never the raw text.
 - External agents cannot return structured answers.
+
+## Answers the Parent Must Accept
+
+A subagent can read a web page or an inbound email and finish its task, and the parent keeps its trust until it chooses otherwise. With [Guardrails](/docs/agents/guardrails) on, an answer that would lower the parent's trust or narrow its audience does not come back on its own. Guardrails holds it, and the parent picks one:
+
+- **Accept:** the parent gets the answer and takes on its labels. After accepting an answer built on an untrusted web page, the parent is untrusted too.
+- **Discard:** nothing of the answer reaches the parent, and its labels stay as they were.
+
+To keep the parent's trust and still use the result, ask for a [structured answer](#get-trusted-answers-from-untrusted-data) instead.
+
+What to know:
+
+- An answer that changes nothing for the parent comes back directly.
+- A discarded answer cannot be accepted later. The parent delegates again to get a new one.
+- This covers forks and agents you built. The exceptions are a subagent with a [dedicated runtime](/docs/agents/runtime) and a subagent's own subagents: they are refused such a read instead.

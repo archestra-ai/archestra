@@ -149,7 +149,11 @@ describe("Claude subscription secret lifecycle", () => {
     await expect(
       manager.requireConnection({
         ...other,
-        runtime: { ...other.runtime, command: ["custom-runtime"] },
+        runtime: {
+          ...other.runtime,
+          command: ["custom-runtime"],
+          claudeCode: undefined,
+        },
         runtimeScope: "changed-tests",
       }),
     ).rejects.toMatchObject({ statusCode: 400 });
@@ -461,9 +465,22 @@ test("uses provider expiry and keeps model discovery outside sign-in", async ({
       runtime: {
         ...owner.runtime,
         command: ["custom-entrypoint"],
+        claudeCode: undefined,
       },
     }),
   ).rejects.toMatchObject({ statusCode: 400 });
+  expect(
+    (
+      await manager.status({
+        ...owner,
+        runtime: {
+          ...owner.runtime,
+          command: ["custom-entrypoint"],
+          claudeCode: { authentication: "subscription" },
+        },
+      })
+    ).state,
+  ).toBe("connected");
 });
 
 const TOKEN = `sk-ant-oat01-${"example".repeat(8)}`;
@@ -501,6 +518,7 @@ function runtime(agent: {
 }): ResolvedAgentRuntime {
   return {
     agentId: agent.id,
+    accountLock: null,
     organizationId: agent.organizationId,
     secretId: null,
     environmentId: null,

@@ -652,7 +652,13 @@ async function validateFallback(params: {
       400,
       "Select an enabled service account in this organization",
     );
-  if (!reviewer || !member || !reviewer.emailVerified || reviewer.banned) {
+  if (
+    !reviewer ||
+    !member ||
+    !reviewer.emailVerified ||
+    reviewer.banned ||
+    reviewer.softDeleted
+  ) {
     throw new ApiError(
       400,
       "Select an active reviewer with a verified email in this organization",

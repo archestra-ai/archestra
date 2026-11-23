@@ -114,4 +114,4 @@ Set **Can use** in the permissions of each connector, file, or Knowledge Base. G
 - Grant changes apply at once. Source permission changes apply at the connector's next permission sync.
 - An [OAuth application](/docs/mcp/authentication/applications#oauth-client-credentials-applications) without a service-account binding searches sources shared with **Everyone in the organization** or granted to that **OAuth client** at **Can use**, through MCP or A2A. For connectors with **Sync permissions from the source** on, source document access follows the user who created the OAuth client.
 
-Granular access and permission sync are Enterprise features. See [Pricing Model](/docs/get-started/pricing-model).
+Granular access and permission sync are Enterprise features. See [Pricing](/pricing).

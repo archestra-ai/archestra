@@ -6,6 +6,7 @@ import {
   ModelInputModalitySchema,
   ModelOutputModalitySchema,
   ProviderEndpointSchema,
+  ReasoningEffortLevelSchema,
   SupportedEmbeddingDimensionsSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -128,6 +129,7 @@ const fieldsToExtend = {
   embeddingDimensions: SupportedEmbeddingDimensionsSchema.nullable(),
   inputModalities: z.array(ModelInputModalitySchema).nullable(),
   outputModalities: z.array(ModelOutputModalitySchema).nullable(),
+  supportedReasoningEfforts: z.array(ReasoningEffortLevelSchema).nullable(),
   defaultParameters: ModelDefaultParametersSchema.nullable(),
   configuredParameters: ConfiguredParametersSchema.nullable(),
   syncedLongContextPricing: SyncedLongContextPricingSchema.nullable(),
@@ -154,6 +156,10 @@ export const CreateModelSchema = InsertModelSchema.omit({
   updatedAt: true,
 }).extend({
   embeddingDimensions: SupportedEmbeddingDimensionsSchema.nullable().optional(),
+  supportedReasoningEfforts: z
+    .array(ReasoningEffortLevelSchema)
+    .nullable()
+    .optional(),
   defaultParameters: ModelDefaultParametersSchema.nullable().optional(),
   configuredParameters: ConfiguredParametersSchema.nullable().optional(),
   syncedLongContextPricing:
@@ -217,8 +223,25 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   supportsToolCalling: true,
   supportsReasoningEffort: true,
 }).extend({
-  /** Provider-declared OpenAI-compatible surfaces, when the catalog provides them. */
+  /**
+   * The model's maximum output tokens: the administrator's override when set,
+   * otherwise the provider's limit. Null when neither is known.
+   */
+  outputLength: z.number().int().nullable(),
+  /**
+   * The provider surfaces this model is served over: what the provider
+   * publishes per model (GitHub Copilot), what an Azure resource's deployment
+   * reports, or Archestra's rules for OpenAI's own models. Null when unknown.
+   */
   supportedEndpoints: z.array(ProviderEndpointSchema).nullable().optional(),
+  /**
+   * The `reasoning_effort` levels the model accepts: the provider's own
+   * per-model list when it publishes one, otherwise the levels Archestra's
+   * per-model rules vouch for (`low`, `medium`, `high`), which the provider
+   * may exceed. An empty list means the model takes no level; null means
+   * unknown.
+   */
+  supportedReasoningEfforts: z.array(ReasoningEffortLevelSchema).nullable(),
   /**
    * Endpoint-scoped agent-suitability verdict from the `api_key_models` link
    * (not a `models` column). Tri-state: `false` is evidence-backed, `true`

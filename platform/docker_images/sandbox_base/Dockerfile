@@ -10,9 +10,14 @@
 # Debian mirror.
 # TODO: move to python 3.15 (lazy imports) once ML wheels such as torch and
 # onnxruntime ship cp315 on PyPI.
-FROM node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS node-runtime
+FROM dhi.io/node:24.22.3-debian13@sha256:927ecf24d99ce7bffe8abd063177242bdfe79a4f41aa6c5ad548f3be0a31f030 AS node-runtime
 
-FROM ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim@sha256:db955a4c5fd85c9e08ae2c02f3fcedf76765aebc7c9bc10c55a6bbcc1b0510be
+FROM ghcr.io/astral-sh/uv:0.13.8-python3.14-trixie-slim@sha256:81a1340fea1e72ad4a8e9a016128b0c61041cf182ea49fd788023e52842bc147 AS uv-bin
+
+FROM dhi.io/python:3.14.10-debian13-dev@sha256:e84d616360a8ca598446289cadeeeaba36aa7d6e5d83878923e0c6123b268b0f
+COPY --from=uv-bin /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=uv-bin /usr/local/bin/uvx /usr/local/bin/uvx
+RUN ln -s /usr/bin/python3 /usr/local/bin/python3
 
 # root setup: toolbelt + sandbox dirs + ownership + the pip->uv shim (so the
 # model is never tempted to `pip install` into a location the venv won't see).
@@ -20,16 +25,21 @@ FROM ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim@sha256:db955a4c5fd85c9e0
 # nodejs and curl decode Brotli through it. The floor fails the build if the
 # CVE-2026-111497 fix is missing. zlib1g is listed for the same reason: the base
 # ships it, and the floor fails the build without the CVE-2026-85091 and
-# CVE-2026-76844 fix.
+# CVE-2026-76844 fix. libc6 and libc-bin are listed for the same reason: the
+# base's glibc build predates Debian's CVE-2026-5435 and CVE-2026-19499 fix
+# (2.41-12+deb13u5).
 # Upgrade inherited apt packages too; CVE-2026-109518 is fixed in 3.0.4.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
-      apt libapt-pkg7.0 bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 zlib1g unzip zip \
+      apt libapt-pkg7.0 bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 zlib1g libc6 libc-bin gzip unzip zip \
  && for package in apt libapt-pkg7.0; do \
       dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge 3.0.4 || exit 1; \
     done \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.1.0-2+deb13u1 \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge 1:1.3.dfsg+really1.3.1-1+deb13u1 \
+ && for package in libc6 libc-bin; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge 2.41-12+deb13u5 || exit 1; \
+    done \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /home/sandbox /skills \
  && chown -R 1000:1000 /home/sandbox /skills \
@@ -45,12 +55,24 @@ RUN apt-get update -qq \
 # preserving Node/npm with the upstream runtime and a mature, bundled npm.
 # pip is deliberately disabled above: remove its unused vendored libraries and
 # ensurepip wheel too, while keeping uv as the project's package installer.
+# The base keeps its own record of each package in /var/lib/dpkg/status.d,
+# which dpkg never updates: drop the records of packages apt upgraded or
+# removed above, or scanners report the base's old builds as still installed.
 RUN apt-get purge -y --auto-remove nodejs npm \
  && rm -rf /usr/local/lib/python3.14/site-packages/pip \
       /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
-      /usr/local/lib/python3.14/ensurepip
+      /usr/lib/python3/dist-packages/pip \
+      /usr/lib/python3/dist-packages/pip-*.dist-info \
+      /usr/local/lib/python3.14/ensurepip \
+      /usr/lib/python3.14/ensurepip \
+ && for record in /var/lib/dpkg/status.d/*; do \
+      package=$(sed -n 's/^Package: //p' "$record" | head -n 1); \
+      [ -n "$package" ] || continue; \
+      version=$(sed -n 's/^Version: //p' "$record" | head -n 1); \
+      [ "$(dpkg-query -W -f='${Version}' "$package" 2>/dev/null)" = "$version" ] || rm -f "$record"; \
+    done
 
-COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/bin/node /usr/local/bin/node
 
 # These archives are unpacked without executing package lifecycle scripts.
 # npm 11.21.1 includes the fixed tar/brace-expansion/pacote dependencies, but

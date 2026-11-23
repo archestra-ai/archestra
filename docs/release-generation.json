@@ -1,34 +1,26 @@
 {
   "schema": 1,
-  "sourceSha": "c439a5f82db27bf88062d880fd7670ea4cd24cbe",
-  "baseSha": "3d53243ef634f214ebbd9d9f3caa2018fe281927",
-  "runId": 44544124043,
+  "sourceSha": "ca17ee0d217617c10d34964b6d0b8d4be7b6f69b",
+  "baseSha": "373ec2a708c41e2de90c3fa12c356ffed1166788",
+  "runId": 45048967654,
   "attempt": 1,
-  "platformTree": "b910d60b2208e3cc63717fd2f94bd06974f27963",
+  "platformTree": "488cc4ced29a20dbe13b4c84c178b4b0ed136b62",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "9415422ef0b43ec37d768f892dfaa138c575ce04"
+      "blob": "0071900e9df29dca64cf19a7639852ab94e13d59"
     },
     {
-      "path": "docs/assets/automated_screenshots/admin-logs_session-waterfall.dark.webp",
-      "blob": "f6d0ecefd6869e69fc050ecb344f8d5aa4dd2768"
+      "path": "docs/assets/automated_screenshots/insights-logs_client-connections.dark.webp",
+      "blob": "18b0c35056ce4cbb7ce251914f2b969ee28ee65b"
     },
     {
-      "path": "docs/assets/automated_screenshots/admin-logs_session-waterfall.webp",
-      "blob": "b0721e5831ae3f9a02d9f2901c4bb9941bedee9c"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.dark.webp",
-      "blob": "1525cbe93aeaa48798b2b354631f1281fe3047e2"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.dark.webp",
-      "blob": "7b89eb86574572b0d1c3c6d02e9f7855a87b3939"
+      "path": "docs/assets/automated_screenshots/insights-logs_client-connections.webp",
+      "blob": "063afad9d007f555ba3550279a0d90c4047b784f"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "24d53f6927e5f141acce6e95933e46bf27589bda"
+      "blob": "0882b1f434f0efb632406694a7cddfc4f732fe3f"
     }
   ]
 }

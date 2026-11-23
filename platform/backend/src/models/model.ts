@@ -1,8 +1,16 @@
 import {
+  bedrockOpenAiReasoningEfforts,
   CACHE_PRICE_MULTIPLIERS,
+  geminiAcceptedReasoningEfforts,
+  modelSupportsThinkingEffort,
+  openAiAcceptsCommonReasoningEfforts,
   PROVIDERS_BILLING_NO_TOKEN_RATE,
+  type ReasoningEffortLevel,
+  requiresOpenAiResponsesApi,
   type SupportedProvider,
+  type SupportedProviderEndpoint,
   stripClaudeContextVariantSuffix,
+  THINKING_EFFORTS,
 } from "@archestra/shared";
 import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import {
@@ -15,6 +23,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
 import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
@@ -294,15 +303,14 @@ class ModelModel {
           canonicalNames.has(ollamaAvailabilityName(model.modelId) ?? ""),
       );
     } else {
-      const models = await ModelModel.findByProviderModelIds(
-        [
+      // Runs at least twice per proxied request: a prepared query for the
+      // hidden match only, not every alias's full catalog row.
+      [hidden] = await ModelModel.hiddenByProviderAndModelIds.get().execute({
+        provider: params.provider,
+        modelIds: [
           ...new Set([modelId, ...providerAliases, ...(params.aliases ?? [])]),
-        ].map((id) => ({
-          provider: params.provider,
-          modelId: id,
-        })),
-      );
-      hidden = [...models.values()].find((model) => model.ignored);
+        ],
+      });
     }
     if (hidden) {
       throw new ApiError(
@@ -685,6 +693,12 @@ class ModelModel {
               // a depth the server now rejects. The last known value survives a
               // sync that says nothing.
               supportsReasoningEffort: sql`COALESCE(excluded.supports_reasoning_effort, ${schema.modelsTable.supportsReasoningEffort})`,
+              // Provider-published per-model facts nothing user-editable
+              // writes. Fresh values win so a model that gains a surface or a
+              // reasoning level shows it; a sync that says nothing keeps the
+              // last known value.
+              supportedEndpoints: sql`COALESCE(excluded.supported_endpoints, ${schema.modelsTable.supportedEndpoints})`,
+              supportedReasoningEfforts: sql`COALESCE(excluded.supported_reasoning_efforts, ${schema.modelsTable.supportedReasoningEfforts})`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
               cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
@@ -782,6 +796,8 @@ class ModelModel {
               outputModalities: sql`excluded.output_modalities`,
               supportsToolCalling: sql`excluded.supports_tool_calling`,
               supportsReasoningEffort: sql`excluded.supports_reasoning_effort`,
+              supportedEndpoints: sql`excluded.supported_endpoints`,
+              supportedReasoningEfforts: sql`excluded.supported_reasoning_efforts`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
               cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
@@ -1055,6 +1071,7 @@ class ModelModel {
       });
       // SPDX-SnippetEnd
       await tx.delete(schema.modelsTable).where(eq(schema.modelsTable.id, id));
+      await ModelModel.clearAgentConnectionModels([id], tx);
       return { status: "deleted" } as const;
     });
   }
@@ -1075,14 +1092,17 @@ class ModelModel {
       return false;
     }
 
-    await db
-      .delete(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.provider, provider),
-          eq(schema.modelsTable.modelId, modelId),
-        ),
-      );
+    await withDbTransaction(async (tx) => {
+      await tx
+        .delete(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, provider),
+            eq(schema.modelsTable.modelId, modelId),
+          ),
+        );
+      await ModelModel.clearAgentConnectionModels([existing.id], tx);
+    });
 
     return true;
   }
@@ -1100,22 +1120,29 @@ class ModelModel {
    * can define custom token pricing for metrics.
    */
   static async deleteOrphanedModels(): Promise<number> {
-    const orphaned = await db
-      .delete(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.discoveredViaLlmProxy, false),
-          notInArray(
-            schema.modelsTable.id,
-            db
-              .selectDistinct({
-                modelId: schema.llmProviderApiKeyModelsTable.modelId,
-              })
-              .from(schema.llmProviderApiKeyModelsTable),
+    const orphaned = await withDbTransaction(async (tx) => {
+      const deleted = await tx
+        .delete(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.discoveredViaLlmProxy, false),
+            notInArray(
+              schema.modelsTable.id,
+              tx
+                .selectDistinct({
+                  modelId: schema.llmProviderApiKeyModelsTable.modelId,
+                })
+                .from(schema.llmProviderApiKeyModelsTable),
+            ),
           ),
-        ),
-      )
-      .returning({ id: schema.modelsTable.id });
+        )
+        .returning({ id: schema.modelsTable.id });
+      await ModelModel.clearAgentConnectionModels(
+        deleted.map(({ id }) => id),
+        tx,
+      );
+      return deleted;
+    });
 
     return orphaned.length;
   }
@@ -1769,11 +1796,13 @@ class ModelModel {
     if (!model) {
       return {
         contextLength: null,
+        outputLength: null,
         inputModalities: null,
         outputModalities: null,
         supportsToolCalling: null,
         supportsReasoningEffort: null,
         supportedEndpoints: null,
+        supportedReasoningEfforts: null,
         recommendedForAgents: null,
         pricePerMillionInput: null,
         pricePerMillionOutput: null,
@@ -1787,9 +1816,11 @@ class ModelModel {
     }
 
     const pricing = ModelModel.getEffectivePricing(model);
+    const supportedReasoningEfforts = resolveSupportedReasoningEfforts(model);
 
     return {
       contextLength: ModelModel.resolveEffectiveContextLength(model),
+      outputLength: ModelModel.resolveEffectiveOutputLength(model),
       inputModalities: model.azureCapabilities
         ? (model.azureCapabilities.inputModalities ?? null)
         : model.inputModalities,
@@ -1807,8 +1838,16 @@ class ModelModel {
           : model.azureCapabilities
             ? (model.azureCapabilities.supportsToolCalling ?? null)
             : model.supportsToolCalling,
-      supportsReasoningEffort: model.supportsReasoningEffort,
-      supportedEndpoints: model.supportedEndpoints,
+      // Whether the model reasons. Levels a client can send settle it; an
+      // empty list does not, since a translation may send no reasoning
+      // setting to a model that reasons anyway (Claude over the Unified Model
+      // API). For the providers whose row decides the composer's control the
+      // levels come from that row, so the flag stays what the row says.
+      supportsReasoningEffort: supportedReasoningEfforts?.length
+        ? true
+        : model.supportsReasoningEffort,
+      supportedEndpoints: resolveSupportedEndpoints(model),
+      supportedReasoningEfforts,
       recommendedForAgents,
       pricePerMillionInput: pricing.pricePerMillionInput,
       pricePerMillionOutput: pricing.pricePerMillionOutput,
@@ -1941,6 +1980,22 @@ class ModelModel {
     return { llmModelRowCount: await ModelModel.countAll() };
   }
 
+  private static readonly hiddenByProviderAndModelIds = new PreparedQuery(
+    (database) =>
+      database
+        .select({ modelId: schema.modelsTable.modelId })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, sql.placeholder("provider")),
+            sql`${schema.modelsTable.modelId} = ANY(${sql.placeholder("modelIds")}::text[])`,
+            eq(schema.modelsTable.ignored, true),
+          ),
+        )
+        .limit(1)
+        .prepare("archestra_model_hidden_by_provider_and_ids"),
+  );
+
   private static readonly byProviderAndModel = new PreparedQuery((database) =>
     database
       .select()
@@ -1971,12 +2026,129 @@ class ModelModel {
         )
         .prepare("archestra_proxy_model_identity"),
   );
+
+  /**
+   * Clears deleted models from the model an agent sets for each connection
+   * it leaves to each person, as the database clears an agent's own model:
+   * whoever picks that connection then picks its model. The agent keeps its
+   * other entries, and drops the map once none is left.
+   */
+  private static async clearAgentConnectionModels(
+    modelIds: string[],
+    tx: Transaction,
+  ): Promise<void> {
+    if (modelIds.length === 0) return;
+    const runtime = schema.agentsTable.runtime;
+    const deleted = sql.join(
+      modelIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const kept = sql`(SELECT jsonb_object_agg(entry.key, entry.value) FROM jsonb_each(${runtime}->'connectionModels') AS entry WHERE entry.value #>> '{}' NOT IN (${deleted}))`;
+    await tx
+      .update(schema.agentsTable)
+      .set({
+        runtime: sql`CASE WHEN ${kept} IS NULL THEN ${runtime} - 'connectionModels' ELSE jsonb_set(${runtime}, '{connectionModels}', ${kept}) END`,
+      })
+      .where(
+        sql`jsonb_typeof(${runtime}->'connectionModels') = 'object' AND EXISTS (SELECT 1 FROM jsonb_each_text(${runtime}->'connectionModels') AS entry WHERE entry.value IN (${deleted}))`,
+      );
+  }
 }
 
 export default ModelModel;
 
 // A JSON-encoded `null` would be stored as the jsonb value `null` rather than
 // SQL NULL, which is what every other write leaves for an unknown modality.
+/**
+ * The provider surfaces a model is served over. A provider-published list
+ * (GitHub Copilot) is used as is. Azure answers from the resource's deployment
+ * evidence. OpenAI's own models answer from the same id rules the chat client
+ * and the Unified Model API route by; a vendor-prefixed id on the `openai`
+ * provider is another vendor's OpenAI-compatible catalog, whose surfaces no
+ * rule here knows.
+ */
+function resolveSupportedEndpoints(
+  model: ProviderPricedModel,
+): SupportedProviderEndpoint[] | null {
+  if (model.supportedEndpoints?.length) return model.supportedEndpoints;
+  if (model.provider === "azure") {
+    const operations = model.azureCapabilities?.operations ?? [];
+    const endpoints: SupportedProviderEndpoint[] = [];
+    if (operations.includes("chat")) endpoints.push("/chat/completions");
+    if (operations.includes("responses")) endpoints.push("/responses");
+    return endpoints.length > 0 ? endpoints : null;
+  }
+  if (model.provider !== "openai" || model.modelId.includes("/")) return null;
+  if (
+    model.embeddingDimensions !== null ||
+    (model.outputModalities && !model.outputModalities.includes("text"))
+  ) {
+    return null;
+  }
+  if (requiresOpenAiResponsesApi(model.modelId)) return ["/responses"];
+  // Audio chat and search models answer Chat Completions only: the Responses
+  // API has no audio output and replaces search models with a search tool.
+  if (
+    model.inputModalities?.includes("audio") ||
+    model.outputModalities?.includes("audio") ||
+    /-search-(?:preview|api)(?:-|$)/i.test(model.modelId)
+  ) {
+    return ["/chat/completions"];
+  }
+  return ["/chat/completions", "/responses"];
+}
+
+/**
+ * The `reasoning_effort` values a client can send for this model through
+ * Archestra's OpenAI-compatible API. A provider-published list wins. Without
+ * one:
+ *
+ * - OpenAI models, and Azure deployments of them by their backing model, get
+ *   the `low`/`medium`/`high` range Archestra's OpenAI rule vouches for. The
+ *   provider may accept more, but none of these is a level it would reject.
+ * - Gemini and Bedrock answer from the rule their Unified Model API
+ *   translation enforces, so the list is exactly what that translation accepts.
+ * - Anthropic and Cohere answer `[]`: their translation sends no reasoning
+ *   setting, whatever the model can do natively.
+ * - The self-hosted providers and OpenRouter follow the row, as the composer
+ *   does (see `modelSupportsThinkingEffort`).
+ *
+ * Any other model whose row says it does not reason answers `[]`; anything
+ * else is unknown (null).
+ */
+function resolveSupportedReasoningEfforts(
+  model: ProviderPricedModel,
+): ReasoningEffortLevel[] | null {
+  if (model.supportedReasoningEfforts) return model.supportedReasoningEfforts;
+  const commonRange = (accepts: boolean) =>
+    accepts ? [...THINKING_EFFORTS] : null;
+  let levels: ReasoningEffortLevel[] | null;
+  switch (model.provider) {
+    case "openai":
+      levels = commonRange(openAiAcceptsCommonReasoningEfforts(model.modelId));
+      break;
+    case "azure": {
+      const underlying = model.azureCapabilities?.underlyingModelName;
+      levels = commonRange(
+        !!underlying &&
+          isAzureOpenAiFirstPartyModelName(underlying) &&
+          openAiAcceptsCommonReasoningEfforts(underlying),
+      );
+      break;
+    }
+    case "gemini":
+      return geminiAcceptedReasoningEfforts(model.modelId);
+    case "bedrock":
+      return bedrockOpenAiReasoningEfforts(model.modelId);
+    case "anthropic":
+    case "cohere":
+      return [];
+    default:
+      levels = commonRange(modelSupportsThinkingEffort(model));
+  }
+  return levels ?? (model.supportsReasoningEffort === false ? [] : null);
+}
+
 function jsonbOrNull(value: unknown[] | null | undefined): string | null {
   return value == null ? null : JSON.stringify(value);
 }

@@ -7,13 +7,15 @@ import {
   and,
   eq,
   gte,
+  isNotNull,
+  isNull,
   lt,
   lte,
   type SQL,
   type SQLWrapper,
   sql,
 } from "drizzle-orm";
-import { unionAll } from "drizzle-orm/pg-core";
+import { union, unionAll } from "drizzle-orm/pg-core";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { AttributionLabels } from "@/types/attribution-label";
 
@@ -105,8 +107,13 @@ class LlmUsageRollupModel {
   /**
    * Usage rows of a window, one per key and hour (see `llm_usage_hourly` for
    * the columns). Aggregate them; a group can span several rows.
+   *
+   * `runs`: the caller filters on `run`, so hours rolled before it existed
+   * (`run` is null until {@link LlmUsageRollupModel.refreshHour} reaches
+   * them) are read from raw rows, like marked hours, and daily rows are not
+   * used. Every row then has `run` set.
    */
-  static facts(window: UsageWindow | null) {
+  static facts(window: UsageWindow | null, options: { runs?: boolean } = {}) {
     const i = schema.interactionsTable;
     // An unparseable range matches nothing, as in timeframeConditions.
     if (!window) return usageFactsQuery(sql`FALSE`, "hour").as("usage_facts");
@@ -119,11 +126,13 @@ class LlmUsageRollupModel {
     if (!window.served) {
       return usageFactsQuery(inWindow, window.grain).as("usage_facts");
     }
-    const { from, to, days } = window.served;
+    const { from, to } = window.served;
+    const days = options.runs ? null : window.served.days;
     const d = schema.llmUsageRollupDirtyTable;
+    const h = schema.llmUsageHourlyTable;
     // Marked hours are read from raw rows. The rolled and raw halves test the
     // same marks because one statement reads them under one snapshot.
-    const marked = db
+    const markedHours = db
       .select({ hour: sql<Date>`${d.hour}`.as("marked_hour") })
       .from(d)
       .where(
@@ -131,19 +140,35 @@ class LlmUsageRollupModel {
           gte(d.hour, sql`${from}::timestamp`),
           lt(d.hour, sql`${to}::timestamp`),
         ),
-      )
-      .as("marked");
+      );
+    const marked = (
+      options.runs
+        ? union(
+            markedHours,
+            db
+              .select({ hour: sql<Date>`${h.hour}`.as("marked_hour") })
+              .from(h)
+              .where(
+                and(
+                  gte(h.hour, sql`${from}::timestamp`),
+                  lt(h.hour, sql`${to}::timestamp`),
+                  isNull(h.run),
+                ),
+              ),
+          )
+        : markedHours
+    ).as("marked");
     // Every part selects the rollup's columns in one order; their types differ
     // only in the table each column is read from.
     type Part = ReturnType<typeof rolledHours>;
     const rolled = days
       ? [
-          rolledHours(from, days.from),
-          rolledHours(days.to, to),
+          rolledHours(from, days.from, options),
+          rolledHours(days.to, to, options),
           rolledDays(days) as unknown as Part,
           hoursOfMarkedDays(days) as unknown as Part,
         ]
-      : [rolledHours(from, to)];
+      : [rolledHours(from, to, options)];
     // The window's parts outside the served hours, each its own range so
     // each is an index range scan.
     const head = usageFactsQuery(
@@ -250,6 +275,41 @@ class LlmUsageRollupModel {
     return row
       ? { hour: row.hour, version: row.version, settling: row.settling }
       : null;
+  }
+
+  /**
+   * The newest rolled hour whose rows predate `run`, for
+   * {@link LlmUsageRollupModel.refreshHour}. Newest first, since recent hours
+   * are the ones read most.
+   */
+  static async nextHourWithoutRun(): Promise<string | null> {
+    const h = schema.llmUsageHourlyTable;
+    const result = await db.execute<{ hour: string }>(sql`
+      SELECT ${h.hour}::text AS hour FROM ${h}
+      WHERE ${h.run} IS NULL
+      ORDER BY ${h.hour} DESC
+      LIMIT 1`);
+    return result.rows[0]?.hour ?? null;
+  }
+
+  /**
+   * Compute an hour rolled before `run` existed again, so its rows carry it.
+   * Its mark, if any, is left alone: the rows are as current as a recompute
+   * makes them, and the mark's own recompute still follows. A no-op when
+   * another run already refreshed it.
+   */
+  static async refreshHour(hour: string): Promise<void> {
+    const h = schema.llmUsageHourlyTable;
+    await withDbTransaction(async (tx) => {
+      await lockRollup(tx);
+      const [stale] = await tx
+        .select({ hour: h.hour })
+        .from(h)
+        .where(and(eq(h.hour, sql`${hour}::timestamp`), isNull(h.run)))
+        .limit(1);
+      if (!stale) return;
+      await recompute(tx, hour);
+    });
   }
 
   /**
@@ -507,8 +567,11 @@ async function recomputeDay(tx: Transaction, hour: string): Promise<void> {
   );
 }
 
-/** Rolled, unmarked hours `[from, to)`. */
-function rolledHours(from: string, to: string) {
+/**
+ * Rolled, unmarked hours `[from, to)`; with `runs`, only hours whose rows
+ * carry `run` (an hour's rows are replaced together, so all or none do).
+ */
+function rolledHours(from: string, to: string, options: { runs?: boolean }) {
   const h = schema.llmUsageHourlyTable;
   return db
     .select(rollupSelection)
@@ -518,6 +581,7 @@ function rolledHours(from: string, to: string) {
         gte(h.hour, sql`${from}::timestamp`),
         lt(h.hour, sql`${to}::timestamp`),
         notMarked(h.hour),
+        options.runs ? isNotNull(h.run) : undefined,
       ),
     );
 }
@@ -641,6 +705,7 @@ function usageFactsQuery(
     string | null
   >`COALESCE(billing_model.model, ${i.model})`;
   const labels = sql<AttributionLabels | null>`COALESCE(${r.attributionLabels}, ${i.attributionLabels})`;
+  const run = sql<boolean>`(${i.runId} IS NOT NULL)`;
   const own = (column: SQLWrapper, cast: string) =>
     sql`COALESCE(SUM(${column}) FILTER (WHERE ${parentRow}), 0)::${sql.raw(cast)}`;
   const split = (receipt: string, fallback: SQLWrapper) =>
@@ -733,6 +798,12 @@ function usageFactsQuery(
         sql<string>`${split("cache_savings", i.cacheSavings)}::numeric`
           .mapWith(h.modelCacheSavings)
           .as("model_cache_savings"),
+      source: i.source,
+      failedRequests:
+        sql<number>`(COUNT(*) FILTER (WHERE ${parentRow} AND ${i.failed}))::integer`
+          .mapWith(h.failedRequests)
+          .as("failed_requests"),
+      run: run.mapWith(h.run).as("run"),
     })
     .from(i)
     .$dynamic();
@@ -761,6 +832,8 @@ function usageFactsQuery(
       billedModel,
       i.billingMode,
       labels,
+      i.source,
+      run,
     );
 }
 
@@ -808,6 +881,9 @@ function rollupColumns(
     modelCost: h.modelCost,
     modelBaselineCost: h.modelBaselineCost,
     modelCacheSavings: h.modelCacheSavings,
+    source: h.source,
+    failedRequests: h.failedRequests,
+    run: h.run,
   };
 }
 
@@ -834,4 +910,6 @@ const KEY_COLUMNS = [
   "billedModel",
   "billingMode",
   "attributionLabels",
+  "source",
+  "run",
 ] as const satisfies (keyof typeof rollupSelection)[];

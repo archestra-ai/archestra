@@ -24,6 +24,7 @@ import logger from "@/logging";
 import {
   ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   MemberModel,
   ModelPoolModel,
   OAuthAccessTokenModel,
@@ -40,7 +41,10 @@ import {
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { UNIFIED_MODEL_PREFIX } from "@/routes/route-paths";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
-import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
+import {
+  resolveAzureModelCapabilities,
+  withListedAzureEvidence,
+} from "@/services/azure-model-capabilities";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -110,6 +114,7 @@ import {
   parseImageEditRequest,
 } from "../image-edit-handler";
 import {
+  assertUserNotSoftDeleted,
   resolveAgent,
   validateVirtualApiKeyToken,
   virtualKeyRateLimiter,
@@ -132,6 +137,10 @@ import {
   userProviderKeyMappings,
 } from "../model-router-access";
 import { assertModelRouterCacheControls } from "../model-router-cache-controls";
+import {
+  describeRoutableModel,
+  RoutableModelCapabilitiesSchema,
+} from "../model-router-catalog";
 import {
   buildRoutableModelId,
   listRoutableModels,
@@ -300,6 +309,8 @@ const ModelListResponseSchema = z.object({
       object: z.literal("model"),
       created: z.number(),
       owned_by: z.string(),
+      /** Absent on model pools and auto routers, whose members can differ. */
+      capabilities: RoutableModelCapabilitiesSchema.optional(),
     }),
   ),
 });
@@ -1271,14 +1282,15 @@ function handleModelRouterResponsesProvider(
 }
 
 async function listModels(params: { auth: ModelRouterAuth }) {
+  const providerApiKeyIds = params.auth.providerApiKeys
+    .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
+    .map((mapping) => mapping.providerApiKeyId);
   // Hide models the caller cannot invoke, mirroring the proxy-time check: a
   // user-attributed credential needs a `use` grant; auth without a user
   // identity may exercise only an organization-wide grant.
   const chatModels = await listRoutableModels({
     organizationId: params.auth.organizationId,
-    providerApiKeyIds: params.auth.providerApiKeys
-      .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
-      .map((mapping) => mapping.providerApiKeyId),
+    providerApiKeyIds,
     userId:
       params.auth.authMethod === "oauth_user"
         ? params.auth.userId
@@ -1288,6 +1300,12 @@ async function listModels(params: { auth: ModelRouterAuth }) {
     includeEmbeddings: true,
     includeMedia: true,
   });
+  // Azure capabilities are per resource; describe each model by the evidence
+  // of the keys this caller is mapped to.
+  const azureLinks =
+    await LlmProviderApiKeyModelLinkModel.findCapabilitiesForApiKeyModels(
+      providerApiKeyIds,
+    );
   // Pools come first: their names are what clients are meant to ask for.
   const pools = (await ModelPoolModel.list(params.auth.organizationId)).filter(
     (pool) =>
@@ -1313,12 +1331,19 @@ async function listModels(params: { auth: ModelRouterAuth }) {
         owned_by: "model-pool",
       })),
       ...autoModel,
-      ...chatModels.map((model) => ({
-        id: buildRoutableModelId(model),
-        object: "model" as const,
-        created: Math.floor(model.createdAt.getTime() / 1000),
-        owned_by: model.provider,
-      })),
+      ...chatModels.map((model) => {
+        const id = buildRoutableModelId(model);
+        return {
+          id,
+          object: "model" as const,
+          created: Math.floor(model.createdAt.getTime() / 1000),
+          owned_by: model.provider,
+          capabilities: describeRoutableModel({
+            model: withListedAzureEvidence({ model, links: azureLinks }),
+            routableId: id,
+          }),
+        };
+      }),
     ],
   };
 }
@@ -1399,6 +1424,18 @@ async function getModelRouterAuth(
  * a Fastify request: a WebSocket upgrade carries the same bearer token.
  */
 export async function authenticateModelRouterBearer(params: {
+  authorization: string | undefined;
+  ip: string;
+}): Promise<ModelRouterAuth> {
+  const auth = await resolveModelRouterBearer(params);
+  // Here, so that inference, model listing and realtime sessions all refuse a
+  // user the identity provider deactivated (SCIM).
+  const userId = modelRouterAuthenticatedUserId(auth);
+  if (userId) await assertUserNotSoftDeleted(userId);
+  return auth;
+}
+
+async function resolveModelRouterBearer(params: {
   authorization: string | undefined;
   ip: string;
 }): Promise<ModelRouterAuth> {

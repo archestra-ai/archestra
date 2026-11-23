@@ -17234,6 +17234,10 @@ export type GetAgentCatalogResponses = {
                         required: boolean;
                     }> | null;
                     allowAgentSuppliedCredentialValues?: boolean;
+                    accountLock?: 'subscription' | 'key' | null;
+                    connectionModels?: {
+                        [key: string]: string;
+                    };
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
                         model?: string;
@@ -17635,6 +17639,10 @@ export type GetAgentsResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -17803,6 +17811,10 @@ export type CreateAgentData = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -18086,6 +18098,10 @@ export type CreateAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -18489,6 +18505,10 @@ export type GetChatAgentRosterResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -18636,6 +18656,10 @@ export type GetChatAgentRosterPageResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -18802,6 +18826,10 @@ export type GetAgentOptionsResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -18984,6 +19012,10 @@ export type GetAgentOptionsPageResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -19364,6 +19396,10 @@ export type GetDefaultMcpGatewayResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -19684,6 +19720,10 @@ export type ImportAgentResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -20013,6 +20053,10 @@ export type GetAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -20163,6 +20207,10 @@ export type UpdateAgentData = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -20352,6 +20400,10 @@ export type UpdateAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -21149,6 +21201,10 @@ export type RestoreAgentVersionResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -21410,6 +21466,10 @@ export type CloneAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -23907,6 +23967,10 @@ export type RestoreAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -24823,10 +24887,402 @@ export type GetAgentRuntimePreflightResponses = {
             reconnect?: boolean;
         }>;
         incompatible: string | null;
+        accountError: string | null;
+        accountErrorFromChoice: boolean;
+        accountErrorFromModel: boolean;
+        accountErrorFromConnection: boolean;
+        companyAccountIsPlan: boolean;
+        missingSubscription: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium' | null;
     };
 };
 
 export type GetAgentRuntimePreflightResponse = GetAgentRuntimePreflightResponses[keyof GetAgentRuntimePreflightResponses];
+
+export type ClearAgentRuntimeAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/account';
+};
+
+export type ClearAgentRuntimeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ClearAgentRuntimeAccountError = ClearAgentRuntimeAccountErrors[keyof ClearAgentRuntimeAccountErrors];
+
+export type ClearAgentRuntimeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agentAccount: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+        };
+        companyKey: boolean;
+        companyAccount: {
+            connection: {
+                id: string | null;
+                name: string | null;
+                provider: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            model: {
+                id: string | null;
+                name: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+            usesOrganizationDefault: boolean;
+        };
+        choice: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+            claudeModel: string | null;
+        } | null;
+        choiceError: string | null;
+        lock: 'subscription' | 'key' | null;
+        subscription: {
+            kind: 'claude' | 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            label: string;
+            connected: boolean;
+            keyId: string | null;
+        } | null;
+    };
+};
+
+export type ClearAgentRuntimeAccountResponse = ClearAgentRuntimeAccountResponses[keyof ClearAgentRuntimeAccountResponses];
+
+export type GetAgentRuntimeAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/account';
+};
+
+export type GetAgentRuntimeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRuntimeAccountError = GetAgentRuntimeAccountErrors[keyof GetAgentRuntimeAccountErrors];
+
+export type GetAgentRuntimeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agentAccount: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+        };
+        companyKey: boolean;
+        companyAccount: {
+            connection: {
+                id: string | null;
+                name: string | null;
+                provider: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            model: {
+                id: string | null;
+                name: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+            usesOrganizationDefault: boolean;
+        };
+        choice: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+            claudeModel: string | null;
+        } | null;
+        choiceError: string | null;
+        lock: 'subscription' | 'key' | null;
+        subscription: {
+            kind: 'claude' | 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            label: string;
+            connected: boolean;
+            keyId: string | null;
+        } | null;
+    };
+};
+
+export type GetAgentRuntimeAccountResponse = GetAgentRuntimeAccountResponses[keyof GetAgentRuntimeAccountResponses];
+
+export type UpdateAgentRuntimeAccountData = {
+    body: {
+        authentication: 'provider' | 'subscription';
+        llmApiKeyId?: string | null;
+        modelId?: string | null;
+        claudeModel?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/account';
+};
+
+export type UpdateAgentRuntimeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAgentRuntimeAccountError = UpdateAgentRuntimeAccountErrors[keyof UpdateAgentRuntimeAccountErrors];
+
+export type UpdateAgentRuntimeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agentAccount: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+        };
+        companyKey: boolean;
+        companyAccount: {
+            connection: {
+                id: string | null;
+                name: string | null;
+                provider: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            model: {
+                id: string | null;
+                name: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+            usesOrganizationDefault: boolean;
+        };
+        choice: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+            claudeModel: string | null;
+        } | null;
+        choiceError: string | null;
+        lock: 'subscription' | 'key' | null;
+        subscription: {
+            kind: 'claude' | 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            label: string;
+            connected: boolean;
+            keyId: string | null;
+        } | null;
+    };
+};
+
+export type UpdateAgentRuntimeAccountResponse = UpdateAgentRuntimeAccountResponses[keyof UpdateAgentRuntimeAccountResponses];
 
 export type DisconnectClaudeCodeAccountData = {
     body?: never;
@@ -27065,6 +27521,28 @@ export type ListAgentRuntimeTemplatesResponses = {
         icon: string | null;
         hidden: boolean;
         position: number;
+        accounts?: {
+            kind?: 'subscription' | 'key';
+            llmApiKeyId?: string;
+            modelId?: string;
+            connectionModels?: {
+                [key: string]: string;
+            };
+            keyName?: string;
+            keyProvider?: string;
+            modelName?: string;
+            keyMissing?: boolean;
+            modelMissing?: boolean;
+            connectionModelNames?: {
+                [key: string]: string;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+        };
         image: string;
     }>;
 };
@@ -27159,6 +27637,28 @@ export type ListBuiltInAgentRuntimeSettingsResponses = {
             idleTimeoutMinutes?: number | null;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
+            };
+            accounts?: {
+                kind?: 'subscription' | 'key';
+                llmApiKeyId?: string;
+                modelId?: string;
+                connectionModels?: {
+                    [key: string]: string;
+                };
+                keyName?: string;
+                keyProvider?: string;
+                modelName?: string;
+                keyMissing?: boolean;
+                modelMissing?: boolean;
+                connectionModelNames?: {
+                    [key: string]: string;
+                };
+                models?: Array<{
+                    id: string;
+                    modelId: string;
+                    displayName: string;
+                    provider: string;
+                }>;
             };
         };
         id: 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot';
@@ -27522,6 +28022,28 @@ export type GetRuntimeTemplateSettingsResponses = {
             icon: string | null;
             hidden: boolean;
             position: number;
+            accounts?: {
+                kind?: 'subscription' | 'key';
+                llmApiKeyId?: string;
+                modelId?: string;
+                connectionModels?: {
+                    [key: string]: string;
+                };
+                keyName?: string;
+                keyProvider?: string;
+                modelName?: string;
+                keyMissing?: boolean;
+                modelMissing?: boolean;
+                connectionModelNames?: {
+                    [key: string]: string;
+                };
+                models?: Array<{
+                    id: string;
+                    modelId: string;
+                    displayName: string;
+                    provider: string;
+                }>;
+            };
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27545,6 +28067,9 @@ export type GetRuntimeTemplateSettingsResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -27564,6 +28089,28 @@ export type GetRuntimeTemplateSettingsResponses = {
                     idleTimeoutMinutes?: number | null;
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
+                    };
+                    accounts?: {
+                        kind?: 'subscription' | 'key';
+                        llmApiKeyId?: string;
+                        modelId?: string;
+                        connectionModels?: {
+                            [key: string]: string;
+                        };
+                        keyName?: string;
+                        keyProvider?: string;
+                        modelName?: string;
+                        keyMissing?: boolean;
+                        modelMissing?: boolean;
+                        connectionModelNames?: {
+                            [key: string]: string;
+                        };
+                        models?: Array<{
+                            id: string;
+                            modelId: string;
+                            displayName: string;
+                            provider: string;
+                        }>;
                     };
                 };
             };
@@ -27620,6 +28167,14 @@ export type SaveRuntimeTemplateSettingsData = {
             icon: string | null;
             hidden: boolean;
             position: number;
+            accounts?: {
+                kind?: 'subscription' | 'key';
+                llmApiKeyId?: string;
+                modelId?: string;
+                connectionModels?: {
+                    [key: string]: string;
+                };
+            };
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27643,6 +28198,9 @@ export type SaveRuntimeTemplateSettingsData = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -27662,6 +28220,14 @@ export type SaveRuntimeTemplateSettingsData = {
                     idleTimeoutMinutes?: number | null;
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
+                    };
+                    accounts?: {
+                        kind?: 'subscription' | 'key';
+                        llmApiKeyId?: string;
+                        modelId?: string;
+                        connectionModels?: {
+                            [key: string]: string;
+                        };
                     };
                 };
             };
@@ -27790,6 +28356,28 @@ export type SaveRuntimeTemplateSettingsResponses = {
             icon: string | null;
             hidden: boolean;
             position: number;
+            accounts?: {
+                kind?: 'subscription' | 'key';
+                llmApiKeyId?: string;
+                modelId?: string;
+                connectionModels?: {
+                    [key: string]: string;
+                };
+                keyName?: string;
+                keyProvider?: string;
+                modelName?: string;
+                keyMissing?: boolean;
+                modelMissing?: boolean;
+                connectionModelNames?: {
+                    [key: string]: string;
+                };
+                models?: Array<{
+                    id: string;
+                    modelId: string;
+                    displayName: string;
+                    provider: string;
+                }>;
+            };
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27813,6 +28401,9 @@ export type SaveRuntimeTemplateSettingsResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -27832,6 +28423,28 @@ export type SaveRuntimeTemplateSettingsResponses = {
                     idleTimeoutMinutes?: number | null;
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
+                    };
+                    accounts?: {
+                        kind?: 'subscription' | 'key';
+                        llmApiKeyId?: string;
+                        modelId?: string;
+                        connectionModels?: {
+                            [key: string]: string;
+                        };
+                        keyName?: string;
+                        keyProvider?: string;
+                        modelName?: string;
+                        keyMissing?: boolean;
+                        modelMissing?: boolean;
+                        connectionModelNames?: {
+                            [key: string]: string;
+                        };
+                        models?: Array<{
+                            id: string;
+                            modelId: string;
+                            displayName: string;
+                            provider: string;
+                        }>;
                     };
                 };
             };
@@ -27966,6 +28579,28 @@ export type GetAgentRuntimeTemplateResponses = {
         icon: string | null;
         hidden: boolean;
         position: number;
+        accounts?: {
+            kind?: 'subscription' | 'key';
+            llmApiKeyId?: string;
+            modelId?: string;
+            connectionModels?: {
+                [key: string]: string;
+            };
+            keyName?: string;
+            keyProvider?: string;
+            modelName?: string;
+            keyMissing?: boolean;
+            modelMissing?: boolean;
+            connectionModelNames?: {
+                [key: string]: string;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+        };
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -27989,6 +28624,9 @@ export type GetAgentRuntimeTemplateResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -33866,7 +34504,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -33973,7 +34611,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -34206,7 +34844,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'blobProvider.created' | 'blobProvider.updated' | 'blobProvider.deleted' | 'blobProvider.tested' | 'browserStorageState.deleted' | 'costExport.created' | 'costExport.updated' | 'costExport.deleted' | 'costExport.run' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'clientPrivacy.updated' | 'connectedClient.disconnected' | 'desktopDeviceSignIn.updated' | 'desktopDevice.updated' | 'desktopDevice.deleted' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'autoRouter.created' | 'autoRouter.updated' | 'autoRouter.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'oauthClient.token_exchanged' | 'oauthClientFederatedCredential.created' | 'oauthClientFederatedCredential.updated' | 'oauthClientFederatedCredential.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'member.provisioning_updated' | 'member.soft_deleted' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'serviceAccount.token_exchanged' | 'serviceAccountFederatedCredential.created' | 'serviceAccountFederatedCredential.updated' | 'serviceAccountFederatedCredential.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.updated' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -45259,6 +45897,10 @@ export type GetNewChatBootstrapResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -45369,7 +46011,9 @@ export type GetNewChatBootstrapResponses = {
                 outputModalities: Array<'text' | 'image' | 'audio'> | null;
                 supportsToolCalling: boolean | null;
                 supportsReasoningEffort: boolean | null;
+                outputLength: number | null;
                 supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
                 recommendedForAgents: boolean | null;
                 pricePerMillionInput: string | null;
                 pricePerMillionOutput: string | null;
@@ -45451,6 +46095,10 @@ export type GetNewChatBootstrapResponses = {
                         required: boolean;
                     }> | null;
                     allowAgentSuppliedCredentialValues?: boolean;
+                    accountLock?: 'subscription' | 'key' | null;
+                    connectionModels?: {
+                        [key: string]: string;
+                    };
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
                         model?: string;
@@ -45612,7 +46260,9 @@ export type GetNewChatBootstrapResponses = {
                     outputModalities: Array<'text' | 'image' | 'audio'> | null;
                     supportsToolCalling: boolean | null;
                     supportsReasoningEffort: boolean | null;
+                    outputLength: number | null;
                     supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                    supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
                     recommendedForAgents: boolean | null;
                     pricePerMillionInput: string | null;
                     pricePerMillionOutput: string | null;
@@ -45861,6 +46511,10 @@ export type GetConversationBootstrapResponses = {
                         required: boolean;
                     }> | null;
                     allowAgentSuppliedCredentialValues?: boolean;
+                    accountLock?: 'subscription' | 'key' | null;
+                    connectionModels?: {
+                        [key: string]: string;
+                    };
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
                         model?: string;
@@ -45971,7 +46625,9 @@ export type GetConversationBootstrapResponses = {
                     outputModalities: Array<'text' | 'image' | 'audio'> | null;
                     supportsToolCalling: boolean | null;
                     supportsReasoningEffort: boolean | null;
+                    outputLength: number | null;
                     supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                    supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
                     recommendedForAgents: boolean | null;
                     pricePerMillionInput: string | null;
                     pricePerMillionOutput: string | null;
@@ -46053,6 +46709,10 @@ export type GetConversationBootstrapResponses = {
                             required: boolean;
                         }> | null;
                         allowAgentSuppliedCredentialValues?: boolean;
+                        accountLock?: 'subscription' | 'key' | null;
+                        connectionModels?: {
+                            [key: string]: string;
+                        };
                         claudeCode?: {
                             authentication: 'provider' | 'subscription';
                             model?: string;
@@ -46214,7 +46874,9 @@ export type GetConversationBootstrapResponses = {
                         outputModalities: Array<'text' | 'image' | 'audio'> | null;
                         supportsToolCalling: boolean | null;
                         supportsReasoningEffort: boolean | null;
+                        outputLength: number | null;
                         supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                        supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
                         recommendedForAgents: boolean | null;
                         pricePerMillionInput: string | null;
                         pricePerMillionOutput: string | null;
@@ -55243,6 +55905,7 @@ export type GetAgentAdoptionResponses = {
     200: {
         since: string;
         until: string;
+        memberCount: number;
         members: Array<{
             userId: string;
             name: string;
@@ -55289,6 +55952,162 @@ export type GetAgentAdoptionResponses = {
 };
 
 export type GetAgentAdoptionResponse = GetAgentAdoptionResponses[keyof GetAgentAdoptionResponses];
+
+export type GetAgentAdoptionMembersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Traffic on or after this date (ISO 8601); the last 30 days when left out
+         */
+        startDate?: string;
+        /**
+         * Traffic on or before this date (ISO 8601); now when left out
+         */
+        endDate?: string;
+        limit?: number;
+        offset?: number;
+        /**
+         * Only members in this state
+         */
+        state?: 'active' | 'inactive' | 'notConnected';
+        /**
+         * Matches names, emails and agent names
+         */
+        search?: string;
+        sortBy?: 'state' | 'user' | 'gateway' | 'llm';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/connected-clients/adoption/members';
+};
+
+export type GetAgentAdoptionMembersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentAdoptionMembersError = GetAgentAdoptionMembersErrors[keyof GetAgentAdoptionMembersErrors];
+
+export type GetAgentAdoptionMembersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            userId: string;
+            name: string;
+            email: string;
+            status: 'active' | 'inactive' | 'notConnected';
+            gatewayLastSeenAt: string | null;
+            llmLastSeenAt: string | null;
+            agents: Array<{
+                clientId: string | null;
+                name: string;
+                status: 'active' | 'inactive' | 'notConnected';
+                setupAt: string | null;
+                signedIn: boolean;
+                viaToken: boolean;
+                lastGatewayCallAt: string | null;
+                lastLlmCallAt: string | null;
+            }>;
+            gatewayUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+            llmUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetAgentAdoptionMembersResponse = GetAgentAdoptionMembersResponses[keyof GetAgentAdoptionMembersResponses];
 
 export type GetAgentAdoptionUsageData = {
     body?: never;
@@ -81179,6 +81998,7 @@ export type GetLlmProxyLogUserIdsResponses = {
     200: Array<{
         id: string;
         name: string;
+        email: string;
     }>;
 };
 
@@ -107979,7 +108799,9 @@ export type GetLlmModelsResponses = {
             outputModalities: Array<'text' | 'image' | 'audio'> | null;
             supportsToolCalling: boolean | null;
             supportsReasoningEffort: boolean | null;
+            outputLength: number | null;
             supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+            supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
             recommendedForAgents: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
@@ -108219,6 +109041,7 @@ export type GetModelsWithApiKeysResponses = {
         supportedEndpoints: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
         cacheReadPricePerToken: string | null;
@@ -108812,6 +109635,7 @@ export type UpdateModelResponses = {
         supportedEndpoints: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        supportedReasoningEfforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
         cacheReadPricePerToken: string | null;
@@ -110557,6 +111381,456 @@ export type UpdateLlmProxyResponses = {
 };
 
 export type UpdateLlmProxyResponse = UpdateLlmProxyResponses[keyof UpdateLlmProxyResponses];
+
+export type GetLogEventsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Comma-separated record types
+         */
+        sources?: string;
+        /**
+         * Comma-separated statuses
+         */
+        statuses?: string;
+        /**
+         * Comma-separated Guardrails decisions
+         */
+        decision?: string;
+        /**
+         * Matches models, people, agents, clients, servers, tools, actions, resources, and an exact session id
+         */
+        q?: string;
+        sessionId?: string;
+        /**
+         * An agent's name
+         */
+        agent?: string;
+        /**
+         * An actor's name
+         */
+        actor?: string;
+        client?: string;
+        model?: string;
+        mcpServer?: string;
+        connectionAction?: string;
+        auditAction?: string;
+        auditCategory?: string;
+        resourceType?: string;
+        resourceName?: string;
+        actorKind?: string;
+        /**
+         * The window, back from now, in hours
+         */
+        hours?: number;
+        limit?: number;
+        /**
+         * The previous page's nextCursor
+         */
+        cursor?: string;
+    };
+    url: '/api/logs/events';
+};
+
+export type GetLogEventsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLogEventsError = GetLogEventsErrors[keyof GetLogEventsErrors];
+
+export type GetLogEventsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            source: 'llm' | 'mcp' | 'guardrails' | 'connections' | 'audit';
+            /**
+             * ISO 8601
+             */
+            timestamp: string;
+            status: 'ok' | 'error' | 'blocked' | 'pending' | 'warning';
+            /**
+             * The model, the tool, the external, the action
+             */
+            title: string;
+            summary?: string;
+            actor: {
+                kind: 'user' | 'agent' | 'service_account' | 'system';
+                name: string;
+                email?: string;
+            };
+            agent?: {
+                id: string;
+                name: string;
+                kind: 'agent' | 'mcp_gateway' | 'llm_proxy';
+            };
+            /**
+             * The client app the call came from
+             */
+            client?: string;
+            sessionId?: string;
+            sessionTitle?: string;
+            durationMs?: number;
+            /**
+             * The record's own detail page
+             */
+            href: string;
+            llm?: {
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                model: string;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                /**
+                 * USD at list price
+                 */
+                cost: number;
+                billingMode: 'metered' | 'subscription';
+                stream: boolean;
+                toolCallsRequested: number;
+                errorCode?: number;
+            };
+            mcp?: {
+                server: string;
+                tool?: string;
+                method: string;
+                authMethod: string;
+                arguments?: {
+                    [key: string]: unknown;
+                };
+                resultPreview?: string;
+                errorMessage?: string;
+            };
+            guardrail?: {
+                decision: 'allow' | 'deny' | 'review' | 'consult' | 'yell';
+                policy: string;
+                rule: string;
+                tool: string;
+                reason: string;
+                reviewer?: string;
+            };
+            connection?: {
+                action: 'connected' | 'first_seen' | 'authorized' | 'token_refreshed' | 'disconnected';
+                client: string;
+                gateway: string;
+                clientVersion?: string;
+            };
+            audit?: {
+                action: string;
+                category: string;
+                resourceType: string;
+                resourceName: string;
+                httpMethod: string;
+                statusCode: number;
+                ip: string;
+                diff?: Array<{
+                    field: string;
+                    before: string | null;
+                    after: string | null;
+                }>;
+            };
+        }>;
+        /**
+         * Pass back as `cursor` for the next page; null on the last
+         */
+        nextCursor: string | null;
+    };
+};
+
+export type GetLogEventsResponse = GetLogEventsResponses[keyof GetLogEventsResponses];
+
+export type GetLogStatsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Comma-separated record types
+         */
+        sources?: string;
+        /**
+         * Comma-separated statuses
+         */
+        statuses?: string;
+        /**
+         * Comma-separated Guardrails decisions
+         */
+        decision?: string;
+        /**
+         * Matches models, people, agents, clients, servers, tools, actions, resources, and an exact session id
+         */
+        q?: string;
+        sessionId?: string;
+        /**
+         * An agent's name
+         */
+        agent?: string;
+        /**
+         * An actor's name
+         */
+        actor?: string;
+        client?: string;
+        model?: string;
+        mcpServer?: string;
+        connectionAction?: string;
+        auditAction?: string;
+        auditCategory?: string;
+        resourceType?: string;
+        resourceName?: string;
+        actorKind?: string;
+        /**
+         * The window, back from now, in hours
+         */
+        hours?: number;
+    };
+    url: '/api/logs/stats';
+};
+
+export type GetLogStatsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLogStatsError = GetLogStatsErrors[keyof GetLogStatsErrors];
+
+export type GetLogStatsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        total: number;
+        facets: {
+            source: Array<{
+                value: string;
+                count: number;
+            }>;
+            status: Array<{
+                value: string;
+                count: number;
+            }>;
+            agent: Array<{
+                value: string;
+                count: number;
+            }>;
+            actor: Array<{
+                value: string;
+                count: number;
+            }>;
+            client: Array<{
+                value: string;
+                count: number;
+            }>;
+            model: Array<{
+                value: string;
+                count: number;
+            }>;
+            mcpServer: Array<{
+                value: string;
+                count: number;
+            }>;
+            decision: Array<{
+                value: string;
+                count: number;
+            }>;
+            connectionAction: Array<{
+                value: string;
+                count: number;
+            }>;
+            auditAction: Array<{
+                value: string;
+                count: number;
+            }>;
+            auditCategory: Array<{
+                value: string;
+                count: number;
+            }>;
+            resourceType: Array<{
+                value: string;
+                count: number;
+            }>;
+            /**
+             * "resourceType::resourceName" pairs
+             */
+            resourceName: Array<{
+                value: string;
+                count: number;
+            }>;
+            /**
+             * "auditCategory::auditAction" pairs
+             */
+            auditCategoryAction: Array<{
+                value: string;
+                count: number;
+            }>;
+            /**
+             * "actorKind::actorName" pairs
+             */
+            actorByKind: Array<{
+                value: string;
+                count: number;
+            }>;
+        };
+        /**
+         * One bucket per hour of the window
+         */
+        buckets: Array<{
+            start: string;
+            end: string;
+            bySource: {
+                [key: string]: number;
+            };
+            errors: number;
+        }>;
+        /**
+         * What the facets name: each agent's kind, model's maker, person's email
+         */
+        directory: {
+            agents: Array<{
+                name: string;
+                kind: 'agent' | 'mcp_gateway' | 'llm_proxy';
+            }>;
+            models: Array<{
+                name: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            }>;
+            emails: Array<{
+                name: string;
+                email: string;
+            }>;
+        };
+        /**
+         * A small type had more events in the window than one count reads
+         */
+        truncated: boolean;
+    };
+};
+
+export type GetLogStatsResponse = GetLogStatsResponses[keyof GetLogStatsResponses];
 
 export type McpAppProxyPostData = {
     body: {
@@ -113388,6 +114662,7 @@ export type GetMembersResponses = {
             role: string;
             createdAt: string;
             twoFactorEnabled: boolean;
+            softDeleted: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -117346,6 +118621,17 @@ export type ModelRouterListModelsWithDefaultAgentResponses = {
             object: 'model';
             created: number;
             owned_by: string;
+            capabilities?: {
+                context_length: number | null;
+                max_output_tokens: number | null;
+                input_modalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                output_modalities: Array<'text' | 'image' | 'audio'> | null;
+                supports_tools: boolean | null;
+                supports_vision: boolean | null;
+                supports_reasoning_effort: boolean | null;
+                supported_reasoning_efforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
+                supported_endpoints: Array<'/chat/completions' | '/responses' | '/embeddings'>;
+            };
         }>;
     };
 };
@@ -117440,6 +118726,17 @@ export type ModelRouterListModelsWithAgentResponses = {
             object: 'model';
             created: number;
             owned_by: string;
+            capabilities?: {
+                context_length: number | null;
+                max_output_tokens: number | null;
+                input_modalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                output_modalities: Array<'text' | 'image' | 'audio'> | null;
+                supports_tools: boolean | null;
+                supports_vision: boolean | null;
+                supports_reasoning_effort: boolean | null;
+                supported_reasoning_efforts: Array<'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'> | null;
+                supported_endpoints: Array<'/chat/completions' | '/responses' | '/embeddings'>;
+            };
         }>;
     };
 };
@@ -135031,6 +136328,10 @@ export type GetMemberSignupStatusResponses = {
             role: string;
             provider: string | null;
             invitationId: string | null;
+            /**
+             * Whether an identity provider created the user through SCIM provisioning.
+             */
+            scimProvisioned: boolean;
         }>;
     };
 };
@@ -160205,6 +161506,686 @@ export type IngestRumEventsResponses = {
 };
 
 export type IngestRumEventsResponse = IngestRumEventsResponses[keyof IngestRumEventsResponses];
+
+export type ScimGetServiceProviderConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/scim/v2/ServiceProviderConfig';
+};
+
+export type ScimGetServiceProviderConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimGetServiceProviderConfigError = ScimGetServiceProviderConfigErrors[keyof ScimGetServiceProviderConfigErrors];
+
+export type ScimGetServiceProviderConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ScimGetServiceProviderConfigResponse = ScimGetServiceProviderConfigResponses[keyof ScimGetServiceProviderConfigResponses];
+
+export type ScimListUsersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        filter?: string;
+        startIndex?: number;
+        count?: number;
+    };
+    url: '/api/scim/v2/Users';
+};
+
+export type ScimListUsersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimListUsersError = ScimListUsersErrors[keyof ScimListUsersErrors];
+
+export type ScimListUsersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        schemas: Array<string>;
+        totalResults: number;
+        startIndex: number;
+        itemsPerPage: number;
+        Resources: Array<{
+            schemas: Array<string>;
+            id: string;
+            userName: string;
+            displayName: string;
+            name: {
+                formatted: string;
+            };
+            emails: Array<{
+                value: string;
+                type: string;
+                primary: boolean;
+            }>;
+            active: boolean;
+            meta: {
+                resourceType: string;
+                created: string;
+                lastModified: string;
+            };
+        }>;
+    };
+};
+
+export type ScimListUsersResponse = ScimListUsersResponses[keyof ScimListUsersResponses];
+
+export type ScimCreateUserData = {
+    body: {
+        userName: string;
+        displayName?: string;
+        name?: {
+            formatted?: string;
+            givenName?: string;
+            familyName?: string;
+            [key: string]: unknown;
+        };
+        emails?: Array<{
+            value: string;
+            primary?: boolean;
+            [key: string]: unknown;
+        }>;
+        active?: boolean;
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/scim/v2/Users';
+};
+
+export type ScimCreateUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimCreateUserError = ScimCreateUserErrors[keyof ScimCreateUserErrors];
+
+export type ScimCreateUserResponses = {
+    /**
+     * Default Response
+     */
+    201: {
+        schemas: Array<string>;
+        id: string;
+        userName: string;
+        displayName: string;
+        name: {
+            formatted: string;
+        };
+        emails: Array<{
+            value: string;
+            type: string;
+            primary: boolean;
+        }>;
+        active: boolean;
+        meta: {
+            resourceType: string;
+            created: string;
+            lastModified: string;
+        };
+    };
+};
+
+export type ScimCreateUserResponse = ScimCreateUserResponses[keyof ScimCreateUserResponses];
+
+export type ScimDeleteUserData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/scim/v2/Users/{id}';
+};
+
+export type ScimDeleteUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimDeleteUserError = ScimDeleteUserErrors[keyof ScimDeleteUserErrors];
+
+export type ScimDeleteUserResponses = {
+    /**
+     * Default Response
+     */
+    204: void;
+};
+
+export type ScimDeleteUserResponse = ScimDeleteUserResponses[keyof ScimDeleteUserResponses];
+
+export type ScimGetUserData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/scim/v2/Users/{id}';
+};
+
+export type ScimGetUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimGetUserError = ScimGetUserErrors[keyof ScimGetUserErrors];
+
+export type ScimGetUserResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        schemas: Array<string>;
+        id: string;
+        userName: string;
+        displayName: string;
+        name: {
+            formatted: string;
+        };
+        emails: Array<{
+            value: string;
+            type: string;
+            primary: boolean;
+        }>;
+        active: boolean;
+        meta: {
+            resourceType: string;
+            created: string;
+            lastModified: string;
+        };
+    };
+};
+
+export type ScimGetUserResponse = ScimGetUserResponses[keyof ScimGetUserResponses];
+
+export type ScimPatchUserData = {
+    body: {
+        Operations: Array<{
+            op: string;
+            path?: string;
+            value?: unknown;
+            [key: string]: unknown;
+        }>;
+        [key: string]: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/scim/v2/Users/{id}';
+};
+
+export type ScimPatchUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimPatchUserError = ScimPatchUserErrors[keyof ScimPatchUserErrors];
+
+export type ScimPatchUserResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        schemas: Array<string>;
+        id: string;
+        userName: string;
+        displayName: string;
+        name: {
+            formatted: string;
+        };
+        emails: Array<{
+            value: string;
+            type: string;
+            primary: boolean;
+        }>;
+        active: boolean;
+        meta: {
+            resourceType: string;
+            created: string;
+            lastModified: string;
+        };
+    };
+};
+
+export type ScimPatchUserResponse = ScimPatchUserResponses[keyof ScimPatchUserResponses];
+
+export type ScimReplaceUserData = {
+    body: {
+        userName: string;
+        displayName?: string;
+        name?: {
+            formatted?: string;
+            givenName?: string;
+            familyName?: string;
+            [key: string]: unknown;
+        };
+        emails?: Array<{
+            value: string;
+            primary?: boolean;
+            [key: string]: unknown;
+        }>;
+        active?: boolean;
+        [key: string]: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/scim/v2/Users/{id}';
+};
+
+export type ScimReplaceUserErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        schemas: Array<string>;
+        status: string;
+        scimType?: string;
+        detail: string;
+    };
+};
+
+export type ScimReplaceUserError = ScimReplaceUserErrors[keyof ScimReplaceUserErrors];
+
+export type ScimReplaceUserResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        schemas: Array<string>;
+        id: string;
+        userName: string;
+        displayName: string;
+        name: {
+            formatted: string;
+        };
+        emails: Array<{
+            value: string;
+            type: string;
+            primary: boolean;
+        }>;
+        active: boolean;
+        meta: {
+            resourceType: string;
+            created: string;
+            lastModified: string;
+        };
+    };
+};
+
+export type ScimReplaceUserResponse = ScimReplaceUserResponses[keyof ScimReplaceUserResponses];
 
 export type GetServiceAccountFederatedCredentialsData = {
     body?: never;

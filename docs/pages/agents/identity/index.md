@@ -50,4 +50,4 @@ What to know:
 
 ## See Who Did What
 
-Every tool call records the person, the agent, and the account it used. Open a call in the [MCP Gateway logs](/docs/admin/logs): **Identity** shows the account, **Token issued to** shows the app a company-identity token was issued to, along with the acting agent when the token names one.
+Every tool call records the person, the agent, and the account it used. Open a call in the [MCP Gateway logs](/docs/insights/logs): **Identity** shows the account, **Token issued to** shows the app a company-identity token was issued to, along with the acting agent when the token names one.

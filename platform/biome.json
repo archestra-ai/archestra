@@ -246,7 +246,6 @@
     {
       "includes": [
         "frontend/src/app/consults/logs/_parts/consult-detail-sheet.tsx",
-        "frontend/src/app/consults/logs/_parts/consults-table.tsx",
         "frontend/src/lib/openappa/external-consults.query.ts"
       ],
       "linter": {

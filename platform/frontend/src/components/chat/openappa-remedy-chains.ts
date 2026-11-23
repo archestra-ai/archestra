@@ -7,6 +7,7 @@ import {
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import isEqual from "lodash-es/isEqual";
 import {
+  type CompactToolState,
   getCompactToolState,
   getHumanRulingDisplay,
   getToolNameFromPart,
@@ -44,7 +45,7 @@ export type RemedyChain = {
 };
 
 export type RemedyChainStatus = {
-  state: "running" | "completed" | "error" | "denied";
+  state: CompactToolState;
   label?: string;
 };
 
@@ -212,10 +213,17 @@ export function getRemedyChainStatus(
     return {
       state,
       label:
-        state === "running"
+        state === "running" || state === "approval-requested"
           ? undefined
           : getHumanRulingDisplay(finalAttempt)?.label,
     };
+  }
+  if (
+    chain.steps.some(
+      (step) => getCompactToolState(step) === "approval-requested",
+    )
+  ) {
+    return { state: "approval-requested" };
   }
   if (options.turnActive) return { state: "running" };
   if (chain.steps.some((step) => getCompactToolState(step) === "running")) {

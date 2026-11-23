@@ -4,6 +4,7 @@ import { ArrowUpRight, Plus } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,9 +28,12 @@ import { scheduleRunLabel } from "./schedule-run-status";
 export function AgentSchedulesSection({
   agentId,
   agentName,
+  runBlock,
 }: {
   agentId: string;
   agentName: string;
+  /** Why the reader's runs of this agent cannot start now: no new schedule until then. */
+  runBlock?: string | null;
 }) {
   const { data: canRead } = useHasPermissions({ project: ["read"] });
   const { data: canCreate } = useHasPermissions({ project: ["create"] });
@@ -64,10 +68,16 @@ export function AgentSchedulesSection({
           )}
         </h2>
         {canCreate && ordered.length > 0 && (
-          <Button size="sm" variant="ghost" onClick={() => setCreating(true)}>
+          <ButtonWithTooltip
+            size="sm"
+            variant="ghost"
+            disabled={!!runBlock}
+            disabledText={runBlock ?? undefined}
+            onClick={() => setCreating(true)}
+          >
             <Plus className="size-4" />
             <span>Create schedule</span>
-          </Button>
+          </ButtonWithTooltip>
         )}
       </div>
       <div className="px-5 py-3">
@@ -87,14 +97,16 @@ export function AgentSchedulesSection({
               Create a schedule to run this agent automatically.
             </p>
             {canCreate && (
-              <Button
+              <ButtonWithTooltip
                 size="sm"
                 variant="outline"
+                disabled={!!runBlock}
+                disabledText={runBlock ?? undefined}
                 onClick={() => setCreating(true)}
               >
                 <Plus className="size-3.5" />
-                Create schedule
-              </Button>
+                <span>Create schedule</span>
+              </ButtonWithTooltip>
             )}
           </div>
         ) : (

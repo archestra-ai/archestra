@@ -26,6 +26,7 @@ import {
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import {
   loadChildReturns,
+  loadDeferredReturn,
   startRuntimeChild,
   withCapturedGuardrailsActivation,
 } from "@/openappa/service";
@@ -457,6 +458,11 @@ export async function handleDelegation(
     targetAgent &&
     (targetHasRuntime || targetIsLoadBalancedRouter)
   ) {
+    // A deferred return is decided by the caller right after the subagent
+    // stops, which a background run outlives.
+    if (context.openappaRuntimeCall?.defersReturn) {
+      return errorResult(DEFERRED_RETURN_TARGET_MISMATCH);
+    }
     const callerAgent = await AgentModel.findById(agentId);
     const loadBalancingEnabled =
       normalizeSubagentLoadBalancingConfig(callerAgent?.subagentLoadBalancing)
@@ -551,7 +557,13 @@ export async function handleDelegation(
       delegationToolCallId: context.currentToolCallId,
     };
     const task =
-      promptWithContract(message, spawn.binding?.contract) ?? message;
+      promptWithContract(
+        message,
+        spawn.binding?.contract ??
+          (context.openappaRuntimeCall?.defersReturn
+            ? DEFERRED_SUBAGENT_BRIEF
+            : undefined),
+      ) ?? message;
     if (!spawn.binding) {
       return delegationResult(
         message,
@@ -572,6 +584,14 @@ export async function handleDelegation(
       });
       const admitted = await admittedSubagentReturn(spawn.binding.child);
       if (admitted !== undefined) return successResult(admitted);
+      // The answer stays with the runtime until the caller decides; the
+      // caller's next request reads the runtime's notice in place of this.
+      if (
+        context.openappaRuntimeCall?.defersReturn &&
+        (await subagentReturnDeferred(context.openappaRuntimeCall))
+      ) {
+        return successResult(DEFERRED_SUBAGENT_RETURN);
+      }
       history = [
         ...history,
         { role: "user", content: turn },
@@ -633,6 +653,17 @@ function reviseHeldReturn(reason: string): string {
 const WITHHELD_SUBAGENT_RETURN =
   "The subagent ended without a final answer that may cross to this session, so its output was withheld. Delegate again with a task it can answer within the declared return.";
 
+// Shown to the person in the conversation; the caller's model reads the
+// runtime's notice in its place.
+const DEFERRED_SUBAGENT_RETURN =
+  "The subagent finished. The agent is reviewing its answer before using it.";
+
+const DEFERRED_SUBAGENT_BRIEF =
+  "Guardrails notices you clear while working are not part of your answer: leave them out. Mention a notice only when what it blocked stayed blocked.";
+
+const DEFERRED_RETURN_TARGET_MISMATCH =
+  "This subagent now runs in the background, where this delegation's return cannot be decided. No task was delivered. Delegate again.";
+
 type ResolvedTarget = { id: string; name: string } | { error: CallToolResult };
 
 /** A fork runs the caller itself; nothing else may name it. */
@@ -685,6 +716,18 @@ async function bindSubagent(params: {
         "The subagent could not be started on a protected trajectory. No task was delivered.",
     };
   }
+}
+
+async function subagentReturnDeferred(
+  spawn: NonNullable<ArchestraContext["openappaRuntimeCall"]>,
+): Promise<boolean> {
+  const notice = await withCapturedGuardrailsActivation("active", () =>
+    loadDeferredReturn({
+      session: spawn.session,
+      spawnCallId: spawn.toolCallId,
+    }),
+  );
+  return notice !== null;
 }
 
 async function admittedSubagentReturn(

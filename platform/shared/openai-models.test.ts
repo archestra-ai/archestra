@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  openAiAcceptsCommonReasoningEfforts,
   openAiReasoningEffortForEffort,
   supportsOpenAiThinkingEffort,
 } from "./openai-models";
@@ -100,5 +101,28 @@ describe("openAiReasoningEffortForEffort", () => {
     "o1-mini",
   ])("sends nothing for %s", (modelId) => {
     expect(openAiReasoningEffortForEffort(modelId, "high")).toBeNull();
+  });
+});
+
+describe("openAiAcceptsCommonReasoningEfforts", () => {
+  test.each([
+    // Everything the composer offers a depth for.
+    ["gpt-5.4", true],
+    ["o3-pro", true],
+    // gpt-6 takes low/medium/high on every tier (verified live).
+    ["gpt-6-luna", true],
+    ["gpt-6.2-sol", true],
+    ["gpt-6.1-terra-2026-09-01", true],
+    // The pro tiers reject low.
+    ["gpt-5-pro", false],
+    ["gpt-5.5-pro", false],
+    ["gpt-6-pro", false],
+    // Not reasoning models, or not OpenAI's.
+    ["gpt-4o", false],
+    ["gpt-6-chat-latest", false],
+    ["gpt-60", false],
+    ["accounts/fireworks/models/gpt-6", false],
+  ])("%s -> %s", (modelId, expected) => {
+    expect(openAiAcceptsCommonReasoningEfforts(modelId)).toBe(expected);
   });
 });

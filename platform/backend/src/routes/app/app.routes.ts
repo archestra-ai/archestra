@@ -55,6 +55,7 @@ import {
   resolveDefaultChatAgentId,
 } from "@/services/apps/app-chat-conversation";
 import {
+  assertAppToolPrefixFreeIn,
   createAppBacking,
   deleteAppBacking,
   syncAppBacking,
@@ -1064,6 +1065,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertEnvironmentAssignable({
           userId: user.id,
           organizationId,
+          environmentId: body.environmentId,
+        });
+        await assertAppToolPrefixFreeIn({
+          app,
           environmentId: body.environmentId,
         });
       }

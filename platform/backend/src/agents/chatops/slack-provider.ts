@@ -1670,6 +1670,12 @@ class SlackProvider implements ChatOpsProvider {
         text: "Something went wrong while setting up your account. Please try again.",
       };
     }
+    if (provisioned.user.softDeleted) {
+      return {
+        response_type: "ephemeral",
+        text: "Your account was deactivated in your identity provider. Contact your administrator.",
+      };
+    }
 
     // Send welcome DM (fire-and-forget) for newly provisioned users
     const welcomeMode =

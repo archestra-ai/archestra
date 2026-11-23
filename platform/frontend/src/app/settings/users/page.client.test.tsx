@@ -93,7 +93,8 @@ function pendingSignupFor(member: Member) {
     email: member.email,
     image: null,
     role: member.role,
-    provider: "microsoft",
+    provider: "slack",
+    scimProvisioned: false,
     invitationId: "invitation-1",
   };
 }
@@ -231,7 +232,7 @@ describe("Users settings — members table", () => {
     expect(bodyRows()).toHaveLength(PAGE_SIZE);
     expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
     expect(screen.getAllByText(members[0].email)).toHaveLength(1);
-    expect(screen.getAllByText("Pending (auto-provisioned)")).toHaveLength(2);
+    expect(screen.getAllByText("Pending (Slack)")).toHaveLength(2);
   });
 
   it("marks a pending-signup member on whatever page they sort onto", () => {
@@ -250,9 +251,9 @@ describe("Users settings — members table", () => {
     const row = screen.getByText(members[2].email).closest("tr");
     expect(row).not.toBeNull();
     expect(
-      within(row as HTMLElement).getByText("Pending (auto-provisioned)"),
+      within(row as HTMLElement).getByText("Pending (Slack)"),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Pending (auto-provisioned)")).toHaveLength(1);
+    expect(screen.getAllByText("Pending (Slack)")).toHaveLength(1);
   });
 });
 

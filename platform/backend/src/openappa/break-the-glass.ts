@@ -19,6 +19,7 @@ import type {
 } from "@/types/guardrails-policy";
 import type { OpenAppaYellKind } from "@/types/openappa-yell";
 import { type OpenAppaSession, openappaYellEnabled } from "./service";
+import { isHardBlock } from "./soft-block";
 import {
   rememberRecordedCalls,
   superyellSession,
@@ -63,7 +64,7 @@ export function waiverFor(params: {
   const { decision, settings } = params;
   if (!settings.active || decision.recorded !== true || decision.unanswered)
     return null;
-  if (HARD_BLOCK.test(decision.feedback)) return null;
+  if (isHardBlock(decision.feedback)) return null;
   // Another tool to run first is a remedy with no offer id; the agent runs it.
   if (REDISPATCH.test(decision.feedback)) return null;
   if (decision.review?.length) {
@@ -402,12 +403,8 @@ function unattendedSessionKey(session: OpenAppaSession): AllowedCacheKey {
 }
 
 // The deny decision carries no structured gap list, so the runtime's rendering
-// is what there is to read. It renders the missing marks as `requires
-// attention: <mark>, …`; the reserved mark is `blocked`, which an upstream
-// OpenAPPA prototype renames `hard-block` (653c7e3b0), and a miss here would
-// let a hard block through. A tool to run first (a redispatch, which mints no offer) renders as
-// `- Run <tool> first; it clears: <gaps>.` under `Continue:`.
-const HARD_BLOCK = /requires attention: [^\n]*\b(?:blocked|hard-block)\b/;
+// is what there is to read. A tool to run first (a redispatch, which mints no
+// offer) renders as `- Run <tool> first; it clears: <gaps>.` under `Continue:`.
 const REDISPATCH = /^\s*- Run .+ first; it clears: /m;
 
 const noted = registerProcessLocalCache(

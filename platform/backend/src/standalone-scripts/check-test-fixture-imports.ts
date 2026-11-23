@@ -62,7 +62,9 @@ for (const file of testFiles(sourceRoot)) {
           (moduleName === "@/test/route-test-app" &&
             element.name.text === "useRouteTestApp") ||
           (moduleName === "./skill.test-helpers" &&
-            element.name.text === "useSkillRouteTestApp"),
+            element.name.text === "useSkillRouteTestApp") ||
+          (moduleName === "@/test/openappa-proxy-harness" &&
+            element.name.text === "useOpenAppaProxyHarness"),
       )
     );
   });

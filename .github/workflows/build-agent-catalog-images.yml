@@ -12,7 +12,7 @@ on:
         description: "Destination registry prefix"
         type: string
         default: ghcr.io/archestra-ai
-      push_to_gcr:
+      push_image:
         description: "Whether to publish the images"
         required: true
         type: boolean
@@ -35,11 +35,6 @@ on:
         required: false
         type: string
         default: ""
-    secrets:
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
-        required: false
-      GCP_SERVICE_ACCOUNT_NAME:
-        required: false
   merge_group:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
@@ -97,14 +92,11 @@ jobs:
       image_name: ${{ matrix.image }}
       image_registry: ${{ inputs.image_registry }}
       version: ${{ inputs.version }}
-      push_image: ${{ inputs.push_to_gcr }}
-      auth_provider: ${{ startsWith(inputs.image_registry, 'ghcr.io/') && 'ghcr' || 'gar' }}
+      push_image: ${{ inputs.push_image }}
+      auth_provider: ghcr
       checkout_ref: ${{ inputs.checkout_ref }}
       reuse_from_version: ${{ inputs.reuse_from_version }}
       reuse_paths: '["platform/docker_images/agent", "platform/backend/src/static/workspace-files.py", "platform/.dockerignore", ".github/workflows/build-agent-catalog-images.yml"]'
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   # Picks the Dockerfile targets the change can affect, from the diff against
   # the merge group's base or the pull request's merge base. The rules live in
@@ -180,6 +172,13 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Log in to Docker Hardened Images
+        uses: $/.github/actions/dhi-login
+        with:
+          dockerfile: ./platform/docker_images/agent/Dockerfile
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+          token: ${{ secrets.DOCKERHUB_DHI_TOKEN }}
 
       - name: Build agent catalog image
         uses: $/.github/actions/build-docker-image

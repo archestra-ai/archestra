@@ -54,6 +54,8 @@ export class BufferedChildStream {
     adapter.prepareResponseReplacement?.();
     this.modelEvents.length = 0;
     this.policyEvents.length = 0;
+    // The cap bounds what is held, and nothing discarded is held any more.
+    this.bufferedBytes = 0;
   }
 
   /** Replacement text is the plugin's own, so it does not count toward the cap. */

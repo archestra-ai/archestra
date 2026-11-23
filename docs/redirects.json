@@ -1,6 +1,11 @@
 {
   "$comment": "Redirects for moved/renamed/deleted docs pages, merged into the archestra-website redirect table at build. URL = /docs/<path below docs/pages, without .md; a folder's index.md is the folder URL>. On move/rename/delete, append { source, destination, permanent: true } pointing at the final URL (no chains); if there is no equivalent, let it 404.",
   "redirects": [
+    {"source": "/docs/admin/logs", "destination": "/docs/insights/logs", "permanent": true},
+    {"source": "/docs/llm-proxy/costs-and-limits", "destination": "/docs/llm-proxy/cost-controls", "permanent": true},
+    {"source": "/docs/llm-proxy/costs-and-limits/costs", "destination": "/docs/insights/costs", "permanent": true},
+    {"source": "/docs/llm-proxy/costs-and-limits/limits", "destination": "/docs/llm-proxy/cost-controls/limits", "permanent": true},
+    {"source": "/docs/llm-proxy/costs-and-limits/exports", "destination": "/docs/llm-proxy/cost-controls/exports", "permanent": true},
     {"source": "/docs/admin/identity/entra-agent-id", "destination": "/docs/agents/identity/entra", "permanent": true},
     {"source": "/docs/llm-proxy/model-router", "destination": "/docs/llm-proxy/unified-model", "permanent": true},
     {"source": "/docs/integrations/claude-code", "destination": "/docs/integrations/ai-clients/claude-code", "permanent": true},
@@ -67,7 +72,7 @@
     {"source": "/docs/platform-connection-reference", "destination": "/docs/get-started/connect", "permanent": true},
     {"source": "/docs/reference/connection-setup", "destination": "/docs/get-started/connect", "permanent": true},
     {"source": "/docs/platform-migrate-from-claude-openclaw-hermes", "destination": "/docs/get-started/migrate", "permanent": true},
-    {"source": "/docs/platform-pricing-model", "destination": "/docs/get-started/pricing-model", "permanent": true},
+    {"source": "/docs/platform-pricing-model", "destination": "/pricing", "permanent": true},
     {"source": "/docs/platform-chat", "destination": "/docs/chat", "permanent": true},
     {"source": "/docs/platform-projects", "destination": "/docs/chat/projects", "permanent": true},
     {"source": "/docs/platform-apps", "destination": "/docs/chat/apps", "permanent": true},
@@ -116,7 +121,7 @@
     {"source": "/docs/platform-deployment", "destination": "/docs/admin/deployment", "permanent": true},
     {"source": "/docs/platform-access-control", "destination": "/docs/admin/access-control", "permanent": true},
     {"source": "/docs/platform-ai-tool-guardrails", "destination": "/docs/agents/guardrails", "permanent": true},
-    {"source": "/docs/platform-costs-and-limits", "destination": "/docs/llm-proxy/costs-and-limits", "permanent": true},
+    {"source": "/docs/platform-costs-and-limits", "destination": "/docs/llm-proxy/cost-controls", "permanent": true},
     {"source": "/docs/platform-observability", "destination": "/docs/admin/observability", "permanent": true},
     {"source": "/docs/platform-performance-benchmarks", "destination": "/docs/admin/performance-benchmarks", "permanent": true},
     {"source": "/docs/platform-environments", "destination": "/docs/admin/environments", "permanent": true},
@@ -149,7 +154,7 @@
     {"source": "/docs/llm-proxy/model-router/client-credentials", "destination": "/docs/llm-proxy/authentication#call-as-the-app", "permanent": true},
     {"source": "/docs/llm-proxy/model-router/user-oauth", "destination": "/docs/llm-proxy/authentication#call-for-a-person", "permanent": true},
     {"source": "/docs/get-started/connect/setup-and-recovery", "destination": "/docs/get-started/connect", "permanent": true},
-    {"source": "/docs/get-started/pricing", "destination": "/docs/get-started/pricing-model", "permanent": true},
+    {"source": "/docs/get-started/pricing", "destination": "/pricing", "permanent": true},
     {"source": "/docs/agents/skills/managing", "destination": "/docs/agents/skills", "permanent": true},
     {"source": "/docs/mcp/servers/managing", "destination": "/docs/mcp/servers#know-when-a-server-breaks", "permanent": true},
     {"source": "/docs/mcp/gateway/skills", "destination": "/docs/mcp/gateway#publish-skills", "permanent": true},
@@ -182,6 +187,7 @@
     {"source": "/docs/agents/managed-agents/setup", "destination": "/docs/agents/runtime/setup", "permanent": true},
     {"source": "/docs/agents/managed-agents/handoff", "destination": "/docs/agents/runtime/handoff", "permanent": true},
     {"source": "/docs/agents/managed-agents/custom-images", "destination": "/docs/agents/runtime/custom-images", "permanent": true},
-    {"source": "/docs/admin/deployment/upgrades", "destination": "/docs/admin/deployment/helm#upgrade", "permanent": true}
+    {"source": "/docs/admin/deployment/upgrades", "destination": "/docs/admin/deployment/helm#upgrade", "permanent": true},
+    {"source": "/docs/get-started/pricing-model", "destination": "/pricing", "permanent": true}
   ]
 }

@@ -66,9 +66,11 @@ const OUTCOME_BADGES: Record<string, { label: string; icon: ReactNode }> = {
 export function HookRunChip({
   data,
   defaultOpen = false,
+  className,
 }: {
   data?: HookRunChipData;
   defaultOpen?: boolean;
+  className?: string;
 }) {
   if (!data) {
     return null;
@@ -112,7 +114,7 @@ export function HookRunChip({
     return (
       <div
         data-testid="hook-run-chip"
-        className="not-prose mb-4 w-full rounded-md border p-3"
+        className={cn("not-prose mb-4 w-full rounded-md border p-3", className)}
       >
         {header}
       </div>
@@ -123,7 +125,7 @@ export function HookRunChip({
     <Collapsible
       data-testid="hook-run-chip"
       defaultOpen={defaultOpen}
-      className="not-prose mb-4 w-full rounded-md border"
+      className={cn("not-prose mb-4 w-full rounded-md border", className)}
     >
       <CollapsibleTrigger className="group flex w-full cursor-pointer items-center justify-between gap-4 p-3">
         {header}

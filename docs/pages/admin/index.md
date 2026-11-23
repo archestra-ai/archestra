@@ -1,7 +1,7 @@
 ---
 title: Admin
 description: Deploy Archestra, manage access, and monitor your instance
-order: 7
+order: 8
 lastUpdated: 2026-10-22
 ---
 

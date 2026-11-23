@@ -105,7 +105,7 @@ function McpToolCallDetail({ id }: { id: string }) {
       title={<ToolCallHeaderTitle title={title} method={content.method} />}
       documentTitle={title}
       stackHeaderOnMobile
-      backLink={<PageBackLink href="/mcp/logs">Back to MCP Logs</PageBackLink>}
+      backLink={<PageBackLink href="/logs">Back to Logs</PageBackLink>}
       description={
         <ToolCallIdentityLine
           call={mcpToolCall}
@@ -137,7 +137,7 @@ function ToolCallShell({ children }: { children: ReactNode }) {
     <PageLayout
       denseContent
       title="Tool call"
-      backLink={<PageBackLink href="/mcp/logs">Back to MCP Logs</PageBackLink>}
+      backLink={<PageBackLink href="/logs">Back to Logs</PageBackLink>}
     >
       {children}
     </PageLayout>

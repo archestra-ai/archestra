@@ -12,9 +12,9 @@
  * (openai-chatops-slack-no-usage.json) reproduces exactly that upstream: a
  * complete stream that never sends usage.
  *
- * This spec pins the *UI* contract: the run is listed on /llm/logs, it is
- * labelled with the Slack source, and it survives the "Slack" entry of the
- * Source filter. The corresponding API/persistence contract is pinned by
+ * This spec pins the *UI* contract: the run is listed under LLM Proxy on the
+ * Logs page, and it survives the "Slack" entry of the Client filter while
+ * another client hides it. The corresponding API/persistence contract is pinned by
  * backend/src/routes/proxy/llm-proxy-handler.test.ts.
  */
 import crypto from "node:crypto";
@@ -30,19 +30,19 @@ const test = mergeTests(uiTest, apiTest);
 const STUB_MARKER = "chatops-slack-no-usage";
 /** Interaction source ChatOps sets for Slack (CHATOPS_PROVIDER_SOURCES). */
 const SLACK_SOURCE = "chatops:slack";
-/** Label INTERACTION_SOURCE_DISPLAY renders for that source. */
-const SLACK_SOURCE_LABEL = "Slack";
+/** The Client filter's name for that source (INTERACTION_SOURCE_DISPLAY). */
+const SLACK_CLIENT = "Slack";
 
-const LOGS_PATH = "/llm/logs";
+/** The Logs page narrowed to LLM Proxy requests matching `q`. */
+const llmLogsPath = (params: { q: string; client?: string }) =>
+  `/logs?type=llm&q=${encodeURIComponent(params.q)}` +
+  (params.client ? `&client=${encodeURIComponent(params.client)}` : "");
 
 /**
  * Drive one Slack-sourced streaming completion through the proxy.
  *
- * Returns both the session id (used for the API-level readiness poll) and the
- * unique prompt text, which is what the log table's Session column actually
- * renders and is therefore how the row is located in the UI. The session-ID
- * search box is deliberately not used: it only accepts a UUID, while a ChatOps
- * session id is a thread-derived string like `slack-<channel>-<ts>`.
+ * Returns the session id, which is unique to this run: the Logs search
+ * matches it, so it narrows the page to this run's request.
  */
 async function runSlackChatOpsCompletion(params: {
   request: APIRequestContext;
@@ -116,13 +116,13 @@ async function runSlackChatOpsCompletion(params: {
     )
     .toBe(true);
 
-  return { sessionId, prompt };
+  return { sessionId };
 }
 
 test.describe("LLM Logs - Slack (ChatOps) source", {
   tag: ["@firefox", "@webkit"],
 }, () => {
-  test("lists a Slack ChatOps run and keeps it under the Slack source filter", async ({
+  test("lists a Slack ChatOps run and keeps it under the Slack client filter", async ({
     request,
     adminPage,
     goToAdminPage,
@@ -179,49 +179,39 @@ async function runSlackLogsChecks({
   proxyId: string;
   passthroughKey: string;
 }) {
-  const { prompt } = await runSlackChatOpsCompletion({
+  const { sessionId } = await runSlackChatOpsCompletion({
     request,
     proxyId,
     passthroughKey,
   });
-  // The Session column renders the run's prompt, so the nonce in it is what
-  // identifies this run's row.
+  // The search narrows the page to this run, so its request is the one row
+  // that links to the session.
   const rowFor = () =>
-    adminPage.locator("tbody tr").filter({ hasText: prompt });
+    adminPage.getByRole("link").filter({ hasText: /gpt-4o/ });
 
-  // 1. Unfiltered log page — the view the bug report screenshotted.
-  await goToAdminPage(LOGS_PATH);
-  await adminPage.waitForLoadState("domcontentloaded");
-
-  const row = rowFor();
-  await expect(
-    row,
-    "The Slack ChatOps run is missing from the unfiltered LLM Proxy logs",
-  ).toBeVisible({ timeout: 20_000 });
-
-  // 2. The Source column identifies it as Slack.
-  await expect(
-    row.getByText(SLACK_SOURCE_LABEL, { exact: true }),
-    "The Slack ChatOps run is not labelled with the Slack source",
-  ).toBeVisible();
-
-  // 3. The Source filter is URL-driven (page.client.tsx reads ?source=),
-  //    so this exercises the same path the "Slack" dropdown entry takes.
-  await goToAdminPage(
-    `${LOGS_PATH}?source=${encodeURIComponent(SLACK_SOURCE)}`,
-  );
-  await adminPage.waitForLoadState("domcontentloaded");
+  // 1. No client filter: the run is listed (the bug left it out entirely).
+  await goToAdminPage(llmLogsPath({ q: sessionId }));
   await expect(
     rowFor(),
-    `The Slack ChatOps run disappeared under the "${SLACK_SOURCE_LABEL}" source filter`,
-  ).toBeVisible({ timeout: 20_000 });
+    "The Slack ChatOps run is missing from the LLM Proxy logs",
+  ).toHaveCount(1, { timeout: 20_000 });
 
-  // 4. ...and the filter genuinely filters: under a different source the
-  //    same run must be gone, otherwise step 3 proves nothing.
-  await goToAdminPage(`${LOGS_PATH}?source=chat`);
-  await adminPage.waitForLoadState("domcontentloaded");
+  // 2. The Client filter is URL-driven, so this takes the same path as
+  //    picking "Slack" in it.
+  await goToAdminPage(llmLogsPath({ q: sessionId, client: SLACK_CLIENT }));
   await expect(
     rowFor(),
-    "The Slack ChatOps run is still listed under a non-Slack source filter",
-  ).toHaveCount(0, { timeout: 20_000 });
+    `The Slack ChatOps run disappeared under the "${SLACK_CLIENT}" client filter`,
+  ).toHaveCount(1, { timeout: 20_000 });
+
+  // 3. ...and the filter genuinely filters: under another client the same
+  //    run is gone, otherwise step 2 proves nothing.
+  await goToAdminPage(llmLogsPath({ q: sessionId, client: "Chat" }));
+  await expect(adminPage.getByText("No events match")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(
+    rowFor(),
+    "The Slack ChatOps run is still listed under another client filter",
+  ).toHaveCount(0);
 }

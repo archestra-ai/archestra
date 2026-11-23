@@ -8,7 +8,6 @@ import {
   DEFAULT_APP_NAME,
   type EnvironmentDeployKind,
   getResourceForAgentType,
-  isModelSelectionComplete,
   PaginationQuerySchema,
   parseLabelsParam,
   ResourceAccessQuerySchema,
@@ -57,7 +56,6 @@ import {
   ProjectModel,
 } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
-import AutoRouterModel from "@/models/auto-router";
 import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { initializeObservabilityMetrics } from "@/observability";
 import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
@@ -79,21 +77,26 @@ import {
 } from "@/services/agent-network-policy";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
+  agentPairToCheck,
+  assertAgentConnectionModels,
   assertAgentRuntimeModelCompatibility,
   assertAgentRuntimeTiersExist,
   assertCanBindRuntimeCredentials,
+  canStoreAgentModelSelection,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
 import {
+  agentCopyAccountLock,
+  applyAgentAccountWrite,
   applyAgentRuntimeAccess,
-  assertCanUseAgentRuntime,
+  assertAccountLockWrite,
+  withStoredAccountLock,
 } from "@/services/agent-runtime/agent-runtime-access";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
-import { applyAgentModelPool } from "@/services/chat-model-pools";
 import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
 import { getDocsSuggestedPrompts } from "@/services/docs-mcp-servers";
 import {
@@ -805,7 +808,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.runtime = await applyAgentRuntimeAccess({
           organizationId,
           userId: user.id,
-          runtime: body.runtime,
+          runtime: withStoredAccountLock({
+            runtime: body.runtime,
+            previous: null,
+          }),
         });
       }
       await requireAgentRuntimePermission({
@@ -856,16 +862,30 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      await applyAgentAutoRouter(body, {
+      const { runtimeConnection } = await applyAgentAccountWrite({
         organizationId,
+        userId: user.id,
+        previous: null,
         runtime: body.runtime ?? null,
+        account: body,
       });
-      await applyAgentModelPool(body, { organizationId, userId: user.id });
-      // A model and its API key are a pair: persist both or neither.
+      await assertAccountLockWrite({
+        organizationId,
+        userId: user.id,
+        previous: null,
+        runtime: body.runtime ?? null,
+        account: body,
+      });
+      // A model and its API key are a pair: persist both or neither. An
+      // Agent Runtime agent may store its API key alone, which leaves the
+      // model to each person; on a runtime that fixes its agents'
+      // connection, a model alone runs on it.
       if (
-        !isModelSelectionComplete({
+        !canStoreAgentModelSelection({
           modelId: body.modelId,
-          apiKeyId: body.llmApiKeyId,
+          llmApiKeyId: body.llmApiKeyId,
+          runtime: body.runtime,
+          runtimeConnection,
         })
       ) {
         throw new ApiError(
@@ -882,6 +902,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         selectsModel: true,
+        runtimeConnection,
+      });
+      await assertAgentConnectionModels({
+        runtime: body.runtime,
+        agent: { llmApiKeyId: body.llmApiKeyId ?? null },
+        runtimeConnection,
+        organizationId,
+        userId: user.id,
       });
 
       const environmentId = await resolveNewAgentEnvironmentId({
@@ -1382,7 +1410,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      await assertCanUseAgentRuntime({
+      // The copy starts without the source's account lock and key (the model
+      // drops them), so copying needs no more than using the runtime. Its
+      // lock follows what a new agent of the caller's on that runtime would
+      // store.
+      const accountLock = await agentCopyAccountLock({
         organizationId,
         userId: user.id,
         runtime: sourceAgent.runtime,
@@ -1409,6 +1441,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scope: "personal",
         teams: [],
         initialGrants,
+        accountLock,
       });
 
       return reply.send(clonedAgent);
@@ -2171,7 +2204,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.runtime = await applyAgentRuntimeAccess({
           organizationId,
           userId: user.id,
-          runtime: body.runtime,
+          runtime: withStoredAccountLock({
+            runtime: body.runtime,
+            previous: existingAgent.runtime,
+          }),
           previous: existingAgent.runtime,
         });
       }
@@ -2239,13 +2275,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      await applyAgentAutoRouter(body, {
+      const { runtimeConnection } = await applyAgentAccountWrite({
         organizationId,
-        runtime:
-          body.runtime !== undefined ? body.runtime : existingAgent.runtime,
+        userId: user.id,
+        previous: existingAgent,
+        runtime: body.runtime,
         builtIn: existingAgent.builtInAgentConfig !== null,
+        account: body,
       });
-      await applyAgentModelPool(body, { organizationId, userId: user.id });
+      await assertAccountLockWrite({
+        organizationId,
+        userId: user.id,
+        previous: existingAgent,
+        runtime: body.runtime,
+        account: body,
+      });
 
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
@@ -2283,9 +2327,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? body.llmApiKeyId
             : existingAgent.llmApiKeyId;
         if (
-          !isModelSelectionComplete({
+          !canStoreAgentModelSelection({
             modelId: mergedModelId,
-            apiKeyId: mergedApiKeyId,
+            llmApiKeyId: mergedApiKeyId,
+            runtime:
+              body.runtime !== undefined ? body.runtime : existingAgent.runtime,
+            runtimeConnection,
           })
         ) {
           throw new ApiError(
@@ -2303,20 +2350,32 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertAgentRuntimeModelCompatibility({
           runtime:
             body.runtime !== undefined ? body.runtime : existingAgent.runtime,
-          agent: {
-            llmApiKeyId:
-              body.llmApiKeyId !== undefined
-                ? body.llmApiKeyId
-                : existingAgent.llmApiKeyId,
-            modelId:
-              body.modelId !== undefined ? body.modelId : existingAgent.modelId,
-          },
+          agent: agentPairToCheck({
+            sent: body,
+            stored: existingAgent,
+            runtimeConnection,
+          }),
           organizationId,
           userId: user.id,
           // A body that names neither keeps the agent's pair: an image or
           // limits change does not choose a model.
           selectsModel:
             body.modelId !== undefined || body.llmApiKeyId !== undefined,
+          runtimeConnection,
+        });
+        await assertAgentConnectionModels({
+          runtime:
+            body.runtime !== undefined ? body.runtime : existingAgent.runtime,
+          previous: existingAgent.runtime,
+          agent: {
+            llmApiKeyId:
+              body.llmApiKeyId !== undefined
+                ? body.llmApiKeyId
+                : existingAgent.llmApiKeyId,
+          },
+          runtimeConnection,
+          organizationId,
+          userId: user.id,
         });
       }
 
@@ -3336,50 +3395,4 @@ async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
     ids: params.ids,
   } satisfies Parameters<typeof AgentModel.findAll>[2];
   return { userId, isAgentAdmin: isAdmin, options };
-}
-
-/**
- * An auto router replaces the agent's model, key and pool; picking any of
- * them leaves the router. Agent Runtime agents and built-in agents cannot run
- * on one.
- */
-async function applyAgentAutoRouter(
-  body: {
-    autoRouterId?: string | null;
-    modelPoolId?: string | null;
-    llmApiKeyId?: string | null;
-    modelId?: string | null;
-  },
-  agent: { organizationId: string; runtime: unknown; builtIn?: boolean },
-): Promise<void> {
-  const hasRuntime = agent.runtime !== null && agent.runtime !== undefined;
-  if (body.autoRouterId) {
-    if (hasRuntime) {
-      throw new ApiError(
-        400,
-        "Agent Runtime agents cannot run on an auto router.",
-      );
-    }
-    if (agent.builtIn) {
-      throw new ApiError(400, "Built-in agents cannot run on an auto router.");
-    }
-    if (
-      !(await AutoRouterModel.findInOrganization(
-        agent.organizationId,
-        body.autoRouterId,
-      ))
-    ) {
-      throw new ApiError(400, "The selected auto router no longer exists.");
-    }
-    body.modelId = null;
-    body.llmApiKeyId = null;
-    body.modelPoolId = null;
-  } else if (
-    hasRuntime ||
-    (body.autoRouterId === undefined &&
-      (body.modelPoolId || body.llmApiKeyId || body.modelId))
-  ) {
-    // An agent that becomes an Agent Runtime agent leaves its auto router too.
-    body.autoRouterId = null;
-  }
 }

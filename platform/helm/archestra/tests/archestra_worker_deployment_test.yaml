@@ -479,3 +479,28 @@ tests:
           content:
             name: ARCHESTRA_DATABASE_AWS_REGION
             value: eu-west-1
+
+  # The Kubernetes image has no shell: the worker starts through Node.
+  - it: starts the worker with the Node start script
+    set:
+      archestra.worker.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["node", "./scripts/start-production.mjs"]
+
+  - it: starts the worker through the Node vault wrapper when vault secrets are on
+    set:
+      archestra.worker.enabled: true
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: ARCHESTRA_DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["node", "/app/with-vault-env.mjs"]
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["node", "./scripts/start-production.mjs"]

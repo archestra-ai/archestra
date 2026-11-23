@@ -22,21 +22,38 @@ const settingsKey = ["agent-runtime-template-settings"] as const;
 const accessKey = ["agent-runtime-access"] as const;
 const behindKey = ["agent-runtime-agents-behind"] as const;
 
+async function listRuntimeTemplateCatalog() {
+  const { data, error } = await archestraApiSdk.listAgentRuntimeTemplates();
+  throwOnApiError(error, { toastOnError: false });
+  return data ?? [];
+}
+
 export function useRuntimeTemplateCatalog() {
   return useQuery({
     queryKey: catalogKey,
-    queryFn: async () => {
-      const { data, error } = await archestraApiSdk.listAgentRuntimeTemplates();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    queryFn: listRuntimeTemplateCatalog,
     refetchOnMount: "always",
     staleTime: 0,
   });
 }
 
+/**
+ * The same list for something shown once per agent, such as a badge in every
+ * row of a table: all of them share the one cached list, and a row that
+ * mounts later asks for nothing while it is this fresh. A saved change to
+ * the runtimes still refreshes it at once.
+ */
+export function useRuntimeTemplateCatalogShared(enabled = true) {
+  return useQuery({
+    queryKey: catalogKey,
+    queryFn: listRuntimeTemplateCatalog,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 /** The settings administrators chose for the maintained runtimes. */
-export function useBuiltInRuntimeSettings() {
+export function useBuiltInRuntimeSettings(enabled = true) {
   return useQuery({
     queryKey: builtInsKey,
     queryFn: async () => {
@@ -45,6 +62,7 @@ export function useBuiltInRuntimeSettings() {
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
+    enabled,
   });
 }
 
@@ -53,7 +71,47 @@ export function useBuiltInRuntimeDefaults(): (
   id: AgentCatalogId,
 ) => AgentRuntimeDefaults | undefined {
   const { data } = useBuiltInRuntimeSettings();
-  return (id) => data?.find((item) => item.id === id)?.settings;
+  return (id) => {
+    // With its account rule: a Claude runtime that names an account kind
+    // starts a new agent on the Claude account of that kind, and one that
+    // names none on the Claude account it stores. The rule itself never
+    // reaches an agent's own runtime.
+    return data?.find((item) => item.id === id)?.settings;
+  };
+}
+
+/**
+ * The account rule in a runtime's settings: which kind of account it names,
+ * and the company connection and model it fixes. It holds at once for every
+ * agent on the runtime and for every person, whatever an agent stores. An
+ * absent field is left to each agent. The names, the connection's models and
+ * the two `Missing` marks are filled in by the server, for readers who may
+ * not read the connection itself.
+ */
+export type RuntimeAccounts = NonNullable<RuntimeTemplateSummary["accounts"]>;
+
+/** What a runtime writes of its accounts: the choices, without the names. */
+export function runtimeAccountsToSave(
+  accounts: RuntimeAccounts | null | undefined,
+):
+  | Pick<
+      RuntimeAccounts,
+      "kind" | "llmApiKeyId" | "modelId" | "connectionModels"
+    >
+  | undefined {
+  if (!accounts) return undefined;
+  const planModels = Object.keys(accounts.connectionModels ?? {}).length > 0;
+  const saved = {
+    ...(accounts.kind && { kind: accounts.kind }),
+    ...(accounts.llmApiKeyId && { llmApiKeyId: accounts.llmApiKeyId }),
+    // A model belongs to a connection.
+    ...(accounts.llmApiKeyId &&
+      accounts.modelId && { modelId: accounts.modelId }),
+    // A model per connection is set only where none is fixed.
+    ...(!accounts.llmApiKeyId &&
+      planModels && { connectionModels: accounts.connectionModels }),
+  };
+  return Object.keys(saved).length > 0 ? saved : undefined;
 }
 
 /** Which Agent Runtimes the reader may put agents on and configure. */
@@ -71,39 +129,96 @@ export function useAgentRuntimeAccess() {
 
 /**
  * What the reader may do with an agent's runtime. `canChange` is whether
- * they may set it at all (undefined while loading); `readOnlyBy` names the
- * Agent Runtime whose settings the agent takes because the reader may use
- * it but not configure it.
+ * they may set it at all (undefined while loading); `canConfigure` is
+ * whether they may configure it (undefined while loading); `readOnlyBy`
+ * names the Agent Runtime whose settings the agent takes because the reader
+ * may use it but not configure it.
+ *
+ * `accounts` is the runtime's account rule, undefined while loading and null
+ * for none: the kind of account it names (`kind`) and the company connection
+ * and model it fixes, with their names. The rule holds for every agent on
+ * the runtime and for every person, whatever an agent stores. Nothing else
+ * in a runtime's settings restricts its agents' accounts: a Claude account a
+ * runtime stores is only what a new agent starts on.
  */
 export function useAgentRuntimePermissions(
   runtime: Pick<TemplatedAgentRuntime, "image" | "command"> | null | undefined,
   catalogImages: Record<AgentCatalogId, string>,
-): { canChange: boolean | undefined; readOnlyBy: string | null } {
+): {
+  canChange: boolean | undefined;
+  canConfigure: boolean | undefined;
+  readOnlyBy: string | null;
+  accounts: RuntimeAccounts | null | undefined;
+} {
   const { data: access } = useAgentRuntimeAccess();
   const { data: customs } = useRuntimeTemplateCatalog();
-  if (!access || !customs) return { canChange: undefined, readOnlyBy: null };
+  const ref =
+    runtime && customs
+      ? resolveAgentRuntimeTemplate({
+          runtime,
+          catalogImages,
+          customTemplates: customs,
+        })
+      : null;
+  const entry = ref
+    ? access?.runtimes.find((item) => item.id === ref.id)
+    : undefined;
+  // A runtime's rule is read from its own settings: a maintained runtime's
+  // from the list of them, a custom one's from the catalog.
+  const usable = entry?.canUse === true;
+  const builtIns = useBuiltInRuntimeSettings(
+    usable && ref?.kind === "built-in",
+  );
+  if (!access || !customs)
+    return {
+      canChange: undefined,
+      canConfigure: undefined,
+      readOnlyBy: null,
+      accounts: undefined,
+    };
   if (!runtime)
     return {
       canChange:
         access.canConfigureAny || access.runtimes.some((item) => item.canUse),
+      canConfigure: access.canConfigureAny,
       readOnlyBy: null,
+      accounts: null,
     };
-  const ref = resolveAgentRuntimeTemplate({
-    runtime,
-    catalogImages,
-    customTemplates: customs,
-  });
-  const entry = ref && access.runtimes.find((item) => item.id === ref.id);
   if (!ref || !entry)
-    return { canChange: access.canConfigureAny, readOnlyBy: null };
-  return {
+    return {
+      canChange: access.canConfigureAny,
+      canConfigure: access.canConfigureAny,
+      readOnlyBy: null,
+      accounts: null,
+    };
+  const permissions = {
     canChange: entry.canUse,
+    canConfigure: entry.canConfigure,
     readOnlyBy:
       entry.canUse && !entry.canConfigure
         ? ref.kind === "built-in"
           ? AGENT_CATALOG_NAMES[ref.id]
           : (customs.find((item) => item.id === ref.id)?.name ?? null)
         : null,
+  };
+  // The server sends a rule only to someone who may use the runtime.
+  if (!usable) return { ...permissions, accounts: null };
+  if (ref.kind === "custom") {
+    return {
+      ...permissions,
+      accounts: customs.find((item) => item.id === ref.id)?.accounts ?? null,
+    };
+  }
+  // A read that failed names nothing: the runtime is then taken to set no
+  // rule.
+  if (!builtIns.data) {
+    return { ...permissions, accounts: builtIns.isError ? null : undefined };
+  }
+  return {
+    ...permissions,
+    accounts:
+      builtIns.data.find((item) => item.id === ref.id)?.settings.accounts ??
+      null,
   };
 }
 
@@ -114,16 +229,23 @@ export function useAgentRuntimePermissions(
 export function useAgentsBehindRuntime(id: string | null) {
   return useQuery({
     queryKey: [...behindKey, id],
-    queryFn: async () => {
-      const { data, error } = await archestraApiSdk.countAgentsBehindRuntime({
-        path: { id: id as string },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      if (!data) throw new Error("Agent count was not returned");
-      return data.agents;
-    },
+    queryFn: () => countAgentsBehindRuntime(id as string),
     enabled: id !== null,
   });
+}
+
+/**
+ * Asks afresh how many agents differ from a runtime's saved settings, for the
+ * moment right after a save, when the cached count is the old settings'.
+ */
+export function useCountAgentsBehindRuntime() {
+  const client = useQueryClient();
+  return (id: string) =>
+    client.fetchQuery({
+      queryKey: [...behindKey, id],
+      queryFn: () => countAgentsBehindRuntime(id),
+      staleTime: 0,
+    });
 }
 
 /** Give every existing agent of a runtime that runtime's current settings. */
@@ -203,6 +325,9 @@ export function useSaveRuntimeTemplateSettings() {
         client.invalidateQueries({ queryKey: accessKey }),
         client.invalidateQueries({ queryKey: behindKey }),
         client.invalidateQueries({ queryKey: organizationKeys.details() }),
+        // A runtime's account rule reaches every agent on it at once: an
+        // open agent page or form reads the account again.
+        client.invalidateQueries({ queryKey: ["agents"] }),
       ]);
       toast.success("Available runtimes updated");
     },
@@ -223,4 +348,13 @@ export function useResolveRuntimeTemplate() {
       return data;
     },
   });
+}
+
+async function countAgentsBehindRuntime(id: string): Promise<number> {
+  const { data, error } = await archestraApiSdk.countAgentsBehindRuntime({
+    path: { id },
+  });
+  throwOnApiError(error, { toastOnError: false });
+  if (!data) throw new Error("Agent count was not returned");
+  return data.agents;
 }

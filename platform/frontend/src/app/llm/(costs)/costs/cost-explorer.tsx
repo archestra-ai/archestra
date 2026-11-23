@@ -4,6 +4,7 @@
 
 import {
   ArrowRight,
+  CalendarClock,
   ChevronDown,
   Download,
   FileJson,
@@ -26,6 +27,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -89,6 +91,9 @@ export default function CostExplorer() {
   const appName = useAppName();
   const { data: canReadApps } = useHasPermissions({ app: ["read"] });
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
+  const { data: canReadExports } = useHasPermissions({
+    costExport: ["read"],
+  });
   const limitsAccess = useTeamLimitAccess();
   const { data: canReadCosts, isPending: isCostAccessPending } =
     useHasPermissions({ llmCost: ["read"] });
@@ -726,25 +731,52 @@ export default function CostExplorer() {
                   variant="ghost"
                   size="xs"
                   className="ml-auto"
-                  disabled={cube.rows.length === 0}
+                  disabled={cube.rows.length === 0 && !canReadExports}
                 >
                   <Download />
                   Export
                   <ChevronDown />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => exportCsv(exportParams)}>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem
+                  disabled={cube.rows.length === 0}
+                  onSelect={() => exportCsv(exportParams)}
+                >
                   <FileSpreadsheet /> CSV
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => exportJson(exportParams)}>
+                <DropdownMenuItem
+                  disabled={cube.rows.length === 0}
+                  onSelect={() => exportJson(exportParams)}
+                >
                   <FileJson /> JSON
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  disabled={cube.rows.length === 0}
                   onSelect={() => void exportParquet(exportParams)}
                 >
                   <Download /> Parquet
                 </DropdownMenuItem>
+                {canReadExports && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {/* The files above are this view, once. A scheduled
+                        export keeps writing costs to the reader's own
+                        bucket; it lives under Cost Controls. */}
+                    <DropdownMenuItem asChild className="items-start">
+                      <Link href="/llm/cost-exports">
+                        <CalendarClock className="mt-0.5" />
+                        <span className="flex flex-col gap-0.5">
+                          <span>Schedule exports…</span>
+                          <span className="text-muted-foreground text-xs">
+                            Send costs to your own S3, GCS or Azure bucket,
+                            hourly or daily, in FOCUS format.
+                          </span>
+                        </span>
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

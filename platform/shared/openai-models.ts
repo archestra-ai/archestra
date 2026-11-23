@@ -63,6 +63,28 @@ export function supportsOpenAiThinkingEffort(modelId: string): boolean {
   return !(isGpt5 && OPENAI_PRO_TOKEN_RE.test(id));
 }
 
+/**
+ * True when an OpenAI model accepts each of `low`, `medium` and `high` as its
+ * `reasoning_effort`, for the model catalogue to report.
+ *
+ * Wider than {@link supportsOpenAiThinkingEffort}, which also decides whether
+ * the chat composer offers the control: the gpt-6 generations accept all
+ * three (verified against every gpt-6 tier), but their chat turns take a
+ * reasoning setting over the Responses API only, so the composer rule leaves
+ * them out. The `pro` tiers stay out of both: they accept `high` and, from
+ * gpt-5.2, `medium`, but never `low`.
+ */
+export function openAiAcceptsCommonReasoningEfforts(modelId: string): boolean {
+  if (supportsOpenAiThinkingEffort(modelId)) return true;
+  const id = modelId.toLowerCase();
+  return (
+    OPENAI_GPT6_RE.test(id) &&
+    !OPENAI_PRO_TOKEN_RE.test(id) &&
+    !id.includes("chat-latest") &&
+    !id.includes("search")
+  );
+}
+
 // ===========================================================================
 // Internal helpers
 // ===========================================================================
@@ -74,6 +96,9 @@ export function supportsOpenAiThinkingEffort(modelId: string): boolean {
 const OPENAI_PRO_TOKEN_RE = /(?:^|[-/])pro(?:[-/]|$)/;
 
 const OPENAI_O_SERIES_RE = /^o[134](?:$|-)/;
+
+/** gpt-6 and its point releases (`gpt-6.2-sol`), not `gpt-60`. */
+const OPENAI_GPT6_RE = /^gpt-6(?:$|[-.])/;
 
 /** The o1 models that predate `reasoning_effort`, dated snapshots included. */
 const OPENAI_PRE_EFFORT_O1_RE = /^o1-(?:mini|preview)/;

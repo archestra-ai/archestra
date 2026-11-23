@@ -44,7 +44,7 @@ use crate::{
 /// override with `ARCHESTRA_DAGGER_RUNTIME_IMAGE` for a custom debian-based base.
 /// TODO: move to python 3.15 (lazy imports) once ML wheels such as torch and
 /// onnxruntime ship cp315 on PyPI.
-pub const DEFAULT_BASE_IMAGE: &str = "ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim";
+pub const DEFAULT_BASE_IMAGE: &str = "ghcr.io/astral-sh/uv:0.13.8-python3.14-trixie-slim";
 
 /// layered on top of the base on first warm; the toolbelt every sandbox can rely on.
 const APT_SECURITY_FLOOR: &str = "3.0.4";
@@ -68,6 +68,11 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
     // Same for zlib1g: named so apt upgrades the base image's copy to the
     // trixie-security build (CVE-2026-85091, CVE-2026-76844).
     "zlib1g",
+    // Same for glibc: the base's build predates Debian's CVE-2026-5435 and
+    // CVE-2026-19499 fix.
+    "libc6",
+    "libc-bin",
+    "gzip",
     "unzip",
     "zip",
 ];

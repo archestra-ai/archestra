@@ -403,9 +403,7 @@ export default function SessionDetailPage({
       <PageLayout
         denseContent
         title="Session"
-        backLink={
-          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
-        }
+        backLink={<PageBackLink href="/logs">Back to Logs</PageBackLink>}
       >
         <QueryLoadError
           title="Couldn't load this session"
@@ -440,9 +438,9 @@ export default function SessionDetailPage({
               check your log access.
             </p>
             <Button variant="outline" asChild>
-              <Link href="/llm/logs">
+              <Link href="/logs">
                 <ArrowLeft aria-hidden="true" />
-                <span>Back to Sessions</span>
+                <span>Back to Logs</span>
               </Link>
             </Button>
           </EmptyContent>
@@ -509,9 +507,7 @@ export default function SessionDetailPage({
         }
         documentTitle={sessionTitle || "Session"}
         stackHeaderOnMobile
-        backLink={
-          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
-        }
+        backLink={<PageBackLink href="/logs">Back to Logs</PageBackLink>}
         description={<SessionIdentityLine session={sessionData} />}
       >
         <div className="space-y-4">

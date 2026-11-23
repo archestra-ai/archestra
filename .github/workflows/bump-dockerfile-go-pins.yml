@@ -1,0 +1,142 @@
+name: Bump Dockerfile Go Pins
+
+# The Dockerfiles pin Go modules of the third-party CLIs they build (docker,
+# dagger, kind, kubectl, git tooling) with `go get module@vX.Y.Z`, mostly past
+# a vulnerable version. Dependabot reads go.mod files only, so it never moves
+# them. Every week this opens or updates one pull request per branch, for main
+# and every supported release line in .github/backport-targets.json, with each
+# pin at its newest release that is at least 7 days old
+# (bump-dockerfile-go-pins.py). A release line takes patch releases only. The
+# image builds in the pull request's CI are what validate a bump; each pull
+# request waits for review.
+
+on:
+  schedule:
+    - cron: "37 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: bump-dockerfile-go-pins
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Choose the branches
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Read backport-targets.json.
+    outputs:
+      bases: ${{ steps.bases.outputs.bases }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/backport-targets.json
+          persist-credentials: false
+
+      - name: List main and the supported release lines
+        id: bases
+        run: |
+          set -euo pipefail
+          bases="$(jq -ce '["main"] + .branches | map(select(test("^(main|release/[0-9]+\\.[0-9]+)$")))' .github/backport-targets.json)"
+          echo "bases=$bases" >> "$GITHUB_OUTPUT"
+
+  bump:
+    name: Bump the pins on ${{ matrix.base }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # Check out the base branch.
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        base: ${{ fromJSON(needs.plan.outputs.bases) }}
+    steps:
+      # The script and its tests come from main; the Dockerfiles from the base.
+      - name: Checkout main's script
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          path: tools
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Checkout ${{ matrix.base }}
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ matrix.base }}
+          fetch-depth: 1
+          path: target
+          persist-credentials: false
+
+      - name: Bump the pins
+        id: bump
+        working-directory: target
+        env:
+          BASE: ${{ matrix.base }}
+        run: |
+          set -euo pipefail
+          flags=()
+          [[ "$BASE" == "main" ]] || flags+=(--patch-only)
+          python3 -I "$GITHUB_WORKSPACE/tools/.github/scripts/bump-dockerfile-go-pins.py" --root . "${flags[@]}" | tee "$RUNNER_TEMP/bumps.txt"
+          if [[ -s "$RUNNER_TEMP/bumps.txt" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Every pin on $BASE is current."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The App token makes the push and the new PR trigger ordinary CI.
+      - name: Generate releaser token
+        if: steps.bump.outputs.changed == 'true'
+        id: token
+        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Configure Git identity
+        if: steps.bump.outputs.changed == 'true'
+        uses: $/.github/actions/configure-git-identity
+        with:
+          working-directory: target
+
+      - name: Open or update the pull request
+        if: steps.bump.outputs.changed == 'true'
+        working-directory: target
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE: ${{ matrix.base }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git --hostname github.com --force
+          branch="automation/dockerfile-go-pins"
+          title="fix(deps): bump the Go modules pinned in Dockerfiles"
+          if [[ "$BASE" != "main" ]]; then
+            branch+="-${BASE//\//-}"
+            title+=" ($BASE)"
+          fi
+          git switch -c "$branch"
+          git add -- platform/Dockerfile platform/docker_images/agent/Dockerfile
+          git -c core.hooksPath=/dev/null commit -m "$title"
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+          note=""
+          [[ "$BASE" == "main" ]] || note=", patch releases only on this release line"
+          body="Moves the Go module pins in the Dockerfiles (go get module@version) to each module's newest release that is at least 7 days old${note}. Dependabot does not read these pins; the image builds in this pull request validate them."
+          body+=$'\n\n```\n'"$(cat "$RUNNER_TEMP/bumps.txt")"$'\n```'
+          existing="$(gh api "repos/$GH_REPO/pulls?state=open&head=${GH_REPO%%/*}:$branch&base=$BASE&per_page=1" --jq '.[0].number // empty')"
+          if [[ -z "$existing" ]]; then
+            gh pr create --base "$BASE" --head "$branch" --title "$title" --body "$body"
+          else
+            gh pr edit "$existing" --title "$title" --body "$body"
+          fi

@@ -11,7 +11,7 @@ import { AuthErrorTool } from "./auth-error-tool";
  * button opens the MCP bridge setup, the same one as the Device page; once a
  * device is linked the card says so.
  */
-export function NoDeviceToolCard() {
+export function NoDeviceToolCard({ className }: { className?: string } = {}) {
   const [setupOpen, setSetupOpen] = useState(false);
   // Not live: the dialog follows the devices while it is open, and this
   // reads them again while none is known.
@@ -24,6 +24,7 @@ export function NoDeviceToolCard() {
         {...copy}
         variant={linked ? "success" : "error"}
         onAction={linked ? undefined : () => setSetupOpen(true)}
+        className={className}
       />
       <McpBridgeSetupDialog open={setupOpen} onOpenChange={setSetupOpen} />
     </>

@@ -104,6 +104,7 @@ test.for([
   });
   const runtime: ResolvedAgentRuntime = {
     agentId: agent.id,
+    accountLock: null,
     organizationId: org.id,
     environmentId: null,
     secretId: null,

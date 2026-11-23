@@ -1,8 +1,14 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { eq, getTableColumns, sql } from "drizzle-orm";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
+import {
+  buildInteractionRecord,
+  calculateInteractionCosts,
+} from "@/routes/proxy/llm-proxy-helpers";
 import { expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
+import type { GatewayAgent } from "@/types";
 import InteractionModel from "./interaction";
 import InteractionUserActivityModel from "./interaction-user-activity";
 
@@ -361,6 +367,72 @@ test("attributed appends use one atomic statement after environment lookup wheth
       "interaction_user_activity_append",
     );
   }
+});
+
+test("a proxied LLM call writes exactly the columns of the append's common shape", async ({
+  makeOrganization,
+  makeAgent,
+  makeUser,
+  makeVirtualApiKey,
+}) => {
+  // Any other column set takes the generic path, which PostgreSQL plans again
+  // on every call: a column the proxy starts writing belongs in the shape.
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const user = await makeUser();
+  const key = await makeVirtualApiKey(organization.id);
+  const usage = { inputTokens: 7, outputTokens: 3 };
+  const record = buildInteractionRecord({
+    agent: agent as unknown as GatewayAgent,
+    billingAttribution: {
+      organizationId: organization.id,
+      environmentId: null,
+      entities: [],
+    },
+    authMethod: "passthrough_virtual_key",
+    billingMode: "metered",
+    userId: user.id,
+    passthroughVirtualKeyId: key.id,
+    sessionId: null,
+    sessionSource: null,
+    source: "api",
+    providerType: "openai:chatCompletions",
+    request: { model: "synthetic", messages: [] },
+    processedRequest: { model: "synthetic", messages: [] },
+    response: { id: "synthetic", object: "chat.completion", choices: [] },
+    actualModel: "synthetic",
+    usage,
+    costs: await calculateInteractionCosts({
+      actualModel: "synthetic",
+      providerName: "openai",
+      usage,
+    }),
+  });
+  const append = vi.spyOn(InteractionUserActivityModel, "appendReturningKey");
+  // What persistProxyInteraction adds before it records the row.
+  await InteractionModel.record({
+    ...record,
+    attributionLabels: {},
+    durationMs: 12,
+  });
+  const columns = getTableColumns(schema.interactionsTable);
+  const written = Object.entries(append.mock.calls[0][0])
+    .filter(([, value]) => value !== undefined)
+    .map(([name]) => columns[name as keyof typeof columns].name)
+    .filter(
+      (name) =>
+        !["virtual_key_id", "passthrough_virtual_key_id"].includes(name),
+    )
+    .sort();
+  const {
+    rows: [{ source }],
+  } = await db.execute<{ source: string }>(
+    sql`SELECT prosrc AS source FROM pg_proc WHERE proname = 'interaction_user_activity_append'`,
+  );
+  const shape = /payload_columns = ARRAY\[([^\]]*)\]/.exec(source)?.[1] ?? "";
+  expect(written).toEqual(
+    [...shape.matchAll(/'([a-z0-9_]+)'/g)].map(([, name]) => name),
+  );
 });
 
 test("append rejects unsupported columns and encodings instead of silently discarding fields", async () => {

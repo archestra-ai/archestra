@@ -5,6 +5,8 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
   AgentModel,
+  AgentRuntimeUserAccountModel,
+  LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
@@ -308,6 +310,75 @@ describe("a2a v2 task methods", () => {
     expect(response.json().error).toMatchObject({
       code: -32602,
       message: expect.stringContaining("expects the Anthropic API"),
+    });
+    expect(mockRunTaskInAgentRuntime).not.toHaveBeenCalled();
+  });
+
+  test("rejects a streaming runtime run on the caller's own stale account choice before opening SSE", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "openai-test-key" } });
+    const providerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    const model = await ModelModel.create({
+      externalId: "openai/gpt-a2a-account-test",
+      provider: "openai",
+      modelId: "gpt-a2a-account-test",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      model.id,
+    ]);
+    // The agent sets no connection of its own: each person picks theirs.
+    await AgentModel.update(agentId, {
+      runtime: {
+        image: "example.invalid/runtime-agent:test",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+        // Each person chooses, so the caller's own choice is the run's account.
+        accountLock: null,
+      },
+    });
+    // The caller picked a connection and its model, and the connection was
+    // removed since: their run, and only theirs, must stop with the "choose
+    // again" message.
+    await AgentRuntimeUserAccountModel.upsert({
+      agentId,
+      userId,
+      authentication: "provider",
+      llmApiKeyId: providerKey.id,
+      modelId: model.id,
+    });
+    await LlmProviderApiKeyModel.delete(providerKey.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v2/a2a/${agentId}`,
+      headers: { authorization: "Bearer test-token" },
+      payload: jsonRpc(92, "SendStreamingMessage", {
+        message: userMessage("start on a stale account"),
+      }),
+    });
+
+    expect(response.headers["content-type"]).not.toContain("text/event-stream");
+    expect(response.json().error).toMatchObject({
+      code: -32602,
+      message: expect.stringContaining(
+        "Your own account for this agent no longer works. The connection you chose no longer exists. Choose your account again.",
+      ),
     });
     expect(mockRunTaskInAgentRuntime).not.toHaveBeenCalled();
   });

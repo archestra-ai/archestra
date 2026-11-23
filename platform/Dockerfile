@@ -10,7 +10,6 @@ ARG DAGGER_VERSION=v0.21.11
 ARG DAGGER_COMMIT=631cdb609aaddc0037c2ba713e7642cadf645ff4
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
-
 FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-builder-base
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
@@ -52,8 +51,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod edit -go=1.25.11 && \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
     go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
-    # CVE-2026-34986 and CVE-2026-116587: patched go-jose JWE/JWK parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.6 && \
+    # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
+    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
     # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
     go get github.com/moby/go-archive@v0.3.0 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
@@ -94,8 +93,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
-    # CVE-2026-34986 and CVE-2026-116587: patched go-jose JWE/JWK parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.6 && \
+    # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
+    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
     # cve-2026-71556: go-git link following fixed in >= 5.19.2
     go get github.com/go-git/go-git/v5@v5.19.2 && \
@@ -123,7 +122,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
     # cve-2026-95837: containerd improper privilege management (HIGH) fixed in >= 2.2.7
-    go get github.com/containerd/containerd/v2@v2.2.7 && \
+    # CVE-2026-95839: containerd uncaught exception (HIGH) fixed in >= 2.2.10
+    go get github.com/containerd/containerd/v2@v2.2.10 && \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
@@ -172,7 +172,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # on every boot (KinD recreates its node each run and its containerd cannot see
 # the host Docker image cache). tagged to match the engine ref the rendered
 # manifest uses, so imagePullPolicy: IfNotPresent finds it locally.
-FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS dagger-engine-image
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS dagger-engine-image
 ARG TARGETARCH
 ARG DAGGER_VERSION
 RUN apk add --no-cache skopeo
@@ -221,7 +221,7 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
 # The script uses paths relative to / so that
 # .github/scripts/test_archestra_cli_image_stage.py can run it in a directory
 # of its own.
-FROM --platform=$BUILDPLATFORM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS archestra-cli-release
+FROM --platform=$BUILDPLATFORM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS archestra-cli-release
 WORKDIR /
 COPY archestra-cli/release.lock.json ./release.lock.json
 RUN <<'ARCHESTRA_CLI_RELEASE'
@@ -286,7 +286,7 @@ rm "$sums"
 printf '{ "version": "%s" }\n' "$version" > manifest.json
 ARCHESTRA_CLI_RELEASE
 
-FROM node:24.22.2-alpine3.23@sha256:0efee1e068d21f6edcab7fa8c962fc4ecd50d4e28727bc23963379b63ee318ab AS base
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"
@@ -506,15 +506,38 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 COPY docker/scripts/prune-backend-deploy.mjs /tmp/prune-backend-deploy.mjs
 RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 
-# <----- Final unified stage (slim: everything except the Dagger Engine tar) ----->
-# `unified-slim` is the complete, runnable platform image minus the ~352MB
-# dagger-engine.tar, which only the quickstart docker-run path consumes (the
-# entrypoint kind-loads it into the embedded KinD cluster). CI e2e shards build
-# --target unified-slim so they never pull or kind-load that dead weight; the
-# default `unified` stage below layers the tar back on top for quickstart and
-# published release images.
-FROM base AS unified-slim
+# <----- Runtime stage (shared by both published images) ----->
+# Everything both images run: the backend, the frontend, the Node supervisor
+# (docker/scripts/supervisor.mjs), git, kubectl and the Dagger CLI. Two images
+# are built on it:
+#   unified-slim  the Kubernetes image (archestra/platform:<version>-slim, the
+#                 Helm chart's default): no bundled PostgreSQL, no quickstart.
+#   unified       the docker run image (archestra/platform:<version>): adds
+#                 PostgreSQL and the quickstart's docker CLI, KinD, manifests and
+#                 Dagger Engine archive.
+# Both share these layers, so the second costs one build of its own layers and
+# a registry stores and serves the shared ones once.
+#
+# The base is Docker's hardened Node image (https://docs.docker.com/dhi/),
+# built by Docker from Docker's package builds with its own provenance, SBOM
+# and VEX. Its -dev variant here, for apk and the packages below; the docker
+# run image also needs its shell. The Kubernetes image is the distroless
+# variant with this stage's files copied on (unified-slim).
+# Same Node release and Alpine branch as the builder stages above, so their
+# native addons load here. Pulling it needs a Docker login (`docker login
+# dhi.io`, any Docker account); CI logs in where it builds this file
+# (.github/actions/dhi-login). The organization's base-image check verifies
+# its signature with Docker's signing key (supply-chain-policy/base-images.toml
+# in archestra-ai/.github).
+# The same hardened Node release without the -dev tools: no shell, no apk, only
+# node and its libraries. The Kubernetes image is built on it (unified-slim).
+# Keep its digest on the same Node release as the -dev pin below.
+FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb4c1b88473096ec9c3660345cb54 AS runtime-base-distroless
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:abe5e2eb4166f422dea213c4181c1ab069f63bb5d4b4bb0878abba2039fefec6 AS runtime
 WORKDIR /app
+# The hardened image runs as UID 1000 by default. This stage installs packages,
+# and the full image starts as root (see the archestra user below).
+USER root
 
 ARG VERSION=dev
 ARG TARGETARCH
@@ -525,7 +548,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 ENV ARCHESTRA_VERSION=${VERSION}
 # 127.0.0.1, not `localhost`: the API and the Next.js server both bind IPv4
-# only (backend config.ts pins the API to 0.0.0.0; supervisord starts Next with
+# only (backend config.ts pins the API to 0.0.0.0; supervisor.mjs starts Next with
 # HOSTNAME=0.0.0.0), while `localhost` resolves to ::1 first — getaddrinfo
 # applies RFC 6724 precedence regardless of /etc/hosts order, and musl has no
 # /etc/gai.conf to retune it. Naming it would start every hop to the backend on
@@ -549,7 +572,7 @@ ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
 # Idle keep-alive window (ms) for both HTTP servers in this image: the Fastify
-# API reads it directly, and supervisord maps it onto KEEP_ALIVE_TIMEOUT for the
+# API reads it directly, and supervisor.mjs maps it onto KEEP_ALIVE_TIMEOUT for the
 # Next.js standalone server, which otherwise falls back to Node's 5s default.
 # It has to stay above the keep-alive timeout of whatever proxies the container
 # (a cloud load balancer holds pooled connections far longer than 5s), so
@@ -570,58 +593,42 @@ COPY docker/certs/aws-rds-global-bundle.pem /tmp/aws-rds-ca.pem
 COPY docker/certs/gcloud-sql-global.pem /tmp/gcloud-sql-ca.pem
 
 RUN apk --no-cache upgrade && \
-    # CVE-2026-6276, CVE-2026-5773: curl/libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
-    # The pinned node:24-alpine3.23 base ships curl 8.19.0-r0. The bare `apk upgrade` above
-    # would pick up the fix, but this RUN layer is Docker-cached on its instruction text and
-    # never re-ran against the newer index — pin curl/libcurl explicitly so the fixed version
-    # is guaranteed (and adding this line busts the stale cache).
-    apk add --no-cache --upgrade "curl>=8.20.0-r0" "libcurl>=8.20.0-r0" && \
+    # CVE-2026-6276, CVE-2026-5773: libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
+    # The bare `apk upgrade` above would pick up fixes, but this RUN layer is
+    # Docker-cached on its instruction text and never re-runs against a newer
+    # index — so the floors below guarantee the fixed versions whatever the cache holds.
+    apk add --no-cache --upgrade "libcurl>=8.20.0-r0" && \
     # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,
     # CVE-2026-14457, CVE-2026-14456: OpenSSL vulnerabilities (HIGH) fixed in 3.5.8-r0.
-    # The pinned base ships 3.5.6-r0 and only the libraries are installed here — the
-    # `openssl` CLI package is not — so the floors go on libcrypto3/libssl3. Same stale-layer
-    # hazard as the curl pin above: the bare `apk upgrade` cannot lift a Docker-cached layer,
-    # so the explicit floors both guarantee the fixed version and bust the cache.
+    # Only the libraries are installed here (the `openssl` CLI package is not), so the
+    # floors go on libcrypto3/libssl3.
     apk add --no-cache --upgrade "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
     # CVE-2026-4738 (zlib, CRITICAL, fixed in 1.4-r0) and CVE-2026-107891 (musl, HIGH,
-    # fixed in 1.2.5-r24): same stale-layer hazard, so floor both explicitly.
+    # fixed in 1.2.5-r24).
     apk add --no-cache --upgrade "zlib>=1.4-r0" "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
-    # Install PostgreSQL 18 with its contrib modules, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
-    #
-    # PostgreSQL 18 because postgresql-pgvector is built for it. Contrib carries
-    # pg_trgm, which migrations 0116/0378 use for the conversation and user
-    # search indexes (they skip the indexes when the extension is missing).
-    #
-    # 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
-    # CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
-    # CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the curl
-    # pin: the bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both
-    # guarantee the fixed versions and bust the cache.
-    apk add --no-cache --upgrade "postgresql18>=18.5-r0" "postgresql18-contrib>=18.5-r0" \
-        postgresql-pgvector su-exec git git-daemon && \
+    apk add --no-cache git git-daemon && \
+    # Nothing here uses npm, yarn or corepack (pnpm runs only in the builder
+    # stages; DB migrations call drizzle-kit directly), and they bring extra
+    # dependencies and vulnerabilities. The hardened base installs them as
+    # packages.
+    for package in npm yarn corepack; do \
+        if apk info --installed "$package" >/dev/null; then apk del --no-cache "$package"; fi; \
+    done && \
+    rm -rf /root/.npm /root/.node-gyp && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
-    # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
-    # See https://github.com/grafana/grafana-image-renderer/pull/625
-    rm -rf /usr/local/lib/node_modules/npm && \
-    rm -rf /usr/local/bin/npm && \
-    rm -rf /usr/local/bin/npx && \
-    rm -rf /root/.npm && \
-    rm -rf /root/.node-gyp && \
-    mkdir -p /var/log/supervisor && \
+    ! command -v npm && ! command -v yarn && ! command -v corepack && \
     # Clean up
     rm -rf /tmp/*
 
-# install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
-# Build with Go 1.26.9 for the October 2026 stdlib security fixes.
-COPY --from=docker-cli-builder /docker-binary /usr/local/bin/docker
-COPY --from=kind-builder /kind-binary /usr/local/bin/kind
+# kubectl: the Dagger CLI reaches the code sandbox's engine through its
+# kube-pod:// connection, which runs kubectl exec.
 COPY --from=kubectl-builder /kubectl-binary /usr/local/bin/kubectl
-RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
+RUN chmod +x /usr/local/bin/kubectl
 # TODO: Once KinD releases a version compiled with Go >= 1.25.11, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
@@ -649,84 +656,29 @@ RUN chmod +x /usr/local/bin/dagger
 # point the SDK at the baked-in CLI so it never downloads one at runtime.
 ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 
-# CVE-2026-6100 (CRITICAL) plus CVE-2026-15308, CVE-2026-11972, CVE-2026-11940, CVE-2026-4786
-# and CVE-2026-4519 (HIGH) in python3, all fixed in 3.12.14-r0. python3 arrives transitively via
-# supervisor, so pin an explicit floor here — the bare `apk upgrade` earlier in this stage runs
-# before python3 is installed and cannot lift it.
-# Expat 2.10.0-r0 fixes the high-severity XML parser advisories. It arrives
-# transitively with python3, so require the patched version explicitly.
-RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.10.0-r0" && \
-    # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
-    # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
-    rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \
-           /usr/lib/python*/site-packages/setuptools/_vendor/wheel-*.dist-info \
-           /usr/lib/python*/ensurepip && \
-    # CVE-2026-23949: jaraco-context 5.3.0 (fixed in 6.1.0). Vendored inside py3-setuptools
-    # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
-    rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/jaraco/context.py \
-           /usr/lib/python*/site-packages/setuptools/_vendor/jaraco.context-*.dist-info
 
-# CVE-2026-23949: jaraco.context 5.3.0, also vendored inside py3-setuptools.
-# Unlike the vendored wheel above it can't be deleted — jaraco.text imports
-# jaraco.context at setuptools/pkg_resources import time — so replace it with
-# the fixed 6.1.0 wheel from PyPI, pinned by sha256. 6.1.0 ships jaraco/context
-# as a package directory (5.3.0 was a single context.py module), hence the
-# directory copy.
-RUN wget -O /tmp/jaraco_context-6.1.0-py3-none-any.whl \
-        "https://files.pythonhosted.org/packages/8d/48/aa685dbf1024c7bd82bede569e3a85f82c32fd3d79ba5fea578f0159571a/jaraco_context-6.1.0-py3-none-any.whl" && \
-    echo "a43b5ed85815223d0d3cfdb6d7ca0d2bc8946f28f30b6f3216bda070f68badda  /tmp/jaraco_context-6.1.0-py3-none-any.whl" | sha256sum -c - && \
-    VENDOR=$(echo /usr/lib/python3*/site-packages/setuptools/_vendor) && \
-    python3 -m zipfile -e /tmp/jaraco_context-6.1.0-py3-none-any.whl /tmp/jaraco_context && \
-    rm -rf "$VENDOR"/jaraco/context.py \
-           "$VENDOR"/jaraco/__pycache__/context.* \
-           "$VENDOR"/jaraco.context-*.dist-info && \
-    cp -r /tmp/jaraco_context/jaraco/context "$VENDOR"/jaraco/context && \
-    cp -r /tmp/jaraco_context/jaraco_context-6.1.0.dist-info "$VENDOR"/ && \
-    rm -rf /tmp/jaraco_context /tmp/jaraco_context-6.1.0-py3-none-any.whl && \
-    # sanity check: the swapped-in module must keep the setuptools import chain intact
-    python3 -c "import pkg_resources, setuptools" && \
-    supervisord --version
+# The image starts as root, which the quickstart needs (the Docker socket, the
+# embedded PostgreSQL). It can also run as the archestra user (UID 10001), as
+# the Helm chart's `archestra.runAsNonRoot` does, or as an arbitrary UID in
+# group 0 (OpenShift). The paths those processes write belong to UID 10001 and
+# are group-0 writable; any other path in the image stays read-only to them.
+RUN addgroup -g 10001 archestra && \
+    adduser -D -u 10001 -G archestra -h /home/archestra -s /sbin/nologin archestra && \
+    mkdir -p /app/data /run/archestra /home/archestra && \
+    chown 10001:0 /app/data /run/archestra /home/archestra && \
+    chmod 0775 /app/data /run/archestra /home/archestra
 
-# Create postgres directories (user already exists from postgresql package)
-RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
-    chown -R postgres:postgres /var/lib/postgresql /run/postgresql
-
-# Mark PostgreSQL data directory as a volume for data persistence
-VOLUME /var/lib/postgresql/data /app/data
+VOLUME /app/data
 
 # Runtime files. The backend and its full node_modules arrive as a single
 # self-contained tree from the builder's `pnpm deploy` output (copied below),
 # and the frontend ships as Next's standalone server, so no package manifests
 # or `pnpm install` are needed in this stage.
-COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
-COPY docker/scripts/shutdown-budget.mjs /app/shutdown-budget.mjs
-COPY docker/scripts/start-backend.sh /app/start-backend.sh
-# slim Dagger Engine manifest applied into the embedded KinD cluster in quickstart
-# mode; backs the skill sandbox / code runtime (archestra__run_command and friends).
-# Real deployments provision engines in code instead — the quickstart runs this one
-# and points the backend at it through ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST.
-# The engine IMAGE archive itself is added only in the final `unified` stage below —
-# the entrypoint falls back to a registry pull when the tar is absent.
-COPY docker/dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
-# Upstream Agent Sandbox controller, applied into the embedded KinD cluster in
-# quickstart mode: every Agent Runtime run is one of its Sandbox resources. Real deployments install it themselves;
-# keep this version in step with the Agent Runtime prerequisites in
-# docs/pages/platform-deployment.md.
-ARG AGENT_SANDBOX_VERSION=v1.0.1
-RUN wget -O /app/agent-sandbox.quickstart.yaml \
-        "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/sandbox-with-extensions.yaml" && \
-    echo "460c1e0272c793c98de82482aed57db1bddb0afcb979c19325dc6cc52289c44c  /app/agent-sandbox.quickstart.yaml" | sha256sum -c -
-COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
-COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
+COPY docker/scripts/docker-banner.mjs docker/scripts/entrypoint.mjs \
+     docker/scripts/shutdown-budget.mjs docker/scripts/start-backend.mjs \
+     docker/scripts/supervisor.mjs docker/scripts/with-vault-env.mjs /app/
 
-# CVE-2026-12151: corepack's cached pnpm bundles undici 6.26.0 (<6.27.0) at
-# /root/.cache/node/corepack/.../dist/node_modules/undici — pnpm overrides cannot
-# reach it. pnpm is only needed in the builder stage (the `pnpm build` +
-# `pnpm deploy` there); this runtime stage runs no pnpm at all — DB migrations
-# call drizzle-kit directly (see docker/supervisord/supervisord.conf) — so drop
-# corepack/pnpm from the final image entirely.
-RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
 
 # Copy the fully-assembled backend from the builder's `pnpm deploy` output.
 # /prod/backend contains backend/dist, scripts, drizzle.config.ts and the
@@ -754,6 +706,10 @@ COPY --from=archestra-cli-release /out/ ./archestra-cli/
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public
 COPY --from=builder /app/frontend/.next/standalone ./
+# Next.js writes optimized images here at runtime, also as a non-root user.
+RUN mkdir -p /app/frontend/.next/cache && \
+    chown 10001:0 /app/frontend/.next/cache && \
+    chmod 0775 /app/frontend/.next/cache
 
 # Copy previous version's static assets first (from CI build context)
 # Content-hashed filenames ensure no conflicts between versions
@@ -767,10 +723,9 @@ COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 COPY --from=builder /app/frontend/.next/static /static-assets-source/
 
 RUN chmod +x /docker-entrypoint.sh
-RUN chmod +x /app/docker-banner.sh /app/start-backend.sh
 
 # Expose ports
-EXPOSE 5432 9000 9050 3000
+EXPOSE 9000 9050 3000
 
 # Health check. Probes a static public file rather than `/`: `/` redirects to
 # /chat, and rendering a page fetches appearance settings from the backend,
@@ -780,13 +735,107 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
-# <----- Final unified stage (default target: quickstart / release) ----->
-# unified-slim plus the pre-baked Dagger Engine docker-archive. Quickstart
-# kind-loads it into the embedded node at boot so the engine starts offline
-# instead of pulling ~352MB from the registry on every run (KinD recreates its
-# node each boot and its containerd cannot see the host Docker image cache) —
-# see docker-entrypoint.sh and the commit that introduced the tar (#5275).
-# This MUST remain the last stage: builds without --target (releases,
-# quickstart CI, fork PRs, local docker build) get the full image.
-FROM unified-slim AS unified
+# Nothing at runtime uses apk itself, and a package manager in a running
+# container only helps an intruder. `apk del` removes apk last and keeps its
+# database, so image scanners still list every OS package. The docker run
+# image below runs it as its last step, after its own packages; the Kubernetes
+# image has no apk to begin with.
+
+# <----- Kubernetes image (archestra/platform:<version>-slim) ----->
+# The Helm chart's default image. The database is external and the cluster is
+# real, so it carries no PostgreSQL and none of the quickstart's tooling. It is
+# Docker's distroless hardened Node image plus the files the platform runs
+# (docker/scripts/build-slim-rootfs.sh): no shell and no package manager, so a
+# compromised process has neither to work with, and there are far fewer
+# packages to patch. Its entrypoint and scripts are Node (entrypoint.mjs); the
+# entrypoint says which image to use when started without a database URL or
+# with ARCHESTRA_QUICKSTART. CI's Kubernetes e2e jobs build this target.
+#
+# Operators run commands with node, which is on PATH:
+#   kubectl exec deploy/archestra-platform -- node /app/backend/dist/standalone-scripts/reset-user-password.mjs --email you@example.com
+FROM runtime AS slim-rootfs
+COPY --from=runtime-base-distroless /lib/apk/db/installed /tmp/base/installed
+COPY --from=runtime-base-distroless /etc/passwd /etc/group /tmp/base/
+COPY docker/scripts/build-slim-rootfs.sh /tmp/build-slim-rootfs.sh
+# scanelf (pax-utils) lists the shared libraries each binary loads.
+RUN apk add --no-cache pax-utils && \
+    ROOTFS=/rootfs BASE=/tmp/base sh /tmp/build-slim-rootfs.sh
+
+FROM runtime-base-distroless AS unified-slim
+ARG VERSION=dev
+COPY --from=slim-rootfs /rootfs/ /
+# The runtime stage's environment, which a new base does not inherit. Keep the
+# two lists equal (.github/scripts/test_platform_dockerfile.py checks it).
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV ARCHESTRA_VERSION=${VERSION}
+ENV ARCHESTRA_INTERNAL_API_BASE_URL="http://127.0.0.1:9000"
+ENV ARCHESTRA_API_BASE_URL=""
+ENV ARCHESTRA_ANALYTICS=""
+ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
+ENV ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING="false"
+ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
+ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
+ENV ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS="620000"
+ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
+ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
+WORKDIR /app
+VOLUME /app/data
+EXPOSE 9000 9050 3000
+# Same probe as the docker run image, without wget.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD ["node", "-e", "fetch('http://127.0.0.1:3000/default-favicon.ico', { signal: AbortSignal.timeout(8000) }).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+# Nothing in this image needs root, so it runs as the archestra user wherever
+# it starts, not only under the chart's securityContext. Numeric, so
+# Kubernetes can verify runAsNonRoot.
+USER 10001
+ENTRYPOINT ["node", "/app/entrypoint.mjs"]
+
+# <----- docker run image (archestra/platform:<version>, default target) ----->
+# The runtime plus the bundled PostgreSQL and the quickstart. This MUST remain
+# the last stage: builds without --target (releases, quickstart CI, fork PRs,
+# local docker build) get the full image.
+FROM runtime AS unified
+# Install PostgreSQL 18, pg_trgm (contrib), and pgvector from the hardened
+# Alpine repository used by the Node base. Keep the major version and data
+# directory unchanged so existing quickstart volumes remain readable. Restrict
+# this install to DHI: the public Alpine community pgvector package is older.
+RUN printf '%s\n' 'https://dhi.io/apk/alpine/v3.23/main' > /tmp/dhi-postgres-repositories && \
+    apk --repositories-file /tmp/dhi-postgres-repositories add --no-cache \
+        postgresql18=18.7-r0 postgresql18-contrib=18.7-r0 \
+        pgvector-0-pg18=0.8.7-r1 su-exec=0.3-r0 && \
+    rm /tmp/dhi-postgres-repositories && \
+    # The postgres user comes with the package.
+    mkdir -p /var/lib/postgresql/data /run/postgresql && \
+    chown -R postgres:postgres /var/lib/postgresql /run/postgresql
+VOLUME /var/lib/postgresql/data
+EXPOSE 5432
+
+# The quickstart's embedded KinD cluster: the docker CLI drives the host's
+# Docker through the mounted socket. Built with Go 1.26.9 for the October 2026
+# stdlib security fixes.
+COPY --from=docker-cli-builder /docker-binary /usr/local/bin/docker
+COPY --from=kind-builder /kind-binary /usr/local/bin/kind
+RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
+# Dagger Engine manifest applied into the embedded KinD cluster; backs the
+# skill sandbox / code runtime (archestra__run_command and friends). Real
+# deployments provision engines in code instead — the quickstart runs this one
+# and points the backend at it through ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST.
+COPY docker/dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
+# Upstream Agent Sandbox controller, applied into the embedded KinD cluster in
+# quickstart mode: every Agent Runtime run is one of its Sandbox resources. Real deployments install it themselves;
+# keep this version in step with the Agent Runtime prerequisites in
+# docs/pages/platform-deployment.md.
+ARG AGENT_SANDBOX_VERSION=v1.0.1
+RUN wget -O /app/agent-sandbox.quickstart.yaml \
+        "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/sandbox-with-extensions.yaml" && \
+    echo "460c1e0272c793c98de82482aed57db1bddb0afcb979c19325dc6cc52289c44c  /app/agent-sandbox.quickstart.yaml" | sha256sum -c -
+# The pre-baked Dagger Engine docker-archive. Quickstart kind-loads it into the
+# embedded node at boot so the engine starts offline instead of pulling ~352MB
+# from the registry on every run (KinD recreates its node each boot and its
+# containerd cannot see the host Docker image cache) — see docker-entrypoint.sh
+# and the commit that introduced the tar (#5275).
 COPY --from=dagger-engine-image /dagger-engine.tar /app/dagger-engine.tar
+RUN apk del --no-cache apk-tools && \
+    test -s /lib/apk/db/installed && \
+    ! test -e /usr/bin/curl && ! test -e /sbin/apk

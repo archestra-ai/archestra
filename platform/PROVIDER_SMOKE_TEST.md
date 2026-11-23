@@ -74,12 +74,12 @@ Before starting, verify the development environment is running:
 
 - Chat invokes `list_issues` or `search_issues` tool
 - Returns a meaningful summary of issues (titles, counts, categories)
-- Tool calls visible in LLM Proxy Logs (`http://localhost:3000/llm/logs`)
+- Tool calls visible in Logs (`http://localhost:3000/logs?type=llm`)
 
 ### Verification
 
-1. Check LLM Proxy Logs for the request
-2. Verify tool calls are recorded in MCP Gateway Logs (`http://localhost:3000/mcp/logs`)
+1. Check Logs for the request
+2. Verify tool calls are recorded under the MCP Gateway type in Logs (`http://localhost:3000/logs?type=mcp`)
 3. Confirm response contains actual issue data
 
 ---

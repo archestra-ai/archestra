@@ -162,6 +162,60 @@ describe("buildAppCapabilityContext", () => {
     expect(names).toContain("default__thing");
   });
 
+  test("a name in the app's environment wins over the same name in Default", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    const appEnv = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: `Prod ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    // Default is created first, so newest-first would pick it without the
+    // environment preference.
+    const defaultCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+    await makeMcpServer({ catalogId: defaultCatalog.id, scope: "org" });
+    await makeTool({
+      name: "weather__forecast",
+      description: "default forecast",
+      catalogId: defaultCatalog.id,
+    });
+    const appEnvCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      environmentId: appEnv.id,
+    });
+    await makeMcpServer({ catalogId: appEnvCatalog.id, scope: "org" });
+    await makeTool({
+      name: "weather__forecast",
+      description: "prod forecast",
+      catalogId: appEnvCatalog.id,
+    });
+
+    const context = await buildAppCapabilityContext({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      environmentId: appEnv.id,
+    });
+
+    expect(
+      context.tools.filter((tool) => tool.name === "weather__forecast"),
+    ).toEqual([{ name: "weather__forecast", description: "prod forecast" }]);
+  });
+
   test("describes the window.archestra SDK surface", async ({
     makeOrganization,
     makeUser,

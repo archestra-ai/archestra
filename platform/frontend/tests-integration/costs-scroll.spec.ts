@@ -61,7 +61,8 @@ test("changing a Costs range preserves the scrolled page through loading and his
     { method: "get", url: "/api/limits", body: [] },
     { method: "get", url: "/api/default-user-limits", body: [] },
   ]);
-  await page.getByRole("link", { name: "Limits", exact: true }).click();
+  // Costs has no tabs of its own: Limits opens from the Cost Controls row.
+  await page.getByRole("link", { name: /^Cost Controls/ }).click();
   await expect(page).toHaveURL(/\/llm\/limits/);
   await expect(
     page.getByRole("heading", { name: "Limits", exact: true }),

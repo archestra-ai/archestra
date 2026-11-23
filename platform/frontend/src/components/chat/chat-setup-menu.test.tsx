@@ -647,6 +647,85 @@ describe("ChatSetupMenu", () => {
   });
 });
 
+describe("ChatSetupMenu behind one form field", () => {
+  const formProps: Partial<ChatSetupMenuProps> = {
+    conversationId: undefined,
+    agentId: null,
+    onAgentChange: undefined,
+    onProviderChange: undefined,
+    suppressAutoSelect: true,
+  };
+
+  it("lists only keys, only the caller's, offers no sign-in, and closes on a choice", async () => {
+    const user = userEvent.setup();
+    const onApiKeyChange = vi.fn();
+    const props = renderMenu({
+      ...formProps,
+      onApiKeyChange,
+      only: "key",
+      keyFilter: (key) => key.scope === "team",
+      keyNote: "1 other is hidden.",
+    });
+
+    // One setting, so no tabs and no way to the models from here.
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /Qwen3 32B/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Team vLLM/ })).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: /Org vLLM/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Personal subscriptions"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("1 other is hidden.")).toBeVisible();
+    expect(screen.getByPlaceholderText("Search keys…")).toBeVisible();
+
+    await user.click(screen.getByRole("option", { name: /Team vLLM/ }));
+    expect(onApiKeyChange).toHaveBeenCalledWith("key-team");
+    expect(props.close).toHaveBeenCalledOnce();
+  });
+
+  it("adds a key from the key list, even while it is empty", async () => {
+    const user = userEvent.setup();
+    const onAddKey = vi.fn();
+    const props = renderMenu({
+      ...formProps,
+      apiKeyId: null,
+      only: "key",
+      keyFilter: () => false,
+      onAddKey,
+    });
+
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add a key" }));
+    expect(onAddKey).toHaveBeenCalledOnce();
+    expect(props.close).toHaveBeenCalledOnce();
+  });
+
+  it("lists only models, and only those that pass the caller's filter", async () => {
+    const user = userEvent.setup();
+    const props = renderMenu({
+      ...formProps,
+      apiKeyId: "key-team",
+      only: "model",
+      modelFilter: (model) => model.dbId === "model-plain",
+    });
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /Team vLLM/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /Qwen3 32B/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Llama 3 8B/ }));
+    expect(props.onModelChange).toHaveBeenCalledWith("model-plain");
+    expect(props.close).toHaveBeenCalledOnce();
+  });
+});
+
 function renderMenu(overrides: Partial<ChatSetupMenuProps> = {}) {
   const props = menuProps(overrides);
   render(<ChatSetupMenu {...props} />);

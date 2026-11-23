@@ -1430,6 +1430,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 role: z.string(),
                 provider: z.string().nullable(),
                 invitationId: z.string().nullable(),
+                scimProvisioned: z
+                  .boolean()
+                  .describe(
+                    "Whether an identity provider created the user through SCIM provisioning.",
+                  ),
               }),
             ),
           }),
@@ -1474,6 +1479,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           email: users.email,
           image: users.image,
           role: members.role,
+          scimProvisioned: users.scimProvisioned,
           invitationId: invitation.id,
           invitationStatus: invitation.status,
         })
@@ -1503,6 +1509,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           role: row.role,
           provider: parts.length === 2 ? parts[1] : null,
           invitationId: row.invitationId ?? null,
+          scimProvisioned: row.scimProvisioned !== null,
         };
       });
 

@@ -24,7 +24,7 @@ export const LOOPBACK_HOST = "127.0.0.1";
 /**
  * Where the backend API is reachable from the frontend server when
  * `ARCHESTRA_INTERNAL_API_BASE_URL` is not set. Both processes always share a
- * container — the unified image runs them under one supervisord, and the Helm
+ * container — the unified image runs them under one supervisor, and the Helm
  * chart exposes ports 3000 and 9000 on a single container — so the loopback
  * literal is correct everywhere.
  *

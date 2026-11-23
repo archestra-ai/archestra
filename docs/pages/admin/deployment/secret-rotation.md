@@ -63,7 +63,7 @@ API keys and MCP gateway OAuth tokens keep working. Archestra replaces its token
 
    ```bash
    kubectl -n archestra exec deploy/archestra-platform -- \
-     sh -c 'cd /app/backend && node dist/standalone-scripts/reencrypt-secrets.mjs'
+     node /app/backend/dist/standalone-scripts/reencrypt-secrets.mjs
    ```
 
    Go on only when it prints `unreadable=0` or `nothing to re-encrypt`.

@@ -31,7 +31,10 @@ import {
 } from "vitest";
 import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
 import { postConnected } from "@/lib/connect-signal";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
@@ -822,18 +825,20 @@ describe("ConnectPage (no connect request)", () => {
   it.each([
     true,
     false,
-  ])("shows the Statistics link only to log admins (%s)", (allowed) => {
+  ])("shows the Statistics link only to client connection admins (%s)", (allowed) => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
-          data: permissions.log?.includes("admin") ? allowed : false,
+          data: permissions.clientConnection?.includes("admin")
+            ? allowed
+            : false,
         }) as ReturnType<typeof useHasPermissions>,
     );
     mockOrganization({});
     render(<ConnectionPage />);
     const link = screen.queryByRole("link", { name: "Statistics" });
     if (allowed) {
-      expect(link).toHaveAttribute("href", "/connections/logs");
+      expect(link).toHaveAttribute("href", "/adoption");
     } else {
       expect(link).not.toBeInTheDocument();
     }
@@ -1551,6 +1556,17 @@ describe("ConnectPage plugins", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "plugin",
+          scope: "*",
+          action: "use",
+        },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useConfig).mockReturnValue({
       data: { features: { plugins: true } },
     } as unknown as ReturnType<typeof useConfig>);

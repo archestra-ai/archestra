@@ -9,7 +9,7 @@ lastUpdated: 2026-11-09
 
 Enforce two-factor authentication (2FA) and session expiration for email/password accounts, and recover locked-out users from the command line.
 
-Two-factor authentication and organization session policies are enterprise features. See [Pricing Model](/docs/get-started/pricing-model).
+Two-factor authentication and organization session policies are enterprise features. See [Pricing](/pricing).
 
 ## Two-Factor Authentication
 
@@ -55,17 +55,19 @@ Run the reset script inside the platform deployment pod:
 
 ```bash
 kubectl exec -it deploy/archestra-platform -- \
-  sh -c 'cd /app/backend && node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
+  node /app/backend/dist/standalone-scripts/reset-user-password.mjs --email user@example.com
 ```
+
+When the chart loads the database URL from Vault (`archestra.initContainers.vaultSecrets`), it is not in the pod's environment. Put `node /app/with-vault-env.mjs` in front of `node`, so the command loads those secrets first.
 
 ### Docker Quickstart
 
 Pass the database connection URL into the container command:
 
 ```bash
-docker exec -it <container> sh -c 'cd /app/backend && \
-  ARCHESTRA_DATABASE_URL=postgresql://user:password@localhost:5432/database \
-  node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
+docker exec -it \
+  -e ARCHESTRA_DATABASE_URL=postgresql://user:password@localhost:5432/database \
+  <container> node /app/backend/dist/standalone-scripts/reset-user-password.mjs --email user@example.com
 ```
 
 ### Script Flags

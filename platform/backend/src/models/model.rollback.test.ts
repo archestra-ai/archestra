@@ -1,5 +1,7 @@
 import { azureModelEvidence } from "@archestra/shared/azure-models";
 import { describe, expect, test } from "@/test";
+import type { CreateModel } from "@/types";
+import AgentModel from "./agent";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
 import ModelModel from "./model";
@@ -690,6 +692,84 @@ describe("ModelModel", () => {
     });
   });
 
+  describe("provider-published endpoints and reasoning levels", () => {
+    const row = (
+      overrides: Pick<
+        CreateModel,
+        "supportedEndpoints" | "supportedReasoningEfforts"
+      >,
+    ) => ({
+      externalId: "github-copilot/gpt-6.2",
+      provider: "github-copilot" as const,
+      modelId: "gpt-6.2",
+      inputModalities: ["text" as const],
+      outputModalities: ["text" as const],
+      lastSyncedAt: new Date(),
+      ...overrides,
+    });
+
+    test("a re-sync refreshes them, and a sync that says nothing keeps them", async () => {
+      await ModelModel.bulkUpsert([
+        row({
+          supportedEndpoints: ["/chat/completions"],
+          supportedReasoningEfforts: ["low", "medium", "high"],
+        }),
+      ]);
+      await ModelModel.bulkUpsert([
+        row({
+          supportedEndpoints: ["/chat/completions", "/responses"],
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        }),
+      ]);
+      let stored = await ModelModel.findByProviderAndModelId(
+        "github-copilot",
+        "gpt-6.2",
+      );
+      expect(stored?.supportedEndpoints).toEqual([
+        "/chat/completions",
+        "/responses",
+      ]);
+      expect(stored?.supportedReasoningEfforts).toEqual([
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+      ]);
+
+      await ModelModel.bulkUpsert([
+        row({ supportedEndpoints: null, supportedReasoningEfforts: null }),
+      ]);
+      stored = await ModelModel.findByProviderAndModelId(
+        "github-copilot",
+        "gpt-6.2",
+      );
+      expect(stored?.supportedEndpoints).toEqual([
+        "/chat/completions",
+        "/responses",
+      ]);
+      expect(stored?.supportedReasoningEfforts).toEqual([
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+      ]);
+    });
+
+    test("a full refresh resets them to what the provider reports now", async () => {
+      await ModelModel.bulkUpsert([
+        row({ supportedReasoningEfforts: ["low", "medium", "high"] }),
+      ]);
+      await ModelModel.bulkUpsertFull([
+        row({ supportedReasoningEfforts: null }),
+      ]);
+      const stored = await ModelModel.findByProviderAndModelId(
+        "github-copilot",
+        "gpt-6.2",
+      );
+      expect(stored?.supportedReasoningEfforts).toBeNull();
+    });
+  });
+
   describe("bulkUpsertFull", () => {
     test("overwrites an existing outputLength with the provider value", async () => {
       const model = {
@@ -1029,6 +1109,82 @@ describe("ModelModel", () => {
   });
 
   describe("deleteOrphanedModels", () => {
+    test("clears the models it deletes from the model each agent sets for a connection, and keeps the rest", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const [retired, kept] = await Promise.all(
+        ["retired-plan-model", "kept-plan-model"].map((modelId) =>
+          ModelModel.create({
+            externalId: `openai/${modelId}`,
+            provider: "openai",
+            modelId,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            lastSyncedAt: new Date(),
+          }),
+        ),
+      );
+      const [retiring, staying] = await Promise.all(
+        [retired, kept].map(async (model) => {
+          const key = await makeLlmProviderApiKey(org.id, secret.id, {
+            provider: "openai",
+          });
+          await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+            key.id,
+            [{ id: model.id, modelId: model.modelId }],
+            "openai",
+          );
+          return key;
+        }),
+      );
+      const runtime = {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_chat" as const,
+        backend: "kubernetes" as const,
+        steerMode: "pipe" as const,
+        privileged: false,
+        environment: null,
+        credentials: [],
+        ttlHours: null,
+        idleTimeoutMinutes: null,
+      };
+      const both = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        runtime: {
+          ...runtime,
+          connectionModels: {
+            [retiring.id]: retired.id,
+            [staying.id]: kept.id,
+          },
+        },
+      });
+      const onlyRetired = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        runtime: {
+          ...runtime,
+          connectionModels: { [retiring.id]: retired.id },
+        },
+      });
+
+      await LlmProviderApiKeyModel.delete(retiring.id);
+      expect(await ModelModel.deleteOrphanedModels()).toBe(1);
+
+      expect((await AgentModel.findById(both.id))?.runtime).toMatchObject({
+        connectionModels: { [staying.id]: kept.id },
+      });
+      const cleared = (await AgentModel.findById(onlyRetired.id))?.runtime;
+      expect(cleared).toMatchObject({ image: runtime.image });
+      expect(cleared).not.toHaveProperty("connectionModels");
+    });
+
     test("deletes provider-synced models used by chat after their last API key is deleted", async ({
       makeOrganization,
       makeSecret,
@@ -1168,6 +1324,191 @@ describe("ModelModel", () => {
       expect(capabilities.supportsToolCalling).toBe(true);
       expect(capabilities.pricePerMillionInput).toBe("5");
       expect(capabilities.pricePerMillionOutput).toBe("15");
+    });
+  });
+
+  describe("toCapabilities — what model-picker clients read", () => {
+    const createModel = (
+      overrides: Partial<Parameters<typeof ModelModel.create>[0]> & {
+        provider: Parameters<typeof ModelModel.create>[0]["provider"];
+        modelId: string;
+      },
+    ) =>
+      ModelModel.create({
+        externalId: `${overrides.provider}/${overrides.modelId}`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+        ...overrides,
+      });
+
+    test("reports the output limit an administrator set over the synced one", async () => {
+      const model = await createModel({
+        provider: "github-copilot",
+        modelId: "gpt-6.2",
+        contextLength: 1_000_000,
+        customContextLength: 1_050_000,
+        outputLength: 64_000,
+        customOutputLength: 128_000,
+      });
+      const capabilities = ModelModel.toCapabilities(model);
+      expect(capabilities.contextLength).toBe(1_050_000);
+      expect(capabilities.outputLength).toBe(128_000);
+    });
+
+    test.each([
+      ["gpt-4o", ["/chat/completions", "/responses"]],
+      ["gpt-6.2", ["/responses"]],
+      ["gpt-5.3-codex", ["/responses"]],
+      ["gpt-4o-search-preview", ["/chat/completions"]],
+      // Another vendor's catalog on the OpenAI-compatible provider.
+      ["accounts/fireworks/models/llama-v3p1-8b", null],
+    ] as const)("derives OpenAI's endpoints for %s", async (modelId, expected) => {
+      const model = await createModel({ provider: "openai", modelId });
+      expect(ModelModel.toCapabilities(model).supportedEndpoints).toEqual(
+        expected,
+      );
+    });
+
+    test("keeps the endpoints a provider published for the model", async () => {
+      const model = await createModel({
+        provider: "github-copilot",
+        modelId: "gpt-5.1",
+        supportedEndpoints: ["/chat/completions", "/responses"],
+      });
+      expect(ModelModel.toCapabilities(model).supportedEndpoints).toEqual([
+        "/chat/completions",
+        "/responses",
+      ]);
+    });
+
+    test("answers Azure endpoints and reasoning levels from the deployment evidence", async () => {
+      const gpt = await createModel({ provider: "azure", modelId: "gpt-team" });
+      const claude = await createModel({
+        provider: "azure",
+        modelId: "claude-team",
+      });
+      const gptCapabilities = ModelModel.toCapabilities({
+        ...gpt,
+        azureCapabilities: azureModelEvidence({
+          underlyingModelName: "gpt-5.4",
+          source: "deployment",
+        }),
+      });
+      expect(gptCapabilities.supportedEndpoints).toEqual([
+        "/chat/completions",
+        "/responses",
+      ]);
+      expect(gptCapabilities.supportedReasoningEfforts).toEqual([
+        "low",
+        "medium",
+        "high",
+      ]);
+      expect(gptCapabilities.supportsReasoningEffort).toBe(true);
+      expect(
+        ModelModel.toCapabilities({
+          ...claude,
+          azureCapabilities: azureModelEvidence({
+            underlyingModelName: "claude-opus-4-6",
+            source: "deployment",
+          }),
+        }).supportedEndpoints,
+      ).toEqual(["/responses"]);
+      // Without evidence nothing is claimed.
+      expect(ModelModel.toCapabilities(gpt).supportedEndpoints).toBeNull();
+    });
+
+    test("prefers the provider's own reasoning levels", async () => {
+      const published = await createModel({
+        provider: "github-copilot",
+        modelId: "gpt-6.2",
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+      });
+      const none = await createModel({
+        provider: "github-copilot",
+        modelId: "claude-haiku-4.5",
+        // The registry thinks it reasons; Copilot lists no level for it.
+        supportsReasoningEffort: true,
+        supportedReasoningEfforts: [],
+      });
+      expect(ModelModel.toCapabilities(published)).toMatchObject({
+        supportsReasoningEffort: true,
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+      });
+      // The model still reasons; Copilot just takes no level for it.
+      expect(ModelModel.toCapabilities(none)).toMatchObject({
+        supportsReasoningEffort: true,
+        supportedReasoningEfforts: [],
+      });
+    });
+
+    test.each([
+      // Archestra's id rules vouch for the common range.
+      [
+        { provider: "openai", modelId: "gpt-5.4" },
+        ["low", "medium", "high"],
+        true,
+      ],
+      [
+        { provider: "openai", modelId: "gpt-6.2-sol" },
+        ["low", "medium", "high"],
+        true,
+      ],
+      // The pro tiers' levels differ per generation, so no rule claims them.
+      [{ provider: "openai", modelId: "gpt-5.5-pro" }, null, null],
+      // Translated providers list exactly what their translation accepts.
+      [
+        { provider: "gemini", modelId: "gemini-2.5-flash" },
+        ["none", "minimal", "low", "medium", "high"],
+        true,
+      ],
+      [
+        { provider: "gemini", modelId: "gemini-3-pro-preview" },
+        ["minimal", "low", "high"],
+        true,
+      ],
+      [
+        { provider: "bedrock", modelId: "us.amazon.nova-2-lite-v1:0" },
+        ["low", "medium", "high"],
+        true,
+      ],
+      // Claude reasons, but the Unified Model API sends it no reasoning setting.
+      [
+        {
+          provider: "anthropic",
+          modelId: "claude-opus-5",
+          supportsReasoningEffort: true,
+        },
+        [],
+        true,
+      ],
+      // A row that says the model does not reason.
+      [
+        {
+          provider: "openai",
+          modelId: "gpt-4o",
+          supportsReasoningEffort: false,
+        },
+        [],
+        false,
+      ],
+      // Row-answered providers follow their row exactly.
+      [
+        {
+          provider: "openrouter",
+          modelId: "vendor/thinker",
+          supportsReasoningEffort: true,
+        },
+        ["low", "medium", "high"],
+        true,
+      ],
+      [{ provider: "openrouter", modelId: "vendor/unknown" }, null, null],
+    ] as const)("resolves reasoning levels for %o", async (row, levels, flag) => {
+      const model = await createModel({ ...row });
+      expect(ModelModel.toCapabilities(model)).toMatchObject({
+        supportedReasoningEfforts: levels,
+        supportsReasoningEffort: flag,
+      });
     });
   });
 

@@ -103,15 +103,13 @@ export function PluginForm({
           </SettingsSection>
         </SettingsSectionGroup>
       ) : (
-        <fieldset disabled={readOnly}>
-          <ResourceAccessSection
-            resource="plugin"
-            id={pluginId}
-            grants={draft.initialGrants}
-            onGrantsChange={(initialGrants) => onChange({ initialGrants })}
-            standalone
-          />
-        </fieldset>
+        <ResourceAccessSection
+          resource="plugin"
+          id={pluginId}
+          grants={draft.initialGrants}
+          onGrantsChange={(initialGrants) => onChange({ initialGrants })}
+          standalone
+        />
       )}
     </>
   );

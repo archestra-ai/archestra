@@ -117,23 +117,15 @@ describe("LLM proxy buffered model response streaming", () => {
     });
 
   describe("buffer limit", () => {
-    test("counts discarded model output toward the limit a refusal is checked against", async () => {
+    test("delivers a refusal after discarding model output that would not fit beside it", async () => {
       const refusal = "R".repeat(5 * MIB);
       bufferingPlugin({ onToolCalls: async () => refuse(refusal) });
 
       chatUpstream(chatTurn({ text: ["x".repeat(6 * MIB)], toolCall: true }));
-      const overLimit = await postChat();
-      // The content-free role preamble already committed the 200, so the
-      // limit surfaces as an in-stream error frame.
-      expect(overLimit.statusCode).toBe(200);
-      expect(streamError(overLimit.body)).toBe(BUFFER_LIMIT_ERROR);
-      expect(contentText(overLimit.body)).toBe("");
-
-      chatUpstream(chatTurn({ text: ["small answer"], toolCall: true }));
-      const underLimit = await postChat();
-      expect(underLimit.statusCode).toBe(200);
-      expect(streamError(underLimit.body)).toBeUndefined();
-      expect(contentText(underLimit.body)).toBe(refusal);
+      const response = await postChat();
+      expect(response.statusCode).toBe(200);
+      expect(streamError(response.body)).toBeUndefined();
+      expect(contentText(response.body)).toBe(refusal);
     });
 
     test("does not count a plugin replacement toward the limit", async () => {

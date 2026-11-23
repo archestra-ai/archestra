@@ -5,7 +5,7 @@ order: 2
 lastUpdated: 2026-11-17
 ---
 
-Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
+Give people **Can use** on an agent to let them run it without changing it. Give them **Can edit** when they need to change it.
 
 <span id="actions-and-scopes"></span>
 
@@ -49,7 +49,7 @@ Give people **Can use** on an agent to let them run it without changing it. Give
 
 ## Share a Resource
 
-Resource sharing is an [Enterprise feature](/docs/get-started/pricing-model).
+Resource sharing is an [Enterprise feature](/pricing).
 
 1. Open the item's **Permissions** control.
 2. Add a person, team, role, service account, OAuth client (on Knowledge Bases, knowledge connectors, and files), or **Everyone in the organization**.
@@ -59,14 +59,14 @@ Resource sharing is an [Enterprise feature](/docs/get-started/pricing-model).
 | --- | --- |
 | Can read | View the item. |
 | Can use | Run or invoke it. |
-| Can update | Edit its configuration. |
+| Can edit | Edit its configuration. |
 | Full access | Delete it and manage access. |
 
 You need **Manage access** on the item to share it. To share every current and future item of a kind, use **Permissions** beside **Create** or **Add** on its list; this requires [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update).
 
 Sharing with everyone or a role also requires that permission or **Full access** on every item of that kind. You cannot grant access you do not hold.
 
-Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers). Agent Runtimes have a **Can use and configure** level instead of **Can update**; see [who can use each runtime](/docs/agents/runtime#choose-who-can-use-each-runtime).
+Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers). Agent Runtimes have a **Can use and configure** level instead of **Can edit**; see [who can use each runtime](/docs/agents/runtime#choose-who-can-use-each-runtime).
 
 ### Share Across Teams
 
@@ -121,7 +121,7 @@ An account gets the permissions of every role assigned to it directly, plus the 
 
 Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits just by being members. Admins manage only that team's members and settings.
 
-Team admins can manage [child-team allocations and member key caps](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) across their team hierarchy, and see [those teams' costs](/docs/llm-proxy/costs-and-limits/costs#view-your-teams-costs). Their own team's ceiling stays protected unless they also administer a parent team.
+Team admins can manage [child-team allocations and member key caps](/docs/llm-proxy/cost-controls/limits#team-limits-and-spend) across their team hierarchy, and see [those teams' costs](/docs/insights/costs#view-your-teams-costs). Their own team's ceiling stays protected unless they also administer a parent team.
 
 <span id="delegation-and-concurrent-edits"></span>
 
@@ -139,8 +139,8 @@ Keep at least one recipient with **Manage access**. If a role or team change wou
 
 ## Transfer Ownership
 
-Choose **Make owner** on another person's row in the permissions editor. You need edit and full access on the item; plugins require edit access to every plugin.
+Choose **Make owner** on another person's row in the permissions editor. You need edit and full access on the item.
 
 The new owner receives **Full access**. The previous owner keeps their grant until you remove it separately. An owner's grant cannot be removed while they still own the resource.
 
-For request and audit-log access, see [Logs and Auditing](/docs/admin/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api/organization).
+For request and audit-log access, see [Logs](/docs/insights/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api/organization).

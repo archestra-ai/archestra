@@ -25,7 +25,6 @@ import {
   AgentRuntimeSteeringField,
   agentRuntimeSectionDescriptions,
   defaultAgentRuntime,
-  isClaudeCodeRuntimeConfig,
   RuntimeSettingsNotice,
 } from "@/components/agent-runtime-fields";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
@@ -56,6 +55,8 @@ export function AgentRuntimePicker({
   modelSummary,
   modelAttention,
   readOnlyBy,
+  accountsLeftToAgent = false,
+  runtimeFixes = null,
   onChangeTemplate,
 }: {
   selectedId: AgentRuntimeSelection;
@@ -73,6 +74,10 @@ export function AgentRuntimePicker({
    * use it but not configure it, if any.
    */
   readOnlyBy?: string | null;
+  /** That runtime names no account: the agent's accounts stay its own. */
+  accountsLeftToAgent?: boolean;
+  /** What that runtime fixes of the agent's company account, if anything. */
+  runtimeFixes?: "connection" | "connection-and-model" | null;
   /**
    * Set when the runtime was picked from the catalog. The picker then shows
    * that choice as a summary rather than asking a second time, and this
@@ -237,7 +242,13 @@ export function AgentRuntimePicker({
         />
       )}
       {runtimeEnabled === false && <AgentRuntimeUnavailableNotice />}
-      {readOnlyBy && <RuntimeSettingsNotice name={readOnlyBy} />}
+      {readOnlyBy && (
+        <RuntimeSettingsNotice
+          name={readOnlyBy}
+          accountsLeftToAgent={accountsLeftToAgent}
+          fixes={runtimeFixes}
+        />
+      )}
       <Accordion
         type="multiple"
         value={expandedRows}
@@ -247,11 +258,7 @@ export function AgentRuntimePicker({
         <ConfigurationRow
           id={`${id}-model`}
           value="model"
-          title={
-            isClaudeCodeRuntimeConfig(value)
-              ? "Whose Claude account runs it"
-              : "Model"
-          }
+          title="Accounts that can run it"
           summary={modelSummary}
           attention={modelAttention}
         >

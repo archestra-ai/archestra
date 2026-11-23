@@ -122,6 +122,34 @@ export async function createAppBacking(params: {
 }
 
 /**
+ * 409 when a server in `environmentId` already carries this app's tool
+ * prefix. An app shares its prefix with no one, so the move would give two
+ * catalogs tools of one name there. The backing sync below is best-effort and
+ * cannot refuse, so this runs before the app is updated.
+ */
+export async function assertAppToolPrefixFreeIn(params: {
+  app: App;
+  environmentId: string | null;
+}): Promise<void> {
+  const { app, environmentId } = params;
+  if (!app.mcpServerId) return;
+  const server = await McpServerModel.findById(app.mcpServerId);
+  if (!server?.catalogId) return;
+  const catalog = await InternalMcpCatalogModel.findNameCheckTarget(
+    server.catalogId,
+  );
+  if (!catalog) return;
+  await InternalMcpCatalogModel.assertRootNameAvailable({
+    name: catalog.name,
+    organizationId: app.organizationId,
+    environmentId,
+    audience: { kind: "app" },
+    excludeId: catalog.id,
+    toolPrefix: catalog.toolPrefix,
+  });
+}
+
+/**
  * Mirror an app edit onto its backing catalog + server so the registry card,
  * tool environment isolation, and gateway visibility track the app: name, scope,
  * environment, and team membership. The server's scope (install-time-only for

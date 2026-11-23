@@ -37,6 +37,14 @@ const ARCHESTRA_TOOL_INVALIDATIONS = new Map<string, readonly string[][]>([
     "update_guardrails_policy" satisfies ArchestraToolShortName,
     [["guardrails-deployment"]],
   ],
+  [
+    "update_guardrails_validation" satisfies ArchestraToolShortName,
+    [["openappa-policy-tests"], ["openappa-policy-test-runs"]],
+  ],
+  [
+    "run_openappa_policy_tests" satisfies ArchestraToolShortName,
+    [["openappa-policy-test-runs"]],
+  ],
 ]);
 
 /**

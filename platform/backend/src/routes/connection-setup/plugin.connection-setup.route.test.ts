@@ -1,10 +1,10 @@
+import type { ResourcePermissionAction } from "@archestra/shared";
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel, PluginModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { grantEverywhere } from "@/test/wildcard-grants";
 import { PLUGIN_DELIVERY_MAX_COUNT, type User } from "@/types";
 
 vi.mock("@/auth");
@@ -24,16 +24,6 @@ describe("POST /api/connection-setups with plugins", () => {
     await makeMember(user.id, organizationId);
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(true);
-    grantEverywhere(["plugin"], async () =>
-      Boolean(
-        await mockUserHasPermission.getMockImplementation()?.(
-          "",
-          "",
-          "plugin",
-          "admin" as never,
-        ),
-      ),
-    );
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -190,19 +180,69 @@ describe("POST /api/connection-setups with plugins", () => {
     ]);
   });
 
-  test("requires plugin:admin and unique reviewed IDs", async () => {
-    const plugin = await seedPlugin("claude-code");
-    for (const allowedAction of ["read", "admin"] as const) {
-      mockUserHasPermission.mockImplementation(
-        async (_userId, _organizationId, _resource, action) =>
-          action === allowedAction,
-      );
-      expect((await postPluginSetup([plugin.id])).statusCode).toBe(403);
-    }
+  test("installs a plugin only with a use grant on it, and only reviewed IDs once", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const author = await makeUser();
+    await makeMember(author.id, organizationId);
+    const viewable = await seedPlugin("claude-code", ["posix"], {
+      authorId: author.id,
+      actions: ["read"],
+    });
+    const usable = await seedPlugin("claude-code", ["posix"], {
+      authorId: author.id,
+      actions: ["read", "use"],
+    });
+    const own = await seedPlugin("claude-code");
 
-    mockUserHasPermission.mockResolvedValue(true);
-    const duplicate = await postPluginSetup([plugin.id, plugin.id]);
+    const refused = await postPluginSetup([own.id, viewable.id]);
+    expect(refused.statusCode).toBe(403);
+    expect(refused.body).toContain("use every selected plugin");
+    const installed = await postPluginSetup([own.id, usable.id]);
+    expect(installed.statusCode, installed.body).toBe(200);
+    expect(
+      installed.json().plugins.map((plugin: { id: string }) => plugin.id),
+    ).toEqual(expect.arrayContaining([own.id, usable.id]));
+
+    const duplicate = await postPluginSetup([own.id, own.id]);
     expect(duplicate.statusCode).toBe(400);
+  });
+
+  test("a setup that names no plugins delivers every plugin the user may use, and no other", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const author = await makeUser();
+    await makeMember(author.id, organizationId);
+    const own = await seedPlugin("claude-code");
+    const shared = await seedPlugin("claude-code", ["posix"], {
+      authorId: author.id,
+      actions: ["read", "use"],
+    });
+    await seedPlugin("claude-code", ["posix"], {
+      authorId: author.id,
+      actions: ["read"],
+    });
+    await seedPlugin("claude-code", ["posix"], { authorId: author.id });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      response
+        .json()
+        .plugins.map((plugin: { id: string }) => plugin.id)
+        .sort(),
+    ).toEqual([own.id, shared.id].sort());
   });
 
   test("rejects explicit plugins and omits implicit plugins when Connect delivery is disabled", async ({
@@ -276,7 +316,9 @@ describe("POST /api/connection-setups with plugins", () => {
       },
     });
     if (!foreign) throw new Error("failed to seed foreign plugin");
-    expect((await postPluginSetup([foreign.id])).statusCode).toBe(404);
+    // Grants belong to an organization: the author's grant on a plugin of
+    // another organization confers nothing here.
+    expect((await postPluginSetup([foreign.id])).statusCode).toBe(403);
   });
 
   test("rejects an implicit all-Plugin setup before loading an oversized set", async () => {
@@ -313,13 +355,26 @@ describe("POST /api/connection-setups with plugins", () => {
     });
   }
 
+  /**
+   * A plugin the test user authors, or, given `sharedBy`, one another member
+   * authors and grants the test user `actions` on (none when omitted).
+   */
   async function seedPlugin(
     clientType: "claude-code" | "claude-desktop" | "codex",
     supportedPlatforms: Array<"posix" | "windows"> = ["posix"],
+    sharedBy?: { authorId: string; actions?: ResourcePermissionAction[] },
   ) {
     const plugin = await PluginModel.create({
       organizationId,
-      userId: user.id,
+      userId: sharedBy?.authorId ?? user.id,
+      initialPermissionGrants: sharedBy?.actions
+        ? [
+            {
+              subject: { type: "user", id: user.id },
+              actions: sharedBy.actions,
+            },
+          ]
+        : [],
       input: {
         displayName: `${clientType} plugin`,
         description: "Connection setup test",

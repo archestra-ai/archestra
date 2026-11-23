@@ -5,6 +5,12 @@ Mutagen keeps a one-way copy of this checkout in the VM: every file the
 repo's .gitignore files don't ignore, plus platform/.env. Nothing the VM writes comes back, and what it changes in the
 copied files is undone, except through `pull`.
 
+Git's data goes the same one way, by git push: before each command, this
+checkout's HEAD, what it stages and archestra's main (as origin/main) go to a
+repo in the VM (~/git/archestra.git) that only receives. The VM copy reads
+them, so its git commands (the commit check, the migration checks) answer as
+here. Nothing committed in the VM comes back.
+
 Usage, from inside the checkout:
   dev-vm-sync.py start
       Copy this checkout to ~/sync/<folder name> in the VM and keep it up to
@@ -12,7 +18,7 @@ Usage, from inside the checkout:
       with ports of its own, so its stack runs next to the other checkouts'.
   dev-vm-sync.py run [<command>]
       Run a command in the VM copy, in the same subfolder you are in; without
-      a command, open a shell there.
+      a command, open a shell there. Waits until the VM copy has every edit.
   dev-vm-sync.py pull '<command>'
       Like run, for a command that writes source files (pnpm db:generate,
       pnpm add, pnpm codegen, pnpm lint:fix): copies the files it changed back
@@ -25,6 +31,9 @@ Usage, from inside the checkout:
       (tilt-<folder name>); does nothing if it already runs. Prints the URLs.
   dev-vm-sync.py tilt stop
       Stop it. Its pods and database stay, as after Ctrl+C.
+  dev-vm-sync.py commit-check
+      Run pnpm commit:check in the VM on what this checkout stages: the
+      pre-commit hook's check. Fails when the VM can't get the staged files.
 
 Usage, from anywhere:
   dev-vm-sync.py status
@@ -56,6 +65,19 @@ SSH = ["ssh", "-F", os.path.expanduser("~/.lima/%s/ssh.config" % VM), "-o", "Bat
 # first uses Tilt's defaults; stack N (1 to 4) uses app 13000+N, API 19000+N
 # and Tilt 20350+N, the same in the VM and on the Mac.
 STACKS = 5
+# The VM's repo of git data, in its home; outside ~/sync, where prune removes
+# what has no sync. One for every checkout: they share the history.
+GIT_STORE = "git/archestra.git"
+# Runs in the VM for the push: makes the repo on the first one. A shallow clone
+# pushes shallow history, which a repo refuses unless told otherwise.
+RECEIVE_PACK = ('f() { [ -d "$1" ] || { mkdir -p "$(dirname "$1")" && git init -q --bare "$1"'
+                ' && git --git-dir="$1" config receive.shallowUpdate true; } || exit 1;'
+                ' exec git-receive-pack "$1"; }; f')
+# The commit that holds what the checkout stages: the same content gives the
+# same commit, so a run that changed nothing adds no object.
+STAGED_COMMIT_ENV = {"GIT_AUTHOR_NAME": "dev-vm-sync", "GIT_AUTHOR_EMAIL": "dev-vm-sync@localhost",
+                     "GIT_AUTHOR_DATE": "@0 +0000", "GIT_COMMITTER_NAME": "dev-vm-sync",
+                     "GIT_COMMITTER_EMAIL": "dev-vm-sync@localhost", "GIT_COMMITTER_DATE": "@0 +0000"}
 
 # What `pull` takes back from the VM; everything else stays out.
 CODE = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".rs", ".css", ".sql")
@@ -99,14 +121,91 @@ def mutagen(*args, quiet=True):
     return subprocess.run(["mutagen", "sync", *args], stdout=out, stderr=out).returncode
 
 
-def in_vm_copy(command):
+def in_vm_copy(command, before=""):
     """Runs a command line in a login shell in the VM copy, in the subfolder
-    the caller is in. Returns its exit code. TILT_PORT points tilt commands at
-    this checkout's Tilt."""
+    the caller is in, after the shell lines `before`. Returns its exit code.
+    TILT_PORT points tilt commands at this checkout's Tilt."""
     folder = "~/%s/%s" % (VM_DIR, os.path.relpath(os.getcwd(), TOP))
     tilt = "export TILT_PORT=%d && " % ports(stack_of(TOP))["tilt_vm"]
     return subprocess.run(["limactl", "shell", "--workdir", "/", VM, "--", "bash", "-lc",
-                           "%scd %s && %s" % (tilt, folder, command)]).returncode
+                           "%s%scd %s && %s" % (before, tilt, folder, command)]).returncode
+
+
+def git_out(*args, env=None):
+    """A git command's output here, stripped; None when it fails."""
+    done = subprocess.run(["git", "-C", TOP, *args], stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, text=True, env=env)
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def main_ref():
+    """The commit of archestra's main here: <remote>/main of the remote that
+    is the GitHub repo, else origin/main."""
+    for remote in (git_out("remote") or "").split():
+        url = git_out("remote", "get-url", remote) or ""
+        if re.search(r"[:/]archestra-ai/archestra(\.git)?$", url):
+            found = git_out("rev-parse", "--verify", "-q", "refs/remotes/%s/main^{commit}" % remote)
+            if found:
+                return found
+    return git_out("rev-parse", "--verify", "-q", "refs/remotes/origin/main^{commit}")
+
+
+def push_git():
+    """Pushes this checkout's git state to the VM's repo: HEAD, a commit of
+    what it stages (with HEAD as parent) and main as origin/main. Moves no
+    ref and writes no index here. Returns the shell lines that point the VM
+    copy at it, or None when that failed."""
+    head = git_out("rev-parse", "--verify", "-q", "HEAD^{commit}")
+    if not head:
+        return None
+    env = dict(os.environ)
+    # In the pre-commit hook git names the index this commit is made from.
+    if env.get("GIT_INDEX_FILE"):
+        env["GIT_INDEX_FILE"] = os.path.abspath(env["GIT_INDEX_FILE"])
+    tree = git_out("write-tree", env=env)  # fails while a merge conflict is open
+    env.update(STAGED_COMMIT_ENV)
+    staged = tree and git_out("commit-tree", tree, "-p", head, "-m", "dev-vm-sync: staged", env=env)
+    if not staged:
+        return None
+    refs = ["%s:refs/dev-vm/%s/head" % (head, NAME), "%s:refs/dev-vm/%s/staged" % (staged, NAME)]
+    main = main_ref()
+    if main:
+        refs.append("%s:refs/remotes/origin/main" % main)
+    ssh_command = " ".join("'%s'" % a for a in SSH[:-1])
+    push = ["git", "-C", TOP, "-c", "push.recurseSubmodules=no", "push", "--quiet", "--force",
+            "--no-verify", "--receive-pack=" + RECEIVE_PACK, "%s:%s" % (HOST, GIT_STORE)] + refs
+    for _ in range(2):  # once more: a push next to another one can lose a ref lock
+        if subprocess.run(push, env=dict(os.environ, GIT_SSH_COMMAND=ssh_command),
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            break
+    else:
+        return None
+    # The VM copy as a worktree of the VM's repo, with its own HEAD and index:
+    # what git worktree add makes. Its index is reset only when the staged
+    # commit changed, so git keeps the file stats it saved.
+    return ("store=$HOME/%(store)s; wt=$store/worktrees/%(name)s; copy=$HOME/%(dir)s; "
+            "mkdir -p \"$wt\" && echo ../.. > \"$wt/commondir\" && echo \"$copy/.git\" > \"$wt/gitdir\" && "
+            "echo \"gitdir: $wt\" > \"$copy/.git\" && "
+            "{ [ \"$(cat \"$wt/HEAD\" 2>/dev/null)\" = %(head)s ] || echo %(head)s > \"$wt/HEAD\"; } && "
+            "{ [ \"$(cat \"$wt/dev-vm-staged\" 2>/dev/null)\" = %(staged)s ] || "
+            "{ git -C \"$copy\" read-tree %(staged)s && echo %(staged)s > \"$wt/dev-vm-staged\"; }; } && "
+            "[ \"$(git -C \"$copy\" write-tree)\" = %(tree)s ]"
+            % {"store": GIT_STORE, "name": NAME, "dir": VM_DIR, "head": head, "staged": staged, "tree": tree})
+
+
+def git_lines(strict):
+    """The shell lines that give the VM copy this checkout's git state, to
+    run before a command. Without strict, a failure only warns."""
+    lines = push_git()
+    if strict:
+        if not lines:
+            die("couldn't send this checkout's git state to the VM (is a merge conflict open?)")
+        return "{ %s; } || { echo 'dev-vm-sync.py: the VM copy has not got the staged files' >&2; exit 1; }; " % lines
+    warning = "echo 'dev-vm-sync.py: git in the VM copy may not match this checkout' >&2"
+    if not lines:
+        print(warning.split("'")[1], file=sys.stderr)
+        return ""
+    return "{ %s; } >/dev/null 2>&1 || %s; " % (lines, warning)
 
 
 def nul_list(data):
@@ -324,6 +423,10 @@ def start():
         # Mutagen uses your own ssh: `dev-vm.sh create` adds the VM to ~/.ssh/config.
         run(["mutagen", "sync", "create", "--name", NAME, "-c", f.name, TOP, "%s:%s" % (HOST, VM_DIR)])
     mutagen("flush", NAME)
+    print("Sending the git history to the VM (the first checkout takes a minute)...")
+    lines = push_git()
+    if not lines or subprocess.run(SSH + [lines], stdout=subprocess.DEVNULL).returncode != 0:
+        print("dev-vm-sync.py: couldn't; the next run tries again", file=sys.stderr)
     print("Syncing %s -> %s:~/%s. Next: dev-vm-sync.py tilt starts its stack." % (TOP, VM, VM_DIR))
     print_urls()
 
@@ -337,6 +440,7 @@ def tilt_up():
         return
     if str(p["tilt_vm"]) in state["ports"]:
         die("another Tilt listens on this checkout's port %d: dev-vm-sync.py status" % p["tilt_vm"])
+    ssh(git_lines(strict=False) + "true")  # Tilt's git commands (husky-hooks) get the VM's repo
     ssh("tmux new-session -d -s %s -e TILT_PORT=%d -c \"$HOME/%s/platform\" \"bash -lc 'tilt up'\""
         % (session(NAME), p["tilt_vm"], VM_DIR))
     print("Started Tilt in the VM's tmux session %s. Logs: dev-vm-sync.py run 'tilt logs <resource>'." % session(NAME))
@@ -420,6 +524,10 @@ def prune():
         if name in state["copies"]:
             ssh("rm -rf ~/sync/%s" % name)
             removed.append("copy ~/sync/%s" % name)
+        # Its git state in the VM's repo: the worktree entry and the refs pushed for it.
+        ssh("s=~/%s; [ -d $s ] && { rm -rf $s/worktrees/%s; git --git-dir=$s for-each-ref"
+            " --format='delete %%(refname)' refs/dev-vm/%s/ | git --git-dir=$s update-ref --stdin; } || true"
+            % (GIT_STORE, name, name))
     for s in sorted(state["sessions"]):
         if s.startswith("tilt-") and s not in {session(n) for n in live | set(names)}:
             ssh("tmux kill-session -t =%s" % s)
@@ -466,7 +574,7 @@ def pull(command):
     try:
         # The sleep: a write in the marker's own clock tick would not count as newer.
         ssh("touch %s && sleep 0.2" % marker)
-        status = in_vm_copy(command)
+        status = in_vm_copy(command, git_lines(strict=False))
         changed = nul_list(ssh(
             "cd ~/%s && find . \\( %s \\) -prune -o -type f \\( -newer %s -o -cnewer %s \\) -print0; rm -f %s"
             % (VM_DIR, prune, marker, marker, marker)))
@@ -543,7 +651,7 @@ def copy_from_vm(paths):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    if not args or args[0] not in ("start", "run", "pull", "tilt", "status", "prune"):
+    if not args or args[0] not in ("start", "run", "pull", "tilt", "commit-check", "status", "prune"):
         print(__doc__.strip())
         sys.exit(1 if args else 0)
     if not shutil.which("mutagen"):
@@ -569,11 +677,27 @@ if __name__ == "__main__":
         if mutagen("list", NAME) != 0:
             die("no sync for this checkout yet: dev-vm-sync.py start")
         tilt_stop() if args[1:] else tilt_up()
+    elif args[0] == "commit-check":
+        # The pre-commit hook: fails closed, since a check that can't see the
+        # staged files would pass by checking nothing.
+        if len(args) != 1:
+            die("commit-check takes no arguments")
+        if mutagen("list", NAME) != 0:
+            die("no sync for this checkout, so no commit check: dev-vm-sync.py start"
+                " (or skip the check once: HUSKY=0 git commit)")
+        if mutagen("flush", NAME) != 0:
+            die("the sync didn't catch up, so the check would see old files (mutagen sync list %s)" % NAME)
+        os.chdir(os.path.join(TOP, "platform"))
+        sys.exit(in_vm_copy("pnpm commit:check", git_lines(strict=True)))
     elif len(args) > 2 or (args[0] == "pull" and len(args) != 2):
         die("give the command as one quoted string")
     elif mutagen("list", NAME) != 0:
         die("no sync for this checkout yet: dev-vm-sync.py start")
     elif args[0] == "run":
-        sys.exit(in_vm_copy(args[1] if len(args) == 2 else "exec bash -l"))
+        # The VM must have every Mac edit first, or the command runs old code.
+        if mutagen("flush", NAME) != 0:
+            print("dev-vm-sync.py: the sync didn't catch up (see mutagen sync list %s);"
+                  " running on the VM copy as it is" % NAME, file=sys.stderr)
+        sys.exit(in_vm_copy(args[1] if len(args) == 2 else "exec bash -l", git_lines(strict=False)))
     else:
         pull(args[1])

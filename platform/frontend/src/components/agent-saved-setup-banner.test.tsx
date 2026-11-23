@@ -1,18 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { availableLlmProviderApiKeysQueryKey } from "@/lib/llm-provider-api-keys-query-keys";
+import { describe, expect, it } from "vitest";
 import { AgentSavedSetupBanner } from "./agent-saved-setup-banner";
 
-vi.mock("@/lib/auth/auth.query");
-
 describe("saved agent setup notices", () => {
-  it("lists Claude sign-in with the other setup rows and ticks off what resolves", async () => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: false,
-      isPending: false,
-    } as never);
+  it("lists what the agent still needs without the Claude sign-in or a progress bar, and ticks off what resolves", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
     });
@@ -31,6 +23,7 @@ describe("saved agent setup notices", () => {
       missing: [
         { key: "CLAUDE_CODE_ACCOUNT", label: "Claude" },
         { key: "API_TOKEN", label: "API token" },
+        { key: "OTHER_TOKEN", label: "Other token" },
       ],
     };
     client.setQueryData(
@@ -42,17 +35,19 @@ describe("saved agent setup notices", () => {
         <AgentSavedSetupBanner agentId="agent-1" canEditAgent />
       </QueryClientProvider>,
     );
-    // Claude sign-in is one row of the checklist, not a notice of its own.
+    // The person's Claude sign-in belongs to the Account strip under
+    // "Give it work", so the checklist leaves it out.
     expect(
-      screen.getAllByRole("button", { name: "Sign in with Claude" }),
-    ).toHaveLength(1);
-    expect(screen.getByText("Before it runs")).toBeVisible();
-    expect(screen.getByText("Claude subscription")).toBeVisible();
+      screen.queryByRole("button", { name: "Sign in with Claude" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Claude subscription")).not.toBeInTheDocument();
+    expect(screen.queryByText("Before it runs")).not.toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     expect(screen.getByText("API token")).toBeVisible();
     await act(async () => {
       client.setQueryData(["agents", "agent-1", "runtime", "preflight"], {
         ...preflight,
-        missing: preflight.missing.slice(0, 1),
+        missing: [preflight.missing[0], preflight.missing[2]],
       });
     });
     // A row resolved while the page is open stays, ticked.
@@ -63,9 +58,6 @@ describe("saved agent setup notices", () => {
         ).getByText("Done"),
       ).toBeVisible(),
     );
-    expect(
-      screen.getByRole("button", { name: "Sign in with Claude" }),
-    ).toBeVisible();
     await act(async () => {
       client.setQueryData(["agents", "agent-1", "runtime", "preflight"], {
         ...preflight,
@@ -73,24 +65,13 @@ describe("saved agent setup notices", () => {
         ready: true,
       });
     });
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "Sign in with Claude" }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(screen.queryByText("Before it runs")).not.toBeInTheDocument();
     client.clear();
   });
 
   it("collapses admin-only credentials into one row and hides what the member cannot use", () => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: false,
-      isPending: false,
-    } as never);
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
     });
-    // A Codex agent, so the ChatGPT subscription row would normally show too.
     client.setQueryData(["agents", "agent-1"], {
       id: "agent-1",
       runtime: { command: ["archestra-codex"], credentials: [] },
@@ -130,7 +111,6 @@ describe("saved agent setup notices", () => {
     for (const hidden of [
       /Provide GitHub account/,
       /Claude subscription/,
-      /ChatGPT subscription/,
       /not supported/,
     ]) {
       expect(screen.queryByText(hidden)).toBeNull();
@@ -139,40 +119,47 @@ describe("saved agent setup notices", () => {
     expect(screen.queryByText(/internet connection/)).toBeNull();
   });
 
-  it("prompts for a ChatGPT subscription when runtime command is archestra-codex-runtime", () => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: true,
-      isPending: false,
-      isError: false,
-    } as never);
+  it.each([
+    "archestra-codex",
+    "archestra-codex-runtime",
+  ])("leaves the ChatGPT sign-in of an %s agent to its account card, and lists only what the setup check reports", (command) => {
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
     });
-    client.setQueryData(["agents", "agent-codex-runtime"], {
-      id: "agent-codex-runtime",
-      runtime: { command: ["archestra-codex-runtime"], credentials: [] },
-    });
-    client.setQueryData(
-      ["agents", "agent-codex-runtime", "runtime", "preflight"],
-      {
-        ready: false,
+    // Nobody here has a ChatGPT key, and neither agent has one selected: the
+    // strip said so once, and now stays out of the person's subscription.
+    const renderStrip = (agentId: string, missing: object[]) => {
+      client.setQueryData(["agents", agentId], {
+        id: agentId,
+        runtime: { command: [command], credentials: [] },
+      });
+      client.setQueryData(["agents", agentId, "runtime", "preflight"], {
+        ready: missing.length === 0,
         configured: [],
         misconfigured: [],
         incompatible: null,
-        missing: [],
-      },
-    );
-    client.setQueryData(
-      availableLlmProviderApiKeysQueryKey(undefined, undefined),
-      [],
-    );
-    render(
-      <QueryClientProvider client={client}>
-        <AgentSavedSetupBanner agentId="agent-codex-runtime" canEditAgent />
-      </QueryClientProvider>,
-    );
+        missing,
+      });
+      return render(
+        <QueryClientProvider client={client}>
+          <AgentSavedSetupBanner agentId={agentId} canEditAgent />
+        </QueryClientProvider>,
+      );
+    };
 
-    expect(screen.getByText("Connect your ChatGPT subscription")).toBeVisible();
+    const waiting = renderStrip("agent-waiting", [
+      { key: "API_TOKEN", label: "API token" },
+    ]);
+    expect(screen.getByText("API token")).toBeVisible();
+    expect(screen.queryByText(/ChatGPT/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Sign in" }),
+    ).not.toBeInTheDocument();
+    waiting.unmount();
+
+    // With nothing missing there is no strip at all.
+    const ready = renderStrip("agent-ready", []);
+    expect(ready.container).toBeEmptyDOMElement();
     client.clear();
   });
 });

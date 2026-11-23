@@ -1,5 +1,6 @@
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -43,6 +44,9 @@ const {
       systemPrompt: null,
       runtime: null,
       accessAllTools: true,
+      tools: undefined as Array<{ catalogId: string | null }> | undefined,
+      knowledgeBaseIds: undefined as string[] | undefined,
+      connectorIds: undefined as string[] | undefined,
     },
     {
       id: "agent-2",
@@ -77,22 +81,39 @@ const {
     data: undefined,
   })),
   mockUseAgentDelegations: vi.fn((_agentId?: string, _options?: unknown) => ({
-    data: [],
+    data: [] as Array<{ id: string }> | undefined,
     isSuccess: true,
+    isError: false,
   })),
   mockUseAllProfileTools: vi.fn((_options?: unknown) => ({
     data: { data: [] },
   })),
   mockUseConnectors: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseConnectorsByIds: vi.fn((_ids: string[], _options?: unknown) => ({
-    data: [],
+    data: [] as
+      | Array<{ id: string; name: string; connectorType?: string }>
+      | undefined,
     isSuccess: true,
+    isError: false,
   })),
   mockUseKnowledgeBasesByIds: vi.fn((_ids: string[], _options?: unknown) => ({
-    data: [],
+    data: [] as
+      | Array<{
+          id: string;
+          name: string;
+          connectors?: Array<{ connectorType?: string }>;
+        }>
+      | undefined,
     isSuccess: true,
+    isError: false,
   })),
-  mockUseInternalMcpCatalog: vi.fn((_options?: unknown) => ({ data: [] })),
+  mockUseInternalMcpCatalog: vi.fn((_options?: unknown) => ({
+    data: [] as
+      | Array<{ id: string; name: string; icon?: string | null }>
+      | undefined,
+    isSuccess: true,
+    isError: false,
+  })),
   mockUseKnowledgeBases: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseMcpInstallOrchestrator: vi.fn((_options?: unknown) => ({
     closeInstallForms: vi.fn(),
@@ -111,9 +132,20 @@ const {
     selectedCatalogItem: null,
     triggerInstallByCatalogId: vi.fn(),
   })),
-  mockUseProfile: vi.fn((id: string | undefined, _options?: unknown) => ({
-    data: agents.find((agent) => agent.id === id),
-  })),
+  mockUseProfile: vi.fn(
+    (
+      id: string | undefined,
+      _options?: unknown,
+    ): {
+      data: (typeof agents)[number] | null | undefined;
+      isSuccess?: boolean;
+      isError?: boolean;
+    } => ({
+      data: id ? agents.find((agent) => agent.id === id) : undefined,
+      isSuccess: !!id,
+      isError: false,
+    }),
+  ),
   mockPinnedIds: [] as string[],
   mockSwitchAccess: vi.fn((_params: unknown) => {}),
 }));
@@ -316,14 +348,47 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
-    typeof useHasPermissions
-  >);
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+    isPending: false,
+  } as ReturnType<typeof useHasPermissions>);
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
   } as ReturnType<typeof useSession>);
   vi.mocked(useFeature).mockReturnValue(false);
   mockPinnedIds.splice(0);
+  for (const agent of agents) {
+    agent.accessAllTools = true;
+    delete agent.tools;
+    delete agent.knowledgeBaseIds;
+    delete agent.connectorIds;
+  }
+  mockUseAgentDelegations.mockImplementation(() => ({
+    data: [],
+    isSuccess: true,
+    isError: false,
+  }));
+  mockUseInternalMcpCatalog.mockReset();
+  mockUseInternalMcpCatalog.mockImplementation(() => ({
+    data: [],
+    isSuccess: true,
+    isError: false,
+  }));
+  mockUseKnowledgeBasesByIds.mockImplementation(() => ({
+    data: [],
+    isSuccess: true,
+    isError: false,
+  }));
+  mockUseConnectorsByIds.mockImplementation(() => ({
+    data: [],
+    isSuccess: true,
+    isError: false,
+  }));
+  mockUseProfile.mockImplementation((id: string | undefined) => ({
+    data: id ? agents.find((agent) => agent.id === id) : undefined,
+    isSuccess: !!id,
+    isError: false,
+  }));
 });
 
 // The quick-edit views are lazy chunks; load them so the dialog renders at once.
@@ -423,6 +488,190 @@ describe("InitialAgentSelector agent chip", () => {
   });
 });
 
+describe("InitialAgentSelector tool icons", () => {
+  it("does not pulse placeholders while permissions are still loading for an agent with no catalog tools", () => {
+    agents[0].accessAllTools = false;
+    agents[0].tools = [];
+    // The permission hook reports `data: false` until the map arrives.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: true,
+    } as ReturnType<typeof useHasPermissions>);
+    mockUseInternalMcpCatalog.mockImplementation(() => ({
+      data: undefined,
+      isSuccess: false,
+      isError: false,
+    }));
+
+    queryClient.clear();
+    renderSelector();
+
+    expect(
+      screen.queryByTestId("agent-tools-placeholder"),
+    ).not.toBeInTheDocument();
+    expect(mockUseInternalMcpCatalog).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it("shows the built-in catalog icon without waiting for the registry directory", async () => {
+    agents[0].accessAllTools = false;
+    agents[0].tools = [{ catalogId: ARCHESTRA_MCP_CATALOG_ID }];
+    mockUseInternalMcpCatalog.mockImplementation(() => ({
+      data: undefined,
+      isSuccess: false,
+      isError: false,
+    }));
+
+    queryClient.clear();
+    renderSelector();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(
+      screen.queryByTestId("agent-tools-placeholder"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Alpha Agent" }),
+    ).toHaveAccessibleDescription("Alpha Agent uses 1 tool server");
+    expect(mockUseInternalMcpCatalog).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it("asks for the registry directory immediately when another catalog's icon is needed", () => {
+    agents[0].accessAllTools = false;
+    agents[0].tools = [{ catalogId: "catalog-remote" }];
+    mockUseInternalMcpCatalog.mockImplementation(() => ({
+      data: undefined,
+      isSuccess: false,
+      isError: false,
+    }));
+
+    queryClient.clear();
+    renderSelector();
+
+    expect(screen.getByTestId("agent-tools-placeholder")).toBeInTheDocument();
+    expect(mockUseInternalMcpCatalog).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it("reads the chosen agent's detail before the roster names it", () => {
+    mockRoster.pending = true;
+    try {
+      queryClient.clear();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <InitialAgentSelector
+            currentAgentId="agent-2"
+            onAgentChange={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+      expect(mockUseProfile).toHaveBeenCalledWith("agent-2", {
+        enabled: false,
+      });
+    } finally {
+      mockRoster.pending = false;
+    }
+  });
+
+  it("drops the placeholders when a trigger query fails", () => {
+    agents[0].accessAllTools = false;
+    agents[0].tools = [{ catalogId: "catalog-remote" }];
+    agents[0].knowledgeBaseIds = ["kb-1"];
+    mockUseAgentDelegations.mockImplementation(() => ({
+      data: undefined,
+      isSuccess: false,
+      isError: true,
+    }));
+    mockUseInternalMcpCatalog.mockImplementation(() => ({
+      data: undefined,
+      isSuccess: false,
+      isError: true,
+    }));
+    mockUseKnowledgeBasesByIds.mockImplementation(() => ({
+      data: undefined,
+      isSuccess: false,
+      isError: true,
+    }));
+
+    queryClient.clear();
+    renderSelector();
+
+    expect(
+      screen.queryByTestId("agent-tools-placeholder"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the tool-icon placeholders still when motion is reduced", () => {
+    agents[0].accessAllTools = false;
+    mockUseProfile.mockImplementation(() => ({ data: undefined }));
+
+    queryClient.clear();
+    renderSelector();
+
+    const placeholder = screen.getByTestId("agent-tools-placeholder");
+    for (const circle of placeholder.children) {
+      expect(circle).toHaveClass("motion-reduce:animate-none");
+    }
+  });
+
+  it("drops the placeholders when the agent detail query fails or settles empty", () => {
+    mockUseProfile.mockImplementation(() => ({
+      data: undefined,
+      isSuccess: false,
+      isError: true,
+    }));
+
+    queryClient.clear();
+    const { rerender } = renderSelector();
+    expect(
+      screen.queryByTestId("agent-tools-placeholder"),
+    ).not.toBeInTheDocument();
+
+    mockUseProfile.mockImplementation(() => ({
+      data: null,
+      isSuccess: true,
+      isError: false,
+    }));
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <InitialAgentSelector
+          currentAgentId="agent-1"
+          onAgentChange={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.queryByTestId("agent-tools-placeholder"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not pulse tool placeholders when no agent is selected and nothing is resolving", () => {
+    const saved = agents.splice(0);
+    try {
+      queryClient.clear();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <InitialAgentSelector currentAgentId={null} onAgentChange={vi.fn()} />
+        </QueryClientProvider>,
+      );
+
+      expect(
+        screen.getByRole("combobox", { name: "Select agent" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("agent-tools-placeholder"),
+      ).not.toBeInTheDocument();
+    } finally {
+      agents.push(...saved);
+    }
+  });
+});
+
 describe("InitialAgentSelector keyboard navigation", () => {
   it("moves through agents with arrow keys and selects with Enter", async () => {
     const user = userEvent.setup();
@@ -493,19 +742,22 @@ describe("InitialAgentSelector keyboard navigation", () => {
     renderSelector();
 
     // The first render must not compete with the composer's first paint.
-    expect(mockUseInternalMcpCatalog).toHaveBeenNthCalledWith(1, {
+    expect(mockUseProfile).toHaveBeenNthCalledWith(1, "agent-1", {
       enabled: false,
     });
-    expect(mockUseProfile).toHaveBeenNthCalledWith(1, "agent-1", {
+    // An agent with no foreign catalog tools never loads the directory.
+    expect(mockUseInternalMcpCatalog).toHaveBeenCalledWith({
       enabled: false,
     });
 
     await waitFor(() =>
-      expect(mockUseInternalMcpCatalog).toHaveBeenLastCalledWith({
+      expect(mockUseProfile).toHaveBeenCalledWith("agent-1", {
         enabled: true,
       }),
     );
-    expect(mockUseProfile).toHaveBeenCalledWith("agent-1", { enabled: true });
+    expect(mockUseInternalMcpCatalog).not.toHaveBeenCalledWith({
+      enabled: true,
+    });
     // Readiness is for the picker; the trigger never pays for it.
     expect(mockUseAgentCredentialReadiness).toHaveBeenLastCalledWith(
       expect.objectContaining({ enabled: false }),
@@ -680,8 +932,9 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     renderSelector();
 
     const trigger = screen.getByRole("combobox", { name: "Alpha Agent" });
+    // No catalog tools: the directory stays off and the button is ready.
     await waitFor(() =>
-      expect(mockUseInternalMcpCatalog).toHaveBeenLastCalledWith({
+      expect(mockUseInternalMcpCatalog).not.toHaveBeenCalledWith({
         enabled: true,
       }),
     );

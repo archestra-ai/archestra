@@ -4,7 +4,9 @@ import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sdk = vi.hoisted(() => ({
+  createPlugin: vi.fn(),
   deletePlugin: vi.fn(),
+  importGithubPlugin: vi.fn(),
   importGithubPluginMarketplace: vi.fn(),
 }));
 
@@ -17,20 +19,34 @@ vi.mock("sonner", () => ({
 }));
 
 import { toast } from "sonner";
+import { authQueryKeys } from "@/lib/auth/auth.query";
 import {
+  type CreatePluginBody,
+  type ImportGithubPluginBody,
   type ImportGithubPluginMarketplaceBody,
   useBulkDeletePlugins,
+  useCreatePlugin,
+  useDeletePlugin,
+  useImportGithubPlugin,
   useImportGithubPluginMarketplace,
 } from "./plugin.query";
+
+function createTestClient() {
+  return new QueryClient({
+    defaultOptions: { mutations: { retry: false } },
+  });
+}
+
+function makeWrapper(client: QueryClient) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  };
+}
 
 function wrapper({ children }: { children: ReactNode }) {
   return createElement(
     QueryClientProvider,
-    {
-      client: new QueryClient({
-        defaultOptions: { mutations: { retry: false } },
-      }),
-    },
+    { client: createTestClient() },
     children,
   );
 }
@@ -83,5 +99,91 @@ describe("Plugin bulk mutations", () => {
         ),
       }),
     );
+  });
+
+  it.each([
+    {
+      name: "create",
+      run: async (client: QueryClient) => {
+        sdk.createPlugin.mockResolvedValue({
+          data: { id: "p-created" },
+          error: undefined,
+        });
+        const { result } = renderHook(() => useCreatePlugin(), {
+          wrapper: makeWrapper(client),
+        });
+        await act(() => result.current.mutateAsync({} as CreatePluginBody));
+      },
+    },
+    {
+      name: "import",
+      run: async (client: QueryClient) => {
+        sdk.importGithubPlugin.mockResolvedValue({
+          data: { id: "p-imported" },
+          error: undefined,
+        });
+        const { result } = renderHook(() => useImportGithubPlugin(), {
+          wrapper: makeWrapper(client),
+        });
+        await act(() =>
+          result.current.mutateAsync({} as ImportGithubPluginBody),
+        );
+      },
+    },
+    {
+      name: "marketplace import",
+      run: async (client: QueryClient) => {
+        sdk.importGithubPluginMarketplace.mockResolvedValue({
+          data: { created: [{ id: "p-mp" }], failed: [] },
+          error: undefined,
+        });
+        const { result } = renderHook(
+          () => useImportGithubPluginMarketplace(),
+          {
+            wrapper: makeWrapper(client),
+          },
+        );
+        await act(() =>
+          result.current.mutateAsync({} as ImportGithubPluginMarketplaceBody),
+        );
+      },
+    },
+    {
+      name: "delete",
+      run: async (client: QueryClient) => {
+        sdk.deletePlugin.mockResolvedValue({
+          data: { success: true },
+          error: undefined,
+        });
+        const { result } = renderHook(() => useDeletePlugin("p-1"), {
+          wrapper: makeWrapper(client),
+        });
+        await act(() => result.current.mutateAsync());
+      },
+    },
+    {
+      name: "bulk delete",
+      run: async (client: QueryClient) => {
+        sdk.deletePlugin.mockResolvedValue({
+          data: { success: true },
+          error: undefined,
+        });
+        const { result } = renderHook(() => useBulkDeletePlugins(), {
+          wrapper: makeWrapper(client),
+        });
+        await act(() =>
+          result.current.mutateAsync([{ id: "p-1", name: "One" }]),
+        );
+      },
+    },
+  ])("refetches scoped capabilities after a plugin $name", async ({ run }) => {
+    const client = createTestClient();
+    client.setQueryData(authQueryKeys.scopedCapabilities(), []);
+
+    await run(client);
+
+    expect(
+      client.getQueryState(authQueryKeys.scopedCapabilities())?.isInvalidated,
+    ).toBe(true);
   });
 });

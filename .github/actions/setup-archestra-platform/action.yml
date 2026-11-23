@@ -37,7 +37,7 @@ inputs:
     required: false
     default: "false"
   helm-chart-ref:
-    description: "Helm chart reference - either a local path or OCI registry URL (e.g., oci://europe-west1-docker.pkg.dev/.../archestra-platform)"
+    description: "Helm chart reference - either a local path or OCI registry URL (e.g., oci://ghcr.io/archestra-ai/helm-charts/archestra-platform)"
     required: false
     default: ""
   helm-chart-version:

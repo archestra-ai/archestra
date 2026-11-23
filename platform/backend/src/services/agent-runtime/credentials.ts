@@ -12,7 +12,6 @@ import { CredentialAccess } from "@/services/credential-access";
 import { CredentialResolutionBatch } from "@/services/credentials";
 import { GitHubReconnectRequiredError } from "@/services/github-user-connection";
 import type {
-  AgentRuntime,
   AgentRuntimeCredentialDeclaration,
   MissingAgentRuntimeCredential,
   ResolvedAgentRuntime,
@@ -46,13 +45,15 @@ export async function resolveAgentRuntimeCredentials(params: {
     Partial<
       Pick<
         ResolvedAgentRuntime,
-        "command" | "allowAgentSuppliedCredentialValues"
+        "command" | "claudeCode" | "allowAgentSuppliedCredentialValues"
       >
     >;
   organizationId: string;
   userId: string | null;
   authorizationUserId?: string | null;
   ephemeralCredentials?: Record<string, string>;
+  /** Whether the run uses a person's Claude subscription. */
+  usesClaudeSubscription?: boolean;
 }): Promise<AgentRuntimeCredentialResolution> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
   const effectiveEphemeral =
@@ -211,13 +212,15 @@ export async function preflightAgentRuntimeCredentials(params: {
     Partial<
       Pick<
         ResolvedAgentRuntime,
-        "command" | "allowAgentSuppliedCredentialValues"
+        "command" | "claudeCode" | "allowAgentSuppliedCredentialValues"
       >
     >;
   organizationId: string;
   userId: string | null;
   authorizationUserId?: string | null;
   ephemeralCredentials?: Record<string, string>;
+  /** Whether the run uses a person's Claude subscription. */
+  usesClaudeSubscription?: boolean;
   /**
    * Report organization credentials the caller may not run with as `missing`
    * entries marked `adminOnly`, instead of refusing the whole check. For the
@@ -541,12 +544,15 @@ export async function declarePersonalRuntimeCredential(params: {
   const credentials = [...(params.runtime.credentials ?? []), declaration];
   // Persist the declaration before the value: `setAgentRuntimeCredential`
   // refuses an undeclared key, and a stored value under a key the Agent does
-  // not declare would never be injected anyway.
+  // not declare would never be injected anyway. It is added to what the agent
+  // stores: a run reads some stored settings as they run, which must not be
+  // written back.
+  const stored = await AgentModel.findById(params.runtime.agentId);
+  if (!stored?.runtime) {
+    throw new ApiError(404, "Agent not found");
+  }
   await AgentModel.update(params.runtime.agentId, {
-    runtime: {
-      ...stripResolvedFields(params.runtime),
-      credentials,
-    },
+    runtime: { ...stored.runtime, credentials },
   });
 
   return {
@@ -811,22 +817,19 @@ async function deleteSecretQuietly(secretId: string): Promise<void> {
   }
 }
 
-/** `ResolvedAgentRuntime` carries server-only associations the column does not. */
-function stripResolvedFields(runtime: ResolvedAgentRuntime): AgentRuntime {
-  const { agentId, organizationId, environmentId, secretId, ...stored } =
-    runtime;
-  return stored;
-}
-
 // Claude Code owns subscription authentication. Legacy pasted tokens must not
-// block native sign-in or override the selected provider's billing.
+// block native sign-in or override the selected provider's billing on the
+// maintained Claude Code runtime, nor block a run on a person's Claude
+// subscription, where the run sets the token itself.
 function applicableCredentials(params: {
   runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials"> &
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
+  usesClaudeSubscription?: boolean;
 }) {
-  return isClaudeCodeRuntimeCommand(params.runtime.command?.[0])
+  return isClaudeCodeRuntimeCommand(params.runtime.command?.[0]) ||
+    params.usesClaudeSubscription === true
     ? params.runtime.credentials?.filter(
         ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
       )

@@ -139,7 +139,10 @@ describe("fetchGithubCopilotModels", () => {
           outputLength: null,
           authoritativeContextLength: true,
           supportsToolCalling: true,
+          supportsVision: null,
           supportedEndpoints: ["/chat/completions"],
+          supportedReasoningEfforts: [],
+          authoritative: true,
         },
       },
       {
@@ -151,7 +154,10 @@ describe("fetchGithubCopilotModels", () => {
           outputLength: null,
           authoritativeContextLength: true,
           supportsToolCalling: false,
+          supportsVision: null,
           supportedEndpoints: ["/chat/completions"],
+          supportedReasoningEfforts: [],
+          authoritative: true,
         },
       },
       {
@@ -163,7 +169,10 @@ describe("fetchGithubCopilotModels", () => {
           outputLength: null,
           authoritativeContextLength: true,
           supportsToolCalling: null,
+          supportsVision: null,
           supportedEndpoints: ["/responses"],
+          supportedReasoningEfforts: null,
+          authoritative: false,
         },
       },
       {
@@ -175,7 +184,10 @@ describe("fetchGithubCopilotModels", () => {
           outputLength: null,
           authoritativeContextLength: true,
           supportsToolCalling: null,
+          supportsVision: null,
           supportedEndpoints: ["/chat/completions", "/responses"],
+          supportedReasoningEfforts: null,
+          authoritative: false,
         },
       },
     ]);
@@ -214,6 +226,69 @@ describe("fetchGithubCopilotModels", () => {
       "gpt-5.1",
     ]);
     expect(probesByEndpoint("/responses")).toEqual(["gpt-5.3-codex"]);
+  });
+
+  test("reads vision and the accepted reasoning levels from `supports`", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: string | URL) => {
+        const url = String(input);
+        if (url.includes("copilot_internal"))
+          return Promise.resolve(tokenExchangeResponse());
+        if (url.endsWith("/responses"))
+          return Promise.resolve(aliveResponsesProbeResponse());
+        if (url.endsWith("/chat/completions"))
+          return Promise.resolve(aliveProbeResponse());
+        return Promise.resolve(
+          Response.json({
+            data: [
+              {
+                id: "gpt-6.2",
+                supported_endpoints: ["/chat/completions", "/responses"],
+                capabilities: {
+                  type: "chat",
+                  supports: {
+                    tool_calls: true,
+                    vision: true,
+                    // Unknown spellings are dropped; order is normalized.
+                    reasoning_effort: ["xhigh", "low", "adaptive", "high"],
+                  },
+                },
+              },
+              {
+                // No `reasoning_effort` key: Copilot rejects every level.
+                id: "claude-haiku-4.5",
+                capabilities: {
+                  type: "chat",
+                  supports: { tool_calls: true, vision: false },
+                },
+              },
+            ],
+          }),
+        );
+      }),
+    );
+
+    const models = await fetchGithubCopilotModels(uniqueGithubToken());
+
+    expect(
+      models.map(({ id, capabilities }) => ({
+        id,
+        supportsVision: capabilities?.supportsVision,
+        supportedReasoningEfforts: capabilities?.supportedReasoningEfforts,
+      })),
+    ).toEqual([
+      {
+        id: "gpt-6.2",
+        supportsVision: true,
+        supportedReasoningEfforts: ["low", "high", "xhigh"],
+      },
+      {
+        id: "claude-haiku-4.5",
+        supportsVision: false,
+        supportedReasoningEfforts: [],
+      },
+    ]);
   });
 
   test("reads Copilot's window, prompt and output limits", async () => {

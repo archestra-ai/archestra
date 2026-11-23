@@ -19,6 +19,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
 import {
+  CATALOG_NAME_CONFLICT_CODE,
   getCatalogMutationErrorCode,
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
   useCreateInternalMcpCatalogItem,
@@ -103,6 +104,17 @@ export default function NewMcpCatalogItemPage() {
               error instanceof Error
                 ? error.message
                 : "Server URL is not allowed by the environment's network policy.",
+          });
+        }
+        // A taken name points at the Name field, as the edit dialog does.
+        // The mutation skips its toast for this code.
+        if (getCatalogMutationErrorCode(error) === CATALOG_NAME_CONFLICT_CODE) {
+          form.setError("name", {
+            type: "server",
+            message:
+              error instanceof Error
+                ? error.message
+                : "An MCP server with this name already exists in this environment. Rename it first.",
           });
         }
       },

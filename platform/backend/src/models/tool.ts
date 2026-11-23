@@ -2238,14 +2238,7 @@ class ToolModel {
           notDeleted(schema.toolsTable),
         ),
       )
-      .orderBy(
-        desc(
-          ToolModel.hasHealthyMcpServerInstall(
-            schema.appToolsTable.mcpServerId,
-          ),
-        ),
-        asc(schema.toolsTable.id),
-      );
+      .orderBy(...ToolModel.appAssignedToolOrder(appId));
   }
 
   /** App-owner counterpart of {@link getMcpToolsAssignedToAgentBySuffix}. */
@@ -2286,14 +2279,7 @@ class ToolModel {
           notDeleted(schema.toolsTable),
         ),
       )
-      .orderBy(
-        desc(
-          ToolModel.hasHealthyMcpServerInstall(
-            schema.appToolsTable.mcpServerId,
-          ),
-        ),
-        asc(schema.toolsTable.id),
-      )
+      .orderBy(...ToolModel.appAssignedToolOrder(appId))
       .limit(1);
   }
 
@@ -2745,6 +2731,40 @@ class ToolModel {
           inArray(schema.toolsTable.name, params.names),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
           notDeleted(schema.toolsTable),
+        ),
+      );
+  }
+
+  static async findProxyToolNames(params: {
+    organizationId: string;
+    userId: string;
+    isAgentAdmin: boolean;
+  }): Promise<Array<{ name: string }>> {
+    return db
+      .selectDistinct({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(visibleProxyToolNamesCondition(params));
+  }
+
+  static async findDescribedProxyToolsByNames(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+    names: string[];
+  }): Promise<
+    Array<{ name: string; description: string | null; parameters: unknown }>
+  > {
+    if (params.names.length === 0) return [];
+    return db
+      .select({
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          visibleProxyToolsCondition(params),
+          inArray(schema.toolsTable.name, params.names),
         ),
       );
   }
@@ -4263,6 +4283,33 @@ class ToolModel {
   }
 
   /**
+   * Order for an app's assigned tools when one name exists twice: the app's
+   * own environment (its backing catalog's environment) before Default, then
+   * a healthy install, then a stable id. For an app in Default the environment
+   * term is true for every candidate row, so the older order stands.
+   */
+  private static appAssignedToolOrder(appId: string) {
+    const appEnvironment = sql`(
+      select app_catalog.environment_id
+      from ${schema.appsTable} app
+      inner join ${schema.mcpServersTable} app_server
+        on app_server.id = app.mcp_server_id
+      inner join ${schema.internalMcpCatalogTable} app_catalog
+        on app_catalog.id = app_server.catalog_id
+      where app.id = ${appId}
+    )`;
+    return [
+      desc(
+        sql`${schema.internalMcpCatalogTable.environmentId} is not distinct from ${appEnvironment}`,
+      ),
+      desc(
+        ToolModel.hasHealthyMcpServerInstall(schema.appToolsTable.mcpServerId),
+      ),
+      asc(schema.toolsTable.id),
+    ];
+  }
+
+  /**
    * True when the connection a tool call would actually reach is connected
    * and authenticated: the assignment's pinned server when it has one (a
    * static credential pin), otherwise any healthy install of the tool's
@@ -4343,5 +4390,75 @@ function coverageCatalogCondition(params: {
     params.catalogIds ? inArray(table.id, params.catalogIds) : undefined,
     isNull(table.parentCatalogItemId),
     notDeleted(table),
+  );
+}
+
+function proxyToolBaseCondition() {
+  return and(
+    isNull(schema.toolsTable.agentId),
+    isNull(schema.toolsTable.delegateToAgentId),
+    isNull(schema.toolsTable.delegateToA2aConnectionId),
+    eq(schema.toolsTable.clonedPendingDiscovery, false),
+    notDeleted(schema.toolsTable),
+  );
+}
+
+function observedByUserCondition(userId: string) {
+  return exists(
+    db
+      .select({ id: schema.toolObservationsTable.id })
+      .from(schema.toolObservationsTable)
+      .where(
+        and(
+          eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
+          eq(schema.toolObservationsTable.userId, userId),
+        ),
+      ),
+  );
+}
+
+function visibleProxyToolNamesCondition(params: {
+  organizationId: string;
+  userId: string;
+  isAgentAdmin: boolean;
+}) {
+  // Proxy ingestion deduplicates names globally against existing catalog rows
+  // and attributes observations to the reused row. Include caller/org proxy
+  // observations for name recognition even when catalogId is non-null, while
+  // keeping metadata reads restricted to uncataloged proxy rows below.
+  const visibility = params.isAgentAdmin
+    ? or(
+        isNull(schema.toolsTable.catalogId),
+        exists(
+          db
+            .select({ id: schema.toolObservationsTable.id })
+            .from(schema.toolObservationsTable)
+            .innerJoin(
+              schema.membersTable,
+              eq(
+                schema.membersTable.userId,
+                schema.toolObservationsTable.userId,
+              ),
+            )
+            .where(
+              and(
+                eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
+                eq(schema.membersTable.organizationId, params.organizationId),
+              ),
+            ),
+        ),
+      )
+    : observedByUserCondition(params.userId);
+  return and(proxyToolBaseCondition(), visibility);
+}
+
+function visibleProxyToolsCondition(params: {
+  userId: string;
+  isAgentAdmin: boolean;
+}) {
+  return and(
+    isNull(schema.toolsTable.catalogId),
+    proxyToolBaseCondition(),
+    params.isAgentAdmin ? undefined : observedByUserCondition(params.userId),
   );
 }

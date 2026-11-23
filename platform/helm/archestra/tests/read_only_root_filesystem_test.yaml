@@ -1,0 +1,175 @@
+suite: read-only root filesystem
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+tests:
+  - it: runs every web, worker, and migration container read-only with an emptyDir at each path the image writes
+    set:
+      archestra.worker.enabled: true
+      archestra.initContainers.vaultSecrets.enabled: true
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers[?(@.securityContext.readOnlyRootFilesystem != true)]
+        documentSelector: &platformPods
+          path: kind
+          value: Deployment
+          matchMany: true
+          skipEmptyTemplates: true
+      - notExists:
+          path: spec.template.spec.containers[?(@.securityContext.readOnlyRootFilesystem != true)]
+        documentSelector: *platformPods
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts
+          value: &writableMounts
+            - name: vault-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+            - name: writable-tmp
+              mountPath: /tmp
+            - name: writable-run
+              mountPath: /run/archestra
+            - name: writable-data
+              mountPath: /app/data
+            - name: writable-home
+              mountPath: /home/archestra
+            - name: writable-next-cache
+              mountPath: /app/frontend/.next/cache
+        documentSelector: *platformPods
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: writable-next-cache
+            emptyDir: {}
+        documentSelector: *platformPods
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 6
+        documentSelector: *platformPods
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "vault-secrets")].volumeMounts
+          value:
+            - name: vault-secrets
+              mountPath: /vault/secrets
+            - name: writable-tmp
+              mountPath: /tmp
+            - name: writable-run
+              mountPath: /run/archestra
+            - name: writable-data
+              mountPath: /app/data
+            - name: writable-home
+              mountPath: /home/archestra
+            - name: writable-next-cache
+              mountPath: /app/frontend/.next/cache
+        documentSelector: *platformPods
+
+  - it: runs the migration Job's containers read-only with the same emptyDirs
+    template: migration-job.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers[?(@.securityContext.readOnlyRootFilesystem != true)]
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 5
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 5
+
+  - it: renders the writable root filesystem and no emptyDirs when the value is off
+    set:
+      archestra.readOnlyRootFilesystem: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts
+      - notExists:
+          path: spec.template.spec.volumes
+        documentSelector:
+          path: kind
+          value: Deployment
+          matchMany: true
+          skipEmptyTemplates: true
+
+  - it: keeps the root filesystem writable when the pods run as root
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.runAsNonRoot: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+      - notExists:
+          path: spec.template.spec.volumes
+
+  - it: lets containerSecurityContext turn the read-only root filesystem off, without emptyDirs
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: false
+      - notExists:
+          path: spec.template.spec.volumes
+
+  - it: mounts the file-storage volume, not an emptyDir, when it uses a writable path
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.fileStorage.provider: filesystem
+      archestra.fileStorage.filesystem.mountPath: /app/data/
+      archestra.fileStorage.filesystem.accessModes: [ReadWriteMany]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "file-storage")].mountPath
+          value: /app/data/
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name == "writable-data")]
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "writable-data")]
+      - exists:
+          path: spec.template.spec.volumes[?(@.name == "writable-tmp")]
+
+  - it: mounts an operator's own volume, not an emptyDir, at a writable path
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.extraVolumes:
+        - name: scratch
+          emptyDir:
+            sizeLimit: 1Gi
+      archestra.extraVolumeMounts:
+        - name: scratch
+          mountPath: /tmp
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.mountPath == "/tmp")].name
+          value: scratch
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "writable-tmp")]
+      - exists:
+          path: spec.template.spec.volumes[?(@.name == "writable-home")]
+
+  - it: gives the migration Job an emptyDir where it leaves out a PVC-backed extra volume
+    template: migration-job.yaml
+    set:
+      archestra.extraVolumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: app-data
+      archestra.extraVolumeMounts:
+        - name: app-data
+          mountPath: /app/data
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name == "app-data")]
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.mountPath == "/app/data")].name
+          value: writable-data

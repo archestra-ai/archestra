@@ -1,3 +1,7 @@
+import {
+  type ReasoningEffortLevel,
+  toReasoningEffortLevels,
+} from "@archestra/shared";
 import { z } from "zod";
 import type { ProviderModelPricing } from "@/types/provider-model-pricing";
 import { joinBaseUrl } from "@/utils/base-url";
@@ -10,10 +14,13 @@ export async function fetchLiteLlmMetadata(params: {
 }): Promise<{
   prices: Map<string, ProviderModelPricing>;
   outputLimits: Map<string, number | null>;
+  /** Accepted `reasoning_effort` levels; null when a deployment does not say. */
+  reasoningEfforts: Map<string, ReasoningEffortLevel[] | null>;
 }> {
   const prices = new Map<string, ProviderModelPricing>();
   const outputLimits = new Map<string, number | null>();
-  const result = { prices, outputLimits };
+  const reasoningEfforts = new Map<string, ReasoningEffortLevel[] | null>();
+  const result = { prices, outputLimits, reasoningEfforts };
   const ambiguous = new Set<string>();
   if (new URL(params.baseUrl).origin === "https://api.openai.com")
     return result;
@@ -45,6 +52,18 @@ export async function fetchLiteLlmMetadata(params: {
           : previousLimit === null || outputLimit === null
             ? null
             : Math.min(previousLimit, outputLimit),
+      );
+      // Same rule as the output limit: an alias accepts only the levels every
+      // deployment behind it accepts, and is unknown if any one is silent.
+      const levels = readReasoningEfforts(info);
+      const previousLevels = reasoningEfforts.get(entry.model_name);
+      reasoningEfforts.set(
+        entry.model_name,
+        previousLevels === undefined
+          ? levels
+          : previousLevels === null || levels === null
+            ? null
+            : previousLevels.filter((level) => levels.includes(level)),
       );
       const price = {
         promptPricePerToken: normalizePrice(info.input_cost_per_token),
@@ -89,6 +108,26 @@ export function readOutputTokenLimit(value: unknown): number | undefined {
     : undefined;
 }
 
+/**
+ * LiteLLM describes reasoning as `supports_reasoning` plus a flag per level
+ * outside the `low`/`medium`/`high` range every reasoning model takes.
+ */
+function readReasoningEfforts(
+  info: z.infer<typeof ModelInfoSchema>,
+): ReasoningEffortLevel[] | null {
+  if (info.supports_reasoning === false) return [];
+  if (info.supports_reasoning !== true) return null;
+  return toReasoningEffortLevels([
+    "low",
+    "medium",
+    "high",
+    info.supports_none_reasoning_effort === true && "none",
+    info.supports_minimal_reasoning_effort === true && "minimal",
+    info.supports_xhigh_reasoning_effort === true && "xhigh",
+    info.supports_max_reasoning_effort === true && "max",
+  ]);
+}
+
 function normalizePrice(value: unknown): string | null {
   if (typeof value !== "number" && typeof value !== "string") return null;
   if (
@@ -100,19 +139,24 @@ function normalizePrice(value: unknown): string | null {
   return Number.isFinite(number) && number >= 0 ? String(number) : null;
 }
 
+const ModelInfoSchema = z.object({
+  max_output_tokens: z.unknown().optional(),
+  input_cost_per_token: z.unknown().optional(),
+  output_cost_per_token: z.unknown().optional(),
+  cache_read_input_token_cost: z.unknown().optional(),
+  cache_creation_input_token_cost: z.unknown().optional(),
+  supports_reasoning: z.unknown().optional(),
+  supports_none_reasoning_effort: z.unknown().optional(),
+  supports_minimal_reasoning_effort: z.unknown().optional(),
+  supports_xhigh_reasoning_effort: z.unknown().optional(),
+  supports_max_reasoning_effort: z.unknown().optional(),
+});
+
 const ResponseSchema = z.object({
   data: z.array(
     z.object({
       model_name: z.string().optional(),
-      model_info: z
-        .object({
-          max_output_tokens: z.unknown().optional(),
-          input_cost_per_token: z.unknown().optional(),
-          output_cost_per_token: z.unknown().optional(),
-          cache_read_input_token_cost: z.unknown().optional(),
-          cache_creation_input_token_cost: z.unknown().optional(),
-        })
-        .nullish(),
+      model_info: ModelInfoSchema.nullish(),
     }),
   ),
 });

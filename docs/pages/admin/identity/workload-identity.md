@@ -2,14 +2,14 @@
 title: Workload Identity Federation
 description: Let CI jobs and workloads sign in as a service account or an OAuth client with their own OIDC token instead of a stored key or secret
 order: 6
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Let a CI job sign in as a service account with the OIDC token its platform already issues, so no Archestra API key sits in your CI secrets. A GitHub Actions job that deploys from `main` gets a one-hour token; the same workflow run from a pull request gets nothing.
 
-Workload identity federation is an [Enterprise feature](/docs/get-started/pricing-model). To manage a service account's or OAuth client's federated credentials, you need update access on it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+Workload identity federation is an [Enterprise feature](/pricing). To manage a service account's or OAuth client's federated credentials, you need update access on it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ## When to Use It
 
@@ -45,6 +45,38 @@ Every value matches exactly. There are no wildcards: to trust two branches or tw
 | Agent Substrate | Your installation's public actor JWT issuer | `actor/support/triage` |
 
 A GitHub Actions job that names an `environment:` gets the environment subject, so require the environment instead of the branch when you deploy through one.
+
+## Declare Accounts in the Helm Chart
+
+With the Helm chart, Archestra creates the service account and its federated credential on its first start, so one install can bring up Archestra and the workloads that manage it, such as the [Terraform or Crossplane provider](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs/guides/authentication), with no API key to mint and hand over.
+
+1. List the accounts under `archestra.bootstrap.serviceAccounts` in your values:
+
+   ```yaml
+   archestra:
+     bootstrap:
+       serviceAccounts:
+         - id: 6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10
+           name: crossplane
+           roles:
+             - fixed:agents:reader
+             - fixed:skills:writer
+           federatedCredentials:
+             - name: crossplane provider
+               issuer: https://oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE
+               audience: https://archestra.example.com
+               subject: system:serviceaccount:crossplane-system:provider-archestra
+   ```
+
+2. List under `roles` every role the account needs, and no more. Compose access from [granular roles](/docs/reference/permissions#granular-roles) such as `fixed:agents:reader`, or use a predefined role (`member`, `editor`, `admin`) or a custom role's identifier.
+3. Set `id` to a UUID you choose, and configure the workload with it. The workload can then sign in on the first deploy, without looking the ID up.
+4. Install or upgrade the chart. Archestra creates the accounts after its database migrations.
+
+What to know:
+
+- Archestra creates only what is missing, matched by name, on every start. It never changes or deletes an account or credential that exists, so edits in the UI, API, or Terraform stick.
+- An account it cannot create, for an unknown role or a private issuer, is skipped and logged. Archestra still starts.
+- The chart renders the list into [`ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SERVICE_ACCOUNT_BOOTSTRAP).
 
 ## Exchange a Token in GitHub Actions
 
@@ -152,7 +184,7 @@ Changing a credential's issuer, audience, subject, or conditions revokes the tok
 
 ## Troubleshooting
 
-A refused exchange answers `400` with an `error` code. The **Audit** tab of [Logs and Auditing](/docs/admin/logs) shows why: open the **Service account token exchanged** event for the account and read `reason`.
+A refused exchange answers `400` with an `error` code. The **Audit** events in [Logs](/docs/insights/logs) show why: open the **Service account token exchanged** event for the account and read `reason`.
 
 | Reason | Fix |
 | --- | --- |

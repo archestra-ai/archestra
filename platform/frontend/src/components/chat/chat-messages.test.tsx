@@ -1,5 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { archestraApiTypes } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -725,9 +726,9 @@ describe("ChatMessages", () => {
   });
 
   it("keeps thinking below the MCP App panel it follows", () => {
-    // The compact row swallows both tool calls, but the app announcement stays
-    // put and renders the panel. Thinking that came after the app must not be
-    // folded into the accordion above it.
+    // When narration separates earlier tools from an MCP App, the app mounts
+    // under its own row (consuming data-tool-ui-start without a duplicate card)
+    // and thinking that came after the app stays below it.
     const messages = [
       {
         id: "assistant-1",
@@ -747,6 +748,7 @@ describe("ChatMessages", () => {
             input: { q: "weather" },
             output: "sunny",
           },
+          { type: "text", text: "Rendering the chart." },
           { type: "reasoning", text: "second pass" },
           {
             type: "tool-charts__render",
@@ -777,25 +779,24 @@ describe("ChatMessages", () => {
     const { container } = render(
       <ChatMessages
         conversationId="conv-1"
+        agentId="agent-1"
         messages={messages}
         status="streaming"
       />,
     );
 
     expect(screen.getAllByTestId("reasoning")).toHaveLength(3);
+    // Consuming data-tool-ui-start avoids rendering a duplicate bare card.
+    expect(screen.queryByText("tool-charts__render")).not.toBeInTheDocument();
 
-    // Document order: the app's card must precede the thinking that followed it.
+    // Document order: the app's section must precede the thinking that followed it.
     const landmarks = [...container.querySelectorAll("*")].flatMap((el) => {
       if (el.getAttribute("data-testid") === "reasoning") return ["thinking"];
-      if (
-        el.children.length === 0 &&
-        el.textContent === "tool-charts__render"
-      ) {
-        return ["app"];
-      }
+      if (el.getAttribute("data-testid") === "mcp-app-section") return ["app"];
       return [];
     });
 
+    expect(landmarks).toContain("app");
     expect(landmarks.indexOf("app")).toBeLessThan(
       landmarks.lastIndexOf("thinking"),
     );
@@ -1578,7 +1579,8 @@ describe("ChatMessages", () => {
     );
 
     // Completed: a compact circle whose expanded card lists the input.
-    fireEvent.click(screen.getByRole("button", { name: /guardrails step/i }));
+    // The approval-requested circle is already auto-expanded under its circle.
+    fireEvent.click(screen.getByRole("button", { name: "Guardrails step" }));
 
     const shownInputs = screen
       .getAllByText(/Share the report with the team/)
@@ -2234,6 +2236,424 @@ describe("ChatMessages", () => {
     expect(
       screen.getByText(/Once that is done I will fetch the server info/i),
     ).toBeInTheDocument();
+  });
+
+  it("orders tool-call circles chronologically around narration and opens policy previews under their own circle", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__load_skill",
+            toolCallId: "c1",
+            state: "output-available",
+            input: { name: "guardrails" },
+            output: "loaded",
+          },
+          { type: "text", text: "First I will inspect the current policy." },
+          {
+            type: "tool-sparky__get_guardrails_policy",
+            toolCallId: "c2",
+            state: "output-available",
+            input: {},
+            output: "current",
+          },
+          { type: "text", text: "Now I am previewing the change." },
+          {
+            type: "tool-sparky__preview_guardrails_policy_change",
+            toolCallId: "c3",
+            state: "output-available",
+            input: {
+              expectedRevision: 3,
+              edits: [{ oldText: "old", newText: "new" }],
+            },
+            output: {
+              structuredContent: {
+                stage: "preview",
+                delivery: "revision",
+                before: "old",
+                after: "new",
+              },
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ChatMessages
+          conversationId="conv-1"
+          messages={messages}
+          status="ready"
+        />
+      </QueryClientProvider>,
+    );
+
+    const skillPill = screen.getByRole("status", { name: "guardrails" });
+    const firstText = screen.getByText(
+      "First I will inspect the current policy.",
+    );
+    const getPolicyCircle = screen.getByRole("button", {
+      name: "get guardrails policy",
+    });
+    const secondText = screen.getByText("Now I am previewing the change.");
+    const previewCircle = screen.getByRole("button", {
+      name: "preview guardrails policy change",
+    });
+    const previewHeader = screen.getByText(
+      "tool-sparky__preview_guardrails_policy_change",
+    );
+
+    expect(previewCircle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      skillPill.compareDocumentPosition(firstText) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      firstText.compareDocumentPosition(getPolicyCircle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      getPolicyCircle.compareDocumentPosition(secondText) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      secondText.compareDocumentPosition(previewCircle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      previewCircle.compareDocumentPosition(previewHeader) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("auto-opens only the latest policy preview across split rows in a message", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__preview_guardrails_policy_change",
+            toolCallId: "preview-1",
+            state: "output-available",
+            input: {
+              expectedRevision: 3,
+              edits: [{ oldText: "old", newText: "first" }],
+            },
+            output: {
+              structuredContent: {
+                stage: "preview",
+                delivery: "revision",
+                before: "old",
+                after: "first",
+              },
+            },
+          },
+          { type: "text", text: "Adjusting the preview." },
+          {
+            type: "tool-sparky__preview_guardrails_policy_change",
+            toolCallId: "preview-2",
+            state: "output-available",
+            input: {
+              expectedRevision: 3,
+              edits: [{ oldText: "old", newText: "second" }],
+            },
+            output: {
+              structuredContent: {
+                stage: "preview",
+                delivery: "revision",
+                before: "old",
+                after: "second",
+              },
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const previewButtons = screen.getAllByRole("button", {
+      name: "preview guardrails policy change",
+    });
+    expect(previewButtons).toHaveLength(2);
+    expect(previewButtons[0]).toHaveAttribute("aria-expanded", "false");
+    expect(previewButtons[1]).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getAllByText("tool-sparky__preview_guardrails_policy_change"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps an earlier row's preview open when a pending proposal references it and a newer preview arrives (even without full-view)", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+
+    const alphaContent = "[policy]\nversion = 2\n# allow alpha\n";
+    const alphaDiff =
+      "--- a/mcp/alpha.toml\n+++ b/mcp/alpha.toml\n@@ -1,2 +1,3 @@\n [policy]\n version = 2\n+# allow alpha\n";
+    const betaContent = "[policy]\nversion = 2\n# allow beta\n";
+    const betaDiff =
+      "--- a/mcp/beta.toml\n+++ b/mcp/beta.toml\n@@ -1,2 +1,3 @@\n [policy]\n version = 2\n+# allow beta\n";
+
+    const buildMessages = (
+      proposalState: "approval-requested" | "output-denied",
+    ) =>
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-sparky__preview_guardrails_server_rules_change",
+              toolCallId: "preview-alpha",
+              state: "output-available",
+              input: {
+                mcpServerId: "server-alpha",
+                expectedCommit: "c1",
+                content: alphaContent,
+              },
+              output: {
+                _meta: {},
+                content: JSON.stringify({
+                  valid: true,
+                  path: "mcp/alpha.toml",
+                  mcpServer: { id: "server-alpha", name: "Alpha" },
+                  diff: alphaDiff,
+                }),
+              },
+            },
+            {
+              type: "text",
+              text: "Proposing the Alpha rules and previewing Beta next.",
+            },
+            {
+              type: "tool-sparky__propose_guardrails_server_rules_change",
+              toolCallId: "propose-alpha",
+              state: proposalState,
+              input: {
+                mcpServerId: "server-alpha",
+                expectedCommit: "c1",
+                content: alphaContent,
+                summary: "Updates Alpha rules.",
+              },
+              ...(proposalState === "approval-requested"
+                ? { approval: { id: "apr-alpha" } }
+                : { errorText: "User denied" }),
+            },
+            {
+              type: "tool-sparky__preview_guardrails_server_rules_change",
+              toolCallId: "preview-beta",
+              state: "output-available",
+              input: {
+                mcpServerId: "server-beta",
+                expectedCommit: "c2",
+                content: betaContent,
+              },
+              output: {
+                _meta: {},
+                content: JSON.stringify({
+                  valid: true,
+                  path: "mcp/beta.toml",
+                  mcpServer: { id: "server-beta", name: "Beta" },
+                  diff: betaDiff,
+                }),
+              },
+            },
+          ],
+        },
+      ] as unknown as UIMessage[];
+
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={buildMessages("approval-requested")}
+        status="ready"
+        onToolApprovalResponse={vi.fn()}
+      />,
+    );
+
+    // Even without chat:full-view, Alpha's preview stays open alongside Beta's
+    // newer preview because the pending proposal points to Alpha's diff.
+    expect(screen.getAllByLabelText("Policy diff")).toHaveLength(2);
+    expect(screen.getByText("# allow alpha")).toBeInTheDocument();
+    expect(screen.getByText("# allow beta")).toBeInTheDocument();
+    expect(screen.getByText("The change previewed above")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+
+    // Once the proposal is resolved, Alpha's earlier preview collapses cleanly,
+    // leaving only Beta's newer preview open.
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={buildMessages("output-denied")}
+        status="ready"
+        onToolApprovalResponse={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByLabelText("Policy diff")).toHaveLength(1);
+    expect(screen.queryByText("# allow alpha")).not.toBeInTheDocument();
+    expect(screen.getByText("# allow beta")).toBeInTheDocument();
+  });
+
+  it("keeps an approval-requested tool in its chronological circle before and after settlement", () => {
+    const buildMessages = (state: "approval-requested" | "output-available") =>
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-google__search",
+              toolCallId: "c1",
+              state: "output-available",
+              input: { q: "branches" },
+              output: "stale",
+            },
+            { type: "text", text: "Ready to delete the stale branch." },
+            {
+              type: "tool-github__delete_branch",
+              toolCallId: "c2",
+              state,
+              input: { branch: "stale" },
+              ...(state === "approval-requested"
+                ? { approval: { id: "apr-1" } }
+                : { output: "deleted" }),
+            },
+          ],
+        },
+      ] as unknown as UIMessage[];
+
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={buildMessages("approval-requested")}
+        status="ready"
+        onToolApprovalResponse={vi.fn()}
+      />,
+    );
+
+    const textNode = screen.getByText("Ready to delete the stale branch.");
+    const pendingCircle = screen.getByRole("button", {
+      name: "delete branch (approval required)",
+    });
+    expect(pendingCircle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      textNode.compareDocumentPosition(pendingCircle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={buildMessages("output-available")}
+        status="ready"
+        onToolApprovalResponse={vi.fn()}
+      />,
+    );
+
+    const settledCircle = screen.getByRole("button", { name: "delete branch" });
+    expect(settledCircle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      textNode.compareDocumentPosition(settledCircle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps auth-error tools in a clickable circle alongside sibling tools and shows the reauth card below", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "c1",
+            state: "output-available",
+            input: { q: "docs" },
+            output: "ok",
+          },
+          {
+            type: "tool-id-jag_test__get_server_info",
+            toolCallId: "c2",
+            state: "output-available",
+            input: {},
+            output: {
+              isError: true,
+              _meta: {
+                archestraError: {
+                  type: "auth_expired",
+                  message:
+                    'Expired or invalid authentication for "id-jag test".',
+                  catalogId: "cat_abc",
+                  catalogName: "id-jag test",
+                  serverId: "srv_xyz",
+                  reauthUrl:
+                    "http://localhost:3000/mcp/registry?reauth=cat_abc&server=srv_xyz",
+                },
+              },
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "search" })).toBeInTheDocument();
+    const errorCircle = screen.getByRole("button", {
+      name: "get server info (error)",
+    });
+    expect(errorCircle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByRole("button", { name: "Re-authenticate" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("tool-id-jag_test__get_server_info"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(errorCircle);
+    expect(errorCircle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByText("tool-id-jag_test__get_server_info"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders optimistic pending tool calls as running circles instead of bare cards", () => {
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={[]}
+        status="streaming"
+        optimisticToolCalls={[
+          {
+            toolCallId: "opt-1",
+            toolName: "google__search",
+            input: { q: "weather" },
+          },
+        ]}
+      />,
+    );
+
+    const circle = screen.getByRole("button", { name: "search (running)" });
+    expect(circle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("tool-google__search")).not.toBeInTheDocument();
   });
 });
 

@@ -97,6 +97,11 @@ export async function handleScheduleTriggerRunExecution(
     if (!actor) {
       throw new Error("Scheduled trigger actor no longer exists");
     }
+    if (actor.softDeleted) {
+      throw new Error(
+        "Scheduled trigger actor was deactivated in the identity provider",
+      );
+    }
     const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
       userId: actor.id,
       organizationId: trigger.organizationId,

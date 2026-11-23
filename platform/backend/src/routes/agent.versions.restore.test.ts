@@ -20,6 +20,10 @@ import {
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createRestrictedEnvironment } from "@/test/environments";
 import type { User } from "@/types";
+import {
+  makeKeyWithModel,
+  runtimeFor,
+} from "./agent-runtime/agent-runtime-account.test-helpers";
 
 describe("POST /api/agents/:id/versions/:version/restore", () => {
   let app: FastifyInstanceWithZod;
@@ -278,6 +282,111 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const agentRow = await AgentModel.findById(agent.id, user.id, true);
     expect(agentRow?.llmApiKeyId).toBe(liveKey.id);
     expect(agentRow?.modelId).toBe(model[0].id);
+  });
+
+  test("restores an API key stored without a model on an Agent Runtime agent, and on no other", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret();
+    const key = await makeLlmProviderApiKey(organizationId, secret.id);
+    const [model] = await db
+      .insert(schema.modelsTable)
+      .values({
+        externalId: "gpt-key-alone-test",
+        modelId: "gpt-key-alone-test",
+        provider: "openai",
+      })
+      .returning();
+    // Version 1 of each stores the key alone; the model is added since.
+    const onRuntime = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      runtime: runtimeFor({ inferenceProtocol: "openai_responses" }),
+      llmApiKeyId: key.id,
+    });
+    const chat = await makeAgent({ organizationId, llmApiKeyId: key.id });
+    for (const agent of [onRuntime, chat]) {
+      await AgentModel.update(agent.id, {
+        llmApiKeyId: key.id,
+        modelId: model.id,
+      });
+    }
+
+    // On an Agent Runtime agent a key alone is whole: its model is each
+    // person's to pick.
+    const restored = await restore(onRuntime.id, 1);
+    expect(restored.statusCode, restored.body).toBe(200);
+    expect(
+      await AgentModel.findById(onRuntime.id, user.id, true),
+    ).toMatchObject({ llmApiKeyId: key.id, modelId: null });
+
+    const refused = await restore(chat.id, 1);
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.message).toContain(
+      "its model and API key were not captured as a pair",
+    );
+    expect(await AgentModel.findById(chat.id, user.id, true)).toMatchObject({
+      llmApiKeyId: key.id,
+      modelId: model.id,
+    });
+  });
+
+  test("restores an API key stored alone only with the checks an edit gives it", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const live = await makeKeyWithModel({
+      organizationId,
+      provider: "openai",
+      modelId: "gpt-live-key",
+    });
+    const refusals = [
+      // Someone else's own key: the restoring person may not use it.
+      [
+        await makeKeyWithModel({
+          organizationId,
+          provider: "openai",
+          modelId: "gpt-someone-elses",
+          userId: (await makeUser()).id,
+        }),
+        "The selected API key must be available to you",
+      ],
+      // The restoring person's own ChatGPT subscription: no company key.
+      [
+        await makeKeyWithModel({
+          organizationId,
+          provider: "openai",
+          modelId: "gpt-own-subscription",
+          userId: user.id,
+          apiKeyValue: "chatgpt-oauth:example-subscription",
+        }),
+        "personal subscription",
+      ],
+    ] as const;
+    for (const [{ key }, reason] of refusals) {
+      // Version 1 stores the key alone; another key and model are set since.
+      const agent = await makeAgent({
+        organizationId,
+        agentType: "agent",
+        runtime: runtimeFor({ inferenceProtocol: "openai_responses" }),
+        llmApiKeyId: key.id,
+      });
+      await AgentModel.update(agent.id, {
+        llmApiKeyId: live.key.id,
+        modelId: live.model.id,
+      });
+
+      const refused = await restore(agent.id, 1);
+
+      expect(refused.statusCode, reason).toBe(400);
+      expect(refused.json().error.message).toContain(reason);
+      expect(await AgentModel.findById(agent.id, user.id, true)).toMatchObject({
+        llmApiKeyId: live.key.id,
+        modelId: live.model.id,
+      });
+    }
   });
 
   test("restores a version whose stored snapshot carries legacy fast/smart tier keys", async ({

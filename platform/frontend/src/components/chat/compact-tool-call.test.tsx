@@ -408,30 +408,41 @@ describe("CompactToolGroup", () => {
         </PreviewedChangesProvider>
       </QueryClientProvider>,
     );
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /^propose guardrails server rules change/,
-      }),
-    );
     return onToolApprovalResponse;
   };
 
   it("asks the person to approve a proposed file by pointing at its preview, printing neither the diff nor the file again, and opens no pull request before they do", () => {
     const onToolApprovalResponse = renderProposal(RULES_AFTER);
-    // The proposal's card is the open one here: it carries no diff of its
-    // own and no raw file.
-    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+    // Both the preview's diff and the pending approval card open automatically
+    // under their circles in order; the proposal carries no duplicate diff and
+    // no raw file.
+    expect(
+      screen.getByRole("button", {
+        name: "propose guardrails server rules change (approval required)",
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByLabelText("Policy diff")).toHaveLength(1);
     expect(screen.queryByText(/"content":/)).not.toBeInTheDocument();
     expect(
       screen.getByText("Adds a note to the Helpdesk rules."),
     ).toBeVisible();
     expect(screen.getByText("The change previewed above")).toBeVisible();
-    expect(screen.getByText("mcp/helpdesk.toml")).toBeVisible();
+    expect(screen.getAllByText("mcp/helpdesk.toml")).toHaveLength(2);
     expect(
       screen.getByText(
         "Approving opens a pull request with the change previewed above on the policy repository. It merges by itself once its checks pass.",
       ),
     ).toBeVisible();
+    // Collapsing the preview leaves only the proposal open, confirming the
+    // proposal card itself renders no diff of its own.
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "preview guardrails server rules change",
+      }),
+    );
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+    expect(screen.getByText("The change previewed above")).toBeVisible();
+    expect(screen.getByText("mcp/helpdesk.toml")).toBeVisible();
     expect(onToolApprovalResponse).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Approve/ }));
     expect(onToolApprovalResponse).toHaveBeenCalledWith({
@@ -476,13 +487,21 @@ describe("CompactToolGroup", () => {
 
   it("shows what a proposal sends when its file is not the one previewed", () => {
     renderProposal(`${RULES_AFTER}# and one more line\n`);
-    // No preview stands for this file: the person reads the file itself.
-    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+    // The proposal opens automatically under its circle alongside the earlier
+    // preview; collapsing the preview leaves only the unpreviewed proposal.
+    expect(screen.getAllByLabelText("Policy diff")).toHaveLength(1);
     expect(screen.getByText(/# and one more line/)).toBeVisible();
     expect(
       screen.getByText("Review this tool call before it can continue."),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /Approve/ })).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "preview guardrails server rules change",
+      }),
+    );
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+    expect(screen.getByText(/# and one more line/)).toBeVisible();
   });
 
   it.each([
@@ -579,7 +598,7 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
   });
 
-  it("keeps saved validations visible without claiming a run or policy activation", () => {
+  it("keeps saved validations and their run outcomes visible without claiming policy activation", () => {
     mockGetToolShortName.mockImplementation((name: string) =>
       name.replace(/^archestra__/, ""),
     );
@@ -629,6 +648,35 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
     rerender(show({ content: JSON.stringify(publication) }));
     expect(screen.getByText("Saved validations")).toBeInTheDocument();
+    for (const [status, detail] of [
+      ["passed", "passed"],
+      ["failed", "failed"],
+      ["cannot_run", "could not run"],
+    ] as const) {
+      rerender(
+        show({
+          structuredContent: {
+            ...publication,
+            run: {
+              validation: { valid: true },
+              files: [{ path: "traces/check.appa", status, steps: [] }],
+            },
+          },
+        }),
+      );
+      expect(screen.getByText(`· ${detail} ·`)).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "View Validations" }),
+      ).toHaveAttribute(
+        "href",
+        "/openappa/policy?entry=validation%3Atraces%2Fcheck.appa",
+      );
+    }
+    rerender(show({ structuredContent: { ...publication, run: null } }));
+    expect(screen.getByText("· saved ·")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View Validations" }),
+    ).toHaveAttribute("href", "/openappa/policy");
     rerender(
       show({
         structuredContent: {
@@ -1290,5 +1338,210 @@ describe("CompactToolGroup", () => {
     expect(await screen.findByTestId("hook-run-chip")).toHaveTextContent(
       "PreToolUse",
     );
+  });
+
+  it("auto-opens an approval-requested circle even when canExpandToolCalls is false and toggles on click", () => {
+    const onToolApprovalResponse = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          canExpandToolCalls={false}
+          onToolApprovalResponse={onToolApprovalResponse}
+          tools={[
+            {
+              kind: "tool",
+              key: "approval-1",
+              toolName: "github__delete_branch",
+              part: {
+                type: "tool-github__delete_branch",
+                state: "approval-requested",
+                toolCallId: "call-approval",
+                input: { branch: "stale" },
+                approval: { id: "apr-1" },
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    const circle = screen.getByRole("button", {
+      name: "delete branch (approval required)",
+    });
+    expect(circle).toHaveAttribute("aria-expanded", "true");
+    expect(circle.querySelector(".bg-amber-500")).not.toBeNull();
+    expect(screen.getByText(/Approval required/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
+
+    fireEvent.click(circle);
+    expect(circle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/Approval required/)).not.toBeInTheDocument();
+
+    fireEvent.click(circle);
+    expect(circle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onToolApprovalResponse).toHaveBeenCalledWith({
+      id: "apr-1",
+      approved: true,
+    });
+  });
+
+  it("scopes policy auto-open across groups via autoOpenPolicyKey", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const previewTool = {
+      kind: "tool" as const,
+      key: "row-1-preview",
+      toolName: "archestra__preview_guardrails_policy_change",
+      part: {
+        type: "tool-archestra__preview_guardrails_policy_change",
+        state: "output-available",
+        toolCallId: "p1",
+        input: {
+          expectedRevision: 3,
+          edits: [{ oldText: "old", newText: "new" }],
+        },
+        output: {
+          structuredContent: {
+            stage: "preview",
+            delivery: "revision",
+            before: "old",
+            after: "new",
+          },
+        },
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    };
+
+    const view = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[previewTool]}
+          autoOpenPolicyKey="row-1-preview"
+        />
+      </QueryClientProvider>,
+    );
+
+    const circle = screen.getByRole("button", {
+      name: "preview guardrails policy change",
+    });
+    expect(circle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Policy diff")).toBeVisible();
+
+    // When a later row in the same message becomes the newest policy preview,
+    // this earlier row collapses automatically.
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[previewTool]}
+          autoOpenPolicyKey="row-2-preview"
+        />
+      </QueryClientProvider>,
+    );
+    expect(circle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+  });
+
+  it("keeps a preview referenced by a pending proposal open alongside a newer preview even when canExpandToolCalls is false", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const previewA = previewEntry(RULES_AFTER, { diff: RULES_DIFF });
+    const proposeA = proposeEntry(RULES_AFTER);
+    const betaDiff =
+      "--- a/mcp/billing.toml\n+++ b/mcp/billing.toml\n@@ -1,2 +1,3 @@\n [policy]\n version = 2\n+# second server\n";
+    const previewB = {
+      kind: "tool" as const,
+      key: "preview-b",
+      toolName: "archestra__preview_guardrails_server_rules_change",
+      part: {
+        type: "tool-archestra__preview_guardrails_server_rules_change",
+        state: "output-available",
+        toolCallId: "preview-b",
+        input: {
+          mcpServerId: "server-2",
+          content: "[policy]\nversion = 2\n# second server\n",
+          expectedCommit: "c2",
+        },
+        output: storedResult({
+          valid: true,
+          path: "mcp/billing.toml",
+          mcpServer: { id: "server-2", name: "Billing" },
+          diff: betaDiff,
+        }),
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    };
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PreviewedChangesProvider
+          value={collectPreviewedChanges(
+            [
+              {
+                id: "m1",
+                role: "assistant",
+                parts: [previewA.part, proposeA.part, previewB.part],
+              } as never,
+            ],
+            (name: string) => name.replace(/^archestra__/, "") as never,
+          )}
+        >
+          <CompactToolGroup
+            canExpandToolCalls={false}
+            tools={[previewA, proposeA, previewB]}
+            autoOpenPolicyKey="preview-b"
+            onToolApprovalResponse={vi.fn()}
+          />
+        </PreviewedChangesProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getAllByLabelText("Policy diff")).toHaveLength(2);
+    expect(screen.getByText("The change previewed above")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Approve/ })).toBeVisible();
+    expect(screen.getByText("mcp/billing.toml")).toBeVisible();
+  });
+
+  it("renders inline auth cards under the circle row while keeping the error circle clickable", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "auth-1",
+              toolName: "github__get_me",
+              part: {
+                type: "tool-github__get_me",
+                state: "output-error",
+                toolCallId: "call-auth",
+                input: {},
+                errorText: "Authentication expired",
+              } as never,
+              toolResultPart: null,
+              errorText: "Authentication expired",
+            },
+          ]}
+          renderAuthCard={({ toolName }) => (
+            <div data-testid="inline-auth-card">Re-authenticate {toolName}</div>
+          )}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("inline-auth-card")).toHaveTextContent(
+      "Re-authenticate github__get_me",
+    );
+    const circle = screen.getByRole("button", { name: "get me (error)" });
+    expect(circle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(circle);
+    expect(circle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Authentication expired")).toBeVisible();
   });
 });

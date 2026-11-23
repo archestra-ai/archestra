@@ -2,7 +2,7 @@
 title: Unified Model API
 description: Call models from multiple providers through an OpenAI-compatible endpoint
 order: 4
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -57,6 +57,35 @@ The Unified Model API speaks the OpenAI API. It supports these endpoints:
 
 Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) token. The Unified Model API does not accept a [passthrough key](/docs/llm-proxy/authentication#passthrough-virtual-keys), a [provider's own key](/docs/llm-proxy/authentication#direct-provider-api-key), or an [identity provider JWT](/docs/llm-proxy/authentication#jwks-external-identity-provider).
 
+## Build a Model Picker
+
+`/models` tells your app each model's limits and settings, so a picker needs no hard-coded defaults. Each model entry carries a `capabilities` object:
+
+```json
+{
+  "id": "openai:gpt-5.4",
+  "object": "model",
+  "owned_by": "openai",
+  "capabilities": {
+    "context_length": 1050000,
+    "max_output_tokens": 128000,
+    "input_modalities": ["text", "image", "pdf"],
+    "output_modalities": ["text"],
+    "supports_tools": true,
+    "supports_vision": true,
+    "supports_reasoning_effort": true,
+    "supported_reasoning_efforts": ["low", "medium", "high"],
+    "supported_endpoints": ["/chat/completions", "/responses"]
+  }
+}
+```
+
+- **Limits:** `context_length` and `max_output_tokens` are the model's limits, with any override an administrator set on **Models**. `null` means unknown.
+- **`supported_reasoning_efforts`:** the `reasoning_effort` values this API accepts for the model. The provider's own list is used when it publishes one (GitHub Copilot, a ChatGPT subscription, a LiteLLM gateway). Otherwise the list holds the levels Archestra knows are safe, and the provider may accept more. `[]` means send none; `null` means unknown.
+- **`supported_endpoints`:** the endpoints on this page that serve the model. Send a Responses-only model to `/responses`.
+
+Model pools and auto routers carry no `capabilities`, because their members can differ. The same fields, in camel case, are in `capabilities` on [`GET /api/llm-models/available`](/docs/reference/api/llm-proxy#tag/llm-models/GET/api/llm-models/available), which any member's API key can read.
+
 ## Images and Audio
 
 Use the same OpenAI SDK client, base URL, and virtual key for text, images, and audio. The mapped provider key must have access to the requested model.
@@ -75,7 +104,7 @@ Image responses carry the provider's image data, and transcriptions carry a `tex
 Audio chat models such as `openai:gpt-audio` answer `/chat/completions` in text, or in speech when the request sets `modalities` and `audio`. Their audio tokens are priced at OpenAI's audio rates.
 
 - **Provider parameters:** OpenAI and Azure accept their native image parameters. Gemini returns one base64 image at its own size and rejects `quality`, `size`, `output_format`, and a mask on edits. Image streaming is rejected for every provider.
-- **Uploads and logs:** audio uploads are limited to 25 MiB per file. Logs keep the text spoken and the transcript. With [**Keep media in logs**](/docs/admin/logs#keep-media-in-the-logs) on, they also keep each audio clip and each image an edit uploads, up to 2 MB, so the conversation view can play or show it. A larger file is marked as not kept.
+- **Uploads and logs:** audio uploads are limited to 25 MiB per file. Logs keep the text spoken and the transcript. With [**Keep media in logs**](/docs/insights/logs#keep-media-in-the-logs) on, they also keep each audio clip and each image an edit uploads, up to 2 MB, so the conversation view can play or show it. A larger file is marked as not kept.
 - **Pricing:** image, speech, transcription, and translation calls are priced at the vendor's published media rates: per image token, per speech character, per minute of audio. A translation or a text-format transcript reports no usage, so Archestra reads its length from the uploaded file. A WebM upload has no readable length and records no cost. **Models** lists each media model's rates.
 - **Budgets:** a priced media call counts toward cost budgets like a chat call. A cost budget rejects a call that cannot be priced, such as a translation of a WebM file, before it reaches the provider.
 

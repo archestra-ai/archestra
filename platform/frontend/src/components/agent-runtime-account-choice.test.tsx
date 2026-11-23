@@ -904,7 +904,9 @@ describe("the setup dialog's one set of buttons", () => {
     server.use(
       http.put(
         `${origin}/api/agents/${agentId}/runtime/credentials/:key`,
-        ({ params }) => {
+        async ({ params }) => {
+          // The credential is saved after the account is.
+          await new Promise((resolve) => setTimeout(resolve, 200));
           credentialWrites.push(String(params.key));
           return HttpResponse.json({ configured: true });
         },
@@ -923,6 +925,11 @@ describe("the setup dialog's one set of buttons", () => {
       ]),
     );
     await waitFor(() => expect(credentialWrites).toEqual(["API_TOKEN"]));
+    // The account section starts on the saved choice once its own save
+    // settles, so the focus moved to it stays there.
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: /My ChatGPT/ })).toHaveFocus(),
+    );
   });
 
   it("keeps the selection and shows the message when the account save fails", async () => {

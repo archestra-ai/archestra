@@ -494,6 +494,7 @@ export function AgentRuntimeCredentialsDialog({
             agentId={agentId}
             form={form as unknown as UseFormReturn<AccountFormValues>}
             saving={saving}
+            savingChoice={saveAccountChoice.isPending}
             saveError={
               saveAccountChoice.isError ? saveAccountChoice.error.message : null
             }

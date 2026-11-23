@@ -7,7 +7,11 @@ import {
   CreateLinkedIdentityProviderIntentResponseSchema,
   LINKED_IDP_AUTH_COMPLETE_ENDPOINT,
   LINKED_IDP_AUTH_INTENT_ENDPOINT,
+  LINKED_IDP_OTHER_SESSION_ERROR_CODE,
 } from "@archestra/shared";
+
+/** The link was finished in a different browser session from the one that started it. */
+export class LinkedIdentityProviderOtherSessionError extends Error {}
 
 export async function createLinkedIdentityProviderIntent(
   params: CreateLinkedIdentityProviderIntentRequest,
@@ -43,6 +47,16 @@ export async function completeLinkedIdentityProviderIntent(
   });
 
   if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as {
+      code?: unknown;
+      message?: unknown;
+    } | null;
+    if (
+      error?.code === LINKED_IDP_OTHER_SESSION_ERROR_CODE &&
+      typeof error.message === "string"
+    ) {
+      throw new LinkedIdentityProviderOtherSessionError(error.message);
+    }
     throw new Error("Failed to complete identity provider link request");
   }
 

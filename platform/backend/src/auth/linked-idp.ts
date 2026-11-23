@@ -4,13 +4,16 @@ import {
   CreateLinkedIdentityProviderIntentRequestSchema,
   LINKED_IDP_AUTH_COMPLETE_PATH,
   LINKED_IDP_AUTH_INTENT_PATH,
+  LINKED_IDP_OTHER_SESSION_ERROR_CODE,
 } from "@archestra/shared";
+import type { AuthContext } from "@better-auth/core";
 import { createAuthEndpoint, sessionMiddleware } from "better-auth/api";
-import { setSessionCookie } from "better-auth/cookies";
+import { expireCookie, setSessionCookie } from "better-auth/cookies";
 import type { BetterAuthPlugin } from "better-auth/types";
 import {
   completeLinkedIdentityProviderIntent,
   createLinkedIdentityProviderIntent,
+  LINKED_IDP_INTENT_TTL_SECONDS,
 } from "@/services/identity-providers/linked-idp-auth";
 import { ApiError } from "@/types";
 
@@ -27,14 +30,20 @@ export function linkedIdentityProviderPlugin() {
         },
         async (ctx) => {
           const { user, session } = ctx.context.session;
-          return ctx.json(
-            await createLinkedIdentityProviderIntent({
-              originalUserId: user.id,
-              originalSessionId: session.id,
-              providerId: ctx.body.providerId,
-              redirectTo: ctx.body.redirectTo,
-            }),
+          const intent = await createLinkedIdentityProviderIntent({
+            originalUserId: user.id,
+            originalSessionId: session.id,
+            providerId: ctx.body.providerId,
+            redirectTo: ctx.body.redirectTo,
+          });
+          const cookie = getIntentCookie(ctx);
+          await ctx.setSignedCookie(
+            cookie.name,
+            intent.intentId,
+            ctx.context.secret,
+            cookie.attributes,
           );
+          return ctx.json(intent);
         },
       ),
       completeLinkedIdentityProviderIntent: createAuthEndpoint(
@@ -46,6 +55,20 @@ export function linkedIdentityProviderPlugin() {
         },
         async (ctx) => {
           const { user, session } = ctx.context.session;
+          // Only the browser that created the intent may complete it.
+          const cookie = getIntentCookie(ctx);
+          const cookieIntentId = await ctx.getSignedCookie(
+            cookie.name,
+            ctx.context.secret,
+          );
+          if (!cookieIntentId || cookieIntentId !== ctx.body.intentId) {
+            throw ctx.error("BAD_REQUEST", {
+              code: LINKED_IDP_OTHER_SESSION_ERROR_CODE,
+              message:
+                "Finish connecting the identity provider in the same browser session where you started it.",
+            });
+          }
+
           try {
             const result = await completeLinkedIdentityProviderIntent({
               intentId: ctx.body.intentId,
@@ -65,6 +88,7 @@ export function linkedIdentityProviderPlugin() {
             }
 
             await setSessionCookie(ctx, originalSession);
+            expireCookie(ctx, cookie);
             return ctx.json({ redirectTo: result.redirectTo });
           } catch (error) {
             if (error instanceof ApiError) {
@@ -78,3 +102,20 @@ export function linkedIdentityProviderPlugin() {
     },
   } satisfies BetterAuthPlugin;
 }
+
+// === Internal helpers
+
+/**
+ * The cookie that ties a linked IdP intent to the browser that created it.
+ * Better Auth's cookie getter gives it the same prefix, Secure flag and domain
+ * as the session cookie.
+ */
+function getIntentCookie(ctx: {
+  context: Pick<AuthContext, "createAuthCookie">;
+}) {
+  return ctx.context.createAuthCookie(LINKED_IDP_INTENT_COOKIE, {
+    maxAge: LINKED_IDP_INTENT_TTL_SECONDS,
+  });
+}
+
+const LINKED_IDP_INTENT_COOKIE = "linked_idp_intent";

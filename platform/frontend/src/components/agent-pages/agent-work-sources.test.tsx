@@ -199,9 +199,7 @@ describe("AgentWorkSources", () => {
         onShowA2a={vi.fn()}
       />,
     );
-    expect(
-      screen.getByText("Runs start once setup above is done."),
-    ).toBeVisible();
+    expect(screen.getByText("Runs start once setup is done.")).toBeVisible();
 
     mockSetupReady(true);
     rerender(
@@ -213,9 +211,35 @@ describe("AgentWorkSources", () => {
         onShowA2a={vi.fn()}
       />,
     );
+    expect(screen.queryByText("Runs start once setup is done.")).toBeNull();
+  });
+
+  it("shows the reader's account under the heading, before the ways to give it work", () => {
+    mockSetupReady(true);
+    render(
+      <AgentWorkSources
+        agentId="a1"
+        hasRuntime
+        runtimeAvailable
+        chatHref="/chat?agentId=a1"
+        onShowA2a={vi.fn()}
+        account={<p>Account</p>}
+      />,
+    );
+    const section = screen.getByRole("region", { name: "Give it work" });
+    const account = within(section).getByText("Account");
+    const heading = within(section).getByRole("heading", {
+      name: "Give it work",
+    });
+    const chat = within(section).getByRole("link", { name: "Open in chat" });
+    // Document order: heading, then the account, then the cards.
     expect(
-      screen.queryByText("Runs start once setup above is done."),
-    ).toBeNull();
+      heading.compareDocumentPosition(account) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      account.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("hides channels from a reader who cannot see them", () => {

@@ -49,18 +49,32 @@ test("creates Claude Code from the catalog and explains the account connection a
       page.getByRole("radiogroup", { name: "Runtime", exact: true }),
     ).toHaveCount(0);
     const authenticationRow = page.getByRole("button", {
-      name: /^Whose Claude account runs it/,
+      name: /^Accounts that can run it/,
     });
     await expect(authenticationRow).toHaveAttribute("aria-expanded", "true");
+    // The runtime's own setting is each person's Claude subscription, so a
+    // new agent starts with that card alone, whatever connection its creator
+    // has.
+    const subscription = page.getByRole("checkbox", {
+      name: /Each person's Claude subscription/,
+    });
+    const companyKey = page.getByRole("checkbox", {
+      name: /A company API key/,
+    });
+    await expect(subscription).toBeChecked();
+    await expect(companyKey).not.toBeChecked();
     await expect(authenticationRow.getByRole("img")).toHaveCount(0);
-    await page.getByRole("radio", { name: /A company API key/ }).click();
+    // With neither card ticked the row asks for one.
+    await subscription.uncheck();
+    await expect(subscription).not.toBeChecked();
+    await expect(companyKey).not.toBeChecked();
     const attention = authenticationRow.getByRole("img", {
-      name: "Select a provider and Claude model",
+      name: "Choose who pays for its runs",
     });
     await expect(attention).toBeVisible();
     await attention.hover();
     await expect(page.getByRole("tooltip")).toHaveText(
-      "Select a provider and Claude model",
+      "Choose who pays for its runs",
     );
     const iconBounds = await attention.boundingBox();
     await expect(async () => {
@@ -82,14 +96,9 @@ test("creates Claude Code from the catalog and explains the account connection a
         iconBounds.y,
       );
     }).toPass();
-    await expect(
-      page.getByRole("button", {
-        name: /^(Select a Claude model|No models available)$/,
-      }),
-    ).toBeVisible();
-    await page
-      .getByRole("radio", { name: /Each person's Claude subscription/ })
-      .click();
+    await subscription.check();
+    await expect(subscription).toBeChecked();
+    await expect(companyKey).not.toBeChecked();
     await expect(authenticationRow.getByRole("img")).toHaveCount(0);
 
     const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
@@ -112,17 +121,19 @@ test("creates Claude Code from the catalog and explains the account connection a
     expect(created.runtime).toMatchObject({
       command: ["archestra-claude-code"],
       claudeCode: { authentication: "subscription" },
+      accountLock: "subscription",
       inferenceProtocol: "anthropic",
     });
-    // Creating opens the agent's own page, which lists the missing Claude
-    // account before the agent can run.
+    // Creating opens the agent's own page. Its account card says the
+    // creator's runs use their own subscription, and offers the sign-in they
+    // still need before the agent can run.
     await expect(page).toHaveURL(new RegExp(`/agents/${agentId}$`));
-    const setup = page.getByRole("status", { name: "Agent setup" });
+    const work = page.getByRole("region", { name: "Give it work" });
     await expect(
-      setup.getByText("Claude subscription", { exact: true }),
+      work.getByText("Uses your personal subscription", { exact: true }),
     ).toBeVisible();
     await expect(
-      setup.getByRole("button", { name: "Sign in with Claude", exact: true }),
+      work.getByRole("button", { name: "Sign in", exact: true }),
     ).toBeVisible();
   } finally {
     if (agentId) await deleteAgent(request, agentId);

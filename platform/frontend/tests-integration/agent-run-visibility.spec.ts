@@ -75,6 +75,11 @@ test("keeps a long run owner and the access details inside the phone viewport", 
       missing: [],
       misconfigured: [],
       incompatible: null,
+      accountError: null,
+      accountErrorFromChoice: false,
+      accountErrorFromModel: false,
+      accountErrorFromConnection: false,
+      missingSubscription: null,
     } satisfies archestraApiTypes.GetAgentRuntimePreflightResponses["200"],
   });
   await mswControl.use({

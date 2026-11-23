@@ -1,6 +1,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { organizationSeed } from "../src/mocks/data/organization";
 import { expect, test } from "./fixtures";
+import type { HandlerOverride } from "./helpers/msw-control";
 
 type FileList = archestraApiTypes.GetKnowledgeFilesResponse;
 type Directory = archestraApiTypes.GetKnowledgeDirectoriesResponse[number];
@@ -51,34 +52,36 @@ function fileList(directoryId: string | null): FileList {
   };
 }
 
+const handlers: HandlerOverride[] = [
+  {
+    method: "get",
+    url: "/api/organization",
+    body: {
+      ...organizationSeed,
+      embeddingChatApiKeyId: "11111111-1111-4111-8111-111111111111",
+      embeddingModel: "text-embedding-3-small",
+    },
+  },
+  { method: "get", url: "/api/knowledge-directories", body: [folder] },
+  {
+    method: "get",
+    url: "/api/knowledge-files",
+    query: { directoryId: "root" },
+    body: fileList(null),
+  },
+  {
+    method: "get",
+    url: "/api/knowledge-files",
+    query: { directoryId: folder.id },
+    body: fileList(folder.id),
+  },
+];
+
 test("Files restores the directory and page on browser Back and Forward", async ({
   page,
   mswControl,
 }) => {
-  await mswControl.registerMany([
-    {
-      method: "get",
-      url: "/api/organization",
-      body: {
-        ...organizationSeed,
-        embeddingChatApiKeyId: "11111111-1111-4111-8111-111111111111",
-        embeddingModel: "text-embedding-3-small",
-      },
-    },
-    { method: "get", url: "/api/knowledge-directories", body: [folder] },
-    {
-      method: "get",
-      url: "/api/knowledge-files",
-      query: { directoryId: "root" },
-      body: fileList(null),
-    },
-    {
-      method: "get",
-      url: "/api/knowledge-files",
-      query: { directoryId: folder.id },
-      body: fileList(folder.id),
-    },
-  ]);
+  await mswControl.registerMany(handlers);
 
   await page.goto("/knowledge/files?page=2&pageSize=10");
   await expect(page.getByText("unfiled.txt", { exact: true })).toBeVisible();
@@ -113,4 +116,46 @@ test("Files restores the directory and page on browser Back and Forward", async 
   await page.goBack();
   await expect(page).toHaveURL(folderUrl);
   await expect(page.getByText("notes.txt", { exact: true })).toBeVisible();
+});
+
+test("Files returns to the root for malformed and removed directory links", async ({
+  page,
+  mswControl,
+}) => {
+  const previousUrl = "/knowledge/files?page=2&pageSize=10";
+  const badIds = ["invalid", "55555555-5555-4555-8555-555555555555"];
+  await mswControl.registerMany([
+    ...handlers,
+    {
+      method: "get",
+      url: "/api/knowledge-files",
+      query: { directoryId: badIds[0] },
+      status: 500,
+    },
+    {
+      method: "get",
+      url: "/api/knowledge-files",
+      query: { directoryId: badIds[1] },
+      body: { ...fileList(null), data: [] },
+    },
+  ]);
+
+  const requestedDirectoryIds: Array<string | null> = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/knowledge-files") {
+      requestedDirectoryIds.push(url.searchParams.get("directoryId"));
+    }
+  });
+  await page.goto(previousUrl);
+  const rootUrl = page.url();
+  for (const id of badIds) {
+    await page.goto(`/knowledge/files?page=2&pageSize=10&directoryId=${id}`);
+    await expect(page).toHaveURL(/\/knowledge\/files\?page=1&pageSize=10$/);
+    await expect(page.getByText("unfiled.txt", { exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(rootUrl);
+  }
+  expect(requestedDirectoryIds).not.toContain(badIds[0]);
+  expect(requestedDirectoryIds).not.toContain(badIds[1]);
 });

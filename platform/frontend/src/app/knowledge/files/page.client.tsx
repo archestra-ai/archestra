@@ -10,7 +10,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { AddToKnowledgeBaseDialog } from "@/app/knowledge/files/_parts/add-to-knowledge-base-dialog";
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
@@ -53,6 +53,7 @@ import {
 } from "@/lib/entity-labels.query";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import {
   type KnowledgeDirectory,
   type KnowledgeFile,
@@ -93,6 +94,8 @@ function _rowCreatedBy(row: Row) {
  */
 
 export default function KnowledgeFilesPage() {
+  const queryParamsAdapter = useQueryParamsAdapter();
+  const replaceLocation = queryParamsAdapter.updateQueryParams;
   const {
     pageIndex,
     pageSize,
@@ -100,15 +103,14 @@ export default function KnowledgeFilesPage() {
     setPagination,
     searchParams,
     updateQueryParams,
-  } = useDataTableQueryParams();
+  } = useDataTableQueryParams({ queryParamsAdapter });
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
   // The access filters narrow documents; directories arrive whole.
   const { hasActiveScopeFilters, access, sharedWith, owner } =
     useScopeFilterParams();
 
-  /** null = the top level, which lists directories plus unfiled documents. */
-  const openDirectoryId = searchParams.get("directoryId") || null;
+  const requestedDirectoryId = searchParams.get("directoryId");
   const [search, setSearch] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -120,7 +122,30 @@ export default function KnowledgeFilesPage() {
   const [editFile, setEditFile] = useState<KnowledgeFile>();
   const [previewFile, setPreviewFile] = useState<PreviewableDocument>();
 
-  const { data: directories = [] } = useKnowledgeDirectories();
+  const {
+    data: directories = [],
+    isSuccess: hasDirectoryList,
+    isFetching: isFetchingDirectories,
+  } = useKnowledgeDirectories();
+  const openDirectory = directories.find((d) => d.id === requestedDirectoryId);
+  // Only query IDs from the viewer's directory list, never raw URL input.
+  const openDirectoryId = openDirectory?.id ?? null;
+  useEffect(() => {
+    if (
+      requestedDirectoryId !== null &&
+      !openDirectoryId &&
+      hasDirectoryList &&
+      !isFetchingDirectories
+    ) {
+      replaceLocation({ directoryId: null, page: "1" }, { history: "replace" });
+    }
+  }, [
+    hasDirectoryList,
+    isFetchingDirectories,
+    openDirectoryId,
+    replaceLocation,
+    requestedDirectoryId,
+  ]);
   const {
     data,
     isFetching: isLoading,
@@ -146,7 +171,6 @@ export default function KnowledgeFilesPage() {
   const deleteDirectory = useDeleteKnowledgeDirectory();
 
   const files = useMemo(() => data?.data ?? [], [data?.data]);
-  const openDirectory = directories.find((d) => d.id === openDirectoryId);
 
   const rows: Row[] = useMemo(() => {
     const fileRows: Row[] = files.map((file) => ({
@@ -508,7 +532,12 @@ export default function KnowledgeFilesPage() {
           </PermissionButton>
         )
       }
-      isPending={isLoading && files.length === 0}
+      isPending={
+        (isLoading && files.length === 0) ||
+        (Boolean(requestedDirectoryId) &&
+          !openDirectory &&
+          isFetchingDirectories)
+      }
     >
       <BulkActionsScope>
         <CollectionFilters>

@@ -475,9 +475,6 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
           name: "archestra__execute_remedy_plan",
           arguments: {
             offer_id: "offer-1",
-            protected: "e30",
-            payload: "{}",
-            signature: "sig",
             trajectory: currentTrajectory({ session_id: "remedy-session" }),
           },
           _meta: { "com.archestra/logicalToolCallId": "logical-remedy-1" },

@@ -222,13 +222,18 @@ describe("runtime crossing", () => {
       makeLlmProviderApiKey,
     });
     const classified = failure();
-    vi.spyOn(openappa, "startRuntimeChild").mockRejectedValue(classified);
+    const bind = vi
+      .spyOn(openappa, "startRuntimeChild")
+      .mockRejectedValue(classified);
 
     const refused = await runTaskInAgentRuntime({
       ...started.params,
       runtimeCrossing: crossing(true, started.organizationId),
+      // Retries allowed for retriable failures: a bind refusal is still not rebound.
+      subagentExecutionPolicy: { retries: 1 },
     }).catch((error: unknown) => error);
 
+    expect(bind).toHaveBeenCalledOnce();
     expect(refused).toMatchObject({
       statusCode,
       shouldRetry,

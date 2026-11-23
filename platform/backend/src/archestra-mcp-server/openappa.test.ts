@@ -45,6 +45,8 @@ import {
   executeArchestraTool,
   getAllArchestraMcpTools,
 } from ".";
+import { errorResult } from "./helpers";
+import { SPENT_RULING_UNCONFIRMED } from "./openappa";
 
 // The real cache, stored in this file's test database.
 setupTestCacheManager();
@@ -924,7 +926,36 @@ describe("OpenAPPA tool execution", () => {
     expect(extractMcpHumanRuling(result)).toBe("approve");
   });
 
-  test("chat client: a retryable failure after the person ruled asks for a fresh review instead of a retry", async () => {
+  test.for([
+    [
+      "a retryable failure",
+      (execute: ReturnType<typeof vi.spyOn>) =>
+        execute.mockRejectedValue(
+          openappaFailure(
+            Object.assign(new Error("connection reset"), { code: "contended" }),
+          ),
+        ),
+    ],
+    [
+      "a transient unanswered policy check",
+      (execute: ReturnType<typeof vi.spyOn>) =>
+        execute.mockResolvedValue({
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "[appa] Not applied: the policy check `archestra.llm-annotator` gave no answer (timeout). Nothing changed and the offer still stands. Call the archestra__execute_remedy_plan tool again with the same offer id.",
+              },
+            ],
+          },
+          known: true,
+        }),
+    ],
+  ] as const)("chat client: %s after the person ruled is reported as an unconfirmed plan with a spent ruling", async ([
+    _case,
+    answer,
+  ]) => {
     vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
       offer_id: "offer-hitl",
       text: "Approve this email?",
@@ -932,12 +963,8 @@ describe("OpenAPPA tool execution", () => {
       tool: "archestra__todo_write",
       arguments: VALID_TODO,
     });
-    const transient = openappaFailure(
-      Object.assign(new Error("connection reset"), { code: "contended" }),
-    );
-    vi.spyOn(openappaService, "executeRemedyByOffer").mockRejectedValue(
-      transient,
-    );
+    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
+    answer(execute);
     const elicitSpy = vi.fn().mockResolvedValue({
       status: "answered",
       result: { action: "accept", content: { action: "approve" } },
@@ -949,12 +976,11 @@ describe("OpenAPPA tool execution", () => {
       { ...mockContext, elicitation: { elicit: elicitSpy } as any },
     );
 
-    expect(transient.shouldRetry).toBe(true);
     expect(elicitSpy).toHaveBeenCalledOnce();
-    expect(result.isError).toBe(true);
-    expect(result.content).not.toEqual([
-      { type: "text", text: `Error: ${transient.message}` },
-    ]);
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ ruling: "approve" }),
+    );
+    expect(result).toEqual(errorResult(SPENT_RULING_UNCONFIRMED));
   });
 
   test("chat client: the prompt lists the typed scope without the person's attention", async () => {

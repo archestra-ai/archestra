@@ -172,6 +172,11 @@ export function crossingRefusal(error: unknown): string | undefined {
   return error instanceof RuntimeCrossingRefusal ? error.message : undefined;
 }
 
+/** A refusal whose OpenAPPA failure says a new attempt can succeed. */
+export function isTransientCrossingRefusal(error: unknown): boolean {
+  return error instanceof RuntimeCrossingRefusal && error.shouldRetry === true;
+}
+
 /** Binds a new same-family child. Refusal throws before any process starts. */
 export async function bindRuntimeChild(params: {
   crossing: RuntimeCrossing;

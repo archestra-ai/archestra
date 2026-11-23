@@ -25,6 +25,8 @@ const AGENT_RUN_FAILURE_CODES = {
    * a start (missing credentials, a credential the image cannot use).
    */
   "launch.misconfigured": { retriable: false },
+  /** Guardrails could not bind the run for a transient reason. */
+  "launch.guardrails_unavailable": { retriable: true },
   /** The turn's credentials did not reach the pod before its startup timeout. */
   "launch.credentials_timeout": { retriable: true },
   /** Kubernetes evicted or preempted the pod. */

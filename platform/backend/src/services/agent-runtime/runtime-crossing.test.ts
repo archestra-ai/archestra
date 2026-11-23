@@ -187,6 +187,7 @@ describe("runtime crossing", () => {
         ),
       statusCode: 503,
       shouldRetry: true,
+      settled: { code: "launch.guardrails_unavailable", retriable: true },
     },
     {
       failure: () =>
@@ -197,11 +198,13 @@ describe("runtime crossing", () => {
         ),
       statusCode: 409,
       shouldRetry: false,
+      settled: { code: "launch.misconfigured", retriable: false },
     },
-  ])("a classified bind failure keeps its status, retry guidance and text ($statusCode)", async ({
+  ])("a classified bind failure keeps its status and retry guidance, and settles with its text ($statusCode)", async ({
     failure,
     statusCode,
     shouldRetry,
+    settled,
   }, {
     makeAgent,
     makeAdmin,
@@ -234,6 +237,11 @@ describe("runtime crossing", () => {
     });
     expect(crossingRefusal(refused)).toBe(classified.message);
     expect(backend.launch).not.toHaveBeenCalled();
+    const task = await A2ATaskModel.findById(started.taskId);
+    expect(task).toMatchObject({
+      statusReason: classified.message,
+      failure: settled,
+    });
   });
 
   test("an unbound human start does not bind a parent", async ({

@@ -9,6 +9,7 @@ import {
   PackagePlus,
   Pencil,
   Plus,
+  Puzzle,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -62,7 +63,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useScopedCapabilities } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import {
   usePluginLabelKeys,
@@ -464,7 +468,13 @@ function PluginsList() {
     <>
       <PageLayout
         title="Plugins"
-        description={PLUGINS_DESCRIPTION}
+        // The empty state explains plugins itself, so the header's line steps
+        // aside with the Add button rather than say it twice.
+        description={
+          showEmptyState || isInitialPluginsLoad
+            ? undefined
+            : PLUGINS_DESCRIPTION
+        }
         actionButton={
           <div className="flex items-center gap-2">
             {!showEmptyState && !isInitialPluginsLoad && (
@@ -841,23 +851,31 @@ function PluginsList() {
 }
 
 function PluginsEmptyState() {
+  const { data: canCreate } = useHasPermissions({ plugin: ["create"] });
   return (
     <EmptyState
-      className="min-h-[60vh]"
-      icon={Braces}
-      title="No plugins yet."
-      description="Create a plugin for Claude Code, Claude Desktop, Codex, Copilot CLI, or Cursor."
+      variant="firstUse"
+      icon={Puzzle}
+      title="Give your whole team the same coding agent"
+      description="Plugins add commands, subagents and hooks to Claude Code, Codex or Cursor. Build one, and everyone gets the same setup."
+      canAct={canCreate}
+      readerMessage="Your admins haven't shared a plugin yet."
       action={
-        <PermissionButton
-          permissions={{ plugin: ["create"] }}
-          size="sm"
-          asChild
-        >
-          <Link href="/plugins/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add your first plugin
+        <Button size="sm" asChild>
+          <Link href="/plugins/new?source=blank">
+            <Plus />
+            <span>Create a plugin</span>
           </Link>
-        </PermissionButton>
+        </Button>
+      }
+      secondaryAction={
+        // The wizard's first step lists the popular marketplaces.
+        <Link
+          href="/plugins/new"
+          className="text-sm text-primary hover:underline"
+        >
+          Browse popular plugins
+        </Link>
       }
     />
   );

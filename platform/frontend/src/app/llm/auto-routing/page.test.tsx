@@ -186,6 +186,54 @@ describe("AutoRoutersPage", () => {
     );
   });
 
+  it("explains auto routing on a page with no routers, and creates the first from there", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
+        HttpResponse.json([]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      await screen.findByText("Send each session to the right model"),
+    ).toBeVisible();
+    // The header's description and button step aside while the page explains.
+    expect(
+      screen.queryByRole("button", { name: /Create auto router/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Read more in the docs")).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Create an auto router" }),
+    );
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Create auto router",
+    );
+  });
+
+  it("tells a reader without permission who creates auto routers", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
+        HttpResponse.json([]),
+      ),
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "Your admins haven't created an auto router yet.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Create an auto router" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("deletes the router the admin confirms", async () => {
     const user = userEvent.setup();
     renderPage();

@@ -2,11 +2,12 @@
 
 import { DocsPage } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Plus, Route, Trash2 } from "lucide-react";
+import { Pencil, Plus, Route, Shuffle, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
@@ -24,9 +25,11 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type AutoRouter,
   useAutoRouters,
@@ -130,35 +133,44 @@ export default function AutoRoutersPage() {
   ];
 
   const organizationOff = routers.length > 0 && !routers[0].enabled;
+  const { data: canCreate } = useHasPermissions({ llmProxy: ["update"] });
+  // Nothing to list and nothing searched: the page explains auto routing
+  // instead of showing an empty table, and its header steps aside so the
+  // explanation isn't said twice.
+  const isFirstUse = query.isSuccess && routers.length === 0 && !search;
 
   return (
     <PageLayout
       minWidth="phone"
       title="Auto Routing"
       description={
-        <>
-          <span>
-            An auto router is a model name that sends each session to a fast,
-            normal or smart model within a daily budget. Pick one for an agent
-            or a chat, or add it to a virtual key.
-          </span>{" "}
-          <ExternalDocsLink
-            href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyAutoRouting)}
-            showIcon={false}
-          >
-            Read more in the docs
-          </ExternalDocsLink>
-        </>
+        isFirstUse ? undefined : (
+          <>
+            <span>
+              An auto router is a model name that sends each session to a fast,
+              normal or smart model within a daily budget. Pick one for an agent
+              or a chat, or add it to a virtual key.
+            </span>{" "}
+            <ExternalDocsLink
+              href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyAutoRouting)}
+              showIcon={false}
+            >
+              Read more in the docs
+            </ExternalDocsLink>
+          </>
+        )
       }
       actionButton={
-        <PermissionButton
-          size="sm"
-          permissions={{ llmProxy: ["update"] }}
-          onClick={() => setCreating(true)}
-        >
-          <Plus />
-          <span>Create auto router</span>
-        </PermissionButton>
+        isFirstUse ? null : (
+          <PermissionButton
+            size="sm"
+            permissions={{ llmProxy: ["update"] }}
+            onClick={() => setCreating(true)}
+          >
+            <Plus />
+            <span>Create auto router</span>
+          </PermissionButton>
+        )
       }
     >
       {query.isLoadingError ? (
@@ -166,6 +178,29 @@ export default function AutoRoutersPage() {
           title="Couldn't load your auto routers"
           error={query.error}
           onRetry={() => query.refetch()}
+        />
+      ) : isFirstUse ? (
+        <EmptyState
+          variant="firstUse"
+          icon={Shuffle}
+          title="Send each session to the right model"
+          description="An auto router sends easy work to a cheap model and hard work to a smart one, within a daily budget."
+          canAct={canCreate}
+          readerMessage="Your admins haven't created an auto router yet."
+          action={
+            <Button size="sm" onClick={() => setCreating(true)}>
+              <Plus />
+              <span>Create an auto router</span>
+            </Button>
+          }
+          secondaryAction={
+            <ExternalDocsLink
+              href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyAutoRouting)}
+              className="text-sm"
+            >
+              How auto routing works
+            </ExternalDocsLink>
+          }
         />
       ) : (
         <div className="space-y-4">

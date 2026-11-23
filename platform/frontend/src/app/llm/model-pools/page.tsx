@@ -6,7 +6,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { Layers, Pencil, Plus, Server, Trash2 } from "lucide-react";
+import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -31,6 +31,7 @@ import {
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -124,6 +125,15 @@ export default function ModelPoolsPage() {
   );
   const hasActiveFilters =
     Boolean(search) || providerFilter !== "all" || statusFilter !== "all";
+  const { data: canAddProvider } = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
+  const { data: canCreatePool } = useHasPermissions({ llmModel: ["update"] });
+  // Nothing to list and nothing filtered: the page explains pools instead of
+  // showing an empty table, and its header steps aside so nothing is said twice.
+  const isFirstUse =
+    needsFirstProvider ||
+    (query.isSuccess && pools.length === 0 && !hasActiveFilters);
   const clearFilters = useCallback(
     () => updateQueryParams({ search: null, provider: null, status: null }),
     [updateQueryParams],
@@ -215,7 +225,7 @@ export default function ModelPoolsPage() {
     },
   ];
 
-  const createButton = needsFirstProvider ? null : (
+  const createButton = isFirstUse ? null : (
     <PermissionButton
       size="sm"
       permissions={{ llmModel: ["update"] }}
@@ -229,7 +239,7 @@ export default function ModelPoolsPage() {
   return (
     <PageLayout
       title="Model Pools"
-      description={DESCRIPTION}
+      description={isFirstUse ? undefined : DESCRIPTION}
       actionButton={createButton}
     >
       {query.isLoadingError ? (
@@ -238,20 +248,45 @@ export default function ModelPoolsPage() {
           description={query.error?.message}
           onRetry={() => query.refetch()}
         />
-      ) : needsFirstProvider ? (
+      ) : isFirstUse ? (
+        // One headline for both first-use states: the outcome is the same
+        // whether or not a provider exists yet. Only the last sentence and
+        // the button switch to the step that has to come first.
         <EmptyState
-          icon={Server}
-          title="Connect your first model provider"
-          description="A pool serves a model from provider connections, including your subscriptions. Add one, then create a pool."
+          variant="firstUse"
+          icon={Layers}
+          title="Keep your models answering when a provider fails"
+          description={
+            needsFirstProvider
+              ? "A pool serves one model from several provider keys. Start by connecting your first provider."
+              : "A pool serves one model, such as claude-sonnet-5-5, from several provider keys. If one fails, the next takes over."
+          }
+          canAct={needsFirstProvider ? canAddProvider : canCreatePool}
+          readerMessage={
+            needsFirstProvider
+              ? "An admin needs to connect a model provider first."
+              : "Your admins haven't created a model pool yet."
+          }
           action={
-            <PermissionButton
-              size="sm"
-              permissions={{ llmProviderApiKey: ["create"] }}
-              onClick={() => setProviderDialogOpen(true)}
+            needsFirstProvider ? (
+              <Button size="sm" onClick={() => setProviderDialogOpen(true)}>
+                <Plus />
+                <span>Add model provider</span>
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <Plus />
+                <span>Create a pool</span>
+              </Button>
+            )
+          }
+          secondaryAction={
+            <ExternalDocsLink
+              href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyModelPools)}
+              className="text-sm"
             >
-              <Plus />
-              <span>Add model provider</span>
-            </PermissionButton>
+              How model pools work
+            </ExternalDocsLink>
           }
         />
       ) : (

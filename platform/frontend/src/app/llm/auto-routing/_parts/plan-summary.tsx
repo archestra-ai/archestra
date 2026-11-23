@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import { BUDGET_PRESET_LABELS, type BudgetPreset } from "./budget-presets";
-import type { PlanSummary } from "./plan-document";
+import { extraBudgetGain, type PlanSummary } from "./plan-document";
 import { TIER_COLOR, TIER_NAMES, type TierName } from "./tiers";
 
 export function PlanSummaryView({
@@ -39,12 +39,7 @@ export function PlanSummaryView({
             {formatPercent(summary.value_size_weighted)}
           </span>
         </SummaryTile>
-        <SummaryTile label="Extra $10/day">
-          <span className="text-2xl font-semibold tabular-nums">
-            +{(summary.value_per_usd * 10 * 100).toFixed(1)} points
-          </span>
-          <span className="text-xs text-muted-foreground">of quality</span>
-        </SummaryTile>
+        <ExtraBudgetTile summary={summary} />
         <SummaryTile label="Sessions/day">
           <span className="text-2xl font-semibold tabular-nums">
             {Math.round(summary.sessions_per_day).toLocaleString("en-US")}
@@ -86,7 +81,7 @@ export function PlanSummaryPlaceholder({
           }
         />
         <PendingTile label="Quality vs all-smart" />
-        <PendingTile label="Extra $10/day" />
+        <PendingTile label="Extra budget" />
         <PendingTile label="Sessions/day" />
       </div>
       <TierSplit
@@ -95,6 +90,22 @@ export function PlanSummaryPlaceholder({
         tierModels={tierModels}
       />
     </div>
+  );
+}
+
+function ExtraBudgetTile({ summary }: { summary: PlanSummary }) {
+  const extra = extraBudgetGain(summary);
+  if (!extra) return <PendingTile label="Extra budget" />;
+  const amount = Number.isInteger(extra.extraUsdPerDay)
+    ? `$${extra.extraUsdPerDay.toLocaleString("en-US")}`
+    : formatCurrency(extra.extraUsdPerDay);
+  return (
+    <SummaryTile label={`Extra ${amount}/day`}>
+      <span className="text-2xl font-semibold tabular-nums">
+        +{extra.points.toFixed(1)} points
+      </span>
+      <span className="text-xs text-muted-foreground">of quality</span>
+    </SummaryTile>
   );
 }
 

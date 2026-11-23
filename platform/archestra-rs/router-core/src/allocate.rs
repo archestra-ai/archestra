@@ -134,33 +134,30 @@ impl Route {
 pub(crate) struct WeightedSession<'a> {
     pub(crate) hull: &'a Hull,
     pub(crate) price: [f64; TIER_COUNT],
+    pub(crate) adequacy: [f64; TIER_COUNT],
     pub(crate) tokens_per_day: f64,
 }
+
+/// The most token-weighted mean adequacy `spend` USD/day buys under the LP relaxation.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FrontierPoint {
+    pub spend: f64,
+    pub value: f64,
+}
+
+/// Evenly spaced spends the frontier is sampled at, besides the plan's own budget.
+const FRONTIER_SAMPLES: usize = 32;
 
 /// Exact solve of the LP relaxation: walk all upgrade steps by descending breakpoint from the
 /// all-cheapest spend until the budget is crossed.
 pub(crate) fn solve(sessions: &[WeightedSession], budget: f64) -> Result<Policy, RouterError> {
-    let cheapest: f64 = sessions
-        .iter()
-        .map(|s| s.tokens_per_day * s.price[s.hull.vertices[0]])
-        .sum();
+    let Steps { cheapest, steps } = Steps::new(sessions);
     if cheapest > budget {
         return Err(RouterError::Infeasible {
             cheapest_spend: cheapest,
             budget,
         });
     }
-    let mut steps: Vec<(f64, f64)> = sessions
-        .iter()
-        .flat_map(|s| {
-            s.hull
-                .breakpoints
-                .iter()
-                .zip(s.hull.vertices.windows(2))
-                .map(|(&lam, w)| (lam, s.tokens_per_day * (s.price[w[1]] - s.price[w[0]])))
-        })
-        .collect();
-    steps.sort_by(|a, b| b.0.total_cmp(&a.0));
     let mut spend = cheapest;
     for group in steps.chunk_by(|a, b| a.0 == b.0) {
         let cost: f64 = group.iter().map(|(_, c)| c).sum();
@@ -176,6 +173,87 @@ pub(crate) fn solve(sessions: &[WeightedSession], budget: f64) -> Result<Policy,
         lam_star: 0.0,
         q: 0.0,
     })
+}
+
+/// Value as a function of budget, from the all-cheapest spend to every upgrade taken: the walk
+/// `solve` stops early, run to the end. It is concave and piecewise linear, so its exact samples
+/// joined by straight lines never overstate it. Sampled at `FRONTIER_SAMPLES + 1` evenly spaced
+/// spends plus `budget` (clamped to the curve), ascending.
+pub(crate) fn frontier(sessions: &[WeightedSession], budget: f64) -> Vec<FrontierPoint> {
+    let tokens: f64 = sessions.iter().map(|s| s.tokens_per_day).sum();
+    let Steps { cheapest, steps } = Steps::new(sessions);
+    let start = FrontierPoint {
+        spend: cheapest,
+        value: sessions
+            .iter()
+            .map(|s| s.tokens_per_day * s.adequacy[s.hull.vertices[0]])
+            .sum::<f64>()
+            / tokens,
+    };
+    let mut vertices = vec![start];
+    for &(lam, cost) in &steps {
+        let last = vertices[vertices.len() - 1];
+        vertices.push(FrontierPoint {
+            spend: last.spend + cost,
+            value: last.value + lam * cost / tokens,
+        });
+    }
+    let end = vertices[vertices.len() - 1].spend;
+    let mut spends: Vec<f64> = (0..=FRONTIER_SAMPLES)
+        .map(|k| cheapest + (end - cheapest) * k as f64 / FRONTIER_SAMPLES as f64)
+        .chain(std::iter::once(budget.clamp(cheapest, end)))
+        .collect();
+    spends.sort_by(f64::total_cmp);
+    spends.dedup();
+    spends
+        .into_iter()
+        .map(|spend| FrontierPoint {
+            spend,
+            value: value_at(&vertices, spend),
+        })
+        .collect()
+}
+
+/// Upgrade steps `(breakpoint, USD/day)` by descending breakpoint, above the all-cheapest spend.
+struct Steps {
+    cheapest: f64,
+    steps: Vec<(f64, f64)>,
+}
+
+impl Steps {
+    fn new(sessions: &[WeightedSession]) -> Self {
+        let cheapest = sessions
+            .iter()
+            .map(|s| s.tokens_per_day * s.price[s.hull.vertices[0]])
+            .sum();
+        let mut steps: Vec<(f64, f64)> = sessions
+            .iter()
+            .flat_map(|s| {
+                s.hull
+                    .breakpoints
+                    .iter()
+                    .zip(s.hull.vertices.windows(2))
+                    .map(|(&lam, w)| (lam, s.tokens_per_day * (s.price[w[1]] - s.price[w[0]])))
+            })
+            .collect();
+        steps.sort_by(|a, b| b.0.total_cmp(&a.0));
+        Self { cheapest, steps }
+    }
+}
+
+/// Linear interpolation on the curve's vertices, held flat past either end.
+fn value_at(vertices: &[FrontierPoint], spend: f64) -> f64 {
+    match vertices.partition_point(|v| v.spend < spend) {
+        0 => vertices[0].value,
+        i if i == vertices.len() => vertices[i - 1].value,
+        i => {
+            let (a, b) = (vertices[i - 1], vertices[i]);
+            match b.spend > a.spend {
+                true => a.value + (b.value - a.value) * (spend - a.spend) / (b.spend - a.spend),
+                false => b.value,
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -225,6 +303,7 @@ mod tests {
         let session = |w| WeightedSession {
             hull: &hull,
             price: [1.0, 2.0, 3.0],
+            adequacy: [0.5, 0.875, 1.0],
             tokens_per_day: w,
         };
         let sessions = [session(1.0), session(1.0)];
@@ -251,5 +330,59 @@ mod tests {
                 budget: 1.0
             })
         );
+    }
+
+    #[test]
+    fn frontier_is_concave_from_all_cheapest_to_all_best() {
+        let (price_a, adequacy_a) = ([1.0, 2.0, 3.0], [0.5, 0.875, 1.0]);
+        let (price_b, adequacy_b) = ([1.0, 2.0, 4.0], [0.2, 0.8, 1.0]);
+        let (hull_a, hull_b) = (
+            Hull::new(price_a, adequacy_a),
+            Hull::new(price_b, adequacy_b),
+        );
+        let sessions = [
+            WeightedSession {
+                hull: &hull_a,
+                price: price_a,
+                adequacy: adequacy_a,
+                tokens_per_day: 1.0,
+            },
+            WeightedSession {
+                hull: &hull_b,
+                price: price_b,
+                adequacy: adequacy_b,
+                tokens_per_day: 2.0,
+            },
+        ];
+        let budget = 5.3;
+        let points = frontier(&sessions, budget);
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-12;
+
+        let (first, last) = (points[0], points[points.len() - 1]);
+        assert!(
+            close(first.spend, 3.0) && close(first.value, 0.3),
+            "{first:?}"
+        );
+        assert!(
+            close(last.spend, 11.0) && close(last.value, 1.0),
+            "{last:?}"
+        );
+        assert!(points.iter().any(|p| p.spend == budget));
+        assert_eq!(points.len(), FRONTIER_SAMPLES + 2);
+
+        let slopes: Vec<f64> = points
+            .windows(2)
+            .map(|w| {
+                assert!(w[1].spend > w[0].spend && w[1].value >= w[0].value, "{w:?}");
+                (w[1].value - w[0].value) / (w[1].spend - w[0].spend)
+            })
+            .collect();
+        assert!(
+            slopes.windows(2).all(|s| s[1] <= s[0] + 1e-12),
+            "{slopes:?}"
+        );
+
+        // the budget's own point is clamped onto the curve
+        assert_eq!(frontier(&sessions, 1e9).last(), Some(&last));
     }
 }

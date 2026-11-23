@@ -127,6 +127,18 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Returns only projects the caller owns or that are shared with them. Oversight of every project (a `*` grant) does **not** extend to this tool.",
   get_project:
     "Readable only for projects the caller owns or that are shared with them. Oversight of every project (a `*` grant) does **not** extend to this tool.",
+  // Plugins are authorized by per-plugin grants; `plugin:read`, `plugin:update`,
+  // and `plugin:delete` role actions do not grant access to individual plugins.
+  list_plugins:
+    "Returns only plugins the caller holds a `read` grant on. Callers with `plugin:read` or `plugin:create` but no grants receive an empty list.",
+  get_plugin:
+    "Requires a `read` grant on the target plugin; unreadable plugins return not found.",
+  update_plugin:
+    "Requires an `update` grant (**Can edit** or **Full access**) on the target plugin.",
+  edit_plugin:
+    "Requires an `update` grant (**Can edit** or **Full access**) on the target plugin.",
+  delete_plugin:
+    "Requires a `delete` grant (**Full access**) on the target plugin.",
 };
 
 /**
@@ -571,9 +583,13 @@ export function formatToolPermission(
     return "None";
   }
 
-  // No role holds this action: it is granted on the individual item.
+  // No role holds this action, or (for plugins) individual plugin access comes
+  // solely from per-plugin grants rather than the role action.
   const resource = roleActionResourceFor(permission.resource);
-  if (!allAvailableActions[resource]?.includes(permission.action as never)) {
+  if (
+    !allAvailableActions[resource]?.includes(permission.action as never) ||
+    (resource === "plugin" && permission.action !== "create")
+  ) {
     const item = perItemNoun(resource);
     return `\`${permission.action}\` on the ${item} (granted per item)`;
   }

@@ -585,16 +585,20 @@ Required RBAC permission: [`team:read`](/docs/reference/permissions#team:read)
 
 | Tool | Description | Permission |
 |------|-------------|--------------------------|
-| [`list_plugins`](#list_plugins) | List the plugins available to you in this organization — one line per plugin with its id, client, platforms, visibility, and file count. | [`plugin:read`](/docs/reference/permissions#plugin:read) |
-| [`get_plugin`](#get_plugin) | Read one plugin, including every file's exact bytes and the plugin's current contentHash. | [`plugin:read`](/docs/reference/permissions#plugin:read) |
+| [`list_plugins`](#list_plugins) | List the plugins available to you in this organization — one line per plugin with its id, client, platforms, visibility, and file count. | `read` on the plugin (granted per item) † |
+| [`get_plugin`](#get_plugin) | Read one plugin, including every file's exact bytes and the plugin's current contentHash. | `read` on the plugin (granted per item) † |
 | [`create_plugin`](#create_plugin) | Create a plugin from an explicit file set. | [`plugin:create`](/docs/reference/permissions#plugin:create) |
-| [`update_plugin`](#update_plugin) | Update a plugin's metadata, visibility, or entire file set. | [`plugin:update`](/docs/reference/permissions#plugin:update) |
-| [`edit_plugin`](#edit_plugin) | Make a targeted edit to one file of a plugin without resending the whole file set. | [`plugin:update`](/docs/reference/permissions#plugin:update) |
-| [`delete_plugin`](#delete_plugin) | Delete a plugin. | [`plugin:delete`](/docs/reference/permissions#plugin:delete) |
+| [`update_plugin`](#update_plugin) | Update a plugin's metadata, visibility, or entire file set. | `update` on the plugin (granted per item) † |
+| [`edit_plugin`](#edit_plugin) | Make a targeted edit to one file of a plugin without resending the whole file set. | `update` on the plugin (granted per item) † |
+| [`delete_plugin`](#delete_plugin) | Delete a plugin. | `delete` on the plugin (granted per item) † |
+
+† This tool enforces an additional access requirement beyond its RBAC permission — see its details below.
 
 ### list_plugins
 
-Required RBAC permission: [`plugin:read`](/docs/reference/permissions#plugin:read)
+Required RBAC permission: `read` on the plugin (granted per item)
+
+Additional access requirement: Returns only plugins the caller holds a `read` grant on. Callers with [`plugin:read`](/docs/reference/permissions#plugin:read) or [`plugin:create`](/docs/reference/permissions#plugin:create) but no grants receive an empty list.
 
 #### Input
 
@@ -607,7 +611,9 @@ Required RBAC permission: [`plugin:read`](/docs/reference/permissions#plugin:rea
 
 ### get_plugin
 
-Required RBAC permission: [`plugin:read`](/docs/reference/permissions#plugin:read)
+Required RBAC permission: `read` on the plugin (granted per item)
+
+Additional access requirement: Requires a `read` grant on the target plugin; unreadable plugins return not found.
 
 #### Input
 
@@ -642,7 +648,9 @@ Required RBAC permission: [`plugin:create`](/docs/reference/permissions#plugin:c
 
 ### update_plugin
 
-Required RBAC permission: [`plugin:update`](/docs/reference/permissions#plugin:update)
+Required RBAC permission: `update` on the plugin (granted per item)
+
+Additional access requirement: Requires an `update` grant (**Can edit** or **Full access**) on the target plugin.
 
 #### Input
 
@@ -663,7 +671,9 @@ Required RBAC permission: [`plugin:update`](/docs/reference/permissions#plugin:u
 
 ### edit_plugin
 
-Required RBAC permission: [`plugin:update`](/docs/reference/permissions#plugin:update)
+Required RBAC permission: `update` on the plugin (granted per item)
+
+Additional access requirement: Requires an `update` grant (**Can edit** or **Full access**) on the target plugin.
 
 #### Input
 
@@ -680,7 +690,9 @@ Required RBAC permission: [`plugin:update`](/docs/reference/permissions#plugin:u
 
 ### delete_plugin
 
-Required RBAC permission: [`plugin:delete`](/docs/reference/permissions#plugin:delete)
+Required RBAC permission: `delete` on the plugin (granted per item)
+
+Additional access requirement: Requires a `delete` grant (**Full access**) on the target plugin.
 
 #### Input
 

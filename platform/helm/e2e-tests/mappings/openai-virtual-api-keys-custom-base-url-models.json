@@ -12,8 +12,8 @@
       "object": "list",
       "data": [
         {
-          "id": "gpt-6.1-sol",
-          "name": "GPT-6"
+          "id": "gpt-5.5",
+          "name": "GPT-5.5"
         }
       ]
     }

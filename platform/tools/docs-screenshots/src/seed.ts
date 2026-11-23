@@ -237,7 +237,12 @@ async function seedProviderKeys(
   record: (kind: string, name: string, id: string) => void,
 ): Promise<void> {
   const existingProviderKeys = items(await api.get<Listed>("/api/llm-provider-api-keys"));
-  for (const providerKey of PROVIDER_KEYS) {
+  const sharedGrants = [{ subject: { type: "organization", id: "*" }, actions: ["read", "use"] }];
+  const providerKeys = [
+    ...PROVIDER_KEYS,
+    ...SHARED_PROVIDER_KEYS.map((key) => ({ ...key, shared: true, initialGrants: sharedGrants })),
+  ];
+  for (const providerKey of providerKeys) {
     const created =
       existingProviderKeys.find((key) => key.name === providerKey.name) ??
       (await api.tryPost<Named>("/api/llm-provider-api-keys", providerKey));
@@ -247,19 +252,11 @@ async function seedProviderKeys(
       console.warn(`Skipped provider key "${providerKey.name}": the provider rejected the fake key.`);
     }
   }
-  for (const providerKey of SHARED_PROVIDER_KEYS) {
-    const created =
-      existingProviderKeys.find((key) => key.name === providerKey.name) ??
-      (await api.post<Named>("/api/llm-provider-api-keys", {
-        ...providerKey,
-        shared: true,
-        initialGrants: [{ subject: { type: "organization", id: "*" }, actions: ["read", "use"] }],
-      }));
-    record("providerKeys", providerKey.name, created.id);
-  }
 }
 
 type AutoRouterResponse = Named & { status: { coldStart: { scorerVersionId: string } } };
+type AutoRouterTier = (typeof AUTO_ROUTER.tiers)[keyof typeof AUTO_ROUTER.tiers];
+type LinkedModel = { id: string; modelId: string; apiKeys: { id: string }[] };
 
 /**
  * Turns auto routing on, prices the tier models and creates the router on the shared keys. Its plan
@@ -271,25 +268,38 @@ async function seedAutoRouter(
   state: SeedState,
   record: (kind: string, name: string, id: string) => void,
 ): Promise<void> {
-  await api.put("/api/auto-routing/state", { enabled: true });
-  const models = await api.get<{ id: string; modelId: string; apiKeys: { id: string }[] }[]>(
-    "/api/llm-models?includeAssignments=false",
-  );
+  const models = await api.get<LinkedModel[]>("/api/llm-models?includeAssignments=false");
   const { tiers, decisionModel } = AUTO_ROUTER;
-  const tier = async ({ key, model, pricePerMillion }: (typeof tiers)[keyof typeof tiers]) => {
-    const providerApiKeyId = state.providerKeys[key];
-    const found = models.find(
-      (candidate) =>
-        candidate.modelId === model && candidate.apiKeys.some((linked) => linked.id === providerApiKeyId),
+  const providerKeys = state.providerKeys ?? {};
+  const linked = ({ key, model }: AutoRouterTier) =>
+    models.find(
+      (candidate) => candidate.modelId === model && candidate.apiKeys.some((apiKey) => apiKey.id === providerKeys[key]),
     );
-    if (!found) throw new Error(`No model ${model} on the provider key "${key}"`);
-    await api.patch(`/api/llm-models/${found.id}`, {
+  const [fast, normal, smart] = [linked(tiers.fast), linked(tiers.normal), linked(tiers.smart)];
+  const decisionApiKeyId = providerKeys[decisionModel.key];
+  if (!fast || !normal || !smart || !decisionApiKeyId) {
+    const missing = [
+      ...Object.values(tiers)
+        .filter((tier) => !linked(tier))
+        .map(({ key, model }) => `${model} on "${key}"`),
+      ...(decisionApiKeyId ? [] : [`the key "${decisionModel.key}"`]),
+    ];
+    console.warn(`Skipped the auto router, so its shots will fail: missing ${missing.join(", ")}.`);
+    return;
+  }
+  const priced = async ({ key, pricePerMillion }: AutoRouterTier, model: LinkedModel) => {
+    await api.patch(`/api/llm-models/${model.id}`, {
       customPricePerMillionInput: pricePerMillion.input,
       customPricePerMillionOutput: pricePerMillion.output,
     });
-    return { modelId: found.id, providerApiKeyId };
+    return { modelId: model.id, providerApiKeyId: providerKeys[key] };
   };
-  const tierModels = { fast: await tier(tiers.fast), normal: await tier(tiers.normal), smart: await tier(tiers.smart) };
+  await api.put("/api/auto-routing/state", { enabled: true });
+  const tierModels = {
+    fast: await priced(tiers.fast, fast),
+    normal: await priced(tiers.normal, normal),
+    smart: await priced(tiers.smart, smart),
+  };
   let router = (await api.get<AutoRouterResponse[]>("/api/auto-routing/routers")).find(
     (existing) => existing.name === AUTO_ROUTER.name,
   );
@@ -298,17 +308,19 @@ async function seedAutoRouter(
       name: AUTO_ROUTER.name,
       budgetPreset: AUTO_ROUTER.budgetPreset,
       tiers: tierModels,
-      decisionModel: { apiKeyId: state.providerKeys[decisionModel.key], model: decisionModel.model },
+      decisionModel: { apiKeyId: decisionApiKeyId, model: decisionModel.model },
     });
   }
   record("autoRouters", AUTO_ROUTER.name, router.id);
   record("autoRouterScorers", AUTO_ROUTER.name, router.status.coldStart.scorerVersionId);
 }
 
-/** Fits the router's plan on the sessions the database seed scored. */
+/** Fits the router's plan on the sessions the database seed scored. A skipped router has none. */
 export async function planAutoRouter(api: ArchestraApi, state: SeedState): Promise<void> {
+  const routerId = state.autoRouters?.[AUTO_ROUTER.name];
+  if (!routerId) return;
   const { fit } = await api.post<{ fit: { status: string; error?: string } | null }>(
-    `/api/auto-routing/routers/${state.autoRouters[AUTO_ROUTER.name]}/replan`,
+    `/api/auto-routing/routers/${routerId}/replan`,
   );
   if (fit?.status !== "active" && fit?.status !== "unchanged") {
     throw new Error(`The auto router's plan did not fit: ${JSON.stringify(fit)}`);

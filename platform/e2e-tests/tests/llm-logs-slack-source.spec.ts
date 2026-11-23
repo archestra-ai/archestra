@@ -72,7 +72,7 @@ async function runSlackChatOpsCompletion(params: {
         "X-Archestra-Session-Id": sessionId,
       },
       data: {
-        model: "gpt-6.1-sol",
+        model: "gpt-5.5",
         stream: true,
         messages: [{ role: "user", content: prompt }],
       },
@@ -187,7 +187,7 @@ async function runSlackLogsChecks({
   // The search narrows the page to this run, so its request is the one row
   // that links to the session.
   const rowFor = () =>
-    adminPage.getByRole("link").filter({ hasText: /gpt-6\.1-sol/ });
+    adminPage.getByRole("link").filter({ hasText: /gpt-5\.5/ });
 
   // 1. No client filter: the run is listed (the bug left it out entirely).
   await goToAdminPage(llmLogsPath({ q: sessionId }));

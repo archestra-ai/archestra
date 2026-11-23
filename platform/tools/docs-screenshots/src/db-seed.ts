@@ -366,6 +366,7 @@ GROUP BY l.id, i.model;`);
  */
 function seedAutoRoutingHistory(state: SeedState): void {
   const { history } = AUTO_ROUTER;
+  if (!state.autoRouters?.[AUTO_ROUTER.name]) return;
   const routerId = sql(state.autoRouters[AUTO_ROUTER.name]);
   const scorerVersionId = sql(state.autoRouterScorers[AUTO_ROUTER.name]);
   let lower = 0;

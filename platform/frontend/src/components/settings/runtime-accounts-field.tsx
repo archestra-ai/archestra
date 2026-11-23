@@ -8,11 +8,14 @@ import {
 import { useCallback } from "react";
 import {
   AccountSectionError,
+  type AccountWay,
   type AgentAccountLock,
   AgentAccountOptions,
   AgentAccountWays,
   accountWays,
   accountWaysMeaning,
+  lockToWay,
+  toggleAccountWay,
 } from "@/components/agent-account-ways-field";
 import type { AgentRuntimeConfig } from "@/components/agent-runtime-fields";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
@@ -25,6 +28,7 @@ import {
   copilotPlansAfterClick,
   copilotPlansOpen,
   enterprisePlanCard,
+  namedEnterprisePlanCard,
   personalSubscriptionCard,
   planModelsAfterClick,
   runtimeCompanyProviderFits,
@@ -178,12 +182,46 @@ export function RuntimeAccountsField({
       // The Copilot CLI always has its subscription kind.
       ...personalSubscriptionCard(subscriptionKind ?? "github-copilot"),
     };
-    if (plans.length === 0) {
+    if (plans.length === 0 && lock !== "key" && !llmApiKeyId) {
       // No plan is connected: each person's own Copilot is the one account.
       return (
         <AgentAccountOptions
           label={LABEL}
           options={[{ ...subscription, checked: true, onToggle: () => {} }]}
+        />
+      );
+    }
+    if (plans.length === 0) {
+      // The rule still runs agents on a plan, and none is connected any
+      // more: the plan keeps its card, so it can be unticked.
+      const toggle = (way: AccountWay) => {
+        if (noneSelected) return changeLock(lockToWay(way));
+        const next = toggleAccountWay(lock, way);
+        if (next === "none") noneNow();
+        else changeLock(next);
+      };
+      return (
+        <AgentAccountOptions
+          label={LABEL}
+          meaning={accountWaysMeaning(
+            ways,
+            companyAccountName(command),
+            "agent",
+          )}
+          problem="The enterprise plan this runtime uses no longer exists. Untick it."
+          options={[
+            {
+              ...subscription,
+              checked: ways.subscription,
+              onToggle: () => toggle("subscription"),
+            },
+            {
+              id: llmApiKeyId ?? "plan",
+              ...namedEnterprisePlanCard(accounts?.keyName),
+              checked: ways.provider,
+              onToggle: () => toggle("provider"),
+            },
+          ]}
         />
       );
     }

@@ -1964,6 +1964,43 @@ describe("the account row on an agent's page", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("asks before disconnecting a subscription while the organization's settings cannot be read", async () => {
+    subscriptionDefault({ companyKey: false });
+    const deletedKeys: string[] = [];
+    server.use(
+      // They name the knowledge base jobs that run on the key: unread, a job
+      // on it cannot be ruled out.
+      http.get(`${origin}/api/organization`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              message: "Unavailable",
+              type: "api_internal_server_error",
+            },
+          },
+          { status: 500 },
+        ),
+      ),
+      http.delete(`${origin}/api/llm-provider-api-keys/:id`, ({ params }) => {
+        deletedKeys.push(String(params.id));
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderRow({
+      runtime: {
+        command: ["archestra-codex"],
+        inferenceProtocol: "openai_chat",
+      },
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Disconnect" }));
+    expect(
+      await screen.findByRole("dialog", { name: "Disconnect subscription" }),
+    ).toBeVisible();
+    expect(deletedKeys).toEqual([]);
+  });
+
   it("holds the card's place while the account loads, and offers Retry when it cannot be read", async () => {
     let fails = true;
     // Each request waits here until the test lets it answer.

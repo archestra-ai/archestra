@@ -1811,4 +1811,35 @@ describe("the kind of account a runtime with a subscription of its own names", (
     await saveRuntime(user, dialog);
     expect(builtInAccounts("copilot")).toBeUndefined();
   });
+
+  it("keeps the card of the enterprise plan the Copilot CLI fixed once no plan is left, so it can be unticked", async () => {
+    // The plan was deleted, and no other is connected.
+    settings.builtIns = {
+      copilot: {
+        settings: {
+          accounts: { kind: "key", llmApiKeyId: "plan-gone", keyMissing: true },
+        },
+      },
+    } as Settings["builtIns"];
+    mount();
+    const user = userEvent.setup();
+    const dialog = await openBuiltIn(user, "GitHub Copilot CLI");
+    const plan = await within(dialog).findByRole("checkbox", {
+      name: /^Enterprise plan/,
+    });
+    const personal = within(dialog).getByRole("checkbox", {
+      name: /Each person's GitHub Copilot subscription/,
+    });
+    expect(plan).toBeChecked();
+    expect(personal).not.toBeChecked();
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "The enterprise plan this runtime uses no longer exists. Untick it.",
+    );
+
+    await user.click(personal);
+    await user.click(plan);
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+    await saveRuntime(user, dialog);
+    expect(builtInAccounts("copilot")).toEqual({ kind: "subscription" });
+  });
 });

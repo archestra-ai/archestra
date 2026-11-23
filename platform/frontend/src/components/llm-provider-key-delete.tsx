@@ -40,18 +40,23 @@ export function useLlmProviderKeyDependents(params: {
     enabled,
     toastOnError: false,
   });
-  const { data: organization, isPending: organizationPending } =
-    useOrganization();
+  const organization = useOrganization();
   const knowledgeBaseUsages = params.keyId
-    ? knowledgeBaseUsagesOf(organization, params.keyId)
+    ? knowledgeBaseUsagesOf(organization.data, params.keyId)
     : [];
   const mappedVirtualKeys = virtualKeys.data?.data ?? [];
   const mappedOauthClients = oauthClients.data?.data ?? [];
   const isLoading =
     enabled &&
-    (virtualKeys.isPending || oauthClients.isPending || organizationPending);
+    (virtualKeys.isPending || oauthClients.isPending || organization.isPending);
+  // Settings that could not be read name no knowledge base job, which is not
+  // the same as none being set to this key.
   const known =
-    enabled && !isLoading && !virtualKeys.isError && !oauthClients.isError;
+    enabled &&
+    !isLoading &&
+    !virtualKeys.isError &&
+    !oauthClients.isError &&
+    !organization.isError;
   return {
     virtualKeys: mappedVirtualKeys,
     oauthClients: mappedOauthClients,

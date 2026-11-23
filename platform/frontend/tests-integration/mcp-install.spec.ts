@@ -1,30 +1,35 @@
+import { makeUserPermissions } from "../src/mocks/data/auth";
 import { makeCatalogItem } from "../src/mocks/data/catalog";
 import { makeInstalledServer } from "../src/mocks/data/servers";
 import { expect, test } from "./fixtures";
+
+function makeSlackCatalog() {
+  const serverUrl = "https://mcp.slack.com/mcp";
+  return makeCatalogItem({
+    id: "slack-credentials-test",
+    name: "Renamed Slack",
+    serverType: "remote",
+    serverUrl,
+    requiresAuth: true,
+    multitenant: true,
+    oauthConfig: {
+      name: "Slack",
+      server_url: serverUrl,
+      client_id: "",
+      redirect_uris: ["http://localhost:3000/oauth-callback"],
+      scopes: [],
+      default_scopes: [],
+      supports_resource_metadata: true,
+    },
+  });
+}
 
 test.describe("Add Remote MCP Server", () => {
   test("Slack requires both app credentials before Test Connection and accepts a saved secret", async ({
     page,
     mswControl,
   }) => {
-    const serverUrl = "https://mcp.slack.com/mcp";
-    const slack = makeCatalogItem({
-      id: "slack-credentials-test",
-      name: "Renamed Slack",
-      serverType: "remote",
-      serverUrl,
-      requiresAuth: true,
-      multitenant: true,
-      oauthConfig: {
-        name: "Slack",
-        server_url: serverUrl,
-        client_id: "",
-        redirect_uris: ["http://localhost:3000/oauth-callback"],
-        scopes: [],
-        default_scopes: [],
-        supports_resource_metadata: true,
-      },
-    });
+    const slack = makeSlackCatalog();
     const url = `/api/internal_mcp_catalog/${slack.id}`;
     const editUrl = `/mcp/registry/${slack.id}/edit`;
     await mswControl.use({ method: "get", url, body: slack });
@@ -62,6 +67,37 @@ test.describe("Add Remote MCP Server", () => {
     await expect(
       page.getByRole("button", { name: "Install", exact: true }),
     ).toBeVisible();
+  });
+
+  test("Slack tells details-only editors who can add the missing credentials", async ({
+    page,
+    mswControl,
+  }) => {
+    const slack = makeSlackCatalog();
+    await mswControl.registerMany([
+      {
+        method: "get",
+        url: `/api/internal_mcp_catalog/${slack.id}`,
+        body: slack,
+      },
+      {
+        method: "get",
+        url: "/api/user/permissions",
+        body: makeUserPermissions({ mcpRegistry: ["read", "update"] }),
+      },
+      { method: "get", url: "/api/resource-permissions", body: [] },
+    ]);
+
+    await page.goto(`/mcp/registry/${slack.id}/edit?step=test`);
+    await expect(
+      page.getByText(
+        /Ask someone who can change this server’s connection settings/,
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Test Connection", exact: true }),
+    ).toBeDisabled();
+    await expect(page.getByLabel(/Client Secret/)).not.toBeVisible();
   });
 
   test("no-auth remote: create + install reports a working connection", async ({

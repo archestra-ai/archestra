@@ -1,7 +1,7 @@
 "use client";
 
 import { isSlackMcpServerUrl } from "@archestra/shared/oauth";
-import { ArrowLeft, ArrowRight, PackageX } from "lucide-react";
+import { ArrowLeft, ArrowRight, Info, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -17,6 +17,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WizardFooter } from "@/components/wizard-footer";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
@@ -53,6 +54,9 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
     item?.serverType === "remote" &&
     isSlackMcpServerUrl(item.serverUrl) &&
     !!item.oauthConfig &&
+    item.oauthConfig.grant_type !== "client_credentials" &&
+    !item.awsIamConfig &&
+    !item.enterpriseManagedConfig &&
     (!item.oauthConfig.client_id?.trim() ||
       !(item.clientSecretId || item.oauthConfig.client_secret?.trim()));
   const navigation = useSetupNavigation(needsSlackCredentials);
@@ -186,10 +190,34 @@ function SetupWizard({
             // returns to the server's page — once clean it just returns. The
             // step's own "Save & Continue" stays the primary CTA; Discard is
             // the secondary escape hatch.
-            footer={({ isDirty, isSaving, hasBlockingErrors, onReset }) => {
+            footer={({
+              isDirty,
+              isSaving,
+              hasBlockingErrors,
+              detailsOnly,
+              onReset,
+            }) => {
               const savingWith = isSaving ? saveIntentRef.current : null;
+              const cannotSetSlackCredentials =
+                needsSlackCredentials && detailsOnly;
               return (
-                <WizardFooter>
+                <WizardFooter
+                  notice={
+                    cannotSetSlackCredentials ? (
+                      <InlineNotice variant="info">
+                        <Info aria-hidden="true" />
+                        <span className="font-medium">
+                          Slack credentials needed
+                        </span>
+                        <InlineNoticeText>
+                          Ask someone who can change this server’s connection
+                          settings to add the Slack app’s Client ID and Client
+                          Secret.
+                        </InlineNoticeText>
+                      </InlineNotice>
+                    ) : undefined
+                  }
+                >
                   <div>
                     {(isDirty || isSaving) && (
                       <Button
@@ -247,7 +275,11 @@ function SetupWizard({
                       <Button
                         size="sm"
                         type="submit"
-                        disabled={hasBlockingErrors || isSaving}
+                        disabled={
+                          hasBlockingErrors ||
+                          isSaving ||
+                          cannotSetSlackCredentials
+                        }
                         onClick={() => {
                           saveIntentRef.current = "continue";
                         }}
@@ -258,7 +290,12 @@ function SetupWizard({
                     ) : (
                       <Button
                         size="sm"
-                        type={needsSlackCredentials ? "submit" : "button"}
+                        type={
+                          needsSlackCredentials && !cannotSetSlackCredentials
+                            ? "submit"
+                            : "button"
+                        }
+                        disabled={cannotSetSlackCredentials}
                         onClick={() => {
                           if (needsSlackCredentials) {
                             saveIntentRef.current = "continue";

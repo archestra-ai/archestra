@@ -277,7 +277,7 @@ export function AppShell({
           <ImpersonationExpiry />
           <ConversationSearchProvider />
           <AfterIdle>
-            <OnboardingSurveyDialog />
+            <FirstRunSetupDialog />
           </AfterIdle>
         </SidebarProvider>
       </NavigationStatusProvider>
@@ -322,9 +322,9 @@ function AfterIdle({ children }: { children: React.ReactNode }) {
   return ready ? <>{children}</> : null;
 }
 
-const OnboardingSurveyDialog = lazyComponent(() =>
-  import("@/components/onboarding-survey-dialog").then(
-    (m) => m.OnboardingSurveyDialog,
+const FirstRunSetupDialog = lazyComponent(() =>
+  import("@/components/first-run-setup-dialog").then(
+    (m) => m.FirstRunSetupDialog,
   ),
 );
 

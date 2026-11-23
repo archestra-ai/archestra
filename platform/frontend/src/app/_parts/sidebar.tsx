@@ -38,7 +38,6 @@ import { prefetchMcpRegistry } from "@/app/mcp/registry/_parts/prefetch-registry
 import { AppLogo } from "@/components/app-logo";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { OnboardingDot } from "@/components/onboarding-dot";
-import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -69,7 +68,6 @@ import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import config from "@/lib/config/config";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useConnectNavigation } from "@/lib/hooks/use-connect-navigation";
 import { useOnce } from "@/lib/hooks/use-once";
@@ -231,7 +229,7 @@ const NavPrimary = ({
             item.beta &&
               item.dotKey &&
               unseenDotKeys.has(item.dotKey) &&
-              "pr-4",
+              "pr-5",
           )}
           onClick={() => {
             if (item.dotKey) onDotItemVisit(item.dotKey);
@@ -515,7 +513,6 @@ export function AppSidebar() {
   const permissionMap = useNavPermissionMap();
   const appIconLogo = useAppIconLogo();
   const { visible: showConnect } = useConnectNavigation();
-  const { data: guardrailsDeployment } = useGuardrailsDeployment();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -551,20 +548,6 @@ export function AppSidebar() {
           // which one it opens: a reader who may read exports but not limits
           // would otherwise land on a page they cannot see.
           .map((item) => {
-            // Enforcement off is the state an operator needs to notice, so the
-            // row itself carries the warning instead of a second status row.
-            if (
-              item.url === "/openappa" &&
-              guardrailsDeployment?.enabled === false
-            ) {
-              return {
-                ...item,
-                icon: OpenAppaAlertIcon,
-                iconClassName: "size-4 shrink-0",
-                className:
-                  "text-destructive hover:text-destructive data-[active=true]:text-destructive",
-              };
-            }
             if (
               item.url === "/openappa" &&
               permissionMap &&
@@ -589,7 +572,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [guardrailsDeployment?.enabled, permissionMap],
+    [permissionMap],
   );
 
   return (
@@ -697,8 +680,8 @@ export function AppSidebar() {
         )}
       </SidebarContent>
       <SidebarFooter>
-        {/* The studio nav already shows the Guardrails row, tinted red while
-            enforcement is off, so the status row would only repeat it. */}
+        {/* The studio nav has its own Guardrails row, so the status row
+            stays out of it. */}
         {!docsScreenshotMode && (
           <SidebarWarningsAccordion
             showGuardrailsStatus={sidebarMode !== "studio"}

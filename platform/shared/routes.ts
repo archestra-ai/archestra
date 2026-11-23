@@ -747,8 +747,8 @@ export const RouteId = {
   // Onboarding Routes
   GetOnboardingSeenNavItems: "getOnboardingSeenNavItems",
   MarkOnboardingNavItemsSeen: "markOnboardingNavItemsSeen",
-  GetOnboardingSurveyEligibility: "getOnboardingSurveyEligibility",
-  SubmitOnboardingSurvey: "submitOnboardingSurvey",
+  GetFirstRunSetup: "getFirstRunSetup",
+  CompleteFirstRunSetup: "completeFirstRunSetup",
 
   // Organization Routes
   GetOrganization: "getOrganization",

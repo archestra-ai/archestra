@@ -31,6 +31,23 @@ test("successful requests log at debug and failed requests also log at info", as
   }
 });
 
+test("an unauthenticated request stays at debug", async () => {
+  const { app, logs } = makeApp();
+  app.get("/api/private", async (_request, reply) =>
+    reply.status(401).send({ error: "Unauthenticated" }),
+  );
+  try {
+    await app.inject({ method: "GET", url: "/api/private" });
+
+    expect(accessLogs(logs())).toEqual([
+      { msg: "incoming request", url: "/api/private", level: DEBUG },
+      { msg: "request completed", url: "/api/private", level: DEBUG },
+    ]);
+  } finally {
+    await app.close();
+  }
+});
+
 test("health checks and token-bearing paths are never access-logged", async () => {
   const { app, logs } = makeApp();
   app.get("/health", async () => ({ status: "ok" }));

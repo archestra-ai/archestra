@@ -20,9 +20,7 @@ import {
   Pencil,
   RefreshCw,
   Route,
-  Server,
   Trash2,
-  User,
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -737,11 +735,11 @@ const McpServerRowActions = memo(function McpServerRowActions({
       // serves the viewer, and for local items while the image awaits admin
       // approval (the card drops it too — the button would only fail the gate).
       actions.push({
-        icon: isLocal ? (
-          <Server className="h-4 w-4" />
-        ) : (
-          <User className="h-4 w-4" />
-        ),
+        // The row's primary action reads as a word: no glyph says "install".
+        // The padding sits on the word: the button's class also lands on the
+        // tooltip wrapper around it, where padding would open a gap in the group.
+        icon: <span className="px-2.5">Install</span>,
+        className: "w-auto",
         label: "Install",
         permissions: { mcpServerInstallation: ["create"] },
         disabled: (isLocal && !isLocalMcpEnabled) || installBlockers.length > 0,

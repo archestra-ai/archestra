@@ -22,6 +22,7 @@ import {
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
+import { telemetryPreference } from "@/observability/telemetry-preference";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { devFeedbackService } from "@/services/dev-feedback";
@@ -380,7 +381,11 @@ export async function getPublicConfigResponse(): Promise<
     siteNotificationMessage: config.siteNotificationMessage,
     enterpriseCoreActive: enterpriseTier.isCoreActive(),
     analytics: {
-      enabled: config.analytics.enabled,
+      // The database is not read in maintenance mode, so the admin's choice
+      // is unknown there and nothing is collected.
+      enabled: config.maintenanceMode
+        ? false
+        : await telemetryPreference.isEnabled(),
       instanceId: await getAnalyticsInstanceId(),
       posthog: config.analytics.posthog,
     },

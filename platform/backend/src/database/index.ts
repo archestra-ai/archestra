@@ -202,6 +202,23 @@ async function doInitializeDatabase(): Promise<void> {
 }
 
 /**
+ * No JIT compilation: it adds hundreds of milliseconds to every query whose
+ * estimated cost passes jit_above_cost (cost statistics over usage rows, most
+ * of all), and the queries here are short-lived.
+ *
+ * The pool awaits this before it hands a new client out. Sent from a "connect"
+ * listener instead, the statement is still running when the first caller's
+ * query arrives, and node-postgres warns about a query on a busy client.
+ */
+async function turnOffJit(client: pg.ClientBase): Promise<void> {
+  try {
+    await client.query("SET jit = off");
+  } catch (err) {
+    logger.warn({ err }, "Could not turn off JIT for a database connection");
+  }
+}
+
+/**
  * Create a connection pool with proper keepalive settings to prevent
  * "Connection terminated unexpectedly" errors.
  *
@@ -217,7 +234,7 @@ async function doInitializeDatabase(): Promise<void> {
  * - statement_timeout: ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS (default 30s);
  *   kills runaway queries so a single slow query can't hang a connection forever.
  *
- * - jit: off for every connection (see the "connect" handler).
+ * - jit: off for every connection (see turnOffJit).
  *
  * Connection keepalive configuration:
  * - keepAlive: true (enable TCP keepalive probes)
@@ -242,6 +259,7 @@ function createPool(connectionString: string): pg.Pool {
         // Keepalive configuration to prevent "Connection terminated unexpectedly"
         keepAlive: true,
         keepAliveInitialDelayMillis: 10000,
+        onConnect: turnOffJit,
       },
       {
         iamAuthEnabled: config.database.iamAuthEnabled,
@@ -259,16 +277,6 @@ function createPool(connectionString: string): pg.Pool {
    */
   newPool.on("error", (err) => {
     logger.error({ err }, "Unexpected error on idle database client");
-  });
-
-  // No JIT compilation: it adds hundreds of milliseconds to every query whose
-  // estimated cost passes jit_above_cost (cost statistics over usage rows,
-  // most of all), and the queries here are short-lived. Queued before the
-  // client's first query.
-  newPool.on("connect", (client) => {
-    client.query("SET jit = off").catch((err) => {
-      logger.warn({ err }, "Could not turn off JIT for a database connection");
-    });
   });
 
   /**

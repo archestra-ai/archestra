@@ -15,7 +15,7 @@ import { usePublicEnterpriseCoreActive } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 /**
- * The one note under the sign-in card. It says what an operator of a fresh
+ * The one note above the sign-in card. It says what an operator of a fresh
  * deployment needs to know: the default admin credentials while they still
  * work, and that single sign-on exists until an identity provider is
  * configured. Same box either way; only the wording changes.

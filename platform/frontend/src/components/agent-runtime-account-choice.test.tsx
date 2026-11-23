@@ -943,7 +943,9 @@ describe("the setup dialog's one set of buttons", () => {
     server.use(
       http.put(
         `${origin}/api/agents/${agentId}/runtime/credentials/:key`,
-        ({ params }) => {
+        async ({ params }) => {
+          // The credential is saved after the account is.
+          await new Promise((resolve) => setTimeout(resolve, 200));
           credentialWrites.push(String(params.key));
           return HttpResponse.json({ configured: true });
         },
@@ -962,12 +964,20 @@ describe("the setup dialog's one set of buttons", () => {
       ]),
     );
     await waitFor(() => expect(credentialWrites).toEqual(["API_TOKEN"]));
+    // The account section starts on the saved choice once its own save
+    // settles, so the focus moved to it stays there.
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: /My ChatGPT/ })).toHaveFocus(),
+    );
   });
 
   it("keeps the selection and shows the message when the account save fails", async () => {
     server.use(
-      http.put(`${origin}/api/agents/${agentId}/runtime/account`, () =>
-        HttpResponse.json(
+      http.put(`${origin}/api/agents/${agentId}/runtime/account`, async () => {
+        // As over a network: the choice shows before the refusal arrives,
+        // and is put back after it.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return HttpResponse.json(
           {
             error: {
               message:
@@ -976,13 +986,14 @@ describe("the setup dialog's one set of buttons", () => {
             },
           },
           { status: 400 },
-        ),
-      ),
+        );
+      }),
     );
     const user = userEvent.setup();
     show();
-    const group = await choices();
-    await user.click(within(group).getByRole("radio", { name: /My ChatGPT/ }));
+    await user.click(
+      within(await choices()).getByRole("radio", { name: /My ChatGPT/ }),
+    );
     await user.click(saveButton());
 
     const region = screen.getByRole("region", { name: "Account" });
@@ -992,7 +1003,7 @@ describe("the setup dialog's one set of buttons", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      within(group).getByRole("radio", { name: /My ChatGPT/ }),
+      within(await choices()).getByRole("radio", { name: /My ChatGPT/ }),
     ).toBeChecked();
     expect(saveButton()).toBeInTheDocument();
   });

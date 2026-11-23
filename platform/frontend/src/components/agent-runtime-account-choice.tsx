@@ -41,6 +41,7 @@ export function AgentRuntimeAccountChoice({
   agentId,
   form,
   saving,
+  savingChoice,
   saveError,
   onPendingChange,
 }: {
@@ -48,6 +49,8 @@ export function AgentRuntimeAccountChoice({
   /** The setup dialog's form; it owns the selection and the save. */
   form: UseFormReturn<AccountFormValues>;
   saving: boolean;
+  /** The account choice's own save is in flight. */
+  savingChoice: boolean;
   /** Why the last account save failed, shown in this section. */
   saveError: string | null;
   /** Told what the dialog's one Save has to store for the account. */
@@ -56,13 +59,14 @@ export function AgentRuntimeAccountChoice({
   const account = useAgentRuntimeAccount(agentId);
   // The form mounts once per stored choice and starts on it. A save shows
   // its choice at once and puts the stored one back if it fails, so the
-  // form stays mounted while a save is in flight: a failed save keeps the
-  // person's selection, and a saved one becomes the new start.
+  // form stays mounted while that save is in flight: a failed save keeps
+  // the person's selection, and a saved one becomes the new start as soon
+  // as it settles, whatever else the dialog still saves.
   const storedChoice = account.data
     ? JSON.stringify(account.data.choice)
     : null;
   const [formKey, setFormKey] = useState(storedChoice);
-  if (!saving && storedChoice !== formKey) setFormKey(storedChoice);
+  if (!savingChoice && storedChoice !== formKey) setFormKey(storedChoice);
   if (!account.data) {
     return account.isError ? (
       <InlineNotice variant="error">

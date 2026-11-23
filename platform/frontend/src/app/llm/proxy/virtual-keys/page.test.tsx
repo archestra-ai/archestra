@@ -179,6 +179,33 @@ describe("VirtualKeysPage provider-key filter", () => {
     ).toHaveTextContent("All provider keys");
   });
 
+  it("opens the key a link names with ?edit=", async () => {
+    virtualKeys = [
+      {
+        id: "22222222-3333-4444-8555-666666666666",
+        name: "Regional key",
+        keyType: "standard",
+        tokenStart: "arch_abc",
+        authorId: "user-1",
+        authorName: "Current User",
+        scope: "personal",
+        teams: [],
+        providerApiKeys: [],
+        expiresAt: null,
+        lastUsedAt: null,
+        labels: [],
+      },
+    ];
+
+    renderPage(
+      "keyType=standard&search=Regional%20key&edit=22222222-3333-4444-8555-666666666666",
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Regional key" }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps identity, access, and activity scannable without separate metadata columns", async () => {
     window.localStorage.setItem("archestra-llm-virtual-keys-view", "table");
     virtualKeys = [

@@ -137,6 +137,22 @@ describe("buildCurlExample", () => {
   }'`);
   });
 
+  it("fits a compact request's body on one line", () => {
+    expect(
+      buildCurlExample({
+        connectionBaseUrl: base,
+        target: { kind: "model-router" },
+        keyType: "standard",
+        keyValue: key,
+        model: "openai:gpt-5.4",
+        compact: true,
+      }),
+    ).toBe(`curl ${base}/unified-model/chat/completions \\
+  -H "Authorization: Bearer ${key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model": "openai:gpt-5.4", "messages": [{"role": "user", "content": "Hello!"}]}'`);
+  });
+
   it("uses chat completions with a bearer token for OpenAI-wire providers", () => {
     const example = buildCurlExample({
       connectionBaseUrl: base,

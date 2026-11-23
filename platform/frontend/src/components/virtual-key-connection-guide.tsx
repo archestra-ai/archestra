@@ -476,6 +476,7 @@ export function RequestExample({
   offerAutoModel = false,
   virtualApiKeyId,
   grantedRouterIds,
+  fields,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -520,6 +521,12 @@ export function RequestExample({
   virtualApiKeyId?: string;
   /** The auto routers given to the OAuth client the example is for, when it calls as the app. */
   grantedRouterIds?: string[];
+  /**
+   * Pickers laid out in one row before the model picker, as the LLM Proxy
+   * page's endpoint card does. The code then floats its own Copy button,
+   * which copies the real key when the reader may read it.
+   */
+  fields?: React.ReactNode;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
@@ -696,31 +703,144 @@ export function RequestExample({
       routerEndpoint: selectedModel?.routerEndpoint,
       supportedEndpoints: selectedModel?.supportedEndpoints,
       imageOperation: selectedImageOperation,
+      compact: !!fields,
     });
   const providerLabel =
     target.kind === "provider" ? providerCatalog.label(target.provider) : null;
 
-  if (!isPending && allOptions.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        {target.kind === "model-router" &&
+  const modelField = (
+    <div className="min-w-0 space-y-1.5">
+      <Label
+        htmlFor="virtual-key-example-model"
+        className={fields ? "text-[12.5px]" : undefined}
+      >
+        Model
+      </Label>
+      <ProviderGroupedModelSelect
+        id="virtual-key-example-model"
+        value={model ?? ""}
+        onValueChange={(value) => {
+          setPickedModel(value);
+          onModelChange?.(value);
+        }}
+        models={modelOptions}
+        pools={pools.map((pool) => ({
+          value: POOL_VALUE_PREFIX + pool.name,
+          name: pool.name,
+          description: pool.description,
+        }))}
+        autoRouters={offeredRouters.map((router) => ({
+          value: router.name,
+          name: router.name,
+          description: (["fast", "normal", "smart"] as const)
+            .map((tier) => router.tiers[tier].modelId)
+            .join(" · "),
+        }))}
+        disabled={isPending || allOptions.length === 0}
+        placeholder={
+          isPending ? "Loading models…" : "No models found for this key"
+        }
+      />
+      {usesCatalog && !isAuto && (
+        <p className="text-xs text-muted-foreground">
+          From your organization&apos;s model catalog. Your own key may have
+          access to different models.
+        </p>
+      )}
+    </div>
+  );
+  const imageOperationField = (
+    <div className="space-y-1.5">
+      <Label htmlFor="virtual-key-image-operation">Image operation</Label>
+      <Select
+        value={selectedImageOperation}
+        onValueChange={(value) =>
+          setImageOperation(value as ImageExampleOperation)
+        }
+      >
+        <SelectTrigger id="virtual-key-image-operation" className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {imageOperations.map((operation) => (
+            <SelectItem key={operation} value={operation}>
+              {operation === "generate" ? "Generate an image" : "Edit an image"}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+  const imageNotes = (
+    <>
+      {selectedImageOperation === "edit" && (
+        <p className="text-xs text-muted-foreground">
+          Save your input image as <InlineCode>edit.png</InlineCode> in the
+          current directory. Use a deployment that supports image editing. cURL
+          sets the multipart boundary automatically.
+        </p>
+      )}
+      {selectedImageOperation &&
+        target.kind === "provider" &&
+        target.provider === "gemini" && (
+          <p className="text-xs text-muted-foreground">
+            The response includes base64 image data in{" "}
+            <InlineCode>inlineData</InlineCode>.
+          </p>
+        )}
+    </>
+  );
+
+  const unavailable =
+    !isPending && allOptions.length === 0
+      ? target.kind === "model-router" &&
         candidates.some(
           (candidate) =>
             candidate.isImage && routerProviders.includes(candidate.provider),
         )
-          ? "Choose the native provider API for image generation examples."
-          : "No runnable model example is available for this key and endpoint yet."}
-      </p>
+        ? "Choose the native provider API for image generation examples."
+        : "No runnable model example is available for this key and endpoint yet."
+      : !example
+        ? isPending
+          ? "Loading models…"
+          : `No example for ${providerLabel} yet. Point your ${providerLabel} SDK at the base URL above.`
+        : null;
+  const fieldRow = fields && (
+    <div className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))]">
+      {fields}
+      {modelField}
+    </div>
+  );
+
+  if (unavailable || !example) {
+    const message = (
+      <p className="text-sm text-muted-foreground">{unavailable}</p>
+    );
+    return fields ? (
+      <div className="space-y-3">
+        {fieldRow}
+        {message}
+      </div>
+    ) : (
+      message
     );
   }
 
-  if (!example) {
+  if (fields) {
     return (
-      <p className="text-sm text-muted-foreground">
-        {isPending
-          ? "Loading models…"
-          : `No example for ${providerLabel} yet. Point your ${providerLabel} SDK at the base URL above.`}
-      </p>
+      <div className="space-y-3">
+        {fieldRow}
+        {showImageOperationPicker && (
+          <div className="sm:max-w-80">{imageOperationField}</div>
+        )}
+        <AutoRoutingUnavailableHint offer={autoRouting} />
+        {imageNotes}
+        <FloatingCodeExample
+          code={example}
+          secret={secret}
+          placeholder={`$${credentialEnvVar}`}
+        />
+      </div>
     );
   }
 
@@ -761,87 +881,12 @@ export function RequestExample({
             showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
           )}
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="virtual-key-example-model">Model</Label>
-            <ProviderGroupedModelSelect
-              id="virtual-key-example-model"
-              value={model ?? ""}
-              onValueChange={(value) => {
-                setPickedModel(value);
-                onModelChange?.(value);
-              }}
-              models={modelOptions}
-              pools={pools.map((pool) => ({
-                value: POOL_VALUE_PREFIX + pool.name,
-                name: pool.name,
-                description: pool.description,
-              }))}
-              autoRouters={offeredRouters.map((router) => ({
-                value: router.name,
-                name: router.name,
-                description: (["fast", "normal", "smart"] as const)
-                  .map((tier) => router.tiers[tier].modelId)
-                  .join(" · "),
-              }))}
-              disabled={isPending || allOptions.length === 0}
-              placeholder={
-                isPending ? "Loading models…" : "No models found for this key"
-              }
-            />
-            {usesCatalog && !isAuto && (
-              <p className="text-xs text-muted-foreground">
-                From your organization&apos;s model catalog. Your own key may
-                have access to different models.
-              </p>
-            )}
-          </div>
-          {showImageOperationPicker && (
-            <div className="space-y-1.5">
-              <Label htmlFor="virtual-key-image-operation">
-                Image operation
-              </Label>
-              <Select
-                value={selectedImageOperation}
-                onValueChange={(value) =>
-                  setImageOperation(value as ImageExampleOperation)
-                }
-              >
-                <SelectTrigger
-                  id="virtual-key-image-operation"
-                  className="w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {imageOperations.map((operation) => (
-                    <SelectItem key={operation} value={operation}>
-                      {operation === "generate"
-                        ? "Generate an image"
-                        : "Edit an image"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {modelField}
+          {showImageOperationPicker && imageOperationField}
         </div>
       )}
       {!fixedModel && <AutoRoutingUnavailableHint offer={autoRouting} />}
-      {selectedImageOperation === "edit" && (
-        <p className="text-xs text-muted-foreground">
-          Save your input image as <InlineCode>edit.png</InlineCode> in the
-          current directory. Use a deployment that supports image editing. cURL
-          sets the multipart boundary automatically.
-        </p>
-      )}
-      {selectedImageOperation &&
-        target.kind === "provider" &&
-        target.provider === "gemini" && (
-          <p className="text-xs text-muted-foreground">
-            The response includes base64 image data in{" "}
-            <InlineCode>inlineData</InlineCode>.
-          </p>
-        )}
+      {imageNotes}
       {secret ? (
         <MaskedCodeExample
           language="cURL"
@@ -985,6 +1030,64 @@ export function MaskedCodeExample({
   );
 }
 
+/**
+ * The example as a dark block with Copy floating in its corner. Copy puts the
+ * real key in the command when the reader may read it (their own key, or one
+ * just created), and the env var otherwise; the block itself stays masked.
+ */
+function FloatingCodeExample({
+  code,
+  secret,
+  placeholder,
+}: {
+  code: string;
+  secret: RevealableSecret | undefined;
+  placeholder: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const onCopy = async () => {
+    setCopying(true);
+    try {
+      // Only a readable key is masked in the code; anyone else's is already
+      // the env var.
+      const value = secret ? await secret.resolve() : null;
+      await copyToClipboard(
+        secret ? code.replaceAll(MASKED_KEY, value ?? placeholder) : code,
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } finally {
+      setCopying(false);
+    }
+  };
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-terminal-edge bg-terminal">
+      <pre
+        className={cn(
+          terminalCodeClass,
+          "m-0 max-h-[360px] overflow-auto px-4 py-3.5 pr-24 text-[12.5px] leading-7",
+        )}
+      >
+        <HighlightedCurl code={code} />
+      </pre>
+      <UnstyledButton
+        type="button"
+        onClick={onCopy}
+        disabled={copying}
+        className="absolute top-2.5 right-2.5 inline-flex h-7 items-center gap-1.5 rounded-md border border-terminal-edge px-2.5 text-xs font-medium text-terminal-muted transition-colors hover:text-terminal-emphasis"
+      >
+        {copied ? (
+          <Check className="size-3.5" />
+        ) : (
+          <Copy className="size-3.5" />
+        )}
+        <span>{copied ? "Copied" : "Copy"}</span>
+      </UnstyledButton>
+    </div>
+  );
+}
+
 /** A multi-line example with a header bar naming the language. */
 export function CodeExample({
   language,
@@ -1064,8 +1167,8 @@ function HighlightedCurl({ code }: { code: string }) {
       <span key={lineIndex}>
         <span>{indent}</span>
         {command && <span className="text-primary">{command}</span>}
-        {rest.split(/("[^"]*")/).map((part, partIndex) =>
-          part.startsWith('"') ? (
+        {rest.split(/("[^"]*"|'[^']*')/).map((part, partIndex) =>
+          /^["']/.test(part) ? (
             // biome-ignore lint/suspicious/noArrayIndexKey: parts are positional and never reorder
             <span key={partIndex} className="text-terminal-success">
               {part}

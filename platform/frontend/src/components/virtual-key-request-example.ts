@@ -91,6 +91,11 @@ export function buildCurlExample(params: {
    * as the one every auto routing tier model serves.
    */
   routerEndpoint?: "chat/completions" | "responses";
+  /**
+   * One line of JSON and a bare URL, for a single request shown on its own,
+   * like the LLM Proxy dashboard's endpoint card.
+   */
+  compact?: boolean;
 }): string | null {
   const {
     connectionBaseUrl,
@@ -102,7 +107,10 @@ export function buildCurlExample(params: {
     imageOperation,
     isPool,
     routerEndpoint,
+    compact = false,
   } = params;
+  const curl = (url: string, headers: string[]) =>
+    curlRequest(url, headers, compact);
   const baseUrl = getProxyBaseUrl(connectionBaseUrl, target);
   const passthrough = keyType === "passthrough";
   if (
@@ -276,11 +284,21 @@ function json(body: unknown): string {
   return JSON.stringify(body, null, 2);
 }
 
-function curl(url: string, headers: string[]) {
+function curlRequest(url: string, headers: string[], compact: boolean) {
   return (body: string) =>
     [
-      `curl "${url}"`,
+      compact ? `curl ${url}` : `curl "${url}"`,
       ...headers.map((header) => `  -H "${header}"`),
-      `  -d '${body.replace(/\n/g, "\n  ")}'`,
+      compact
+        ? `  -d '${oneLineJson(body)}'`
+        : `  -d '${body.replace(/\n/g, "\n  ")}'`,
     ].join(" \\\n");
+}
+
+/** `{"model": "auto", "messages": [{"role": "user", ...}]}`: one line, spaced. */
+function oneLineJson(body: string): string {
+  return JSON.stringify(JSON.parse(body), null, 1)
+    .replace(/\n\s*/g, " ")
+    .replace(/([[{]) /g, "$1")
+    .replace(/ ([\]}])/g, "$1");
 }

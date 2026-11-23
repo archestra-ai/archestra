@@ -39,6 +39,7 @@ import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-cont
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -80,10 +81,19 @@ export default function ModelPoolsPage() {
   const statusFilter = searchParams.get("status") ?? "all";
 
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<{
-    pool: ModelPool;
-    section: PoolDialogSection;
-  } | null>(null);
+  const [section, setSection] = useState<PoolDialogSection>("pool");
+  // `?edit=<id>` opens that pool's dialog, so a link can land on it.
+  const editId = searchParams.get("edit");
+  const {
+    entity: editing,
+    open: openPoolDialog,
+    close: closePoolDialog,
+  } = useDialogUrlParam<ModelPool>({
+    paramName: "edit",
+    entityFromUrl: editId
+      ? (pools.find((pool) => pool.id === editId) ?? null)
+      : null,
+  });
   const [deleting, setDeleting] = useState<ModelPool | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const deletePool = useDeleteModelPool();
@@ -132,10 +142,12 @@ export default function ModelPoolsPage() {
     ...new Set(pools.flatMap((pool) => pool.members.map((m) => m.provider))),
   ].sort();
   const editingPool = editing
-    ? (pools.find((pool) => pool.id === editing.pool.id) ?? editing.pool)
+    ? (pools.find((pool) => pool.id === editing.id) ?? editing)
     : null;
-  const openPool = (pool: ModelPool, section: PoolDialogSection = "pool") =>
-    setEditing({ pool, section });
+  const openPool = (pool: ModelPool, opensOn: PoolDialogSection = "pool") => {
+    setSection(opensOn);
+    openPoolDialog(pool);
+  };
   const rangeSelection = useBulkRangeSelectionController();
   const cardSelection = useBulkCardSelection({
     rows: visible,
@@ -400,13 +412,13 @@ export default function ModelPoolsPage() {
           }}
         />
       ) : null}
-      {editing && editingPool ? (
+      {editingPool ? (
         <PoolDialog
           key={editingPool.id}
           pool={editingPool}
-          initialSection={editing.section}
+          initialSection={section}
           onOpenChange={(open) => {
-            if (!open) setEditing(null);
+            if (!open) closePoolDialog();
           }}
         />
       ) : null}

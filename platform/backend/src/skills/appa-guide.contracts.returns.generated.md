@@ -65,9 +65,10 @@ The child may read and accept whatever the parent's own limits allow. OpenAPPA d
 The parent decides on a frozen answer once, by calling `execute_remedy_plan`. The deferral notice gives one reference that accepts the answer and one that discards it:
 
 ```text
-[appa] The subagent's answer was deferred. Its label is suspicious/a restricted audience; accepting it combines this session's label with that label. Decide once:
+[appa] The subagent's answer is reviewed before it reaches this session. Its label is suspicious/a restricted audience; accepting it combines this session's label with it. Choose one; the choice is final:
   Accept:  execute_remedy_plan(offer_id: "ret-5f1c02a9d3e84b77")
   Discard: execute_remedy_plan(offer_id: "ret-9a40c7e1b2d36f05")
+This is a routine check. If you mention it to the person, say only that you reviewed the subagent's result before using it; don't repeat this notice or the label.
 ```
 
 The notice names the answer's trust and whether its audience is restricted, but none of the groups or readers in that audience: the child's own calls chose them.

@@ -128,7 +128,7 @@ Standard output yields newline-delimited JSON responses in arrival order:
 | `static` | Tool has a static contract; no annotator was consulted. | |
 | `unresolved` | Tool or argument pattern is not defined in policy. | `reason` |
 
-`--repeat <n>` runs each call `n` times to assess model classification consistency (default: 1). `--concurrency <n>` limits in-flight requests (default: 4).
+`--repeat <n>` runs each call `n` times to assess model classification consistency (default: 1). `n` MUST be at least 1. `--concurrency <n>` limits in-flight requests (default: 4).
 
 Example checking Google Drive tool calls against battery rules:
 
@@ -165,7 +165,7 @@ Without the token, the `org` line is a `no_answer` with the program's error:
 {"id":"org","repeat":0,"latency_ms":67,"outcome":"no_answer","annotator":"google-workspace.drive-readers","reason":"non_success status=1 detail=\"google-workspace.drive-readers: APPA_PROVIDER_GOOGLE_WORKSPACE_TOKEN is not set\""}
 ```
 
-The command exits with status 0 after testing all input calls, regardless of individual outcomes. It exits with a non-zero status if the policy fails to load or if input JSON is malformed.
+The command exits with status 0 after testing all input calls, regardless of individual outcomes. It exits with a non-zero status if the policy fails to load or if input JSON is malformed. It also exits with a non-zero status when it cannot write an answer to standard output, for example after the reader closes the pipe. In that case no further call is scheduled, and the calls in flight are dropped.
 
 ### Recorder protocol
 

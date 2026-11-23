@@ -26,7 +26,19 @@ if (!process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE) {
   if (process.env.ARCHESTRA_DATABASE_BUNDLED === "true") {
     const deadline = Date.now() + BUNDLED_DATABASE_WAIT_MS;
     while (
-      spawnSync("pg_isready", ["-q", "-h", "127.0.0.1", "-p", "5432"]).status !== 0
+      // Probe as the postgres role: without -U the probe uses this process's
+      // OS user (root), and the server logs "FATAL: role "root" does not exist".
+      spawnSync("pg_isready", [
+        "-q",
+        "-h",
+        "127.0.0.1",
+        "-p",
+        "5432",
+        "-U",
+        "postgres",
+        "-d",
+        "postgres",
+      ]).status !== 0
     ) {
       if (Date.now() > deadline) {
         console.error(

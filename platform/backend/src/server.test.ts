@@ -938,6 +938,30 @@ describe("createFastifyInstance", () => {
       loggerInfoSpy.mockRestore();
     });
 
+    test("logs a 401 at debug level", async () => {
+      const app = createFastifyInstance();
+      const loggerInfoSpy = vi.spyOn(app.log, "info");
+      const loggerDebugSpy = vi.spyOn(app.log, "debug");
+
+      app.get("/test-401-logging", async () => {
+        throw new ApiError(401, "Unauthenticated");
+      });
+
+      await app.inject({ method: "GET", url: "/test-401-logging" });
+
+      expect(loggerDebugSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "Unauthenticated", statusCode: 401 }),
+        "HTTP 40x request error occurred",
+      );
+      expect(loggerInfoSpy).not.toHaveBeenCalledWith(
+        expect.anything(),
+        "HTTP 40x request error occurred",
+      );
+
+      loggerInfoSpy.mockRestore();
+      loggerDebugSpy.mockRestore();
+    });
+
     test("logs unknown 4xx status codes at info level", async () => {
       const app = createFastifyInstance();
 

@@ -5,7 +5,6 @@ import {
   Bot,
   Boxes,
   Brain,
-  Cable,
   ChartColumn,
   CircleDollarSign,
   Database,
@@ -28,9 +27,10 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
-import { OpenAppaIcon } from "@/components/openappa-icon";
+import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
+import { ConnectNavIcon } from "./connect-nav-icon";
 
 /**
  * What the product's navigation is, separately from any one thing that draws
@@ -148,7 +148,7 @@ export const chatsNavItems: NavItem[] = [
   {
     title: "Connect",
     url: "/connection",
-    icon: Cable,
+    icon: ConnectNavIcon,
     customIsActive: (pathname: string) => pathname.startsWith("/connection"),
     dotKey: "nav:connect",
   },
@@ -172,7 +172,8 @@ export const contentNavGroups: NavGroup[] = [
         title: "Guardrails",
         url: "/openappa",
         permissionUrls: ["/openappa", "/openappa/policy"],
-        icon: OpenAppaIcon,
+        icon: OpenAppaSolidIcon,
+        iconClassName: "size-4 shrink-0",
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
         beta: true,
         badgeLabel: "Beta",

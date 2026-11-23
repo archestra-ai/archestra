@@ -853,8 +853,43 @@ describe("KbChunkModel", () => {
       ).resolves.toBeUndefined();
     });
 
-    // updateEmbeddings writes vector columns and is likewise only exercised
-    // against real Postgres, with the same caveat as vectorSearch above.
+    test("stores each chunk's own vector in the column for its dimensions, across statements", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization({ legacyPermissions: true });
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+      // One row more than a single statement carries.
+      const chunks = await KbChunkModel.insertMany(
+        Array.from({ length: 501 }, (_, chunkIndex) => ({
+          documentId: doc.id,
+          content: `chunk ${chunkIndex}`,
+          chunkIndex,
+        })),
+      );
+      const vectorFor = (chunkIndex: number) =>
+        Array.from({ length: 384 }, () => chunkIndex - 0.5);
+
+      await KbChunkModel.updateEmbeddings(
+        chunks.map((chunk) => ({
+          chunkId: chunk.id,
+          embedding: vectorFor(chunk.chunkIndex),
+        })),
+        384,
+      );
+
+      const stored = await KbChunkModel.findByDocument(doc.id);
+      expect(stored).toHaveLength(501);
+      for (const chunk of stored) {
+        expect(chunk.embedding384).toEqual(vectorFor(chunk.chunkIndex));
+        expect(chunk.embedding).toBeNull();
+      }
+    });
   });
 });
 

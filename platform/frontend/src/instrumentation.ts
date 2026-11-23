@@ -24,6 +24,10 @@ function isIgnorableRequestError(error: unknown): boolean {
 export async function register() {
   const reportErrors = getFrontendServerErrorReporting().enabled;
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { raiseServerResponseListenerLimit } = await import(
+      "@/lib/server-response-listeners.server"
+    );
+    raiseServerResponseListenerLimit();
     if (reportErrors) {
       await import("../sentry.server.config");
     }

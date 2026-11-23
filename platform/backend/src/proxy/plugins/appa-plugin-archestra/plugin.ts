@@ -8789,7 +8789,7 @@ function appendQuestionContinuation(params: {
   if (!wire || !isRecord(params.request)) return;
   if (params.onContinue === "skip") return;
   if (params.onContinue === "turn") {
-    appendToLastUserTurn(params.request, guidance, {
+    appendTurnGuidance(params.request, guidance, {
       plainText: wire === "chatCompletions:noDeveloper",
     });
     return;
@@ -8860,14 +8860,14 @@ function appendQuestionContinuation(params: {
       mergeLeadingSystemMessage(params.request, guidance);
       return;
     }
-    appendToLastUserTurn(params.request, guidance, { plainText: true });
+    appendTurnGuidance(params.request, guidance, { plainText: true });
     return;
   }
   if (wire === "anthropic:messages") {
     // Transient guidance goes after the last cache breakpoint in the final
     // message. Earlier messages and system stay unchanged.
     if (params.scope !== "request") {
-      appendToLastUserTurn(params.request, guidance);
+      appendTurnGuidance(params.request, guidance);
       return;
     }
     if (Array.isArray(params.request.system)) {
@@ -8889,7 +8889,7 @@ function appendQuestionContinuation(params: {
 }
 
 /** Adds turn guidance after the last cache breakpoint in the final message. */
-function appendToLastUserTurn(
+function appendTurnGuidance(
   request: Record<string, unknown>,
   text: string,
   options?: { plainText?: boolean },

@@ -403,12 +403,8 @@ export async function resolveCompanyOption(params: {
   const fixed = (reason: string, stale: string = reason) => ({
     problem: { status: 409 as const, reason, stale, fixed: true as const },
   });
-  const modelDeleted = () =>
-    own(
-      400,
-      "The selected model does not exist.",
-      "The model you chose no longer exists.",
-    );
+  // Only a stored choice records what it picked, so only a run reads these.
+  const modelDeleted = () => own(400, "The model you chose no longer exists.");
 
   if (params.saving && chosen?.llmApiKeyId && fixedBy.connection) {
     return own(409, fixedPartMessage("connection", fixedBy.connection, words));
@@ -439,22 +435,18 @@ export async function resolveCompanyOption(params: {
   }
   if (fixedBy.model && !modelId) return gone(fixedBy.model, "model");
   if (!llmApiKeyId) {
+    // A connection or a model the person picked and that was deleted since:
+    // deleting it empties its id, and the run does not take the
+    // organization's default instead.
+    if (chosen?.llmApiKeyChosen) {
+      return own(400, `The ${words.connection} you chose no longer exists.`);
+    }
     if (!modelId) {
-      // Nothing is left of what the person picked: deleting a connection or
-      // a model empties its id. The run does not take the organization's
-      // default instead.
-      if (chosen?.llmApiKeyChosen) {
-        return own(
-          400,
-          `The selected ${words.connection} does not exist.`,
-          `The ${words.connection} you chose no longer exists.`,
-        );
-      }
       if (chosen?.modelChosen) return modelDeleted();
       return { key: null, model: null };
     }
-    // Only a person's model stands without a connection: the one they
-    // picked it with was deleted, or the agent no longer sets its own.
+    // Only a person's model stands without a connection: they picked it
+    // under the agent's own, which the agent no longer sets.
     return own(
       400,
       `Choose ${words.aConnection} before its model.`,

@@ -67,6 +67,11 @@ const agentRuntimeUserAccountsTable = pgTable(
       "agent_runtime_user_accounts_authentication_check",
       sql`${table.authentication} in ('provider', 'subscription')`,
     ),
+    // A stored id is always one the person picked.
+    check(
+      "agent_runtime_user_accounts_chosen_check",
+      sql`(${table.llmApiKeyId} is null or ${table.llmApiKeyChosen}) and (${table.modelId} is null or ${table.modelChosen})`,
+    ),
     // Back the FK cascades; the PK starts with agent_id.
     index("agent_runtime_user_accounts_user_id_idx").on(table.userId),
     index("agent_runtime_user_accounts_llm_api_key_id_idx").on(

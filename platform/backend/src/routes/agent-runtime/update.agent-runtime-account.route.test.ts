@@ -1172,13 +1172,13 @@ describe("PUT /api/agents/:id/runtime/account", () => {
       });
       await stale("You can no longer use the connection you chose.");
 
-      // The connection is deleted: its model stands alone.
+      // The connection is deleted, and its model stays stored alone.
       await LlmProviderApiKeyModel.delete(shared.key.id);
       expect(await storedChoice(agent.id, member.id)).toMatchObject({
         llmApiKeyId: null,
         modelId: shared.model.id,
       });
-      await stale("The model you chose has no connection any more.");
+      await stale("The connection you chose no longer exists.");
 
       // A connection picked without a model leaves no id behind once it is
       // deleted, and the run still does not move to the default.

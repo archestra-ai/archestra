@@ -1,5 +1,5 @@
 {
-  "id": "4c657b3e-6ac3-45fe-932c-e55e10e2e30f",
+  "id": "64a282ce-d7a3-4934-b125-020c9c7c042c",
   "prevId": "ed00232a-89f3-4044-b23d-aed507fb22e8",
   "version": "7",
   "dialect": "postgresql",
@@ -4131,6 +4131,10 @@
         "agent_runtime_user_accounts_authentication_check": {
           "name": "agent_runtime_user_accounts_authentication_check",
           "value": "\"agent_runtime_user_accounts\".\"authentication\" in ('provider', 'subscription')"
+        },
+        "agent_runtime_user_accounts_chosen_check": {
+          "name": "agent_runtime_user_accounts_chosen_check",
+          "value": "(\"agent_runtime_user_accounts\".\"llm_api_key_id\" is null or \"agent_runtime_user_accounts\".\"llm_api_key_chosen\") and (\"agent_runtime_user_accounts\".\"model_id\" is null or \"agent_runtime_user_accounts\".\"model_chosen\")"
         }
       },
       "isRLSEnabled": false

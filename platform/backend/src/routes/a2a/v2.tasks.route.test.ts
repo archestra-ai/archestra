@@ -377,7 +377,7 @@ describe("a2a v2 task methods", () => {
     expect(response.json().error).toMatchObject({
       code: -32602,
       message: expect.stringContaining(
-        "Your own account for this agent no longer works. The model you chose has no connection any more. Choose your account again.",
+        "Your own account for this agent no longer works. The connection you chose no longer exists. Choose your account again.",
       ),
     });
     expect(mockRunTaskInAgentRuntime).not.toHaveBeenCalled();

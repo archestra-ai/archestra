@@ -845,14 +845,16 @@ function PluginsList() {
 }
 
 function PluginsEmptyState() {
-  const { data: canCreate } = useHasPermissions({ plugin: ["create"] });
+  const { data: canCreate, isPending } = useHasPermissions({
+    plugin: ["create"],
+  });
   return (
     <EmptyState
       variant="firstUse"
       icon={Puzzle}
       title="Extend the coding tools your team already uses"
       description="A plugin adds commands, hooks and other files to one tool, such as Claude Code, Codex or Cursor. Share it, and each person installs it with one command."
-      canAct={canCreate}
+      canAct={isPending ? undefined : canCreate}
       readerMessage="Your admins haven't shared a plugin yet."
       action={
         <Button size="sm" asChild>

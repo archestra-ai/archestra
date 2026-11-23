@@ -13,6 +13,7 @@ const access = vi.hoisted(() => ({
   role: { plugin: ["read", "create"] } as Record<string, string[]>,
   grants: [] as { resource: string; action: string; scope: string }[],
   plugins: null as unknown[] | null,
+  isPending: false,
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
@@ -20,6 +21,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
     permissions: Record<string, string[]>,
     scope?: string,
   ) => ({
+    isPending: access.isPending,
     data: Object.entries(permissions).every(([resource, actions]) =>
       actions.every((action) =>
         scope === undefined
@@ -131,6 +133,7 @@ describe("PluginsPage", () => {
       { resource: "plugin", action: "use", scope: PLUGIN.id },
     ];
     access.plugins = null;
+    access.isPending = false;
   });
 
   it("offers adding a plugin to a role that may only create plugins", () => {
@@ -166,6 +169,23 @@ describe("PluginsPage", () => {
     expect(
       screen.getByRole("link", { name: /Add new plugin/ }),
     ).toHaveAttribute("href", "/plugins/new");
+  });
+
+  it("waits for permissions before showing first-use actions or the reader message", () => {
+    access.plugins = [];
+    access.role = {};
+    access.isPending = true;
+    render(<PluginsPage />);
+
+    expect(
+      screen.getByText("Extend the coding tools your team already uses"),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Your admins haven't shared a plugin yet."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Create a plugin/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("tells a reader without plugin:create who shares plugins instead of offering a disabled button", () => {

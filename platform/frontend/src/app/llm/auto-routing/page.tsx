@@ -133,7 +133,8 @@ export default function AutoRoutersPage() {
   ];
 
   const organizationOff = routers.length > 0 && !routers[0].enabled;
-  const { data: canCreate } = useHasPermissions({ llmProxy: ["update"] });
+  const { data: canCreate, isPending: resolvingCreatePermission } =
+    useHasPermissions({ llmProxy: ["update"] });
   // Nothing to list and nothing searched: the page explains auto routing
   // instead of showing an empty table.
   const isFirstUse = query.isSuccess && routers.length === 0 && !search;
@@ -180,7 +181,7 @@ export default function AutoRoutersPage() {
           icon={Shuffle}
           title="Send each session to the right model"
           description="An auto router sends easy work to a cheap model and hard work to a smart one, within a daily budget."
-          canAct={canCreate}
+          canAct={resolvingCreatePermission ? undefined : canCreate}
           readerMessage="Your admins haven't created an auto router yet."
           action={
             <Button size="sm" onClick={() => setCreating(true)}>

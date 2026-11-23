@@ -141,6 +141,33 @@ describe("ModelPoolsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("waits for the provider check before offering to create a pool", async () => {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, async () => {
+        await promise;
+        return HttpResponse.json([]);
+      }),
+    );
+
+    renderPage();
+    try {
+      expect(
+        await screen.findByText(
+          "Keep your models answering when a provider fails",
+        ),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: /^Create (a )?pool$/ }),
+      ).not.toBeInTheDocument();
+    } finally {
+      resolve();
+    }
+    expect(
+      await screen.findByRole("button", { name: "Add model provider" }),
+    ).toBeEnabled();
+  });
+
   it("explains pools on a page with none, under the usual header", async () => {
     renderPage();
     expect(

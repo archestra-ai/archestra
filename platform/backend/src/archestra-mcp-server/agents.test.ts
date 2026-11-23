@@ -27,6 +27,7 @@ import {
   ToolModel,
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
+import { makeKeyWithModel } from "@/routes/agent-runtime/agent-runtime-account.test-helpers";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -1329,6 +1330,58 @@ describe("agent runtime and model tools", () => {
     expect(refused.isError).toBe(true);
     expect(JSON.stringify(refused)).toContain("locked Claude Code runtime");
     expect((await AgentModel.findById(agent.id))?.runtime).toEqual(runtime);
+  });
+
+  test("edit_agent checks a model sent alone against the connection the runtime fixes, and keeps the agent's own", async ({
+    makeAgent,
+  }) => {
+    const fixed = await makeKeyWithModel({
+      organizationId,
+      provider: "anthropic",
+      modelId: "claude-sonnet-4-5",
+    });
+    const own = await makeKeyWithModel({
+      organizationId,
+      provider: "anthropic",
+      modelId: "claude-haiku-4-5",
+    });
+    await AgentRuntimeTemplateModel.saveSettings({
+      organizationId,
+      settings: {
+        revision: 0,
+        templates: [],
+        builtIns: {
+          "claude-code": {
+            locked: false,
+            settings: { accounts: { llmApiKeyId: fixed.key.id } },
+          },
+        },
+      },
+      popularAgentOverrides: null,
+    });
+    // It kept its own pair from before the runtime fixed a connection.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: mockContext.userId,
+      agentType: "agent",
+      runtime: buildAgentCatalogRuntime({
+        id: "claude-code",
+        image: config.agentRuntime.catalogImages["claude-code"],
+      }),
+      llmApiKeyId: own.key.id,
+      modelId: own.model.id,
+    });
+
+    const edited = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      modelId: fixed.model.id,
+    });
+
+    expect(edited.isError, JSON.stringify(edited.content)).not.toBe(true);
+    expect(await AgentModel.findById(agent.id)).toMatchObject({
+      llmApiKeyId: own.key.id,
+      modelId: fixed.model.id,
+    });
   });
 
   test("create_agent applies runtime overrides on top of a template", async ({

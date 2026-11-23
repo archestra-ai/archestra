@@ -1350,6 +1350,30 @@ describe("a runtime's account rule", () => {
         message:
           "This agent's model is not available through the connection the Engineering workspace runtime runs its agents on. Someone who can edit the agent must choose another model.",
       });
+
+      // What that asks for: a model of the runtime's connection, sent alone
+      // as the agent form sends it. The agent keeps its own connection,
+      // which plays no part while the rule stands.
+      const repaired = await update(own.json().id, {
+        modelId: company.model.id,
+      });
+      expect(repaired.statusCode, repaired.body).toBe(200);
+      expect(await stored(own.json().id)).toMatchObject({
+        llmApiKeyId: shared.key.id,
+        modelId: company.model.id,
+      });
+      expect(await launchOf(own.json().id, ctx.member)).toMatchObject({
+        subscription: false,
+        boundKeyIds: [company.key.id],
+      });
+      // A model sent alone is still one of the runtime connection's.
+      const notOfRuntime = await update(own.json().id, {
+        modelId: shared.model.id,
+      });
+      expect(notOfRuntime.statusCode).toBe(400);
+      expect(notOfRuntime.json().error.message).toBe(
+        "The Engineering workspace runtime runs its agents on one connection, and the model you chose is not one of its models. Choose one of them.",
+      );
     });
 
     test("an agent created while a kind is named is free once the rule is removed, as an agent created before it is", async () => {

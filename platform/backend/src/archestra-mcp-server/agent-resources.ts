@@ -36,6 +36,7 @@ import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import {
+  agentPairToCheck,
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
   assertCanBindRuntimeCredentials,
@@ -983,13 +984,18 @@ async function resolveRuntimeAndModelForWrite(params: {
     organizationId: context.organizationId,
     userId: context.userId,
   };
+  const checked = agentPairToCheck({
+    sent: { llmApiKeyId, modelId },
+    stored: existing,
+    runtimeConnection,
+  });
   // Stricter than the REST routes on purpose: a model is checked against the
   // caller's keys even for a chat agent, so the tool never stores a pairing
   // the caller could not have picked in the UI.
   if (touchesModel) {
     await assertAgentModelSelectionAvailable({
       ...scope,
-      agent: merged,
+      agent: checked,
       runtime: merged.runtime,
       runtimeConnection,
     });
@@ -997,7 +1003,7 @@ async function resolveRuntimeAndModelForWrite(params: {
   await assertAgentRuntimeModelCompatibility({
     ...scope,
     runtime: merged.runtime,
-    agent: merged,
+    agent: checked,
     selectsModel: touchesModel,
     runtimeConnection,
   });

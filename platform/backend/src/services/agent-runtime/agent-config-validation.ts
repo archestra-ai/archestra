@@ -133,6 +133,30 @@ export function canStoreAgentModelSelection(params: {
 }
 
 /**
+ * The model and connection a write's model is judged on: what it sends,
+ * with what the agent stores for the rest. On a runtime that fixes its
+ * agents' connection, a model sent without a connection runs on that
+ * connection, whatever connection the agent kept from before: it is judged
+ * as a model alone, and the agent keeps its connection.
+ */
+export function agentPairToCheck(params: {
+  sent: { llmApiKeyId?: string | null; modelId?: string | null };
+  stored: Pick<Agent, "llmApiKeyId" | "modelId"> | null | undefined;
+  runtimeConnection: { llmApiKeyId: string } | null | undefined;
+}): Pick<Agent, "llmApiKeyId" | "modelId"> {
+  const { sent, stored } = params;
+  const modelId =
+    sent.modelId !== undefined ? sent.modelId : (stored?.modelId ?? null);
+  const llmApiKeyId =
+    sent.llmApiKeyId !== undefined
+      ? sent.llmApiKeyId
+      : params.runtimeConnection && sent.modelId
+        ? null
+        : (stored?.llmApiKeyId ?? null);
+  return { llmApiKeyId, modelId };
+}
+
+/**
  * Refuse a model/key pair the caller cannot use, or a half-set pair an
  * agent may not store. An Agent Runtime agent may store its connection
  * alone, which must be one the caller may use; its model is then each

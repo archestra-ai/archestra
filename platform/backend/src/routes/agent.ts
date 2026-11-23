@@ -72,6 +72,7 @@ import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledg
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
+  agentPairToCheck,
   assertAgentRuntimeModelCompatibility,
   assertCanBindRuntimeCredentials,
   canStoreAgentModelSelection,
@@ -2370,14 +2371,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertAgentRuntimeModelCompatibility({
           runtime:
             body.runtime !== undefined ? body.runtime : existingAgent.runtime,
-          agent: {
-            llmApiKeyId:
-              body.llmApiKeyId !== undefined
-                ? body.llmApiKeyId
-                : existingAgent.llmApiKeyId,
-            modelId:
-              body.modelId !== undefined ? body.modelId : existingAgent.modelId,
-          },
+          agent: agentPairToCheck({
+            sent: body,
+            stored: existingAgent,
+            runtimeConnection,
+          }),
           organizationId,
           userId: user.id,
           // A body that names neither keeps the agent's pair: an image or

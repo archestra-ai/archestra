@@ -251,7 +251,7 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
         .chain(externals.sanitizers.values())
         .any(|binding| !allowed(binding))
     {
-        return Err("Validation supports only certain built-in authorities and sanitizers.".into());
+        return Err("Validation supports only built-in authorities and sanitizers.".into());
     }
     let unanswered = Arc::new(Unanswered::default());
     // The deployment `appa replay` runs, under the Archestra adapter: no person is asked,
@@ -687,7 +687,7 @@ mod tests {
 
     #[tokio::test]
     async fn unsupported_remedies_are_refused_without_dispatch() {
-        let unsupported = "Validation supports only certain built-in authorities and sanitizers.";
+        let unsupported = "Validation supports only built-in authorities and sanitizers.";
         for (extra, error) in [
             (
                 "\n[externals.authorities.remote]\nurl = 'https://example.test/authority'\n",

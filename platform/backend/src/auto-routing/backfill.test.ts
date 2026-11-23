@@ -995,6 +995,49 @@ describe("auto routing backfill", () => {
     expect(own.sample).toHaveLength(10);
   });
 
+  test("a router fitted on its own sessions keeps the past volume until they span a week", async () => {
+    config.autoRouting.minSessions = 5;
+    await sessions(3);
+    await scanAndScore({});
+    const scorerVersionId = (await activeSourceVersion()).id;
+    const settings = await AutoRouterModel.find(routerId);
+    await seedFitHistory({
+      organizationId,
+      routerId,
+      modelId: settings?.normalModelId ?? "",
+      scorerVersionId,
+      sessions: 5,
+      session: (i) => ({
+        features: {
+          signals: {
+            "jev-session": {
+              version: scorerVersionId,
+              tier_needed: [0.2, 0.5, 0.3],
+              p_long: 0.1,
+            },
+          },
+          client: "claude-code",
+        },
+        createdAt: new Date(Date.now() - (2 + i) * DAY_MS),
+      }),
+    });
+
+    const history = await readFitHistory({
+      router: await liveRouter(),
+      scorerVersionId,
+      inputWatermark: new Date(),
+      longContextThreshold: null,
+    });
+
+    expect(history).toMatchObject({
+      sessions: 5,
+      pastSessions: 0,
+      volumeSource: "history",
+      volume: { sessions: 3 },
+    });
+    expect(history.sample).toHaveLength(5);
+  });
+
   test("the session minimum is the live one unless past sessions make up the sample", async () => {
     config.autoRouting.minSessions = 1000;
     await sessions(3);

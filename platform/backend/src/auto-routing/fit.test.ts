@@ -5,14 +5,14 @@ import type { RouterTierSet, RouterTokenPrices } from "./tiers";
 describe("planInput tier prices", () => {
   test("cache writes cost the 5m and 1h rates blended by each block's 1h share", () => {
     const { tiers } = input(trio({ long: usd(4, 8) }), [
-      { weight: 1, short: [100, 100], long: [300, 0] },
+      { weight: 1, short: [300, 300], long: [300, 0] },
       { weight: 3, short: [100, 0], long: [0, 0] },
     ]);
 
     expect(tiers.tiers[0].short).toEqual({
       input: 1,
       cache_read: 0.1,
-      cache_write: 0.75 * 2 + 0.25 * 4,
+      cache_write: 0.5 * 2 + 0.5 * 4,
       output: 5,
     });
     expect(tiers.tiers[0].long?.cache_write).toBe(4);

@@ -260,8 +260,8 @@ export type FitVolume = {
 
 /**
  * Reads the history window, or, when it holds fewer than `minSessions`
- * sessions, the window of the router's latest `minSessions` ones: a thin
- * router is fitted on as many sessions as a busy one, from further back.
+ * sessions, the window since the router's `minSessions`-th latest one: a
+ * thin router is fitted on as many sessions as a busy one, from further back.
  */
 async function overFitWindow<T>(
   params: FitWindow,

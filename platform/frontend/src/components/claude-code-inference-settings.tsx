@@ -1,12 +1,17 @@
 "use client";
 
-import { isClaudeCodeRuntimeCommand } from "@archestra/shared";
+import {
+  DocsPage,
+  getDocsUrl,
+  isClaudeCodeRuntimeCommand,
+} from "@archestra/shared";
 import type { ReactNode } from "react";
 import {
   type AccountChooser,
   type AgentAccountLock,
   AgentAccountWays,
 } from "@/components/agent-account-ways-field";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CLAUDE_SUBSCRIPTION_CARD,
   companyApiKeyCard,
@@ -87,7 +92,17 @@ export function ClaudeCodeInferenceSettings({
 function CustomImageSubscriptionHint() {
   return (
     <span>
-      Choose a personal subscription only for an image that runs Claude Code.
+      Choose a personal subscription only for an image that runs Claude Code the
+      way the docs describe.{" "}
+      <ExternalDocsLink
+        href={getDocsUrl(
+          DocsPage.PlatformAgentRuntimeCustomImages,
+          "run-on-personal-claude-subscriptions",
+        )}
+        className="whitespace-nowrap"
+      >
+        What the image must do
+      </ExternalDocsLink>
     </span>
   );
 }

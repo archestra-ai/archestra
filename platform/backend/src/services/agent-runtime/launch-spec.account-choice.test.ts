@@ -883,6 +883,23 @@ describe("a person's own account for their runs", () => {
         accountErrorFromModel: true,
       });
 
+      // The connection they picked is deleted, and its model with it. Both
+      // were set aside already, so nothing of theirs broke either.
+      await LlmProviderApiKeyModel.delete(picked.key.id);
+      await ModelModel.deleteOrphanedModels();
+      expect(
+        await AgentRuntimeUserAccountModel.find({
+          agentId: agent.id,
+          userId: chooser.id,
+        }),
+      ).toMatchObject({ llmApiKeyId: null, modelId: null });
+      await expect(
+        ranOn(withConnection, { kind: "user", id: chooser.id }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: "Choose a model on the agent's page to run this agent.",
+      });
+
       // The agent sets the model too: nothing is left to ask.
       await AgentModel.update(agent.id, { modelId: set.model.id });
       const updated = await AgentModel.findById(agent.id);

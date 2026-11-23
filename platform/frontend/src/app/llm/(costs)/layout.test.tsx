@@ -39,17 +39,14 @@ const setPermissions = ({
   canReadCosts,
   canReadLimits,
   canReadModels = false,
-  canReadExports = false,
 }: {
   canReadCosts: boolean;
   canReadLimits: boolean;
   canReadModels?: boolean;
-  canReadExports?: boolean;
 }) => {
   vi.mocked(usePermissionMap).mockReturnValue({
     "/llm/costs": canReadCosts,
     "/llm/limits": canReadLimits,
-    "/llm/cost-exports": canReadExports,
     "/llm/models": canReadModels,
   } as unknown as ReturnType<typeof usePermissionMap>);
 };
@@ -71,13 +68,16 @@ describe("CostsLayout", () => {
     expect(screen.getByTestId("tabs")).toBeEmptyDOMElement();
   });
 
-  it("scopes the Costs description to a team admin's teams", () => {
+  it("opens both tabs to a team admin and scopes the Costs description to their teams", () => {
     setPermissions({ canReadCosts: false, canReadLimits: false });
     vi.mocked(useTeamLimitAccess).mockReturnValue({
       canRead: true,
       isTeamAdmin: true,
     } as ReturnType<typeof useTeamLimitAccess>);
     render(<CostsLayout>content</CostsLayout>);
+    const tabs = screen.getByTestId("tabs");
+    expect(tabs).toHaveTextContent("/llm/costs");
+    expect(tabs).toHaveTextContent("/llm/limits");
     expect(screen.getByTestId("description")).toHaveTextContent(
       /across the teams you administer/i,
     );
@@ -106,24 +106,18 @@ describe("CostsLayout", () => {
     ).toHaveAttribute("href", "/llm/models");
   });
 
-  it("gives Cost Controls the Limits and Exports tabs, and Costs none", () => {
+  it("keeps every tab for a reader who may open them all", () => {
     setPermissions({
       canReadCosts: true,
       canReadLimits: true,
-      canReadExports: true,
     });
 
-    vi.mocked(usePathname).mockReturnValue("/llm/limits");
-    const { unmount } = render(<CostsLayout>content</CostsLayout>);
-    const tabs = screen.getByTestId("tabs");
-    expect(tabs).toHaveTextContent("/llm/limits");
-    expect(tabs).toHaveTextContent("/llm/cost-exports");
-    expect(tabs).not.toHaveTextContent("/llm/costs,");
-    unmount();
-
-    vi.mocked(usePathname).mockReturnValue("/llm/costs");
     render(<CostsLayout>content</CostsLayout>);
-    expect(screen.getByTestId("tabs")).toBeEmptyDOMElement();
+
+    const tabs = screen.getByTestId("tabs");
+    expect(tabs).toHaveTextContent("/llm/costs");
+    expect(tabs).toHaveTextContent("/llm/limits");
+    expect(tabs).not.toHaveTextContent("/llm/usage");
   });
 
   it("describes the organization-wide view when the reader may see it", () => {

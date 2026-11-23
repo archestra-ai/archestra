@@ -29,8 +29,8 @@ export function YellDetail({ id }: { id: string }) {
   const resolve = useResolveOpenAppaYell();
   const { data: canResolve } = useHasPermissions({ guardrailsLog: ["read"] });
   const back = (
-    <PageBackLink href="/logs" labelled>
-      <span>Back to Logs</span>
+    <PageBackLink href="/consults/logs?type=yell" labelled>
+      <span>Back to Guardrails logs</span>
     </PageBackLink>
   );
 

@@ -150,8 +150,10 @@ describe("WithPagePermissions", () => {
     [{ guardrailsLog: ["read"] }, "/consults/logs/yells/yell-1", true],
     [{ log: ["read", "admin"] }, "/consults/logs/yells/yell-1", false],
     [{ guardrailsPolicy: ["read"] }, "/logs", false],
-    [{ clientConnection: ["admin"] }, "/adoption", true],
-    [{ clientConnection: ["read"] }, "/adoption", false],
+    [{ clientConnection: ["admin"] }, "/connections/logs", true],
+    [{ clientConnection: ["read"] }, "/connections/logs", false],
+    [{ guardrailsLog: ["read"] }, "/consults/logs", true],
+    [{ log: ["read"] }, "/consults/logs", false],
   ] as [
     Permissions,
     string,

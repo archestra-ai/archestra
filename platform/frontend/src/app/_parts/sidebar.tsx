@@ -23,7 +23,7 @@ import {
 import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
-import { getCostControlsNavigationUrl } from "@/app/_parts/costs-navigation";
+import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import {
@@ -547,8 +547,8 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
-          // Cost Controls is one row over two pages, so it has to choose
-          // which one it opens: a reader who may read exports but not limits
+          // Costs & Limits is one row over two pages, so it has to choose
+          // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
           .map((item) => {
             // Enforcement off is the state an operator needs to notice, so the
@@ -574,10 +574,15 @@ export function AppSidebar() {
               // Yells, or the Policy page for their MCP servers' rules.
               return { ...item, url: "/openappa/policy" };
             }
-            if (item.url === "/llm/limits") {
+            if (item.url === "/llm/costs") {
               return {
                 ...item,
-                url: getCostControlsNavigationUrl(permissionMap),
+                title:
+                  permissionMap?.["/llm/costs"] === false &&
+                  permissionMap?.["/llm/limits"]
+                    ? "Limits"
+                    : item.title,
+                url: getCostsNavigationUrl(permissionMap),
               };
             }
             // Same reason one row over: /settings is a stub that forwards to

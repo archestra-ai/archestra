@@ -2,7 +2,10 @@
 
 import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { AgentIcon, agentLabel } from "@/app/adoption/_parts/agent-icon";
+import {
+  AgentIcon,
+  agentLabel,
+} from "@/app/connections/logs/_parts/agent-icon";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";

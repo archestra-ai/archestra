@@ -23,7 +23,7 @@ const location = {
   },
 };
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/adoption",
+  usePathname: () => "/connections/logs",
   useRouter: () => ({ push: location.push, replace: location.push }),
   useSearchParams: () =>
     useSyncExternalStore(

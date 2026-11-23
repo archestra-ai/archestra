@@ -6,7 +6,7 @@ FROM ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657d
 
 # One Rust toolchain both builds the review engine and ships in the runtime, so
 # projects with native code (Archestra's addons included) compile in place.
-FROM rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 AS rust
+FROM rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97 AS rust
 
 # Build the review engine once for each native architecture. Skills supply the
 # review procedure and configuration; the runtime needs only this executable.

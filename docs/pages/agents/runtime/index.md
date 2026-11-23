@@ -157,7 +157,7 @@ What a field reads while you have picked nothing for it:
 
 A connection you pick is saved without a model. Its model then reads **Default model** where the connection serves the organization's default model, and **Choose a model** where it does not.
 
-When your choice stops working, for example because the agent's API key was removed, your runs stop and the card offers **Choose account**. Pick again there. A connection or model you picked that no longer works reads **Choose a connection** or **Choose a model** again.
+When your choice stops working, for example because the connection or model you picked was deleted, your runs stop and the card offers **Choose account**. They never move to the organization's default on their own. Pick again there. A connection or model you picked that no longer works reads **Choose a connection** or **Choose a model** again.
 
 What to know:
 

@@ -1,6 +1,7 @@
 import config from "@/config";
 import logger from "@/logging";
 import { InstanceUsageModel, OrganizationModel } from "@/models";
+import { telemetryPreference } from "@/observability/telemetry-preference";
 import type { InstanceEntityCounts } from "@/types";
 
 const HEARTBEAT_INTERVAL_MS = 60 * 60 * 1000;
@@ -64,6 +65,9 @@ class InstanceAnalyticsService {
   private async captureHeartbeat(): Promise<void> {
     const analyticsConfig = this.getAnalyticsConfig();
     if (!analyticsConfig.enabled || !analyticsConfig.posthog.key) return;
+    // The admin turned telemetry off in the first-run setup dialog. Checked
+    // on every beat, so the hourly timer follows a later change.
+    if (!(await telemetryPreference.isOptedIn())) return;
 
     const state = await OrganizationModel.getAnalyticsState();
 

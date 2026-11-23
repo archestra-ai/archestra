@@ -37,6 +37,8 @@ class ErrorReporting {
   private state: "idle" | "awaiting-analytics" | "loading" | "ready" | "off" =
     "idle";
   private params: StartParams | null = null;
+  /** Reporting to Archestra's project, which follows the telemetry setting. */
+  private reportsToArchestra = false;
   private pending: Array<(sentry: Sentry) => void> = [];
   private readonly keyed = new Map<string, (sentry: Sentry) => void>();
 
@@ -69,11 +71,24 @@ class ErrorReporting {
    * buffered when the deployment opted out.
    */
   setAnalyticsEnabled(enabled: boolean): void {
+    // An admin turned telemetry off after reporting to Archestra's project
+    // had started: stop it in this tab.
+    if (
+      !enabled &&
+      this.reportsToArchestra &&
+      (this.state === "loading" || this.state === "ready")
+    ) {
+      void this.sentry?.close();
+      this.sentry = null;
+      this.turnOff();
+      return;
+    }
     if (this.state !== "awaiting-analytics" || !this.params) return;
     if (!enabled) {
       this.turnOff();
       return;
     }
+    this.reportsToArchestra = true;
     this.load(
       resolveFrontendErrorReporting({ ...this.params, analyticsEnabled: true }),
     );
@@ -104,6 +119,8 @@ class ErrorReporting {
       .whenIdle()
       .then(() => import("@sentry/nextjs"))
       .then((sentry) => {
+        // Telemetry was turned off while the SDK was still loading.
+        if (this.state === "off") return;
         sentry.init(getFrontendBrowserSentryOptions(reporting));
         this.stopListeningForUncaughtErrors();
         this.sentry = sentry;

@@ -13,6 +13,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import { telemetryPreference } from "@/observability/telemetry-preference";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
   AppearanceSettings,
@@ -223,6 +224,50 @@ class OrganizationModel {
   }
 
   /**
+   * The admin's telemetry choice for this installation (the default
+   * organization's `telemetry_enabled`). Callers go through
+   * observability/telemetry-preference.ts, which caches it and applies the
+   * deployment-level ARCHESTRA_ANALYTICS switch.
+   */
+  static async getTelemetryEnabled(): Promise<boolean> {
+    const organization =
+      await OrganizationModel.getOrCreateDefaultOrganization();
+    const [row] = await db
+      .select({ telemetryEnabled: schema.organizationsTable.telemetryEnabled })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organization.id))
+      .limit(1);
+    return row?.telemetryEnabled ?? true;
+  }
+
+  /**
+   * Atomically record that the first-run setup dialog was finished and store
+   * the telemetry choice made in it. Returns true only for the call that
+   * actually completed it (it was previously null), so two admins finishing
+   * concurrently cannot both subscribe an email or overwrite each other's
+   * telemetry choice.
+   */
+  static async completeFirstRunSetup(params: {
+    id: string;
+    telemetryEnabled: boolean;
+  }): Promise<boolean> {
+    const rows = await db
+      .update(schema.organizationsTable)
+      .set({
+        firstRunSetupCompletedAt: new Date(),
+        telemetryEnabled: params.telemetryEnabled,
+      })
+      .where(
+        and(
+          eq(schema.organizationsTable.id, params.id),
+          isNull(schema.organizationsTable.firstRunSetupCompletedAt),
+        ),
+      )
+      .returning({ id: schema.organizationsTable.id });
+    return rows.length > 0;
+  }
+
+  /**
    * Get persistent analytics identity and event timestamps for this installation.
    */
   static async getAnalyticsState(): Promise<OrganizationAnalyticsState> {
@@ -344,31 +389,6 @@ class OrganizationModel {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     OrganizationModel.mcpIdleHibernationCache.clear();
     // SPDX-SnippetEnd
-  }
-
-  /**
-   * Atomically record that the first-login onboarding survey was submitted for
-   * this organization. Returns true only for the call that actually flipped the
-   * flag (it was previously null), so the caller can forward the survey exactly
-   * once even when two admins submit concurrently. Never shown again once set.
-   */
-  static async markOnboardingSurveyCompleted(id: string): Promise<boolean> {
-    const rows = await db
-      .update(schema.organizationsTable)
-      .set({ onboardingSurveyCompletedAt: new Date() })
-      .where(
-        and(
-          eq(schema.organizationsTable.id, id),
-          isNull(schema.organizationsTable.onboardingSurveyCompletedAt),
-        ),
-      )
-      .returning({ id: schema.organizationsTable.id });
-    if (rows.length > 0) {
-      await cacheManager.delete(getOrganizationSettingsCacheKey(id));
-      await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
-      await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
-    }
-    return rows.length > 0;
   }
 
   /**
@@ -989,6 +1009,8 @@ class OrganizationModel {
     };
   }
 }
+telemetryPreference.setReader(() => OrganizationModel.getTelemetryEnabled());
+
 export default OrganizationModel;
 
 /** Single-org table (`limit 1` read), so one fixed key is enough. */

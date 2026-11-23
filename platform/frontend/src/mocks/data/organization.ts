@@ -18,6 +18,8 @@ export function makeOrganization(
     metadata: null,
     onboardingComplete: true,
     onboardingSurveyCompletedAt: null,
+    firstRunSetupCompletedAt: null,
+    telemetryEnabled: true,
     theme: "modern-minimal",
     customFont: "inter",
     onlineMcpCatalogEnabled: true,

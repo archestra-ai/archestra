@@ -152,6 +152,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_ANALYTICS`** - Sends usage analytics and telemetry to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
   - Default: on in production builds, including the released Docker images. Off in development, and off when [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`](/docs/admin/deployment/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED) is `true`.
   - Values: `disabled` turns it off. Any other value turns it on.
+  - On a new installation without a license, the first admin to sign in can also turn telemetry off. That choice keeps it off even when this variable turns it on.
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key for analytics.
   - Default: Archestra's PostHog project

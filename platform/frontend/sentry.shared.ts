@@ -1,3 +1,4 @@
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   ERROR_REPORTING_DATA_COLLECTION,
   isAnalyticsEnabled,
@@ -101,6 +102,7 @@ export function getFrontendServerSentryOptions(
 ): NodeOptions {
   return {
     ...getBaseOptions(reporting),
+    ...getTelemetryChoiceFilters(reporting),
     ...(!reporting.errorsOnly && {
       tracesSampleRate: FRONTEND_SERVER_TRACES_SAMPLE_RATE,
       enableLogs: true,
@@ -113,6 +115,7 @@ export function getFrontendEdgeSentryOptions(
 ): EdgeOptions {
   return {
     ...getBaseOptions(reporting),
+    ...getTelemetryChoiceFilters(reporting),
     ...(!reporting.errorsOnly && {
       tracesSampleRate: FRONTEND_SERVER_TRACES_SAMPLE_RATE,
       enableLogs: true,
@@ -120,7 +123,63 @@ export function getFrontendEdgeSentryOptions(
   };
 }
 
+/**
+ * Whether the instance still allows telemetry: the deployment setting and
+ * the choice an admin made in the first-run setup dialog, as the backend's
+ * public config reports them. The Next.js server and edge runtimes cannot
+ * read the database, so they ask the backend, at most once a minute. When
+ * the backend cannot be reached, nothing is sent.
+ */
+async function isInstanceTelemetryEnabled(): Promise<boolean> {
+  if (telemetryChoice && telemetryChoice.expiresAt > Date.now()) {
+    return telemetryChoice.enabled;
+  }
+  let enabled = false;
+  try {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL ||
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL ||
+      DEFAULT_INTERNAL_API_BASE_URL;
+    const response = await fetch(new URL(PUBLIC_CONFIG_PATH, baseUrl), {
+      signal: AbortSignal.timeout(TELEMETRY_CHOICE_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    if (response.ok) {
+      const body = (await response.json()) as {
+        analytics?: { enabled?: boolean };
+      };
+      enabled = body.analytics?.enabled === true;
+    }
+  } catch {
+    enabled = false;
+  }
+  telemetryChoice = {
+    enabled,
+    expiresAt: Date.now() + TELEMETRY_CHOICE_TTL_MS,
+  };
+  return enabled;
+}
+
 // === Internal helpers ===
+
+const PUBLIC_CONFIG_PATH = "/api/config/public";
+const TELEMETRY_CHOICE_TTL_MS = 60_000;
+const TELEMETRY_CHOICE_TIMEOUT_MS = 3_000;
+let telemetryChoice: { enabled: boolean; expiresAt: number } | null = null;
+
+/**
+ * Server and edge reports to Archestra's project also follow the admin's
+ * telemetry choice. The deployment's own project always gets its reports.
+ */
+function getTelemetryChoiceFilters(reporting: FrontendErrorReporting) {
+  if (!reporting.errorsOnly) return {};
+  return {
+    beforeSend: async <T extends object>(event: T) =>
+      (await isInstanceTelemetryEnabled())
+        ? scrubErrorReportEvent(event)
+        : null,
+  };
+}
 
 function getBaseOptions(reporting: FrontendErrorReporting) {
   return {

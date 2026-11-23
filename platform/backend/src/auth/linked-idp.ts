@@ -4,6 +4,7 @@ import {
   CreateLinkedIdentityProviderIntentRequestSchema,
   LINKED_IDP_AUTH_COMPLETE_PATH,
   LINKED_IDP_AUTH_INTENT_PATH,
+  LINKED_IDP_OTHER_SESSION_ERROR_CODE,
 } from "@archestra/shared";
 import type { AuthContext } from "@better-auth/core";
 import { createAuthEndpoint, sessionMiddleware } from "better-auth/api";
@@ -62,7 +63,9 @@ export function linkedIdentityProviderPlugin() {
           );
           if (!cookieIntentId || cookieIntentId !== ctx.body.intentId) {
             throw ctx.error("BAD_REQUEST", {
-              message: "Linked identity provider request not found",
+              code: LINKED_IDP_OTHER_SESSION_ERROR_CODE,
+              message:
+                "Finish connecting the identity provider in the same browser session where you started it.",
             });
           }
 

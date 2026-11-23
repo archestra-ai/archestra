@@ -1,6 +1,7 @@
 import {
   LINKED_IDP_AUTH_COMPLETE_ENDPOINT,
   LINKED_IDP_AUTH_INTENT_ENDPOINT,
+  LINKED_IDP_OTHER_SESSION_ERROR_CODE,
 } from "@archestra/shared";
 import {
   createCookieGetter,
@@ -223,6 +224,9 @@ describe("linked identity provider auth plugin", () => {
       );
 
       expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: LINKED_IDP_OTHER_SESSION_ERROR_CODE,
+      });
       expect(
         parseSetCookieHeader(response.headers.get("set-cookie") || "").has(
           getSessionCookieName(),

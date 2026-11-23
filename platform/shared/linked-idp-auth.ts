@@ -8,6 +8,9 @@ export const LINKED_IDP_AUTH_COMPLETE_PATH = "/linked-idp/complete";
 export const LINKED_IDP_AUTH_INTENT_ENDPOINT = `/api/auth${LINKED_IDP_AUTH_INTENT_PATH}`;
 export const LINKED_IDP_AUTH_COMPLETE_ENDPOINT = `/api/auth${LINKED_IDP_AUTH_COMPLETE_PATH}`;
 
+/** Error code when a linked IdP intent is completed in another browser session. */
+export const LINKED_IDP_OTHER_SESSION_ERROR_CODE = "LINKED_IDP_OTHER_SESSION";
+
 export const CreateLinkedIdentityProviderIntentRequestSchema = z.object({
   providerId: z.string().min(1),
   redirectTo: z.string().default("/chat"),

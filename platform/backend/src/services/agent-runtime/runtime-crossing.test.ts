@@ -21,7 +21,9 @@ import {
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
+  AgentRuntimeUserAccountModel,
   AgentWorkspaceModel,
+  LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
@@ -32,6 +34,7 @@ import { openappaActor } from "@/openappa/actor";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
 import { superyellSession } from "@/openappa/unenforced";
+import { makeKeyWithModel } from "@/routes/agent-runtime/agent-runtime-account.test-helpers";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import {
   createRuntimeCredentialDefinition,
@@ -621,6 +624,70 @@ describe("model-facing runtime tools", () => {
       session_id: task.id,
       state: "submitted",
     });
+  });
+
+  test("a launch checks the caller's own account, as their run does: one that stopped working is refused before a task exists", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const actor = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(actor.id, org.id, { role: "member" });
+    // The organization's default would run the agent's own account.
+    await makeKeyWithModel({
+      organizationId: org.id,
+      provider: "openai",
+      modelId: "gpt-5.4",
+    });
+    const picked = await makeKeyWithModel({
+      organizationId: org.id,
+      provider: "openai",
+      modelId: "gpt-5.4-mini",
+    });
+    // Each person chooses the account of their own runs. The caller picked
+    // a connection, which is deleted since.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: actor.id,
+      runtime: { ...runtimeConfig(), accountLock: null },
+    });
+    await AgentRuntimeUserAccountModel.upsert({
+      agentId: agent.id,
+      userId: actor.id,
+      authentication: "provider",
+      llmApiKeyId: picked.key.id,
+      modelId: null,
+    });
+    await LlmProviderApiKeyModel.delete(picked.key.id);
+    await releasedSpawn(org.id);
+    const start = vi.spyOn(startTask, "startDetachedAgentTask");
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: actor.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "Your own account for this agent no longer works. The connection you chose no longer exists. Choose your account again.",
+    );
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "model_unready",
+    });
+    expect(start).not.toHaveBeenCalled();
   });
 
   test("records that a launch needs credentials, with the setup link", async ({

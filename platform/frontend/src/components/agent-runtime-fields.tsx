@@ -88,6 +88,11 @@ export type AgentRuntimeConfig = {
     authentication: "provider" | "subscription";
     model?: string;
   };
+  /**
+   * The one account every person's runs use: each person's subscription, or
+   * the agent's own key and model. Null leaves each person the choice.
+   */
+  accountLock?: "subscription" | "key" | null;
   ttlHours: number | null;
   maxCostUsd: number | null;
   idleTimeoutMinutes: number | null;
@@ -231,21 +236,53 @@ export function AgentRuntimeFields({
 }
 
 /** Says which locked Agent Runtime sets the settings shown read-only. */
-export function LockedRuntimeNotice({ name }: { name: string }) {
+export function LockedRuntimeNotice({
+  name,
+  accountsLeftToAgent = false,
+  fixes = null,
+}: {
+  name: string;
+  /**
+   * The runtime sets no account kind, so the agent's accounts stay its own
+   * to choose.
+   */
+  accountsLeftToAgent?: boolean;
+  /** What the runtime fixes of the agent's company account, if anything. */
+  fixes?: "connection" | "connection-and-model" | null;
+}) {
+  // Only what this runtime sets is named as its own.
+  const set = [
+    "launch command",
+    "protocol",
+    "follow-up delivery",
+    "limits",
+    ...(accountsLeftToAgent ? [] : ["Claude account"]),
+    ...(fixes ? ["connection"] : []),
+    ...(fixes === "connection-and-model" ? ["model"] : []),
+  ];
+  const own = [
+    "Environment",
+    "credentials",
+    "resources",
+    "ports",
+    ...(accountsLeftToAgent ? ["accounts"] : []),
+  ];
   return (
     <InlineNotice variant="info">
       <LockKeyhole className="size-4 shrink-0" />
       <InlineNoticeBody>
         <span className="font-medium">Set by the {name} runtime</span>
         <InlineNoticeText>
-          Its launch command, protocol, follow-up delivery, limits and Claude
-          account apply to every agent that uses it. Administrators change them
-          in Settings, under Agents. Environment, credentials, resources and
-          ports stay this agent's own.
+          <span>{`Its ${listed(set, "and")} apply to every agent that uses it. Administrators change them in Settings, under Agents. ${listed(own, "and")} stay this agent's own.`}</span>
         </InlineNoticeText>
       </InlineNoticeBody>
     </InlineNotice>
   );
+}
+
+/** "a, b and c", with the last two joined by `word`. */
+function listed(items: string[], word: "and" | "or"): string {
+  return `${items.slice(0, -1).join(", ")} ${word} ${items.at(-1)}`;
 }
 
 type RuntimeSectionProps = {

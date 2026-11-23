@@ -62284,6 +62284,24 @@
                                       "allowAgentSuppliedCredentialValues": {
                                         "type": "boolean"
                                       },
+                                      "accountLock": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": [
+                                              "subscription",
+                                              "key"
+                                            ]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "nullable": true,
+                                            "enum": [
+                                              null
+                                            ]
+                                          }
+                                        ]
+                                      },
                                       "claudeCode": {
                                         "type": "object",
                                         "properties": {
@@ -63972,6 +63990,24 @@
                               "allowAgentSuppliedCredentialValues": {
                                 "type": "boolean"
                               },
+                              "accountLock": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "subscription",
+                                      "key"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
                               "claudeCode": {
                                 "type": "object",
                                 "properties": {
@@ -65012,6 +65048,24 @@
                       "allowAgentSuppliedCredentialValues": {
                         "type": "boolean"
                       },
+                      "accountLock": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "subscription",
+                              "key"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
                       "claudeCode": {
                         "type": "object",
                         "properties": {
@@ -65813,6 +65867,24 @@
                         },
                         "allowAgentSuppliedCredentialValues": {
                           "type": "boolean"
+                        },
+                        "accountLock": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "subscription",
+                                "key"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
                         },
                         "claudeCode": {
                           "type": "object",
@@ -67415,6 +67487,24 @@
                           "allowAgentSuppliedCredentialValues": {
                             "type": "boolean"
                           },
+                          "accountLock": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "subscription",
+                                  "key"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
                           "claudeCode": {
                             "type": "object",
                             "properties": {
@@ -68058,6 +68148,24 @@
                               },
                               "allowAgentSuppliedCredentialValues": {
                                 "type": "boolean"
+                              },
+                              "accountLock": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "subscription",
+                                      "key"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
                               },
                               "claudeCode": {
                                 "type": "object",
@@ -68740,6 +68848,24 @@
                               },
                               "allowAgentSuppliedCredentialValues": {
                                 "type": "boolean"
+                              },
+                              "accountLock": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "subscription",
+                                      "key"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
                               },
                               "claudeCode": {
                                 "type": "object",
@@ -69574,6 +69700,24 @@
                               },
                               "allowAgentSuppliedCredentialValues": {
                                 "type": "boolean"
+                              },
+                              "accountLock": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "subscription",
+                                      "key"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
                               },
                               "claudeCode": {
                                 "type": "object",
@@ -71024,6 +71168,24 @@
                         "allowAgentSuppliedCredentialValues": {
                           "type": "boolean"
                         },
+                        "accountLock": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "subscription",
+                                "key"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -72401,6 +72563,24 @@
                             "allowAgentSuppliedCredentialValues": {
                               "type": "boolean"
                             },
+                            "accountLock": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "subscription",
+                                    "key"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
                             "claudeCode": {
                               "type": "object",
                               "properties": {
@@ -73451,6 +73631,24 @@
                         "allowAgentSuppliedCredentialValues": {
                           "type": "boolean"
                         },
+                        "accountLock": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "subscription",
+                                "key"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -74423,6 +74621,24 @@
                       "allowAgentSuppliedCredentialValues": {
                         "type": "boolean"
                       },
+                      "accountLock": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "subscription",
+                              "key"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
                       "claudeCode": {
                         "type": "object",
                         "properties": {
@@ -74907,6 +75123,24 @@
                         },
                         "allowAgentSuppliedCredentialValues": {
                           "type": "boolean"
+                        },
+                        "accountLock": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "subscription",
+                                "key"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
                         },
                         "claudeCode": {
                           "type": "object",
@@ -77551,6 +77785,24 @@
                         "allowAgentSuppliedCredentialValues": {
                           "type": "boolean"
                         },
+                        "accountLock": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "subscription",
+                                "key"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -78723,6 +78975,24 @@
                         },
                         "allowAgentSuppliedCredentialValues": {
                           "type": "boolean"
+                        },
+                        "accountLock": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "subscription",
+                                "key"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
                         },
                         "claudeCode": {
                           "type": "object",
@@ -86702,6 +86972,24 @@
                         "allowAgentSuppliedCredentialValues": {
                           "type": "boolean"
                         },
+                        "accountLock": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "subscription",
+                                "key"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
                         "claudeCode": {
                           "type": "object",
                           "properties": {
@@ -90421,6 +90709,39 @@
                     "incompatible": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "accountError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "accountErrorFromChoice": {
+                      "type": "boolean"
+                    },
+                    "accountErrorFromModel": {
+                      "type": "boolean"
+                    },
+                    "accountErrorFromConnection": {
+                      "type": "boolean"
+                    },
+                    "missingSubscription": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "chatgpt",
+                            "github-copilot",
+                            "microsoft-365-copilot",
+                            "x-premium"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -90428,7 +90749,1671 @@
                     "configured",
                     "missing",
                     "misconfigured",
-                    "incompatible"
+                    "incompatible",
+                    "accountError",
+                    "accountErrorFromChoice",
+                    "accountErrorFromModel",
+                    "accountErrorFromConnection",
+                    "missingSubscription"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/agents/{id}/runtime/account": {
+      "get": {
+        "operationId": "getAgentRuntimeAccount",
+        "tags": [
+          "Agents"
+        ],
+        "description": "The account the caller's runs of this agent use: the agent's own, the caller's choice, the company API key as it resolves for them (its connection and model, and who sets each), and the personal subscription they can use.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agentAccount": {
+                      "type": "object",
+                      "properties": {
+                        "authentication": {
+                          "type": "string",
+                          "enum": [
+                            "provider",
+                            "subscription"
+                          ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "authentication",
+                        "llmApiKeyId",
+                        "modelId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "companyKey": {
+                      "type": "boolean"
+                    },
+                    "companyAccount": {
+                      "type": "object",
+                      "properties": {
+                        "connection": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "provider": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "fixedBy": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "runtime",
+                                    "agent"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "provider",
+                            "fixedBy"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "fixedBy": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "runtime",
+                                    "agent"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "fixedBy"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "modelId": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "modelId",
+                              "displayName",
+                              "provider"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "usesOrganizationDefault": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "connection",
+                        "model",
+                        "usesOrganizationDefault"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "choice": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "authentication": {
+                          "type": "string",
+                          "enum": [
+                            "provider",
+                            "subscription"
+                          ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "claudeModel": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "authentication",
+                        "llmApiKeyId",
+                        "modelId",
+                        "claudeModel"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "choiceError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lock": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "subscription",
+                            "key"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "subscription": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "claude"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "chatgpt",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "x-premium"
+                              ]
+                            }
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "connected": {
+                          "type": "boolean"
+                        },
+                        "keyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "connected",
+                        "keyId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "agentAccount",
+                    "companyKey",
+                    "companyAccount",
+                    "choice",
+                    "choiceError",
+                    "lock",
+                    "subscription"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      },
+      "put": {
+        "operationId": "updateAgentRuntimeAccount",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Choose the account the caller's own runs of this agent use: their personal subscription, or the company API key, with the connection and model of it that the agent and its runtime leave to each person.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "authentication": {
+                    "type": "string",
+                    "enum": [
+                      "provider",
+                      "subscription"
+                    ]
+                  },
+                  "llmApiKeyId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "modelId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "claudeModel": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "authentication"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agentAccount": {
+                      "type": "object",
+                      "properties": {
+                        "authentication": {
+                          "type": "string",
+                          "enum": [
+                            "provider",
+                            "subscription"
+                          ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "authentication",
+                        "llmApiKeyId",
+                        "modelId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "companyKey": {
+                      "type": "boolean"
+                    },
+                    "companyAccount": {
+                      "type": "object",
+                      "properties": {
+                        "connection": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "provider": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "fixedBy": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "runtime",
+                                    "agent"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "provider",
+                            "fixedBy"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "fixedBy": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "runtime",
+                                    "agent"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "fixedBy"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "modelId": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "modelId",
+                              "displayName",
+                              "provider"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "usesOrganizationDefault": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "connection",
+                        "model",
+                        "usesOrganizationDefault"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "choice": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "authentication": {
+                          "type": "string",
+                          "enum": [
+                            "provider",
+                            "subscription"
+                          ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "claudeModel": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "authentication",
+                        "llmApiKeyId",
+                        "modelId",
+                        "claudeModel"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "choiceError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lock": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "subscription",
+                            "key"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "subscription": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "claude"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "chatgpt",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "x-premium"
+                              ]
+                            }
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "connected": {
+                          "type": "boolean"
+                        },
+                        "keyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "connected",
+                        "keyId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "agentAccount",
+                    "companyKey",
+                    "companyAccount",
+                    "choice",
+                    "choiceError",
+                    "lock",
+                    "subscription"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      },
+      "delete": {
+        "operationId": "clearAgentRuntimeAccount",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Forget the caller's account choice for this agent, so their runs follow the agent's default again.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agentAccount": {
+                      "type": "object",
+                      "properties": {
+                        "authentication": {
+                          "type": "string",
+                          "enum": [
+                            "provider",
+                            "subscription"
+                          ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "authentication",
+                        "llmApiKeyId",
+                        "modelId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "companyKey": {
+                      "type": "boolean"
+                    },
+                    "companyAccount": {
+                      "type": "object",
+                      "properties": {
+                        "connection": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "provider": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "fixedBy": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "runtime",
+                                    "agent"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "provider",
+                            "fixedBy"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "fixedBy": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "runtime",
+                                    "agent"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "fixedBy"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "modelId": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "modelId",
+                              "displayName",
+                              "provider"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "usesOrganizationDefault": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "connection",
+                        "model",
+                        "usesOrganizationDefault"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "choice": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "authentication": {
+                          "type": "string",
+                          "enum": [
+                            "provider",
+                            "subscription"
+                          ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "claudeModel": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "authentication",
+                        "llmApiKeyId",
+                        "modelId",
+                        "claudeModel"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "choiceError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lock": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "subscription",
+                            "key"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "subscription": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "claude"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "chatgpt",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "x-premium"
+                              ]
+                            }
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "connected": {
+                          "type": "boolean"
+                        },
+                        "keyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "connected",
+                        "keyId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "agentAccount",
+                    "companyKey",
+                    "companyAccount",
+                    "choice",
+                    "choiceError",
+                    "lock",
+                    "subscription"
                   ],
                   "additionalProperties": false
                 }
@@ -97043,6 +99028,71 @@
                         "default": false,
                         "type": "boolean"
                       },
+                      "accounts": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "subscription",
+                              "key"
+                            ]
+                          },
+                          "llmApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "modelId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "keyName": {
+                            "type": "string"
+                          },
+                          "keyProvider": {
+                            "type": "string"
+                          },
+                          "modelName": {
+                            "type": "string"
+                          },
+                          "keyMissing": {
+                            "type": "boolean"
+                          },
+                          "modelMissing": {
+                            "type": "boolean"
+                          },
+                          "models": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "modelId": {
+                                  "type": "string"
+                                },
+                                "displayName": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "modelId",
+                                "displayName",
+                                "provider"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
                       "image": {
                         "type": "string"
                       }
@@ -97358,6 +99408,71 @@
                             "required": [
                               "authentication"
                             ],
+                            "additionalProperties": false
+                          },
+                          "accounts": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "subscription",
+                                  "key"
+                                ]
+                              },
+                              "llmApiKeyId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "modelId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "keyName": {
+                                "type": "string"
+                              },
+                              "keyProvider": {
+                                "type": "string"
+                              },
+                              "modelName": {
+                                "type": "string"
+                              },
+                              "keyMissing": {
+                                "type": "boolean"
+                              },
+                              "modelMissing": {
+                                "type": "boolean"
+                              },
+                              "models": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "modelId": {
+                                      "type": "string"
+                                    },
+                                    "displayName": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "modelId",
+                                    "displayName",
+                                    "provider"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
                             "additionalProperties": false
                           }
                         },
@@ -97682,6 +99797,71 @@
                             "default": false,
                             "type": "boolean"
                           },
+                          "accounts": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "subscription",
+                                  "key"
+                                ]
+                              },
+                              "llmApiKeyId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "modelId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "keyName": {
+                                "type": "string"
+                              },
+                              "keyProvider": {
+                                "type": "string"
+                              },
+                              "modelName": {
+                                "type": "string"
+                              },
+                              "keyMissing": {
+                                "type": "boolean"
+                              },
+                              "modelMissing": {
+                                "type": "boolean"
+                              },
+                              "models": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "modelId": {
+                                      "type": "string"
+                                    },
+                                    "displayName": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "modelId",
+                                    "displayName",
+                                    "provider"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "additionalProperties": false
+                          },
                           "runtime": {
                             "type": "object",
                             "properties": {
@@ -97944,6 +100124,71 @@
                                 "required": [
                                   "authentication"
                                 ],
+                                "additionalProperties": false
+                              },
+                              "accounts": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "subscription",
+                                      "key"
+                                    ]
+                                  },
+                                  "llmApiKeyId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "modelId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "keyName": {
+                                    "type": "string"
+                                  },
+                                  "keyProvider": {
+                                    "type": "string"
+                                  },
+                                  "modelName": {
+                                    "type": "string"
+                                  },
+                                  "keyMissing": {
+                                    "type": "boolean"
+                                  },
+                                  "modelMissing": {
+                                    "type": "boolean"
+                                  },
+                                  "models": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "modelId": {
+                                          "type": "string"
+                                        },
+                                        "displayName": {
+                                          "type": "string"
+                                        },
+                                        "provider": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "modelId",
+                                        "displayName",
+                                        "provider"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
                                 "additionalProperties": false
                               }
                             },
@@ -98300,7 +100545,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Save custom templates, the maintained templates' settings, and the combined runtime order. Saving a locked runtime applies its settings to every agent of its type; an unlocked runtime's settings only start new agents. The revision prevents overwriting concurrent edits.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Save custom templates, the maintained templates' settings, and the combined runtime order. Saving a locked runtime applies its settings to every agent of its type; an unlocked runtime's settings only start new agents. A runtime's account rule (accounts) holds for every agent of the runtime from the moment it is saved, and is never written onto them. The revision prevents overwriting concurrent edits.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -98349,6 +100594,28 @@
                         "locked": {
                           "default": false,
                           "type": "boolean"
+                        },
+                        "accounts": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "subscription",
+                                "key"
+                              ]
+                            },
+                            "llmApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "modelId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          }
                         },
                         "runtime": {
                           "type": "object",
@@ -98605,6 +100872,28 @@
                               "required": [
                                 "authentication"
                               ]
+                            },
+                            "accounts": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "subscription",
+                                    "key"
+                                  ]
+                                },
+                                "llmApiKeyId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "modelId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              }
                             }
                           }
                         }
@@ -98760,6 +101049,71 @@
                           "locked": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "accounts": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "subscription",
+                                  "key"
+                                ]
+                              },
+                              "llmApiKeyId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "modelId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "keyName": {
+                                "type": "string"
+                              },
+                              "keyProvider": {
+                                "type": "string"
+                              },
+                              "modelName": {
+                                "type": "string"
+                              },
+                              "keyMissing": {
+                                "type": "boolean"
+                              },
+                              "modelMissing": {
+                                "type": "boolean"
+                              },
+                              "models": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "modelId": {
+                                      "type": "string"
+                                    },
+                                    "displayName": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "modelId",
+                                    "displayName",
+                                    "provider"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "additionalProperties": false
                           },
                           "runtime": {
                             "type": "object",
@@ -99023,6 +101377,71 @@
                                 "required": [
                                   "authentication"
                                 ],
+                                "additionalProperties": false
+                              },
+                              "accounts": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "subscription",
+                                      "key"
+                                    ]
+                                  },
+                                  "llmApiKeyId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "modelId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "keyName": {
+                                    "type": "string"
+                                  },
+                                  "keyProvider": {
+                                    "type": "string"
+                                  },
+                                  "modelName": {
+                                    "type": "string"
+                                  },
+                                  "keyMissing": {
+                                    "type": "boolean"
+                                  },
+                                  "modelMissing": {
+                                    "type": "boolean"
+                                  },
+                                  "models": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "modelId": {
+                                          "type": "string"
+                                        },
+                                        "displayName": {
+                                          "type": "string"
+                                        },
+                                        "provider": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "modelId",
+                                        "displayName",
+                                        "provider"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
                                 "additionalProperties": false
                               }
                             },
@@ -99432,6 +101851,71 @@
                     "locked": {
                       "default": false,
                       "type": "boolean"
+                    },
+                    "accounts": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "subscription",
+                            "key"
+                          ]
+                        },
+                        "llmApiKeyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "keyName": {
+                          "type": "string"
+                        },
+                        "keyProvider": {
+                          "type": "string"
+                        },
+                        "modelName": {
+                          "type": "string"
+                        },
+                        "keyMissing": {
+                          "type": "boolean"
+                        },
+                        "modelMissing": {
+                          "type": "boolean"
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "modelId": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "modelId",
+                              "displayName",
+                              "provider"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "additionalProperties": false
                     },
                     "runtime": {
                       "type": "object",
@@ -141245,6 +143729,24 @@
                               "allowAgentSuppliedCredentialValues": {
                                 "type": "boolean"
                               },
+                              "accountLock": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "subscription",
+                                      "key"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
                               "claudeCode": {
                                 "type": "object",
                                 "properties": {
@@ -142239,6 +144741,24 @@
                                 },
                                 "allowAgentSuppliedCredentialValues": {
                                   "type": "boolean"
+                                },
+                                "accountLock": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "subscription",
+                                        "key"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "nullable": true,
+                                      "enum": [
+                                        null
+                                      ]
+                                    }
+                                  ]
                                 },
                                 "claudeCode": {
                                   "type": "object",
@@ -144463,6 +146983,24 @@
                                   "allowAgentSuppliedCredentialValues": {
                                     "type": "boolean"
                                   },
+                                  "accountLock": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "subscription",
+                                          "key"
+                                        ]
+                                      },
+                                      {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "enum": [
+                                          null
+                                        ]
+                                      }
+                                    ]
+                                  },
                                   "claudeCode": {
                                     "type": "object",
                                     "properties": {
@@ -145457,6 +147995,24 @@
                                     },
                                     "allowAgentSuppliedCredentialValues": {
                                       "type": "boolean"
+                                    },
+                                    "accountLock": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "enum": [
+                                            "subscription",
+                                            "key"
+                                          ]
+                                        },
+                                        {
+                                          "type": "string",
+                                          "nullable": true,
+                                          "enum": [
+                                            null
+                                          ]
+                                        }
+                                      ]
                                     },
                                     "claudeCode": {
                                       "type": "object",

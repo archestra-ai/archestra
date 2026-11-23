@@ -1,8 +1,10 @@
 "use client";
 
+import type { SubscriptionCredentialKind } from "@archestra/shared";
 import { AlertTriangle, InfoIcon, KeyRound, Lock } from "lucide-react";
 import Link from "next/link";
 import { type ComponentProps, useState } from "react";
+import { SubscriptionSignInButton } from "@/components/account-subscription-controls";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -40,15 +42,34 @@ export function AgentRuntimeCredentialPrompt({
   missing,
   declarations,
   incompatible,
+  accountError,
+  accountErrorFromChoice = false,
+  accountErrorFromModel = false,
+  accountErrorFromConnection = false,
+  missingSubscription,
   onConnected,
 }: {
   agentId: string;
   missing: MissingCredential[];
   declarations: CredentialDeclaration[];
   incompatible?: string | null;
+  /** Why the account the viewer's runs use cannot run. */
+  accountError?: string | null;
+  /** Whether the viewer fixes `accountError` by choosing their account. */
+  accountErrorFromChoice?: boolean;
+  /** Whether the viewer fixes `accountError` by picking one of their models. */
+  accountErrorFromModel?: boolean;
+  /** Whether the viewer fixes `accountError` by picking a connection. */
+  accountErrorFromConnection?: boolean;
+  /**
+   * The viewer's own subscription their runs wait on, when signing in to it
+   * is what `accountError` asks for.
+   */
+  missingSubscription?: SubscriptionCredentialKind | null;
   onConnected: () => void;
 }) {
   const [connecting, setConnecting] = useState(false);
+  const [choosingAccount, setChoosingAccount] = useState(false);
   // Credentials the person may not use: no value of theirs can fix these, so
   // they get a plain "ask an admin" notice rather than a Connect button.
   const adminOnly = missing.filter((entry) => entry.adminOnly);
@@ -83,6 +104,89 @@ export function AgentRuntimeCredentialPrompt({
           {adminOnlyDescription(adminOnly.map(({ label }) => label))}
         </InlineNoticeText>
       </InlineNotice>
+    );
+  }
+
+  if (missingSubscription) {
+    // Their own sign-in is all that is missing, so it is offered here, as on
+    // the agent's page. Signing in refreshes the setup check.
+    return (
+      <InlineNotice variant="warning">
+        <AlertTriangle />
+        <span className="font-medium">Sign in to run this agent</span>
+        {accountError && <InlineNoticeText>{accountError}</InlineNoticeText>}
+        <SubscriptionSignInButton
+          kind={missingSubscription}
+          size="xs"
+          variant="outline"
+          className="ml-auto shrink-0 bg-background"
+        />
+      </InlineNotice>
+    );
+  }
+
+  if (accountError && (accountErrorFromConnection || accountErrorFromModel)) {
+    // The connection or the model is theirs to pick, and none of theirs
+    // runs yet. Both pickers are on the agent's page, on the card for their
+    // account, so the notice leads there.
+    return (
+      <InlineNotice variant="warning">
+        <AlertTriangle />
+        <span className="font-medium">
+          {accountErrorFromConnection
+            ? "Choose a connection to run this agent"
+            : "Choose a model to run this agent"}
+        </span>
+        <InlineNoticeText>{accountError}</InlineNoticeText>
+        <Button
+          asChild
+          size="xs"
+          variant="outline"
+          className="ml-auto shrink-0 bg-background"
+        >
+          <Link href={`/agents/${agentId}`}>Open agent</Link>
+        </Button>
+      </InlineNotice>
+    );
+  }
+
+  if (accountError) {
+    // The backend's message names the fix; the title only says whose it is.
+    return (
+      <>
+        <InlineNotice variant="warning">
+          <AlertTriangle />
+          <span className="font-medium">
+            {accountErrorFromChoice
+              ? "Your account for this agent no longer works"
+              : "This agent's account cannot run"}
+          </span>
+          <InlineNoticeText>{accountError}</InlineNoticeText>
+          {accountErrorFromChoice && (
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              className="ml-auto shrink-0 bg-background"
+              onClick={() => setChoosingAccount(true)}
+            >
+              Choose account
+            </Button>
+          )}
+        </InlineNotice>
+        {choosingAccount && (
+          <AgentRuntimeCredentialsDialog
+            agentId={agentId}
+            declarations={declarations}
+            canEditAgent={false}
+            forAccount
+            onClose={() => {
+              setChoosingAccount(false);
+              onConnected();
+            }}
+          />
+        )}
+      </>
     );
   }
 

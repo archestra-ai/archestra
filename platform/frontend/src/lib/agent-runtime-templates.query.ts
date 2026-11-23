@@ -34,7 +34,7 @@ export function useRuntimeTemplateCatalog() {
 }
 
 /** The settings administrators chose for the maintained runtimes. */
-export function useBuiltInRuntimeSettings() {
+export function useBuiltInRuntimeSettings(enabled = true) {
   return useQuery({
     queryKey: builtInsKey,
     queryFn: async () => {
@@ -43,6 +43,7 @@ export function useBuiltInRuntimeSettings() {
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
+    enabled,
   });
 }
 
@@ -52,6 +53,31 @@ export function useBuiltInRuntimeDefaults(): (
 ) => AgentRuntimeDefaults | undefined {
   const { data } = useBuiltInRuntimeSettings();
   return (id) => data?.find((item) => item.id === id)?.settings;
+}
+
+/**
+ * The account rule in a runtime's settings: which kind of account it names,
+ * and the company connection and model it fixes. It holds at once for every
+ * agent on the runtime and for every person, whatever an agent stores. An
+ * absent field is left to each agent. The names, the connection's models and
+ * the two `Missing` marks are filled in by the server, for readers who may
+ * not read the connection itself.
+ */
+export type RuntimeAccounts = NonNullable<RuntimeTemplateSummary["accounts"]>;
+
+/** What a runtime writes of its accounts: the choices, without the names. */
+export function runtimeAccountsToSave(
+  accounts: RuntimeAccounts | null | undefined,
+): Pick<RuntimeAccounts, "kind" | "llmApiKeyId" | "modelId"> | undefined {
+  if (!accounts) return undefined;
+  const saved = {
+    ...(accounts.kind && { kind: accounts.kind }),
+    ...(accounts.llmApiKeyId && { llmApiKeyId: accounts.llmApiKeyId }),
+    // A model belongs to a connection.
+    ...(accounts.llmApiKeyId &&
+      accounts.modelId && { modelId: accounts.modelId }),
+  };
+  return Object.keys(saved).length > 0 ? saved : undefined;
 }
 
 /**
@@ -77,6 +103,41 @@ export function useLockedRuntimeName(
       : null;
   const custom = customs?.find((item) => item.id === ref.id);
   return custom?.locked ? custom.name : null;
+}
+
+/**
+ * The account rule of the Agent Runtime a runtime is an Agent of: the kind
+ * of account it names (`kind`) and the company connection and model it
+ * fixes, with their names. The rule holds for every agent on the runtime and
+ * for every person, whatever an agent stores. Undefined while loading, null
+ * for none, and for a reader the server sends no rule to.
+ */
+export function useRuntimeAccountRule(
+  runtime: Pick<LockableAgentRuntime, "image" | "command"> | null | undefined,
+  catalogImages: Record<AgentCatalogId, string>,
+): RuntimeAccounts | null | undefined {
+  const { data: customs } = useRuntimeTemplateCatalog();
+  const ref =
+    runtime && customs
+      ? resolveAgentRuntimeTemplate({
+          runtime,
+          catalogImages,
+          customTemplates: customs,
+        })
+      : null;
+  const builtIns = useBuiltInRuntimeSettings(ref?.kind === "built-in");
+  if (!runtime) return null;
+  if (!customs) return undefined;
+  if (!ref) return null;
+  if (ref.kind === "custom") {
+    return customs.find((item) => item.id === ref.id)?.accounts ?? null;
+  }
+  // A read that failed names nothing: the runtime is then taken to set no
+  // rule.
+  if (!builtIns.data) return builtIns.isError ? null : undefined;
+  return (
+    builtIns.data.find((item) => item.id === ref.id)?.settings.accounts ?? null
+  );
 }
 
 export function useRuntimeTemplateSettings(enabled: boolean) {
@@ -125,6 +186,9 @@ export function useSaveRuntimeTemplateSettings() {
         // Also refreshes the maintained runtimes' settings under it.
         client.invalidateQueries({ queryKey: catalogKey }),
         client.invalidateQueries({ queryKey: organizationKeys.details() }),
+        // A runtime's account rule reaches every agent on it at once: an
+        // open agent page or form reads the account again.
+        client.invalidateQueries({ queryKey: ["agents"] }),
       ]);
       toast.success("Available runtimes updated");
     },

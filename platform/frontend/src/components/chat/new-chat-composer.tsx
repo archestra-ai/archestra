@@ -162,6 +162,17 @@ export function NewChatComposer({
                 ]}
                 declarations={runtimeAgent?.runtime?.credentials ?? []}
                 incompatible={runtimePreflight.data.incompatible}
+                accountError={runtimePreflight.data.accountError}
+                accountErrorFromChoice={
+                  runtimePreflight.data.accountErrorFromChoice
+                }
+                accountErrorFromModel={
+                  runtimePreflight.data.accountErrorFromModel
+                }
+                accountErrorFromConnection={
+                  runtimePreflight.data.accountErrorFromConnection
+                }
+                missingSubscription={runtimePreflight.data.missingSubscription}
                 onConnected={() => runtimePreflight.refetch()}
               />
             )}

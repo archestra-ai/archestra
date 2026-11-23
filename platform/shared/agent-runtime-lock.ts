@@ -166,7 +166,11 @@ export function withAgentRuntimeDefaults<
   runtime: Runtime;
   defaults: AgentRuntimeDefaults | null | undefined;
 }): Runtime {
-  const { claudeCode, accounts: _accounts, ...defaults } = params.defaults ?? {};
+  const {
+    claudeCode,
+    accounts: _accounts,
+    ...defaults
+  } = params.defaults ?? {};
   return {
     ...params.runtime,
     ...defaults,

@@ -1,4 +1,9 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  SUBSCRIPTION_CREDENTIALS,
+  type SubscriptionCredentialKind,
+} from "@archestra/shared";
 import {
   useInfiniteQuery,
   useMutation,
@@ -69,11 +74,30 @@ export function runtimePreflightDisabledReason(preflight: {
   data?: {
     ready: boolean;
     missing?: Array<{ adminOnly?: boolean }>;
+    accountError?: string | null;
+    accountErrorFromChoice?: boolean;
+    accountErrorFromModel?: boolean;
+    accountErrorFromConnection?: boolean;
+    missingSubscription?: SubscriptionCredentialKind | null;
   } | null;
 }): string | undefined {
   if (preflight.isPending) return "Checking the agent's credentials…";
   if (preflight.isError) return "Can't check this agent's setup";
   if (preflight.data?.ready !== true) {
+    if (preflight.data?.missingSubscription)
+      return SUBSCRIPTION_CREDENTIALS[preflight.data.missingSubscription]
+        .connect.signInTitle;
+    if (
+      preflight.data?.accountError &&
+      preflight.data.accountErrorFromConnection
+    )
+      return "Choose a connection for this agent";
+    if (preflight.data?.accountError && preflight.data.accountErrorFromModel)
+      return "Choose a model for this agent";
+    if (preflight.data?.accountError)
+      return preflight.data.accountErrorFromChoice
+        ? "Choose your account again"
+        : "This agent's account cannot run";
     return preflight.data?.missing?.some((entry) => entry.adminOnly)
       ? "Only admins can run this agent"
       : "Connect the credentials this agent needs";

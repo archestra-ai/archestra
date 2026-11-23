@@ -453,9 +453,9 @@ function PluginsList() {
   /**
    * Nothing has come back yet, so the page cannot tell whether it is about to
    * show a list or an empty state. Rendering the list branch meanwhile puts
-   * the filter bar, the table and the "Add new plugin" button on screen and
-   * then replaces the lot with the empty state — see the same guard on the
-   * skills page, where that swap measured ~250ms.
+   * the filter bar and the table on screen and then replaces them with the
+   * empty state — see the same guard on the skills page, where that swap
+   * measured ~250ms.
    *
    * `isPending` is paired with `isFetching` so a disabled query, which stays
    * pending indefinitely, cannot hold this true.
@@ -468,27 +468,21 @@ function PluginsList() {
     <>
       <PageLayout
         title="Plugins"
-        // The empty state explains plugins itself, so the header's line steps
-        // aside with the Add button rather than say it twice.
-        description={
-          showEmptyState || isInitialPluginsLoad
-            ? undefined
-            : PLUGINS_DESCRIPTION
-        }
+        description={PLUGINS_DESCRIPTION}
+        // The header stays the same while loading, empty or listing, so the
+        // first plugin doesn't shift it.
         actionButton={
           <div className="flex items-center gap-2">
-            {!showEmptyState && !isInitialPluginsLoad && (
-              <PermissionButton
-                permissions={{ plugin: ["create"] }}
-                size="sm"
-                asChild
-              >
-                <Link href="/plugins/new">
-                  <Plus className="h-4 w-4" />
-                  Add new plugin
-                </Link>
-              </PermissionButton>
-            )}
+            <PermissionButton
+              permissions={{ plugin: ["create"] }}
+              size="sm"
+              asChild
+            >
+              <Link href="/plugins/new">
+                <Plus className="h-4 w-4" />
+                Add new plugin
+              </Link>
+            </PermissionButton>
             <ResourceListActions resource="plugin" />
           </div>
         }

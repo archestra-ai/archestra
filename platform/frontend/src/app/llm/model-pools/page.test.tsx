@@ -141,7 +141,7 @@ describe("ModelPoolsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("explains pools on a page with none, and the header steps aside", async () => {
+  it("explains pools on a page with none, under the usual header", async () => {
     renderPage();
     expect(
       await screen.findByText(
@@ -149,10 +149,8 @@ describe("ModelPoolsPage", () => {
       ),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Create a pool" })).toBeEnabled();
-    expect(
-      screen.queryByRole("button", { name: "Create pool" }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("Read more in the docs")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create pool" })).toBeEnabled();
+    expect(screen.getByText("Read more in the docs")).toBeInTheDocument();
   });
 
   it("tells a reader without permission who creates pools", async () => {

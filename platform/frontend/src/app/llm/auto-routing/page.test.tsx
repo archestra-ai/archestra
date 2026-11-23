@@ -198,11 +198,11 @@ describe("AutoRoutersPage", () => {
     expect(
       await screen.findByText("Send each session to the right model"),
     ).toBeVisible();
-    // The header's description and button step aside while the page explains.
+    // The header keeps its description and button.
     expect(
-      screen.queryByRole("button", { name: /Create auto router/ }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("Read more in the docs")).not.toBeInTheDocument();
+      screen.getByRole("button", { name: /Create auto router/ }),
+    ).toBeEnabled();
+    expect(screen.getByText("Read more in the docs")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "Create an auto router" }),

@@ -130,7 +130,7 @@ export default function ModelPoolsPage() {
   });
   const { data: canCreatePool } = useHasPermissions({ llmModel: ["update"] });
   // Nothing to list and nothing filtered: the page explains pools instead of
-  // showing an empty table, and its header steps aside so nothing is said twice.
+  // showing an empty table.
   const isFirstUse =
     needsFirstProvider ||
     (query.isSuccess && pools.length === 0 && !hasActiveFilters);
@@ -225,7 +225,7 @@ export default function ModelPoolsPage() {
     },
   ];
 
-  const createButton = isFirstUse ? null : (
+  const createButton = needsFirstProvider ? null : (
     <PermissionButton
       size="sm"
       permissions={{ llmModel: ["update"] }}
@@ -239,7 +239,7 @@ export default function ModelPoolsPage() {
   return (
     <PageLayout
       title="Model Pools"
-      description={isFirstUse ? undefined : DESCRIPTION}
+      description={DESCRIPTION}
       actionButton={createButton}
     >
       {query.isLoadingError ? (

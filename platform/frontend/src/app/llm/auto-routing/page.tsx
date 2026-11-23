@@ -135,8 +135,7 @@ export default function AutoRoutersPage() {
   const organizationOff = routers.length > 0 && !routers[0].enabled;
   const { data: canCreate } = useHasPermissions({ llmProxy: ["update"] });
   // Nothing to list and nothing searched: the page explains auto routing
-  // instead of showing an empty table, and its header steps aside so the
-  // explanation isn't said twice.
+  // instead of showing an empty table.
   const isFirstUse = query.isSuccess && routers.length === 0 && !search;
 
   return (
@@ -144,33 +143,29 @@ export default function AutoRoutersPage() {
       minWidth="phone"
       title="Auto Routing"
       description={
-        isFirstUse ? undefined : (
-          <>
-            <span>
-              An auto router is a model name that sends each session to a fast,
-              normal or smart model within a daily budget. Pick one for an agent
-              or a chat, or add it to a virtual key.
-            </span>{" "}
-            <ExternalDocsLink
-              href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyAutoRouting)}
-              showIcon={false}
-            >
-              Read more in the docs
-            </ExternalDocsLink>
-          </>
-        )
+        <>
+          <span>
+            An auto router is a model name that sends each session to a fast,
+            normal or smart model within a daily budget. Pick one for an agent
+            or a chat, or add it to a virtual key.
+          </span>{" "}
+          <ExternalDocsLink
+            href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyAutoRouting)}
+            showIcon={false}
+          >
+            Read more in the docs
+          </ExternalDocsLink>
+        </>
       }
       actionButton={
-        isFirstUse ? null : (
-          <PermissionButton
-            size="sm"
-            permissions={{ llmProxy: ["update"] }}
-            onClick={() => setCreating(true)}
-          >
-            <Plus />
-            <span>Create auto router</span>
-          </PermissionButton>
-        )
+        <PermissionButton
+          size="sm"
+          permissions={{ llmProxy: ["update"] }}
+          onClick={() => setCreating(true)}
+        >
+          <Plus />
+          <span>Create auto router</span>
+        </PermissionButton>
       }
     >
       {query.isLoadingError ? (

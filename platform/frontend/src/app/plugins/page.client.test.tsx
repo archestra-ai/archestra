@@ -156,16 +156,16 @@ describe("PluginsPage", () => {
     expect(
       screen.getByRole("link", { name: "Browse popular plugins" }),
     ).toHaveAttribute("href", "/plugins/new");
-    // The empty state carries the explanation, so the header neither repeats
-    // it nor offers a second Add button.
+    // The header keeps its line and its Add button, so the first plugin
+    // doesn't shift the page.
     expect(
-      screen.queryByText(
+      screen.getByText(
         "Plugins install client-native files on developer machines.",
       ),
-    ).not.toBeInTheDocument();
+    ).toBeVisible();
     expect(
-      screen.queryByRole("link", { name: /Add new plugin/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("link", { name: /Add new plugin/ }),
+    ).toHaveAttribute("href", "/plugins/new");
   });
 
   it("tells a reader without plugin:create who shares plugins instead of offering a disabled button", () => {

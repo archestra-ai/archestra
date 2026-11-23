@@ -206,20 +206,14 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     });
   });
 
-  it("links to the SSRF protection docs in a new tab", () => {
+  it("links to the Environments page in the same tab", () => {
     setup({ enforcementStatus: "verified-not-enforced" });
 
     const link = screen.getByRole("link", {
       name: /Network policy not enforced/,
     });
-    expect(link).toHaveAttribute(
-      "href",
-      expect.stringContaining(
-        "admin/deployment/networking#enforce-workload-egress",
-      ),
-    );
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    expect(link).toHaveAttribute("href", "/settings/environments");
+    expect(link).not.toHaveAttribute("target");
   });
 });
 

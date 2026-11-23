@@ -2,7 +2,7 @@
 title: Environments
 description: Separate staging and production resources and workload networks
 order: 3
-lastUpdated: 2026-11-20
+lastUpdated: 2026-11-23
 ---
 
 Keep a staging agent away from production tools and knowledge, and give its workloads a different network policy. Environments separate resource sets inside one Archestra organization.
@@ -12,8 +12,6 @@ Keep a staging agent away from production tools and knowledge, and give its work
 <span id="cost-limits"></span>
 
 <span id="domain-presets"></span>
-
-<span id="the-public-internet-floor"></span>
 
 ## Creating an Environment
 
@@ -85,6 +83,24 @@ Choose what workloads can reach from the environment's namespace. Archestra uses
 | Public destinations plus a private service | Public internet, with that service's range under **Additional allowed CIDRs**. |
 
 Self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [coding agent workspaces](/docs/agents/runtime#environments-and-network-egress) inherit the policy. The cluster must enforce the relevant policy type; creating a policy object alone does not isolate workloads.
+
+### Built-in Default Policy
+
+<span id="the-public-internet-floor"></span>
+
+With no policy set, MCP servers, agents, and code sandboxes can reach websites and public APIs, but nothing inside your own network. A compromised MCP server cannot connect to your database, call other services in the cluster, or take your cloud credentials. The **Network Egress** column shows this policy as **Built-in**.
+
+It blocks these ranges. **Public internet** mode blocks the same ones.
+
+| Blocked | Examples | Ranges |
+| --- | --- | --- |
+| Internal networks | Your databases, other services in the cluster, company systems on the same network | `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `fc00::/7` |
+| Cloud metadata service | The address on every AWS, Google Cloud, or Azure machine that hands out the machine's cloud credentials | `169.254.0.0/16`, `168.63.129.16/32`, `fe80::/10` |
+| Loopback and reserved ranges | `localhost` | `127.0.0.0/8`, `0.0.0.0/8`, `::1/128`, `64:ff9b::/96` |
+
+- DNS to the cluster resolver stays allowed.
+- To let workloads reach one private service, choose **Public internet** and add its range under **Additional allowed CIDRs**.
+- The cluster must [enforce NetworkPolicy](/docs/admin/deployment/networking#enforce-workload-egress). If it does not, the sidebar shows **Network policy not enforced** and nothing is blocked.
 
 ### Give One Agent Its Own Policy
 

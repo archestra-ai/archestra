@@ -54,6 +54,15 @@ export function AgentRuntimeAccountChoice({
   onPendingChange: (change: PendingAccountChange | null) => void;
 }) {
   const account = useAgentRuntimeAccount(agentId);
+  // The form mounts once per stored choice and starts on it. A save shows
+  // its choice at once and puts the stored one back if it fails, so the
+  // form stays mounted while a save is in flight: a failed save keeps the
+  // person's selection, and a saved one becomes the new start.
+  const storedChoice = account.data
+    ? JSON.stringify(account.data.choice)
+    : null;
+  const [formKey, setFormKey] = useState(storedChoice);
+  if (!saving && storedChoice !== formKey) setFormKey(storedChoice);
   if (!account.data) {
     return account.isError ? (
       <InlineNotice variant="error">
@@ -84,7 +93,7 @@ export function AgentRuntimeAccountChoice({
   }
   return (
     <AccountChoiceForm
-      key={JSON.stringify(account.data.choice)}
+      key={formKey ?? ""}
       agentId={agentId}
       account={account.data}
       form={form}

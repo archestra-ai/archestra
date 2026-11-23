@@ -41,6 +41,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useSidebarOpenState } from "@/lib/hooks/use-sidebar-open";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
+import { POLICY_WORKSPACE_PATH } from "@/lib/openappa-policy-views";
 import { useOrganization } from "@/lib/organization.query";
 import { useIsShellSeeded, useShellReady } from "@/lib/shell-deferral";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
@@ -110,8 +111,8 @@ export function AppShell({
   // scroll, so we only bound the chain for these to avoid clipping content.
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
-  // The policy source fills the viewport like an editor, with no version line.
-  const isPolicySource = pathname === "/openappa/policy";
+  // The policy workspace fills the viewport like an editor, with no version line.
+  const isPolicySource = pathname === POLICY_WORKSPACE_PATH;
   const isViewportLocked = isChat || isProjectDetail || isPolicySource;
   const [sidebarOpen, setSidebarOpen] = useSidebarOpenState(initialSidebarOpen);
   const sidebarWidth = useSidebarWidthState();

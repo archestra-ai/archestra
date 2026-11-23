@@ -2322,6 +2322,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Also open to a member who may read some MCP server's rules file: the
   // page then lists only those files (`useServerRulesAccess`).
   "/openappa/policy": { guardrailsPolicy: ["read"] },
+  // The file workspace over the same policy; not linked from the navigation.
+  "/openappa/policy/workspace": { guardrailsPolicy: ["read"] },
   "/openappa/batteries": { guardrailsPolicy: ["read"] },
 
   // Logs

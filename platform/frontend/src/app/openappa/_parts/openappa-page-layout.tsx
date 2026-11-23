@@ -16,6 +16,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
+import { POLICY_WORKSPACE_PATH } from "@/lib/openappa-policy-views";
 import {
   OpenAppaHeaderModeContext,
   OpenAppaPageActionSlotContext,
@@ -70,7 +71,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
             </>
           ),
         }
-      : pathname === "/openappa/policy"
+      : pathname === "/openappa/policy" || pathname === POLICY_WORKSPACE_PATH
         ? {
             title: "Policy",
             description: scoped
@@ -132,7 +133,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
         )
       }
       // The policy source is an editor: it takes the height the viewport has.
-      fillContent={pathname === "/openappa/policy"}
+      fillContent={pathname === POLICY_WORKSPACE_PATH}
       documentTitle={fileDetail ? "Validation" : page.title}
       backLink={
         fileDetail || requestedMode?.back ? (
@@ -171,7 +172,9 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
         ) : firstStepOnly ||
           pathname === "/openappa/tests" ||
           pathname.startsWith("/openappa/validation") ||
-          pathname === "/openappa/policy" ? null : pathname === "/openappa" ? (
+          pathname === "/openappa/policy" ||
+          pathname === POLICY_WORKSPACE_PATH ? null : pathname ===
+          "/openappa" ? (
           <OverviewHeaderActions />
         ) : null
       }

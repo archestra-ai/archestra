@@ -21,6 +21,7 @@ const anthropicOrigin = "https://anthropic-fallback.example.test";
 const awsModel = "anthropic.claude-sonnet-4-6";
 const poolName = "converse-fallback";
 const fallbackFirstName = "converse-fallback-first";
+const bedrockOnlyName = "converse-bedrock-only";
 const toolSpec = {
   name: "look_up",
   inputSchema: {
@@ -94,10 +95,11 @@ const poolTest = test.extend<{
       awsMember,
       anthropicMember,
     ]);
+    const bedrockOnly = await createPool(bedrockOnlyName, [awsMember]);
     await ModelPoolModel.setPoolsForVirtualApiKey({
       organizationId: org.id,
       virtualApiKeyId: virtualKey.id,
-      poolIds: [pool.id, fallbackFirst.id],
+      poolIds: [pool.id, fallbackFirst.id, bedrockOnly.id],
     });
 
     const transient = () =>
@@ -440,6 +442,35 @@ poolTest(
     expect(aws).toHaveBeenCalledTimes(hits);
     expect(openai).not.toHaveBeenCalled();
     expect(anthropic).not.toHaveBeenCalled();
+  },
+);
+
+poolTest(
+  "keeps the existing Bedrock-only Converse path for unrecognized fields",
+  async ({ converse: { ask, aws } }) => {
+    const output = {
+      message: { role: "assistant", content: [{ text: "Native response" }] },
+    };
+    aws.mockImplementationOnce(() =>
+      HttpResponse.json({
+        output,
+        stopReason: "end_turn",
+        usage: { inputTokens: 4, outputTokens: 2 },
+      }),
+    );
+
+    // The native schema has always stripped unrecognized fields like this.
+    const response = await ask(
+      { ...request, syntheticNativeOption: true },
+      false,
+      bedrockOnlyName,
+    );
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ output, stopReason: "end_turn" });
+    expect(aws).toHaveBeenCalledOnce();
+    expect(aws.mock.calls[0][0]).toMatchObject(request);
+    expect(aws.mock.calls[0][0]).not.toHaveProperty("syntheticNativeOption");
   },
 );
 

@@ -2677,7 +2677,11 @@ async function handleObservedLLMProxy<
     ) as TRequest;
 
     if (modelPoolPlan && poolWire) {
-      if (converseTranslation === "unsupported")
+      // Bedrock-only pools keep their existing parsed native request path.
+      if (
+        converseTranslation === "unsupported" &&
+        modelPoolPlan.members.some((member) => member.provider !== "bedrock")
+      )
         throw new ApiError(
           400,
           "This model pool cannot serve a Converse request with unrecognized native options without dropping them.",

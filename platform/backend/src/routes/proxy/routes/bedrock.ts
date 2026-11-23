@@ -61,7 +61,7 @@ function converseTranslation(
   const raw = nativeConverseBodies.get(request);
   if (!raw) return;
   // Distinguish representable AWS-only fields from fields the native schema
-  // stripped. Reject the latter in a pool rather than silently downgrade.
+  // stripped. Reject the latter if the pool can route across providers.
   const system = Array.isArray(raw?.system)
     ? raw.system.map((item: unknown) => {
         const block = asRecord(item);

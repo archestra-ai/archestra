@@ -112,6 +112,11 @@ export async function saveAgentRuntimeAccountChoice(
   },
 ): Promise<AgentRuntimeAccount> {
   requirePerson(params.userId);
+  // The startup upgrade could not create the table that stores choices:
+  // until a restart does, every run uses the agent's own account.
+  if (!AgentRuntimeUserAccountModel.tableAvailable) {
+    throw new ApiError(409, CHOICES_UNAVAILABLE_MESSAGE);
+  }
   const { authentication } = params.choice;
   const { resolved, account } = await resolvedAccountContext(params);
   const lock = resolved.choiceLock;
@@ -173,6 +178,9 @@ export async function clearAgentRuntimeAccountChoice(
 // ===================================================================
 // Internal helpers
 // ===================================================================
+
+const CHOICES_UNAVAILABLE_MESSAGE =
+  "This server cannot store your own account choice yet, so your runs use the agent's own account. An administrator must let it create its table and restart it.";
 
 /**
  * The caller's account for the agent as its runs resolve it, and the

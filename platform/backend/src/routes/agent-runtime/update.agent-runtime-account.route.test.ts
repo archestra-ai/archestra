@@ -1443,6 +1443,21 @@ describe("PUT /api/agents/:id/runtime/account", () => {
     });
   });
 
+  test("refuses a choice, and stores none, while the server cannot store choices", async () => {
+    // The startup upgrade could not create the table.
+    AgentRuntimeUserAccountModel.tableAvailable = false;
+    try {
+      const refused = await put({ authentication: "provider" });
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json().error.message).toBe(
+        "This server cannot store your own account choice yet, so your runs use the agent's own account. An administrator must let it create its table and restart it.",
+      );
+    } finally {
+      AgentRuntimeUserAccountModel.tableAvailable = true;
+    }
+    expect(await storedChoice()).toBeNull();
+  });
+
   test("keeps the choice when the agent's key goes and removes it with its agent", async ({
     makeAgent,
   }) => {

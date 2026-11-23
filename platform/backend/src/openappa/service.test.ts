@@ -2860,14 +2860,31 @@ describe("APPA feature boundary", () => {
       retryAfterSeconds: undefined,
       cause: expect.any(OpenappaRefusal),
     });
-    expect(failure).toHaveProperty("cause.ruling", ruling);
+    expect(failure).toHaveProperty("cause.message", ruling);
   });
 
   test.each([
-    { decision: "refuse", detail: "storage failure: internal detail" },
-    { decision: "child_return", value: "bytes" },
-  ])("keeps any other answer to an empty child return a defect: %j", async (decision) => {
-    native.dispatchHook.mockResolvedValueOnce(JSON.stringify(decision));
+    [
+      "an answer that is no ruling",
+      () =>
+        native.dispatchHook.mockResolvedValueOnce(
+          JSON.stringify({ decision: "child_return", value: "bytes" }),
+        ),
+    ],
+    [
+      "a storage failure",
+      () =>
+        native.dispatchHook.mockRejectedValueOnce(
+          Object.assign(
+            new Error(
+              "OpenAPPA processing interrupted: storage failure: receipt storage failed: PostgreSQL ERROR (SQLSTATE 23505)",
+            ),
+            { code: "storage" },
+          ),
+        ),
+    ],
+  ])("keeps %s at an empty child return a failure, not a refusal", async (_case, answer) => {
+    answer();
 
     const failure = await endChildTurn({
       session: { ...session, parent_id: "parent", session_id: "child" },
@@ -2876,7 +2893,7 @@ describe("APPA feature boundary", () => {
     }).catch((error: unknown) => error);
 
     expect(failure).toMatchObject({ statusCode: 500, shouldRetry: false });
-    expect(failure).not.toHaveProperty("cause.ruling");
+    expect(failure).not.toHaveProperty("cause", expect.any(OpenappaRefusal));
   });
 
   test("submits the exact crossed child value as the parent SpawnResult", async () => {

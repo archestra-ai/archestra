@@ -120,7 +120,7 @@ export class OpenappaRootOnlyError extends Error {
  * soft-block waiver reads it on the cause chain; the client sees it bounded.
  */
 export class OpenappaRefusal extends Error {
-  constructor(readonly ruling: string) {
+  constructor(ruling: string) {
     super(ruling);
     this.name = "OpenappaRefusal";
   }
@@ -233,7 +233,7 @@ function classify(error: unknown): Failure {
       detail: `Guardrails refused the organization's policy, and no earlier version of it can run (${summarize(error.refusal)}). An administrator can fix it on the ${POLICY_PAGE} page.`,
     };
   if (error instanceof OpenappaRefusal)
-    return modelRefusal("Guardrails refused this operation", error.ruling);
+    return modelRefusal("Guardrails refused this operation", error.message);
   if (error instanceof OpenappaCredentialError)
     return {
       statusCode: 500,

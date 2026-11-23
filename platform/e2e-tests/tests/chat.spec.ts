@@ -173,25 +173,31 @@ for (const config of testConfigs) {
       request,
       makeApiRequest,
     }) => {
-      const runtimeModel = await getRuntimeModelForProviderFromApi(
+      const lookup = {
         makeApiRequest,
         request,
-        config.providerName,
-        config.matchModel,
-      );
+        provider: config.providerName,
+        matchModel: config.matchModel,
+      };
       test.skip(
-        !runtimeModel,
+        !(await getRuntimeModelForProviderFromApi(lookup)),
         `${config.providerDisplayName} is not configured in this test environment`,
       );
-      if (!runtimeModel) {
-        return;
-      }
 
       await goToChat(page);
       await expectChatReady(page);
       const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
 
-      await selectApiKeyForProvider(page, runtimeModel.provider);
+      const apiKeyId = await selectApiKeyForProvider(page, config.providerName);
+      const runtimeModel = await getRuntimeModelForProviderFromApi({
+        ...lookup,
+        apiKeyId,
+      });
+      if (!runtimeModel) {
+        throw new Error(
+          `The selected ${config.providerDisplayName} key serves no matching model`,
+        );
+      }
 
       // Open model selector and choose the test model
       const modelSelectorTrigger = page

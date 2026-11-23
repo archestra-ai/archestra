@@ -370617,6 +370617,9 @@
                           "client_secret": {
                             "type": "string"
                           },
+                          "requires_client_credentials": {
+                            "type": "boolean"
+                          },
                           "audience": {
                             "type": "string"
                           },
@@ -371732,6 +371735,9 @@
                       "client_secret": {
                         "type": "string"
                       },
+                      "requires_client_credentials": {
+                        "type": "boolean"
+                      },
                       "audience": {
                         "type": "string"
                       },
@@ -372525,6 +372531,9 @@
                         },
                         "client_secret": {
                           "type": "string"
+                        },
+                        "requires_client_credentials": {
+                          "type": "boolean"
                         },
                         "audience": {
                           "type": "string"
@@ -376374,6 +376383,9 @@
                         "client_secret": {
                           "type": "string"
                         },
+                        "requires_client_credentials": {
+                          "type": "boolean"
+                        },
                         "audience": {
                           "type": "string"
                         },
@@ -377426,6 +377438,9 @@
                       "client_secret": {
                         "type": "string"
                       },
+                      "requires_client_credentials": {
+                        "type": "boolean"
+                      },
                       "audience": {
                         "type": "string"
                       },
@@ -378074,6 +378089,9 @@
                         },
                         "client_secret": {
                           "type": "string"
+                        },
+                        "requires_client_credentials": {
+                          "type": "boolean"
                         },
                         "audience": {
                           "type": "string"
@@ -380926,6 +380944,9 @@
                           "client_secret": {
                             "type": "string"
                           },
+                          "requires_client_credentials": {
+                            "type": "boolean"
+                          },
                           "audience": {
                             "type": "string"
                           },
@@ -381971,6 +381992,9 @@
                         },
                         "client_secret": {
                           "type": "string"
+                        },
+                        "requires_client_credentials": {
+                          "type": "boolean"
                         },
                         "audience": {
                           "type": "string"

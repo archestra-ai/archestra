@@ -93926,6 +93926,7 @@ export type GetInternalMcpCatalogResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -94102,6 +94103,7 @@ export type CreateInternalMcpCatalogItemData = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -94339,6 +94341,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -95436,6 +95439,7 @@ export type GetInternalMcpCatalogItemResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -95600,6 +95604,7 @@ export type UpdateInternalMcpCatalogItemData = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -95818,6 +95823,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -96528,6 +96534,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -96770,6 +96777,7 @@ export type ApproveCatalogItemImageResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;

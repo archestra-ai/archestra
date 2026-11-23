@@ -3,19 +3,20 @@ import { makeCatalogItem } from "../src/mocks/data/catalog";
 import { makeInstalledServer } from "../src/mocks/data/servers";
 import { expect, test } from "./fixtures";
 
-function makeSlackCatalog() {
-  const serverUrl = "https://mcp.slack.com/mcp";
+function makeConfidentialOAuthCatalog() {
+  const serverUrl = "https://mcp.example.com/mcp";
   return makeCatalogItem({
-    id: "slack-credentials-test",
-    name: "Renamed Slack",
+    id: "confidential-oauth-credentials-test",
+    name: "Confidential OAuth MCP",
     serverType: "remote",
     serverUrl,
     requiresAuth: true,
     multitenant: true,
     oauthConfig: {
-      name: "Slack",
+      name: "Confidential OAuth",
       server_url: serverUrl,
       client_id: "",
+      requires_client_credentials: true,
       redirect_uris: ["http://localhost:3000/oauth-callback"],
       scopes: [],
       default_scopes: [],
@@ -25,14 +26,14 @@ function makeSlackCatalog() {
 }
 
 test.describe("Add Remote MCP Server", () => {
-  test("Slack requires both app credentials before Test Connection and accepts a saved secret", async ({
+  test("A configured client requires both app credentials before Test Connection and accepts a saved secret", async ({
     page,
     mswControl,
   }) => {
-    const slack = makeSlackCatalog();
-    const url = `/api/internal_mcp_catalog/${slack.id}`;
-    const editUrl = `/mcp/registry/${slack.id}/edit`;
-    await mswControl.use({ method: "get", url, body: slack });
+    const catalog = makeConfidentialOAuthCatalog();
+    const url = `/api/internal_mcp_catalog/${catalog.id}`;
+    const editUrl = `/mcp/registry/${catalog.id}/edit`;
+    await mswControl.use({ method: "get", url, body: catalog });
 
     // This old deep link cannot bypass configuration.
     await page.goto(`${editUrl}?step=test`);
@@ -42,19 +43,15 @@ test.describe("Add Remote MCP Server", () => {
     await page
       .getByRole("button", { name: "Test Connection", exact: true })
       .click();
-    await expect(
-      page.getByText("Enter your Slack app’s Client ID."),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Enter your Slack app’s Client Secret."),
-    ).toBeVisible();
+    await expect(page.getByText("Enter the Client ID.")).toBeVisible();
+    await expect(page.getByText("Enter the Client Secret.")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Install", exact: true }),
     ).toHaveCount(0);
 
     const saved = {
-      ...slack,
-      oauthConfig: { ...slack.oauthConfig, client_id: "fixture-client-id" },
+      ...catalog,
+      oauthConfig: { ...catalog.oauthConfig, client_id: "fixture-client-id" },
       clientSecretId: "fixture-stored-secret-reference",
     };
     await mswControl.use({ method: "get", url, body: saved });
@@ -69,16 +66,16 @@ test.describe("Add Remote MCP Server", () => {
     ).toBeVisible();
   });
 
-  test("Slack tells details-only editors who can add the missing credentials", async ({
+  test("A configured client tells details-only editors who can add the missing credentials", async ({
     page,
     mswControl,
   }) => {
-    const slack = makeSlackCatalog();
+    const catalog = makeConfidentialOAuthCatalog();
     await mswControl.registerMany([
       {
         method: "get",
-        url: `/api/internal_mcp_catalog/${slack.id}`,
-        body: slack,
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        body: catalog,
       },
       {
         method: "get",
@@ -88,7 +85,7 @@ test.describe("Add Remote MCP Server", () => {
       { method: "get", url: "/api/resource-permissions", body: [] },
     ]);
 
-    await page.goto(`/mcp/registry/${slack.id}/edit?step=test`);
+    await page.goto(`/mcp/registry/${catalog.id}/edit?step=test`);
     await expect(
       page.getByText(
         /Ask someone who can change this server’s connection settings/,

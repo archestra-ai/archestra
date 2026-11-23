@@ -198,6 +198,9 @@ export function transformFormToApiData(
         values.oauthConfig.resourceMetadataUrl || undefined,
       token_endpoint: values.oauthConfig.tokenEndpoint || undefined,
       client_id: isClientCredentials ? "" : values.oauthConfig.client_id || "",
+      requires_client_credentials: isClientCredentials
+        ? undefined
+        : values.oauthConfig.requires_client_credentials,
       client_secret: isClientCredentials
         ? undefined
         : values.oauthConfig.client_secret || undefined,
@@ -416,6 +419,7 @@ export function transformCatalogItemToFormValues(
     | {
         client_id: string;
         client_secret: string;
+        requires_client_credentials?: boolean;
         audience: string;
         resource: string;
         redirect_uris: string;
@@ -435,6 +439,7 @@ export function transformCatalogItemToFormValues(
     oauthConfig = {
       client_id: item.oauthConfig.client_id || "",
       client_secret: item.oauthConfig.client_secret || "",
+      requires_client_credentials: item.oauthConfig.requires_client_credentials,
       audience:
         typeof item.userConfig?.audience?.default === "string"
           ? item.userConfig.audience.default
@@ -675,6 +680,12 @@ export function transformExternalCatalogToFormValues(
     oauthConfig = {
       client_id: server.oauth_config.client_id || "",
       client_secret: server.oauth_config.client_secret || "",
+      // The hosted catalog and its generated client can deploy independently.
+      requires_client_credentials:
+        "requires_client_credentials" in server.oauth_config &&
+        typeof server.oauth_config.requires_client_credentials === "boolean"
+          ? server.oauth_config.requires_client_credentials
+          : undefined,
       audience: "",
       resource:
         getOptionalStringProperty(server.oauth_config, "resource") || "",

@@ -6,7 +6,6 @@ import {
   findMcpRuntimeTier,
   getDefaultMcpImagePullPolicy,
   isBuiltInCatalogId,
-  isSlackMcpServerUrl,
   summarizeAgentRuntimeTier,
 } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -289,12 +288,10 @@ export function McpCatalogForm({
   const defaultIdentityProviderId =
     oidcIdentityProviders.length === 1 ? oidcIdentityProviders[0]?.id : null;
 
-  const hasSavedSlackSecret =
-    initialValues?.serverType === "remote" &&
-    isSlackMcpServerUrl(initialValues.serverUrl) &&
-    Boolean(
-      initialValues.clientSecretId || initialValues.oauthConfig?.client_secret,
-    );
+  const hasSavedClientSecret = Boolean(
+    initialValues?.clientSecretId ||
+      initialValues?.oauthConfig?.client_secret?.trim(),
+  );
   const schema = useMemo(
     () =>
       formSchema.superRefine((values, ctx) => {
@@ -302,7 +299,7 @@ export function McpCatalogForm({
           detailsOnly ||
           values.serverType !== "remote" ||
           values.authMethod !== "oauth" ||
-          !isSlackMcpServerUrl(values.serverUrl)
+          !values.oauthConfig?.requires_client_credentials
         ) {
           return;
         }
@@ -310,21 +307,21 @@ export function McpCatalogForm({
           ctx.addIssue({
             code: "custom",
             path: ["oauthConfig", "client_id"],
-            message: "Enter your Slack app’s Client ID.",
+            message: "Enter the Client ID.",
           });
         }
         if (
-          !hasSavedSlackSecret &&
+          !hasSavedClientSecret &&
           !values.oauthConfig?.client_secret?.trim()
         ) {
           ctx.addIssue({
             code: "custom",
             path: ["oauthConfig", "client_secret"],
-            message: "Enter your Slack app’s Client Secret.",
+            message: "Enter the Client Secret.",
           });
         }
       }),
-    [detailsOnly, hasSavedSlackSecret],
+    [detailsOnly, hasSavedClientSecret],
   );
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
@@ -398,10 +395,10 @@ export function McpCatalogForm({
 
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
-  const isSlackOAuth =
+  const requiresOAuthClientCredentials =
     currentServerType === "remote" &&
     authMethod === "oauth" &&
-    isSlackMcpServerUrl(form.watch("serverUrl"));
+    form.watch("oauthConfig.requires_client_credentials") === true;
   // A desktop MCP server runs on each user's own computer: none of the
   // connection, deployment or authentication sections apply to it.
   const isDesktopMcp = currentServerType === "desktop_mcp";
@@ -1827,7 +1824,7 @@ export function McpCatalogForm({
                                       <FormItem>
                                         <FormLabel>
                                           Client ID
-                                          {isSlackOAuth && (
+                                          {requiresOAuthClientCredentials && (
                                             <span className="text-destructive">
                                               {" "}
                                               *
@@ -1836,16 +1833,16 @@ export function McpCatalogForm({
                                         </FormLabel>
                                         <FormDescription>
                                           <span>
-                                            {isSlackOAuth
-                                              ? "Use the Client ID from your Slack app’s Basic Information page."
+                                            {requiresOAuthClientCredentials
+                                              ? "Use the Client ID from the OAuth app you registered."
                                               : "Leave empty if the server supports dynamic client registration"}
                                           </span>
                                         </FormDescription>
                                         <FormControl>
                                           <Input
                                             placeholder={
-                                              isSlackOAuth
-                                                ? "Slack app Client ID"
+                                              requiresOAuthClientCredentials
+                                                ? "your-client-id"
                                                 : "your-client-id (optional for dynamic registration)"
                                             }
                                             className="font-mono"
@@ -1864,7 +1861,7 @@ export function McpCatalogForm({
                                         <FormItem>
                                           <FormLabel>
                                             Client Secret
-                                            {isSlackOAuth && (
+                                            {requiresOAuthClientCredentials && (
                                               <span className="text-destructive">
                                                 {" "}
                                                 *
@@ -1874,10 +1871,10 @@ export function McpCatalogForm({
                                           <FormControl>
                                             <SecretInput
                                               placeholder={
-                                                isSlackOAuth
-                                                  ? hasSavedSlackSecret
+                                                requiresOAuthClientCredentials
+                                                  ? hasSavedClientSecret
                                                     ? "Saved; enter a new secret to replace it"
-                                                    : "Slack app Client Secret"
+                                                    : "your-client-secret"
                                                   : "your-client-secret (optional)"
                                               }
                                               className="font-mono"

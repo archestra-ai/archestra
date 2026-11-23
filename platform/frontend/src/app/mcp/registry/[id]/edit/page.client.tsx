@@ -1,6 +1,5 @@
 "use client";
 
-import { isSlackMcpServerUrl } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, Info, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";
@@ -50,16 +49,15 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
   // An app's backing entry is never listed in the registry; its id opens
   // nothing here, as it did when the page looked the item up in the list.
   const item = itemById && itemById.serverType !== "app" ? itemById : undefined;
-  const needsSlackCredentials =
+  const needsOAuthClientCredentials =
     item?.serverType === "remote" &&
-    isSlackMcpServerUrl(item.serverUrl) &&
-    !!item.oauthConfig &&
+    item.oauthConfig?.requires_client_credentials === true &&
     item.oauthConfig.grant_type !== "client_credentials" &&
     !item.awsIamConfig &&
     !item.enterpriseManagedConfig &&
     (!item.oauthConfig.client_id?.trim() ||
       !(item.clientSecretId || item.oauthConfig.client_secret?.trim()));
-  const navigation = useSetupNavigation(needsSlackCredentials);
+  const navigation = useSetupNavigation(needsOAuthClientCredentials);
 
   return (
     <PageLayout
@@ -124,7 +122,7 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
         <SetupWizard
           item={item}
           navigation={navigation}
-          needsSlackCredentials={needsSlackCredentials}
+          needsOAuthClientCredentials={needsOAuthClientCredentials}
         />
       )}
     </PageLayout>
@@ -134,11 +132,11 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
 function SetupWizard({
   item,
   navigation,
-  needsSlackCredentials,
+  needsOAuthClientCredentials,
 }: {
   item: CatalogItem;
   navigation: ReturnType<typeof useSetupNavigation>;
-  needsSlackCredentials: boolean;
+  needsOAuthClientCredentials: boolean;
 }) {
   const router = useRouter();
   const { step, nextStep, prevStep, goToStep } = navigation;
@@ -198,21 +196,20 @@ function SetupWizard({
               onReset,
             }) => {
               const savingWith = isSaving ? saveIntentRef.current : null;
-              const cannotSetSlackCredentials =
-                needsSlackCredentials && detailsOnly;
+              const cannotSetOAuthClientCredentials =
+                needsOAuthClientCredentials && detailsOnly;
               return (
                 <WizardFooter
                   notice={
-                    cannotSetSlackCredentials ? (
+                    cannotSetOAuthClientCredentials ? (
                       <InlineNotice variant="info">
                         <Info aria-hidden="true" />
                         <span className="font-medium">
-                          Slack credentials needed
+                          OAuth credentials needed
                         </span>
                         <InlineNoticeText>
                           Ask someone who can change this server’s connection
-                          settings to add the Slack app’s Client ID and Client
-                          Secret.
+                          settings to add the Client ID and Client Secret.
                         </InlineNoticeText>
                       </InlineNotice>
                     ) : undefined
@@ -278,7 +275,7 @@ function SetupWizard({
                         disabled={
                           hasBlockingErrors ||
                           isSaving ||
-                          cannotSetSlackCredentials
+                          cannotSetOAuthClientCredentials
                         }
                         onClick={() => {
                           saveIntentRef.current = "continue";
@@ -291,13 +288,14 @@ function SetupWizard({
                       <Button
                         size="sm"
                         type={
-                          needsSlackCredentials && !cannotSetSlackCredentials
+                          needsOAuthClientCredentials &&
+                          !cannotSetOAuthClientCredentials
                             ? "submit"
                             : "button"
                         }
-                        disabled={cannotSetSlackCredentials}
+                        disabled={cannotSetOAuthClientCredentials}
                         onClick={() => {
-                          if (needsSlackCredentials) {
+                          if (needsOAuthClientCredentials) {
                             saveIntentRef.current = "continue";
                           } else {
                             goToStep("test");
@@ -361,7 +359,7 @@ function SetupWizard({
   );
 }
 
-function useSetupNavigation(needsSlackCredentials: boolean) {
+function useSetupNavigation(needsOAuthClientCredentials: boolean) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -374,7 +372,7 @@ function useSetupNavigation(needsSlackCredentials: boolean) {
       ? "tools"
       : "configuration";
   const step =
-    needsSlackCredentials && requestedStep === "test"
+    needsOAuthClientCredentials && requestedStep === "test"
       ? "configuration"
       : requestedStep;
   const stepIndex = SETUP_STEPS.findIndex((candidate) => candidate.id === step);

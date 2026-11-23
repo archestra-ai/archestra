@@ -9,7 +9,7 @@ import {
   type SupportedProvider,
   TimeInMs,
 } from "@archestra/shared";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -344,31 +344,6 @@ class OrganizationModel {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     OrganizationModel.mcpIdleHibernationCache.clear();
     // SPDX-SnippetEnd
-  }
-
-  /**
-   * Atomically record that the first-login onboarding survey was submitted for
-   * this organization. Returns true only for the call that actually flipped the
-   * flag (it was previously null), so the caller can forward the survey exactly
-   * once even when two admins submit concurrently. Never shown again once set.
-   */
-  static async markOnboardingSurveyCompleted(id: string): Promise<boolean> {
-    const rows = await db
-      .update(schema.organizationsTable)
-      .set({ onboardingSurveyCompletedAt: new Date() })
-      .where(
-        and(
-          eq(schema.organizationsTable.id, id),
-          isNull(schema.organizationsTable.onboardingSurveyCompletedAt),
-        ),
-      )
-      .returning({ id: schema.organizationsTable.id });
-    if (rows.length > 0) {
-      await cacheManager.delete(getOrganizationSettingsCacheKey(id));
-      await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
-      await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
-    }
-    return rows.length > 0;
   }
 
   /**

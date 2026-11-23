@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
-import { afterNextPaint, appInteractive } from "@/lib/app-interactive";
+import { afterNextPaint } from "@/lib/app-interactive";
 import { MAIN_CONTENT_ID } from "@/lib/app-shell-region";
 import { useSession } from "@/lib/auth/auth.query";
 import { seededConversationId } from "@/lib/auth/shell-seed";
@@ -44,7 +44,6 @@ import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
 import { useIsShellSeeded, useShellReady } from "@/lib/shell-deferral";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
-import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 import { cn } from "@/lib/utils/tailwind";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
@@ -276,9 +275,6 @@ export function AppShell({
           <Toaster />
           <ImpersonationExpiry />
           <ConversationSearchProvider />
-          <AfterIdle>
-            <OnboardingSurveyDialog />
-          </AfterIdle>
         </SidebarProvider>
       </NavigationStatusProvider>
     </ConnectivityProvider>
@@ -306,27 +302,6 @@ function DeferredSidebar({ defer }: { defer: boolean }) {
   if (!mounted) return <SidebarPlaceholder collapsible="icon" />;
   return <AppSidebar />;
 }
-
-/** Renders its children from the first idle callback after the app is interactive. */
-function AfterIdle({ children }: { children: React.ReactNode }) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void appInteractive.whenIdle().then(() => {
-      if (!cancelled) setReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return ready ? <>{children}</> : null;
-}
-
-const OnboardingSurveyDialog = lazyComponent(() =>
-  import("@/components/onboarding-survey-dialog").then(
-    (m) => m.OnboardingSurveyDialog,
-  ),
-);
 
 function ConnectivityBar() {
   const { state, retry } = useConnectivity();

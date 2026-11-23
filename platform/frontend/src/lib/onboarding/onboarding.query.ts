@@ -1,14 +1,11 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export const onboardingKeys = {
   all: ["onboarding"] as const,
   seenNavItems: () => [...onboardingKeys.all, "seen-nav-items"] as const,
-  surveyEligibility: () =>
-    [...onboardingKeys.all, "survey-eligibility"] as const,
 };
 
 /**
@@ -65,59 +62,6 @@ export function useMarkNavItemsSeen() {
       void queryClient.invalidateQueries({
         queryKey: onboardingKeys.seenNavItems(),
       });
-    },
-  });
-}
-
-/**
- * Whether the first-login survey should be shown. Admin-only endpoint, so the
- * caller gates `enabled` on the admin permission. No error toast: on failure
- * the survey simply isn't shown.
- */
-export function useOnboardingSurveyEligibility({
-  enabled,
-}: {
-  enabled: boolean;
-}) {
-  return useQuery({
-    queryKey: onboardingKeys.surveyEligibility(),
-    enabled,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.getOnboardingSurveyEligibility();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? { eligible: false };
-    },
-  });
-}
-
-/**
- * Submit the first-login survey. The backend records it per organization and
- * eligibility flips off for good — the website forward is best-effort, so
- * this succeeds even on instances that can't reach the website.
- */
-export function useSubmitOnboardingSurvey() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (
-      body: archestraApiTypes.SubmitOnboardingSurveyData["body"],
-    ) => {
-      const { data, error } = await archestraApiSdk.submitOnboardingSurvey({
-        body,
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(onboardingKeys.surveyEligibility(), {
-        eligible: false,
-      });
-    },
-    onError: () => {
-      toast.error("Couldn't submit — please try again");
     },
   });
 }

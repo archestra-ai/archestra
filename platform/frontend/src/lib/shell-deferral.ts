@@ -10,11 +10,11 @@ import { useState, useSyncExternalStore } from "react";
 
 /**
  * Whether the app shell may start its deferred requests: the nav dots, the
- * banner, the sidebar warnings, the registry badge, the onboarding survey and
- * the feedback popup. On a hard load, these requests compete with the page's
- * first data request. The hook returns true when the first wave of requests
- * settles, or after FALLBACK_MS. It then stays true, so client-side
- * navigations in the mounted shell do not wait.
+ * banner, the sidebar warnings, the registry badge and the feedback popup. On
+ * a hard load, these requests compete with the page's first data request. The
+ * hook returns true when the first wave of requests settles, or after
+ * FALLBACK_MS. It then stays true, so client-side navigations in the mounted
+ * shell do not wait.
  */
 export function useShellReady(): boolean {
   const deferral = deferralFor(useQueryClient());

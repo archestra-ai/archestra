@@ -2,7 +2,11 @@ import {
   LINKED_IDP_AUTH_COMPLETE_ENDPOINT,
   LINKED_IDP_AUTH_INTENT_ENDPOINT,
 } from "@archestra/shared";
-import { getCookies, parseSetCookieHeader } from "better-auth/cookies";
+import {
+  createCookieGetter,
+  getCookies,
+  parseSetCookieHeader,
+} from "better-auth/cookies";
 import { makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { auth as betterAuth } from "@/auth/better-auth";
@@ -116,13 +120,14 @@ describe("linked identity provider auth plugin", () => {
     );
     expect(intentResponse.status).toBe(200);
     const { intentId } = (await intentResponse.json()) as { intentId: string };
+    const intentCookie = getIntentCookieFromResponse(intentResponse);
 
     const completeResponse = await betterAuth.handler(
       new Request(`http://localhost:3000${LINKED_IDP_AUTH_COMPLETE_ENDPOINT}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          cookie: await createSessionCookie(downstreamSession.token),
+          cookie: `${await createSessionCookie(downstreamSession.token)}; ${intentCookie}`,
         },
         body: JSON.stringify({ intentId }),
       }),
@@ -132,6 +137,11 @@ describe("linked identity provider auth plugin", () => {
     expect(await completeResponse.json()).toEqual({
       redirectTo: "/chat/conversation-123",
     });
+    const clearedIntentCookie = parseSetCookieHeader(
+      completeResponse.headers.get("set-cookie") || "",
+    ).get(getIntentCookieName());
+    expect(clearedIntentCookie?.value).toBe("");
+    expect(clearedIntentCookie?.["max-age"]).toBe(0);
 
     const restoredCookie = getSessionCookieFromResponse(completeResponse);
     expect(restoredCookie).toContain(originalSession.token);
@@ -161,7 +171,100 @@ describe("linked identity provider auth plugin", () => {
       .where(eq(schema.sessionsTable.id, downstreamSession.id));
     expect(deletedDownstreamSession).toBeUndefined();
   });
+
+  test("rejects completing an intent from a browser that did not create it", async ({
+    makeAccount,
+    makeMember,
+    makeOrganization,
+    makeSession,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const intentOwner = await makeUser({ email: "owner@example.com" });
+    const otherUser = await makeUser({ email: "other@example.com" });
+    await makeMember(intentOwner.id, org.id, { role: "member" });
+    await makeMember(otherUser.id, org.id, { role: "member" });
+    const intentOwnerSession = await makeSession(intentOwner.id, {
+      activeOrganizationId: org.id,
+    });
+    const otherUserSession = await makeSession(otherUser.id, {
+      activeOrganizationId: org.id,
+    });
+    const otherUserAccount = await makeAccount(otherUser.id, {
+      providerId: "downstream-idp",
+      accessToken: "other-access-token",
+    });
+
+    const intentOwnerIntent = await createIntent({
+      sessionToken: intentOwnerSession.token,
+    });
+    const otherUserIntent = await createIntent({
+      sessionToken: otherUserSession.token,
+    });
+    const otherUserSessionCookie = await createSessionCookie(
+      otherUserSession.token,
+    );
+
+    // Another user's browser sends the intent id: first with no intent cookie,
+    // then with the cookie of its own, different intent.
+    for (const cookie of [
+      otherUserSessionCookie,
+      `${otherUserSessionCookie}; ${otherUserIntent.cookie}`,
+    ]) {
+      const response = await betterAuth.handler(
+        new Request(
+          `http://localhost:3000${LINKED_IDP_AUTH_COMPLETE_ENDPOINT}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", cookie },
+            body: JSON.stringify({ intentId: intentOwnerIntent.intentId }),
+          },
+        ),
+      );
+
+      expect(response.status).toBe(400);
+      expect(
+        parseSetCookieHeader(response.headers.get("set-cookie") || "").has(
+          getSessionCookieName(),
+        ),
+      ).toBe(false);
+    }
+
+    const [account] = await db
+      .select()
+      .from(schema.accountsTable)
+      .where(eq(schema.accountsTable.id, otherUserAccount.id));
+    expect(account?.userId).toBe(otherUser.id);
+
+    const [session] = await db
+      .select()
+      .from(schema.sessionsTable)
+      .where(eq(schema.sessionsTable.id, otherUserSession.id));
+    expect(session?.userId).toBe(otherUser.id);
+
+    const [user] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, otherUser.id));
+    expect(user).toBeDefined();
+  });
 });
+
+async function createIntent(params: { sessionToken: string }) {
+  const response = await betterAuth.handler(
+    new Request(`http://localhost:3000${LINKED_IDP_AUTH_INTENT_ENDPOINT}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: await createSessionCookie(params.sessionToken),
+      },
+      body: JSON.stringify({ providerId: "downstream-idp" }),
+    }),
+  );
+  expect(response.status).toBe(200);
+  const { intentId } = (await response.json()) as { intentId: string };
+  return { intentId, cookie: getIntentCookieFromResponse(response) };
+}
 
 async function createSessionCookie(sessionToken: string) {
   if (!config.auth.secret) {
@@ -183,6 +286,20 @@ function getSessionCookieFromResponse(response: Response) {
   const sessionCookie = cookies.get(cookieName);
   expect(sessionCookie?.value).toBeTruthy();
   return `${cookieName}=${sessionCookie?.value}`;
+}
+
+function getIntentCookieFromResponse(response: Response) {
+  const cookies = parseSetCookieHeader(
+    response.headers.get("set-cookie") || "",
+  );
+  const cookieName = getIntentCookieName();
+  const intentCookie = cookies.get(cookieName);
+  expect(intentCookie?.value).toBeTruthy();
+  return `${cookieName}=${intentCookie?.value}`;
+}
+
+function getIntentCookieName() {
+  return createCookieGetter(betterAuth.options)("linked_idp_intent").name;
 }
 
 function getSessionCookieName() {

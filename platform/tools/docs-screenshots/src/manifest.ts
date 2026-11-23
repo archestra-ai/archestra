@@ -504,6 +504,30 @@ export const SHOTS: Shot[] = [
     prepare: prepareThroughputLimit,
   },
   {
+    asset: "automated_screenshots/llm-proxy-auto-routing_overview",
+    route: (seed) => `/llm/auto-routing/${seed.autoRouters.auto}`,
+    prepare: async (page) => {
+      await expect(page.getByTestId("auto-routing-header-status")).toHaveText(
+        "Active",
+      );
+      await expect(page.getByTestId("auto-routing-plan-caption")).toHaveText(
+        /^Plan updated /,
+      );
+    },
+  },
+  {
+    asset: "automated_screenshots/llm-proxy-auto-routing_configure",
+    route: (seed) => `/llm/auto-routing/${seed.autoRouters.auto}`,
+    viewport: { width: 1440, height: 1100 },
+    prepare: async (page) => {
+      await page.getByRole("button", { name: "Configure" }).click();
+      await page.getByTestId("auto-routing-preset-estimate").waitFor();
+      // The dialog focuses the name field; the shot is about tiers and budget.
+      await page.getByRole("heading", { name: "Configure auto" }).click();
+    },
+    target: (page) => page.getByRole("dialog"),
+  },
+  {
     asset: "automated_screenshots/platform-agent-plugins_catalog",
     route: () => "/plugins",
   },

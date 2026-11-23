@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import {
   AGENT_PLACEMENT,
+  AUTO_ROUTER,
   CHANNEL_BINDINGS,
   COLLEAGUES,
   CONNECTIONS,
@@ -60,6 +61,7 @@ ON CONFLICT DO NOTHING;`);
   seedLogSession(state);
   seedDesktopDevice(state);
   seedConnections(state);
+  seedAutoRoutingHistory(state);
 }
 
 /** Rebuild only reserved fixture records so session-head triggers and ownership stay current. */
@@ -355,9 +357,67 @@ WHERE l.limit_type = 'token_cost' AND (
 GROUP BY l.id, i.model;`);
 }
 
+/**
+ * The sessions the auto router learned from, as the proxy records them before
+ * a first plan: Jev's reading of each session, routed to the normal tier, and
+ * the usage of its requests. Only live traffic and a live Jev create them.
+ * Dated from now, since a fit reads sessions idle for a day within the last
+ * 35 days. A rerun replaces them.
+ */
+function seedAutoRoutingHistory(state: SeedState): void {
+  const { history } = AUTO_ROUTER;
+  const routerId = sql(state.autoRouters[AUTO_ROUTER.name]);
+  const scorerVersionId = sql(state.autoRouterScorers[AUTO_ROUTER.name]);
+  let lower = 0;
+  const kinds = history.kinds
+    .map((kind) => {
+      const row = [lower, lower + kind.share, ...kind.tierNeeded, ...kind.requests];
+      lower += kind.share;
+      return `(${row.join(", ")})`;
+    })
+    .join(",\n    ");
+  const between = ([min, max]: readonly [number, number]) => `(${min} + random() * ${max - min})::int`;
+  const { request } = history;
+  const total = "(k.p0 * s.a + k.p1 * s.b + k.p2 * s.c)";
+  runSql(`BEGIN;
+DELETE FROM routing_usage WHERE decision_id IN (SELECT id FROM routing_decisions WHERE router_id = ${routerId} AND session_key LIKE '${ROUTING_SESSION_PREFIX}%');
+DELETE FROM routing_decisions WHERE router_id = ${routerId} AND session_key LIKE '${ROUTING_SESSION_PREFIX}%';
+SELECT setseed(0.17);
+CREATE TEMP TABLE docs_routing_sessions ON COMMIT DROP AS
+SELECT '${ROUTING_SESSION_PREFIX}' || s.n AS session_key, s.created_at,
+  (ARRAY[${history.clients.map(sql).join(", ")}])[1 + s.n % ${history.clients.length}] AS client,
+  k.p0 * s.a / ${total} AS q0, k.p1 * s.b / ${total} AS q1, k.p2 * s.c / ${total} AS q2,
+  (k.min_requests + random() * (k.max_requests - k.min_requests))::int AS requests
+FROM (
+  SELECT n, now() - make_interval(days => 2 + n % ${history.days - 1}, mins => (random() * 1300)::int) AS created_at,
+    random() AS pick, 0.75 + random() * 0.5 AS a, 0.75 + random() * 0.5 AS b, 0.75 + random() * 0.5 AS c
+  FROM generate_series(1, ${history.sessions}) AS n
+) AS s
+JOIN (VALUES
+    ${kinds}
+  ) AS k(lower, upper, p0, p1, p2, min_requests, max_requests) ON s.pick >= k.lower AND s.pick < k.upper;
+INSERT INTO routing_decisions
+  (organization_id, router_id, session_key, tier_index, model_id, propensity, u, reason, scorer_version_id, features, features_schema_version, core_version, created_at)
+SELECT ${sql(state.organization.id)}, ${routerId}, s.session_key, 1,
+  (SELECT model_id FROM auto_routing_tiers WHERE router_id = ${routerId} AND tier = 'normal'), 1, random(), 'cold_start', ${scorerVersionId},
+  jsonb_build_object('client', s.client, 'signals', jsonb_build_object('jev-session',
+    jsonb_build_object('version', ${scorerVersionId}, 'tier_needed', jsonb_build_array(s.q0, s.q1, s.q2), 'p_long', 0.02))),
+  1, (SELECT core_version FROM routing_plans WHERE router_id = ${routerId} ORDER BY created_at DESC LIMIT 1), s.created_at
+FROM docs_routing_sessions AS s;
+INSERT INTO routing_usage (interaction_id, decision_id, created_at, input, cache_read, cache_write, cache_write_1h, output, estimated)
+SELECT gen_random_uuid(), d.id, d.created_at + make_interval(mins => r * 3),
+  ${between(request.input)}, ${between(request.cacheRead)}, 0, 0, ${between(request.output)}, false
+FROM docs_routing_sessions AS s
+JOIN routing_decisions AS d ON d.router_id = ${routerId} AND d.session_key = s.session_key
+CROSS JOIN LATERAL generate_series(1, s.requests) AS r;
+COMMIT;`);
+}
+
 const FIXTURE_TIME_SQL = `TIMESTAMPTZ '${FIXTURE_TIME}'`;
 
 const USAGE_SESSION_PREFIX = "docs-usage-";
+
+const ROUTING_SESSION_PREFIX = "docs-routing-";
 
 // ===
 

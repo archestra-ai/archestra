@@ -58,6 +58,7 @@ import {
   RoutingSessionKeySchema,
 } from "@/types/auto-routing";
 import { STREAM_KEEPALIVE_SSE_COMMENT } from "../stream-keepalive";
+import bedrockProxyRoutes from "./bedrock";
 import modelRouterProxyRoutes from "./model-router";
 import openAiProxyRoutes from "./openai";
 
@@ -1469,6 +1470,82 @@ describe("Model Router auto model", () => {
       await makeMember(user.id, org.organizationId);
       return user.id;
     }
+
+    test("a native Converse call does not auto-route across providers", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const bedrockModel = await createModel("bedrock", "converse-native");
+      await setAutoRoutingTiers(org.organizationId, { fast: bedrockModel });
+      const baseUrl = "https://bedrock.auto-routing.test";
+      const key = await makeLlmProviderApiKey(
+        org.organizationId,
+        (await makeSecret({ secret: { apiKey: "sk-bedrock" } })).id,
+        { provider: "bedrock", baseUrl },
+      );
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        bedrockModel.id,
+      ]);
+      const userId = await member(org, makeUser, makeMember);
+      const previousIam = config.llm.bedrock.iamAuthEnabled;
+      config.llm.bedrock.iamAuthEnabled = false;
+      onTestFinished(() => {
+        config.llm.bedrock.iamAuthEnabled = previousIam;
+      });
+      const system = [
+        { text: "Be concise." },
+        { cachePoint: { type: "default" } },
+      ];
+      const aws = vi.fn();
+      server.use(
+        http.post(
+          `${baseUrl}/model/${bedrockModel.modelId}/converse`,
+          async ({ request }) => {
+            aws(await request.json());
+            return HttpResponse.json({
+              output: {
+                message: { role: "assistant", content: [{ text: "Native" }] },
+              },
+              stopReason: "end_turn",
+              usage: { inputTokens: 4, outputTokens: 1 },
+            });
+          },
+        ),
+      );
+      const app = createApp();
+      await app.register(bedrockProxyRoutes);
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/bedrock/${org.agentId}/model/${bedrockModel.modelId}/converse`,
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...internalCallHeader(),
+          authorization: "Bearer sk-bedrock",
+          [AUTO_ROUTER_ID_HEADER]: org.routerId,
+          [CHAT_API_KEY_ID_HEADER]: key.id,
+          [USER_ID_HEADER]: userId,
+          [PROVIDER_BASE_URL_HEADER]: baseUrl,
+        },
+        payload: {
+          system,
+          messages: [{ role: "user", content: [{ text: PROMPT }] }],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(aws).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ system }),
+      );
+      expect(upstreamModels).toEqual([]);
+    });
 
     test("a call naming a Fireworks alias still routes and checks only the selected tier's budget", async ({
       makeOrganization,

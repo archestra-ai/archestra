@@ -5,6 +5,7 @@ import {
   findMcpRuntimeTier,
   grantsAudience,
   type McpServerResources,
+  PLAYWRIGHT_MCP_CATALOG_ID,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
   resolveMcpRuntimeTiers,
@@ -2622,6 +2623,12 @@ class InternalMcpCatalogModel {
             ownerColumn: schema.internalMcpCatalogTable.authorId,
             userId,
             subjects: principals.viewer.subjects,
+            // Built-in Playwright is already readable by organization members
+            // without a per-object grant. Classify it as org, not admin-only.
+            intrinsicOrgAudience: eq(
+              schema.internalMcpCatalogTable.id,
+              PLAYWRIGHT_MCP_CATALOG_ID,
+            ),
             ...options.access,
           });
         if (accessCondition) listConditions.push(accessCondition);

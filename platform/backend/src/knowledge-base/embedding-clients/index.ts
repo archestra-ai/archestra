@@ -95,24 +95,23 @@ export async function callEmbedding(params: {
       : undefined,
   });
 
+  const expected = {
+    provider,
+    model: params.model,
+    dimensions: params.dimensions,
+  };
   let response: EmbeddingApiResponse;
   try {
     response = await adapter.call(rest);
   } catch (error) {
     if (error instanceof PartialEmbeddingError) {
-      throw validatePartialEmbeddingSuccesses(error, {
-        provider,
-        model: params.model,
-        dimensions: params.dimensions,
-      });
+      throw validatePartialEmbeddingSuccesses(error, expected);
     }
     throw error;
   }
   validateEmbeddingResponse(response, {
-    provider,
-    model: params.model,
+    ...expected,
     expectedCount: params.inputs.length,
-    dimensions: params.dimensions,
   });
   return response;
 }
@@ -153,10 +152,8 @@ function validateEmbeddingResponse(
 }
 
 /**
- * The vectors a partially failed fan-out banks never pass through
- * `validateEmbeddingResponse`, so check them here: a vector that fails moves to
- * the failures as a typed, non-retryable `UnusableEmbeddingResponseError`, and
- * the valid ones are still kept.
+ * A vector that fails the checks moves to the failures as a typed,
+ * non-retryable `UnusableEmbeddingResponseError`; the valid ones are kept.
  */
 function validatePartialEmbeddingSuccesses(
   error: PartialEmbeddingError,

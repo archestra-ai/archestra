@@ -853,7 +853,7 @@ describe("KbChunkModel", () => {
       ).resolves.toBeUndefined();
     });
 
-    test("stores each chunk's own vector in the column for its dimensions", async ({
+    test("stores each chunk's own vector in the column for its dimensions, across statements", async ({
       makeOrganization,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
@@ -864,59 +864,30 @@ describe("KbChunkModel", () => {
       const doc = await KbDocumentModel.create(
         createDocumentData(connector.id, org.id),
       );
-      const [first, second] = await KbChunkModel.insertMany([
-        { documentId: doc.id, content: "first", chunkIndex: 0 },
-        { documentId: doc.id, content: "second", chunkIndex: 1 },
-      ]);
-      const firstVector = Array.from({ length: 1024 }, () => 0.5);
-      const secondVector = Array.from({ length: 1024 }, () => -0.25);
-
-      await KbChunkModel.updateEmbeddings(
-        [
-          { chunkId: first.id, embedding: firstVector },
-          { chunkId: second.id, embedding: secondVector },
-        ],
-        1024,
-      );
-
-      const stored = await KbChunkModel.findByDocument(doc.id);
-      const byId = new Map(stored.map((chunk) => [chunk.id, chunk]));
-      expect(byId.get(first.id)?.embedding1024).toEqual(firstVector);
-      expect(byId.get(second.id)?.embedding1024).toEqual(secondVector);
-      expect(byId.get(first.id)?.embedding).toBeNull();
-    });
-
-    test("stores every vector when the set is larger than one statement", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const org = await makeOrganization({ legacyPermissions: true });
-      const kb = await makeKnowledgeBase(org.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-      const doc = await KbDocumentModel.create(
-        createDocumentData(connector.id, org.id),
-      );
+      // One row more than a single statement carries.
       const chunks = await KbChunkModel.insertMany(
-        Array.from({ length: 1201 }, (_, chunkIndex) => ({
+        Array.from({ length: 501 }, (_, chunkIndex) => ({
           documentId: doc.id,
           content: `chunk ${chunkIndex}`,
           chunkIndex,
         })),
       );
+      const vectorFor = (chunkIndex: number) =>
+        Array.from({ length: 384 }, () => chunkIndex - 0.5);
 
       await KbChunkModel.updateEmbeddings(
         chunks.map((chunk) => ({
           chunkId: chunk.id,
-          embedding: Array.from({ length: 384 }, () => chunk.chunkIndex),
+          embedding: vectorFor(chunk.chunkIndex),
         })),
         384,
       );
 
       const stored = await KbChunkModel.findByDocument(doc.id);
-      expect(stored).toHaveLength(1201);
+      expect(stored).toHaveLength(501);
       for (const chunk of stored) {
-        expect(chunk.embedding384?.[0]).toBe(chunk.chunkIndex);
+        expect(chunk.embedding384).toEqual(vectorFor(chunk.chunkIndex));
+        expect(chunk.embedding).toBeNull();
       }
     });
   });

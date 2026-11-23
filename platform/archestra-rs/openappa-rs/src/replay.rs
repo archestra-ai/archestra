@@ -7,8 +7,7 @@
 //! `cannot_run` at the first step that answer could have decided. As in `appa replay`,
 //! every authority and sanitizer is answered in process: an authority approves and a
 //! sanitizer returns the body unchanged, so a step that expects `hitl` takes the offer and
-//! its file goes on. A policy naming an external authority or sanitizer is refused as a
-//! whole.
+//! its file goes on. Only allowlisted authority and sanitizer bindings can be replayed.
 use appa_runtime::{
     api::{
         ConsultRecord, ConsultTranscriber, ExternalOutcome, ExternalRole, OfferKind, Remedies,
@@ -243,8 +242,11 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
     if externals
         .authorities
         .values()
-        .chain(externals.sanitizers.values())
         .any(|binding| !stock(binding))
+        || externals.sanitizers.values().any(|binding| {
+            !stock(binding)
+                && !matches!(binding, Implementation::Builtin(name) if name.as_str() == "archestra")
+        })
     {
         return Err("Replay cannot run a policy with an external authority or sanitizer: replay takes every remedy it is offered, which would act through that party".into());
     }
@@ -798,6 +800,25 @@ mod tests {
         fn heads(&self) -> Vec<String> {
             self.heads.lock().unwrap().clone()
         }
+    }
+
+    #[tokio::test]
+    async fn a_policy_with_an_archestra_sanitizer_can_replay() {
+        let consults = Consults::start().await;
+        let policy = format!(
+            "{POLICY}\n[policy.deployment]\ncontext_control = true\n\n[[policy.sanitizer]]\nname = 'scrub'\non = ['tool_output']\n\n[policy.sanitizer.permits]\ntrust = {{ from = 'suspicious', to = 'trusted' }}\n\n[externals.sanitizers.scrub]\nbuiltin = 'archestra'\n"
+        );
+        let response = run_with(
+            request(&policy, &[("read.appa", "mcp/files/read {}\nexpect allow")]),
+            consults.defaults(),
+        )
+        .await;
+        assert_eq!(
+            response.files[0].status,
+            Status::Passed,
+            "{:?}",
+            response.files[0].error
+        );
     }
 
     async fn answer(mut stream: tokio::net::TcpStream, heads: Arc<Mutex<Vec<String>>>) {

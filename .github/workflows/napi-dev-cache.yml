@@ -71,12 +71,12 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # The agent image takes Rust from the same rust:1.93.0-bookworm image.
+      # The agent image takes Rust from the same rust:1.97.1-bookworm image.
       - name: Build the addons on Debian bookworm
         if: steps.published.outputs.exists != 'true'
         run: |
           docker build --tag "napi-dev-builder:${GITHUB_RUN_ID}" - <<'EOF'
-          FROM rust:1.93.0-bookworm@sha256:d0a4aa3ca2e1088ac0c81690914a0d810f2eee188197034edf366ed010a2b382 AS rust
+          FROM rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97 AS rust
           FROM node:24-bookworm@sha256:e7add2a490bb17d97b485b8641bd88455fff7839ade0f5eba493c3508124d413
           COPY --from=rust /usr/local/cargo /usr/local/cargo
           COPY --from=rust /usr/local/rustup /usr/local/rustup

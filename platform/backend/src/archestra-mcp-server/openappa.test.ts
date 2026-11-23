@@ -19,6 +19,7 @@ import { openappaActor, scopedSessionId } from "@/openappa/actor";
 import { rememberUnattendedSession } from "@/openappa/break-the-glass";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { openappaFailure } from "@/openappa/failure";
 import * as hitlReview from "@/openappa/hitl-review";
 import {
   consumeHitlRuling,
@@ -921,6 +922,39 @@ describe("OpenAPPA tool execution", () => {
     expect(executeSpy.mock.calls[0][0]).not.toHaveProperty("precheckRefusal");
     expect(result.content[0]).toEqual({ type: "text", text: "Authorized" });
     expect(extractMcpHumanRuling(result)).toBe("approve");
+  });
+
+  test("chat client: a retryable failure after the person ruled asks for a fresh review instead of a retry", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this email?",
+      session_id: "session-1",
+      tool: "archestra__todo_write",
+      arguments: VALID_TODO,
+    });
+    const transient = openappaFailure(
+      Object.assign(new Error("connection reset"), { code: "contended" }),
+    );
+    vi.spyOn(openappaService, "executeRemedyByOffer").mockRejectedValue(
+      transient,
+    );
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-hitl", trajectory: trajectory() },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    expect(transient.shouldRetry).toBe(true);
+    expect(elicitSpy).toHaveBeenCalledOnce();
+    expect(result.isError).toBe(true);
+    expect(result.content).not.toEqual([
+      { type: "text", text: `Error: ${transient.message}` },
+    ]);
   });
 
   test("chat client: the prompt lists the typed scope without the person's attention", async () => {

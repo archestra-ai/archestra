@@ -1610,7 +1610,15 @@ const registry = defineArchestraTools([
         };
       }
 
-      const byOffer = await executePlan();
+      let byOffer: Awaited<ReturnType<typeof executePlan>>;
+      try {
+        byOffer = await executePlan();
+      } catch (error) {
+        // The person's ruling is spent: a retry would ask them again.
+        if (ruling && error instanceof ApiError && error.shouldRetry)
+          return errorResult(SPENT_RULING_UNRUN);
+        throw error;
+      }
       if (!ruling || !byOffer.known) return byOffer.result;
       if (await supersededByPublish(byOffer.result))
         return supersededReview(byOffer.result);
@@ -2459,3 +2467,6 @@ const RETIRED_OFFER_TEXTS = [
   "no live offer with this id exists",
   "changed after this offer was made, so the offer no longer applies",
 ];
+
+const SPENT_RULING_UNRUN =
+  "Guardrails could not run this plan after the reviewer ruled on it, and that ruling is now used. Calling the plan again asks the reviewer for a fresh review.";

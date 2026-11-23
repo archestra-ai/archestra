@@ -375,6 +375,99 @@ poolTest(
 );
 
 poolTest(
+  "returns an empty input object for a zero-argument tool in Converse JSON and eventstream",
+  async ({ converse: { ask, openai, anthropic } }) => {
+    const name = "get_current_time";
+    const id = "call_empty";
+    const payload = {
+      ...request,
+      toolConfig: {
+        tools: [
+          {
+            toolSpec: {
+              name,
+              inputSchema: { json: { type: "object", properties: {} } },
+            },
+          },
+        ],
+      },
+    };
+    openai.mockImplementationOnce(() =>
+      HttpResponse.json({
+        id: "chatcmpl-empty",
+        object: "chat.completion",
+        created: 1,
+        model: "gpt-4.1-mini",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "tool_calls",
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                { id, type: "function", function: { name, arguments: "" } },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 8, completion_tokens: 1, total_tokens: 9 },
+      }),
+    );
+    anthropic.mockImplementationOnce(() =>
+      anthropicSse([
+        {
+          type: "message_start",
+          message: {
+            id: "msg_empty",
+            type: "message",
+            role: "assistant",
+            content: [],
+            model: "claude-sonnet-4-6",
+            stop_reason: null,
+            usage: { input_tokens: 8, output_tokens: 0 },
+          },
+        },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id, name, input: {} },
+        },
+        { type: "content_block_stop", index: 0 },
+        {
+          type: "message_delta",
+          delta: { stop_reason: "tool_use", stop_sequence: null },
+          usage: { output_tokens: 1 },
+        },
+        { type: "message_stop" },
+      ]),
+    );
+
+    const json = await ask(payload);
+    expect(json.statusCode, json.body).toBe(200);
+    expect(json.json()).toMatchObject({
+      output: {
+        message: { content: [{ toolUse: { toolUseId: id, name, input: {} } }] },
+      },
+      stopReason: "tool_use",
+    });
+
+    const stream = await ask(payload, true);
+    expect(stream.statusCode, stream.body).toBe(200);
+    expect(decodeFrames(stream.rawPayload)).toEqual(
+      expect.arrayContaining([
+        [
+          "contentBlockDelta",
+          { contentBlockIndex: 0, delta: { toolUse: { input: "{}" } } },
+        ],
+        ["messageStop", { stopReason: "tool_use" }],
+      ]),
+    );
+    expect(anthropic).toHaveBeenCalledOnce();
+  },
+);
+
+poolTest(
   "never dispatches AWS-specific guardrails or unknown raw options to a non-Bedrock member",
   async ({ converse }) => {
     const { ask, aws, openai, anthropic } = converse;

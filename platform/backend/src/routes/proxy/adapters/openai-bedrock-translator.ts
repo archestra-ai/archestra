@@ -279,6 +279,11 @@ function converseUsage(usage: OpenAi.Types.Usage | null | undefined) {
   };
 }
 
+function toolArgumentsJson(input: string) {
+  // A parameterless streamed call may have no argument deltas at all.
+  return input.trim() ? input : "{}";
+}
+
 function toolInput(argumentsJson: string): Record<string, unknown> {
   try {
     const input = asRecord(JSON.parse(argumentsJson));
@@ -311,7 +316,7 @@ export function openaiResponseToConverse(
       toolUse: {
         toolUseId: wordToolCallId(call.id),
         name: call.function.name,
-        input: toolInput(call.function.arguments),
+        input: toolInput(toolArgumentsJson(call.function.arguments)),
       },
     });
   }
@@ -383,7 +388,8 @@ export function createOpenaiToConverseStreamTranslator(
       for (const [, tool] of [...tools].sort(([a], [b]) => a - b)) {
         if (!tool.id || !tool.name)
           throw new Error("The upstream returned an incomplete tool call");
-        toolInput(tool.input);
+        const input = toolArgumentsJson(tool.input);
+        toolInput(input);
         events.push(
           {
             contentBlockStart: {
@@ -399,7 +405,7 @@ export function createOpenaiToConverseStreamTranslator(
           {
             contentBlockDelta: {
               contentBlockIndex,
-              delta: { toolUse: { input: tool.input } },
+              delta: { toolUse: { input } },
             },
           },
           { contentBlockStop: { contentBlockIndex } },

@@ -598,22 +598,37 @@ class KbChunkModel {
   ): Promise<void> {
     if (updates.length === 0) return;
 
-    const col = getEmbeddingColumnName(dimensions);
-    const values = updates
-      .map(
-        (u) =>
-          `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector(${dimensions}))`,
-      )
-      .join(", ");
+    if (!Number.isInteger(dimensions) || dimensions <= 0) {
+      throw new Error(`Invalid embedding dimensions: ${dimensions}`);
+    }
+    const col = sql.raw(getEmbeddingColumnName(dimensions));
+    const vectorCast = sql.raw(`::vector(${dimensions})`);
 
-    await db.execute(
-      sql.raw(`
-        UPDATE kb_chunks AS c
-        SET ${col} = v.embedding
-        FROM (VALUES ${values}) AS v(id, embedding)
-        WHERE c.id = v.id
-      `),
-    );
+    // Each slice goes as one JSON parameter: a bind per row would hit
+    // PostgreSQL's 65,535-parameter limit, and one value for a whole indexing
+    // batch can pass jsonb's size limit at high dimensions. Each vector travels
+    // as its JSON text ("[0.1,0.2,…]"), which is also pgvector's input format.
+    // One transaction keeps the write all-or-nothing, as the caller expects.
+    await db.transaction(async (tx) => {
+      for (
+        let i = 0;
+        i < updates.length;
+        i += EMBEDDING_WRITE_ROWS_PER_STATEMENT
+      ) {
+        const rows = JSON.stringify(
+          updates.slice(i, i + EMBEDDING_WRITE_ROWS_PER_STATEMENT).map((u) => ({
+            id: u.chunkId,
+            embedding: JSON.stringify(u.embedding),
+          })),
+        );
+        await tx.execute(sql`
+          UPDATE kb_chunks AS c
+          SET ${col} = v.embedding${vectorCast}
+          FROM jsonb_to_recordset(${rows}::jsonb) AS v(id uuid, embedding text)
+          WHERE c.id = v.id
+        `);
+      }
+    });
   }
 
   private static async runFullTextStatement(params: {
@@ -1155,6 +1170,11 @@ class KbChunkModel {
 }
 
 export default KbChunkModel;
+
+// === Internal constants ===
+
+/** At 3072 dimensions a slice of this size is roughly 30 MB of JSON. */
+const EMBEDDING_WRITE_ROWS_PER_STATEMENT = 500;
 
 // === Internal helpers ===
 

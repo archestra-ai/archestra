@@ -95,7 +95,19 @@ export async function callEmbedding(params: {
       : undefined,
   });
 
-  const response = await adapter.call(rest);
+  let response: EmbeddingApiResponse;
+  try {
+    response = await adapter.call(rest);
+  } catch (error) {
+    if (error instanceof PartialEmbeddingError) {
+      throw validatePartialEmbeddingSuccesses(error, {
+        provider,
+        model: params.model,
+        dimensions: params.dimensions,
+      });
+    }
+    throw error;
+  }
   validateEmbeddingResponse(response, {
     provider,
     model: params.model,
@@ -133,19 +145,62 @@ function validateEmbeddingResponse(
     fail(`expected ${expectedCount} embedding(s) but received ${data.length}`);
   }
   for (const item of data) {
-    const embedding = item?.embedding;
-    if (!Array.isArray(embedding) || embedding.length === 0) {
-      fail("an embedding vector was empty or missing");
-    }
-    if (!embedding.every((value) => Number.isFinite(value))) {
-      fail("an embedding vector contained non-numeric values");
-    }
-    if (dimensions !== undefined && embedding.length !== dimensions) {
-      fail(
-        `expected ${dimensions}-dimension vectors but received ${embedding.length}`,
-      );
+    const problem = findEmbeddingVectorProblem(item?.embedding, dimensions);
+    if (problem) {
+      fail(problem);
     }
   }
+}
+
+/**
+ * The vectors a partially failed fan-out banks never pass through
+ * `validateEmbeddingResponse`, so check them here: a vector that fails moves to
+ * the failures as a typed, non-retryable `UnusableEmbeddingResponseError`, and
+ * the valid ones are still kept.
+ */
+function validatePartialEmbeddingSuccesses(
+  error: PartialEmbeddingError,
+  params: { provider: SupportedProvider; model: string; dimensions?: number },
+): PartialEmbeddingError {
+  const { provider, model, dimensions } = params;
+  const successes: PartialEmbeddingError["successes"] = [];
+  const unusable: PartialEmbeddingError["failures"] = [];
+  for (const success of error.successes) {
+    const problem = findEmbeddingVectorProblem(success.embedding, dimensions);
+    if (problem) {
+      unusable.push({
+        index: success.index,
+        reason: new UnusableEmbeddingResponseError(provider, model, problem),
+      });
+    } else {
+      successes.push(success);
+    }
+  }
+  if (unusable.length === 0) {
+    return error;
+  }
+  return new PartialEmbeddingError({
+    successes,
+    failures: [...error.failures, ...unusable],
+    tokens: error.tokens,
+  });
+}
+
+/** Why `embedding` can't be stored as a vector, or null when it can. */
+function findEmbeddingVectorProblem(
+  embedding: unknown,
+  dimensions: number | undefined,
+): string | null {
+  if (!Array.isArray(embedding) || embedding.length === 0) {
+    return "an embedding vector was empty or missing";
+  }
+  if (!embedding.every((value) => Number.isFinite(value))) {
+    return "an embedding vector contained non-numeric values";
+  }
+  if (dimensions !== undefined && embedding.length !== dimensions) {
+    return `expected ${dimensions}-dimension vectors but received ${embedding.length}`;
+  }
+  return null;
 }
 
 /**

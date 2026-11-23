@@ -87,6 +87,12 @@ const bedrockEmbeddingHandler = http.post(
         { status: 400 },
       );
     }
+    if (input.includes("malformed chunk")) {
+      return HttpResponse.json({
+        embedding: [...Array.from({ length: 1023 }, () => 0.1), "not-a-number"],
+        inputTextTokenCount: 2,
+      });
+    }
     return HttpResponse.json({
       embedding: Array.from({ length: 1024 }, () => 0.1),
       inputTextTokenCount: 2,
@@ -198,6 +204,69 @@ describe("EmbeddingService", () => {
       "failed",
     );
     expect(bedrockEmbeddingRequests).toHaveLength(2);
+  });
+
+  test("rejects a non-numeric vector from a partially failed batch before storing it", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: {
+        apiKey: "test-key",
+        baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        model: "amazon.titan-embed-image-v1",
+        dimensions: 1024,
+        provider: "bedrock",
+        inputModalities: ["text", "image"],
+        acceptedImageMimeTypes: ["image/png", "image/jpeg"],
+      },
+    });
+
+    const makeDoc = (title: string) =>
+      KbDocumentModel.create({
+        connectorId: connector.id,
+        organizationId: org.id,
+        title,
+        content: title,
+        contentHash: `malformed-partial-${title}`,
+        embeddingStatus: "pending",
+      });
+    const good = await makeDoc("good");
+    const malformed = await makeDoc("malformed");
+    const bad = await makeDoc("bad");
+    await KbChunkModel.insertMany([
+      { documentId: good.id, content: "good chunk", chunkIndex: 0 },
+      { documentId: malformed.id, content: "malformed chunk", chunkIndex: 0 },
+      { documentId: bad.id, content: "bad chunk", chunkIndex: 0 },
+    ]);
+    const writeSpy = vi.spyOn(KbChunkModel, "updateEmbeddings");
+
+    const outcome = await embeddingService.processDocuments([
+      good.id,
+      malformed.id,
+      bad.id,
+    ]);
+
+    const storedValues = writeSpy.mock.calls.flatMap(([updates]) =>
+      updates.flatMap((update) => update.embedding),
+    );
+    writeSpy.mockRestore();
+    expect(storedValues.every((value) => Number.isFinite(value))).toBe(true);
+    expect(outcome.failedDocumentCount).toBe(2);
+    expect((await KbDocumentModel.findById(good.id))?.embeddingStatus).toBe(
+      "completed",
+    );
+    expect(
+      (await KbDocumentModel.findById(malformed.id))?.embeddingStatus,
+    ).toBe("failed");
+    expect((await KbDocumentModel.findById(bad.id))?.embeddingStatus).toBe(
+      "failed",
+    );
   });
 
   test("retries only transiently failed Bedrock inputs without replaying successes", async ({

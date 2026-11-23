@@ -665,5 +665,60 @@ describe("RuntimeTemplateSection", () => {
         llmApiKeyId: "key-openai",
       });
     });
+
+    it("sets a custom Claude Code runtime's Claude account to the one card left, and keeps it once both are ticked again", async () => {
+      settings.templates = [
+        {
+          id: "00000000-0000-4000-8000-000000000002",
+          name: "Claude workspace",
+          description: "Development",
+          icon: null,
+          hidden: false,
+          position: 0,
+          locked: false,
+          runtime: {
+            ...buildCustomAgentRuntime({
+              image: "registry.example.com/claude:v1",
+            }),
+            command: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCode: { authentication: "provider" },
+            privileged: false,
+          },
+        },
+      ];
+      const user = userEvent.setup();
+      mount();
+
+      // Personal subscriptions only: the server refuses a Claude account
+      // of the other kind beside that rule.
+      let dialog = await openAccounts(user, "Claude workspace");
+      await user.click(card(dialog, /A company API key/));
+      await saveRuntime(user, dialog);
+      expect(settings.templates[0]).toMatchObject({
+        accounts: { kind: "subscription" },
+        runtime: { claudeCode: { authentication: "subscription" } },
+      });
+
+      // The company API key only.
+      dialog = await openAccounts(user, "Claude workspace");
+      await user.click(card(dialog, /A company API key/));
+      await user.click(card(dialog, /Each person's Claude subscription/));
+      await saveRuntime(user, dialog);
+      expect(settings.templates[0]).toMatchObject({
+        accounts: { kind: "key" },
+        runtime: { claudeCode: { authentication: "provider" } },
+      });
+
+      // Both again: each agent chooses, and the account new agents start on
+      // stays as stored.
+      dialog = await openAccounts(user, "Claude workspace");
+      await user.click(card(dialog, /Each person's Claude subscription/));
+      await saveRuntime(user, dialog);
+      expect(settings.templates[0].accounts ?? {}).not.toHaveProperty("kind");
+      expect(settings.templates[0].runtime.claudeCode).toEqual({
+        authentication: "provider",
+      });
+    });
   });
 });

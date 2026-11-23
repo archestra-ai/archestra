@@ -615,7 +615,23 @@ function RuntimeTemplateDialog({
   });
   const save = ({ accounts: _stored, ...values }: TemplateDraft) => {
     const saved = accounts.toSave();
-    onSave(saved ? { ...values, accounts: saved } : values);
+    // The runtime's Claude account follows the kind its rule names, as on a
+    // maintained runtime. Where the rule names none, it stays as it was.
+    const { claudeCode } = values.runtime;
+    const withAccount =
+      claudeCode && accounts.lock
+        ? {
+            ...values,
+            runtime: {
+              ...values.runtime,
+              claudeCode: {
+                ...claudeCode,
+                authentication: claudeAccount(accounts.lock),
+              },
+            },
+          }
+        : values;
+    onSave(saved ? { ...withAccount, accounts: saved } : withAccount);
   };
 
   return (

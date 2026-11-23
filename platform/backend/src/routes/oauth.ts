@@ -4,6 +4,7 @@ import {
   OFFLINE_ACCESS_OAUTH_SCOPE,
   RouteId,
 } from "@archestra/shared";
+import { getRequiredOAuthAppCredentialState } from "@archestra/shared/oauth";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -1046,12 +1047,15 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await loadOAuthCatalogForCaller({ request, catalogId, serverId });
 
         const oauthConfig = catalogItem.oauthConfig;
-        if (
-          catalogItem.serverType === "remote" &&
-          oauthConfig.grant_type !== "client_credentials" &&
-          oauthConfig.requires_client_credentials &&
-          (!oauthConfig.client_id?.trim() || !oauthConfig.client_secret?.trim())
-        ) {
+        const { missingClientId, missingClientSecret } =
+          getRequiredOAuthAppCredentialState({
+            serverType: catalogItem.serverType,
+            oauthConfig:
+              catalogItem.awsIamConfig || catalogItem.enterpriseManagedConfig
+                ? undefined
+                : oauthConfig,
+          });
+        if (missingClientId || missingClientSecret) {
           throw new ApiError(
             400,
             "In Configuration, add the Client ID and Client Secret before installing.",

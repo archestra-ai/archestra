@@ -1,5 +1,6 @@
 "use client";
 
+import { getRequiredOAuthAppCredentialState } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, Info, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";
@@ -49,14 +50,16 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
   // An app's backing entry is never listed in the registry; its id opens
   // nothing here, as it did when the page looked the item up in the list.
   const item = itemById && itemById.serverType !== "app" ? itemById : undefined;
-  const needsOAuthClientCredentials =
-    item?.serverType === "remote" &&
-    item.oauthConfig?.requires_client_credentials === true &&
-    item.oauthConfig.grant_type !== "client_credentials" &&
-    !item.awsIamConfig &&
-    !item.enterpriseManagedConfig &&
-    (!item.oauthConfig.client_id?.trim() ||
-      !(item.clientSecretId || item.oauthConfig.client_secret?.trim()));
+  const { missingClientId, missingClientSecret } =
+    getRequiredOAuthAppCredentialState({
+      serverType: item?.serverType,
+      oauthConfig:
+        item?.awsIamConfig || item?.enterpriseManagedConfig
+          ? undefined
+          : item?.oauthConfig,
+      hasSavedSecret: Boolean(item?.clientSecretId),
+    });
+  const needsOAuthClientCredentials = missingClientId || missingClientSecret;
   const navigation = useSetupNavigation(needsOAuthClientCredentials);
 
   return (

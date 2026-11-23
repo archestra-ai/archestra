@@ -54,6 +54,18 @@ test.describe("Add Remote MCP Server", () => {
       oauthConfig: { ...catalog.oauthConfig, client_id: "fixture-client-id" },
       clientSecretId: "fixture-stored-secret-reference",
     };
+    // PUT is authoritative: a slow GET must not return the wizard to Configuration.
+    await mswControl.registerMany([
+      { method: "put", url, body: saved },
+      { method: "get", url, body: saved, delayMs: 10_000 },
+    ]);
+    await clientId.fill("fixture-client-id");
+    await secret.fill("fixture-client-secret");
+    await page.getByRole("button", { name: "Save & Continue" }).click();
+    await expect(
+      page.getByRole("button", { name: "Install", exact: true }),
+    ).toBeVisible({ timeout: 3_000 });
+
     await mswControl.use({ method: "get", url, body: saved });
     await page.goto(`${editUrl}?step=configuration`);
     await expect(clientId).toHaveValue("fixture-client-id");

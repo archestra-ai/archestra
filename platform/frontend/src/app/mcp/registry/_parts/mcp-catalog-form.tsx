@@ -5,6 +5,7 @@ import {
   DocsPage,
   findMcpRuntimeTier,
   getDefaultMcpImagePullPolicy,
+  getRequiredOAuthAppCredentialState,
   isBuiltInCatalogId,
   summarizeAgentRuntimeTier,
 } from "@archestra/shared";
@@ -295,25 +296,22 @@ export function McpCatalogForm({
   const schema = useMemo(
     () =>
       formSchema.superRefine((values, ctx) => {
-        if (
-          detailsOnly ||
-          values.serverType !== "remote" ||
-          values.authMethod !== "oauth" ||
-          !values.oauthConfig?.requires_client_credentials
-        ) {
-          return;
-        }
-        if (!values.oauthConfig?.client_id?.trim()) {
+        if (detailsOnly || values.authMethod !== "oauth") return;
+
+        const { missingClientId, missingClientSecret } =
+          getRequiredOAuthAppCredentialState({
+            serverType: values.serverType,
+            oauthConfig: values.oauthConfig,
+            hasSavedSecret: hasSavedClientSecret,
+          });
+        if (missingClientId) {
           ctx.addIssue({
             code: "custom",
             path: ["oauthConfig", "client_id"],
             message: "Enter the Client ID.",
           });
         }
-        if (
-          !hasSavedClientSecret &&
-          !values.oauthConfig?.client_secret?.trim()
-        ) {
+        if (missingClientSecret) {
           ctx.addIssue({
             code: "custom",
             path: ["oauthConfig", "client_secret"],
@@ -396,9 +394,15 @@ export function McpCatalogForm({
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
   const requiresOAuthClientCredentials =
-    currentServerType === "remote" &&
     authMethod === "oauth" &&
-    form.watch("oauthConfig.requires_client_credentials") === true;
+    getRequiredOAuthAppCredentialState({
+      serverType: currentServerType,
+      oauthConfig: {
+        requires_client_credentials: form.watch(
+          "oauthConfig.requires_client_credentials",
+        ),
+      },
+    }).required;
   // A desktop MCP server runs on each user's own computer: none of the
   // connection, deployment or authentication sections apply to it.
   const isDesktopMcp = currentServerType === "desktop_mcp";

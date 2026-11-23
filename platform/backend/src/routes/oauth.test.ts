@@ -911,6 +911,91 @@ describe("OAuth routes", () => {
     );
   });
 
+  test("rejects incomplete Slack app credentials before OAuth discovery", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const serverUrl = "https://mcp.slack.com/mcp";
+    const fetchMock = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
+
+    for (const [name, client_id] of [
+      ["Slack without either credential", ""],
+      ["Slack without a secret", "fixture-client-id"],
+    ]) {
+      const catalog = await makeInternalMcpCatalog({
+        name,
+        organizationId,
+        serverType: "remote",
+        serverUrl,
+        oauthConfig: {
+          name,
+          server_url: serverUrl,
+          grant_type: "authorization_code",
+          client_id,
+          redirect_uris: ["http://localhost:3000/oauth-callback"],
+          scopes: [],
+          default_scopes: [],
+          supports_resource_metadata: true,
+        },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/oauth/initiate",
+        payload: { catalogId: catalog.id },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toContain(
+        "add your Slack app’s Client ID and Client Secret",
+      );
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("starts Slack authorization with a stored app secret", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const origin = "https://mcp.slack.com";
+    const serverUrl = `${origin}/mcp`;
+    const authorizationEndpoint = "https://slack.com/oauth/v2_user/authorize";
+    const secret = await secretManager().createSecret(
+      { client_secret: "fixture-slack-secret" },
+      "fixture-slack-app-credentials",
+    );
+    const catalog = await makeInternalMcpCatalog({
+      name: "Slack with saved credentials",
+      organizationId,
+      serverType: "remote",
+      serverUrl,
+      clientSecretId: secret.id,
+      oauthConfig: {
+        name: "Slack",
+        server_url: serverUrl,
+        grant_type: "authorization_code",
+        client_id: "fixture-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+    globalThis.fetch = vi.fn<typeof fetch>().mockImplementation(async () =>
+      Response.json({
+        issuer: origin,
+        authorization_endpoint: authorizationEndpoint,
+        token_endpoint: "https://slack.com/api/oauth.v2.user.access",
+      }),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      payload: { catalogId: catalog.id },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const url = new URL(response.json().authorizationUrl);
+    expect(url.origin + url.pathname).toBe(authorizationEndpoint);
+    expect(url.searchParams.get("client_id")).toBe("fixture-client-id");
+  });
+
   test("uses a configured OAuth resource separately from the MCP endpoint URL", async ({
     makeInternalMcpCatalog,
   }) => {

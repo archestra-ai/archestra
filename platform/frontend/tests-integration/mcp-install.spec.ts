@@ -3,6 +3,67 @@ import { makeInstalledServer } from "../src/mocks/data/servers";
 import { expect, test } from "./fixtures";
 
 test.describe("Add Remote MCP Server", () => {
+  test("Slack requires both app credentials before Test Connection and accepts a saved secret", async ({
+    page,
+    mswControl,
+  }) => {
+    const serverUrl = "https://mcp.slack.com/mcp";
+    const slack = makeCatalogItem({
+      id: "slack-credentials-test",
+      name: "Renamed Slack",
+      serverType: "remote",
+      serverUrl,
+      requiresAuth: true,
+      multitenant: true,
+      oauthConfig: {
+        name: "Slack",
+        server_url: serverUrl,
+        client_id: "",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: true,
+      },
+    });
+    const url = `/api/internal_mcp_catalog/${slack.id}`;
+    const editUrl = `/mcp/registry/${slack.id}/edit`;
+    await mswControl.use({ method: "get", url, body: slack });
+
+    // This old deep link cannot bypass configuration.
+    await page.goto(`${editUrl}?step=test`);
+    const clientId = page.getByLabel(/Client ID/);
+    const secret = page.getByLabel(/Client Secret/);
+    await expect(clientId).toBeVisible();
+    await page
+      .getByRole("button", { name: "Test Connection", exact: true })
+      .click();
+    await expect(
+      page.getByText("Enter your Slack app’s Client ID."),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Enter your Slack app’s Client Secret."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Install", exact: true }),
+    ).toHaveCount(0);
+
+    const saved = {
+      ...slack,
+      oauthConfig: { ...slack.oauthConfig, client_id: "fixture-client-id" },
+      clientSecretId: "fixture-stored-secret-reference",
+    };
+    await mswControl.use({ method: "get", url, body: saved });
+    await page.goto(`${editUrl}?step=configuration`);
+    await expect(clientId).toHaveValue("fixture-client-id");
+    await expect(secret).toHaveValue("");
+    await page
+      .getByRole("button", { name: "Test Connection", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Install", exact: true }),
+    ).toBeVisible();
+  });
+
   test("no-auth remote: create + install reports a working connection", async ({
     page,
     mcpRegistryPage,

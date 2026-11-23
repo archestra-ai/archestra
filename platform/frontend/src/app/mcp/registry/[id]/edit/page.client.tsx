@@ -1,5 +1,6 @@
 "use client";
 
+import { isSlackMcpServerUrl } from "@archestra/shared/oauth";
 import { ArrowLeft, ArrowRight, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";
@@ -48,7 +49,13 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
   // An app's backing entry is never listed in the registry; its id opens
   // nothing here, as it did when the page looked the item up in the list.
   const item = itemById && itemById.serverType !== "app" ? itemById : undefined;
-  const navigation = useSetupNavigation();
+  const needsSlackCredentials =
+    item?.serverType === "remote" &&
+    isSlackMcpServerUrl(item.serverUrl) &&
+    !!item.oauthConfig &&
+    (!item.oauthConfig.client_id?.trim() ||
+      !(item.clientSecretId || item.oauthConfig.client_secret?.trim()));
+  const navigation = useSetupNavigation(needsSlackCredentials);
 
   return (
     <PageLayout
@@ -110,7 +117,11 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <SetupWizard item={item} navigation={navigation} />
+        <SetupWizard
+          item={item}
+          navigation={navigation}
+          needsSlackCredentials={needsSlackCredentials}
+        />
       )}
     </PageLayout>
   );
@@ -119,9 +130,11 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
 function SetupWizard({
   item,
   navigation,
+  needsSlackCredentials,
 }: {
   item: CatalogItem;
   navigation: ReturnType<typeof useSetupNavigation>;
+  needsSlackCredentials: boolean;
 }) {
   const router = useRouter();
   const { step, nextStep, prevStep, goToStep } = navigation;
@@ -245,8 +258,14 @@ function SetupWizard({
                     ) : (
                       <Button
                         size="sm"
-                        type="button"
-                        onClick={() => goToStep("test")}
+                        type={needsSlackCredentials ? "submit" : "button"}
+                        onClick={() => {
+                          if (needsSlackCredentials) {
+                            saveIntentRef.current = "continue";
+                          } else {
+                            goToStep("test");
+                          }
+                        }}
                       >
                         <span>Test Connection</span>
                         <ArrowRight className="h-4 w-4" />
@@ -305,18 +324,22 @@ function SetupWizard({
   );
 }
 
-function useSetupNavigation() {
+function useSetupNavigation(needsSlackCredentials: boolean) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const stepParam = searchParams.get("step");
-  const step: SetupStepId = SETUP_STEPS.some(
+  const requestedStep: SetupStepId = SETUP_STEPS.some(
     (candidate) => candidate.id === stepParam,
   )
     ? (stepParam as SetupStepId)
     : stepParam === "guardrails"
       ? "tools"
       : "configuration";
+  const step =
+    needsSlackCredentials && requestedStep === "test"
+      ? "configuration"
+      : requestedStep;
   const stepIndex = SETUP_STEPS.findIndex((candidate) => candidate.id === step);
 
   return {

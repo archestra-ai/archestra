@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+/** The official Slack MCP endpoint requires an existing confidential Slack app. */
+export function isSlackMcpServerUrl(value: string | null | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.origin === "https://mcp.slack.com" &&
+      (url.pathname === "/mcp" || url.pathname === "/mcp/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Scopes supported by the OAuth 2.1 authorization server.
  * Used by better-auth oauthProvider config, well-known endpoints, and consent UI.

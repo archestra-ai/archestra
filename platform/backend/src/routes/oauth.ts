@@ -4,6 +4,7 @@ import {
   OFFLINE_ACCESS_OAUTH_SCOPE,
   RouteId,
 } from "@archestra/shared";
+import { isSlackMcpServerUrl } from "@archestra/shared/oauth";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -1046,6 +1047,16 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await loadOAuthCatalogForCaller({ request, catalogId, serverId });
 
         const oauthConfig = catalogItem.oauthConfig;
+        if (
+          catalogItem.serverType === "remote" &&
+          isSlackMcpServerUrl(catalogItem.serverUrl) &&
+          (!oauthConfig.client_id?.trim() || !oauthConfig.client_secret?.trim())
+        ) {
+          throw new ApiError(
+            400,
+            "In Configuration, add your Slack app’s Client ID and Client Secret before installing.",
+          );
+        }
         const fetchFn = createMcpOAuthFetch({
           catalog: catalogItem,
           organizationId,

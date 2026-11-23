@@ -1,4 +1,5 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
+import { makeUserPermissions } from "../src/mocks/data/auth";
 import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { makeOrganization } from "../src/mocks/data/organization";
 import { expect, test } from "./fixtures";
@@ -14,16 +15,6 @@ const openAiKey = makeLlmProviderApiKey({
   userId: null,
 });
 const SETTINGS_URL = "/api/agent-runtime-templates/settings";
-const RUNTIME_IDS = [
-  "claude-code",
-  "codex",
-  "opencode",
-  "hermes",
-  "openclaw",
-  "grok",
-  "kimi",
-  "copilot",
-];
 
 test("an administrator sees Codex's two account cards in its editor, fixes its company connection, and clears it again", async ({
   page,
@@ -37,6 +28,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
       url: "/api/llm-provider-api-keys/available",
       body: [openAiKey],
     },
+    { method: "get", url: SETTINGS_URL, body: savedSettings(undefined) },
     // The runtimes save as a whole list. The answer is what was stored, with
     // the connection's name filled in.
     {
@@ -51,13 +43,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   ]);
   await page.goto("/settings/agents/runtimes");
 
-  const openCodex = async () => {
-    await page.getByRole("button", { name: "Actions for Codex" }).click();
-    await page.getByRole("menuitem", { name: "Edit runtime" }).click();
-    const dialog = page.getByRole("dialog", { name: "Edit Codex" });
-    await dialog.getByRole("button", { name: "Runtime settings" }).click();
-    return dialog;
-  };
+  const openCodex = () => openAccounts(page, "Codex");
   const savedBody = () =>
     page.waitForRequest(
       (sent) => sent.method() === "PUT" && sent.url().endsWith(SETTINGS_URL),
@@ -66,9 +52,6 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   // The cards an agent on Codex shows, under the same heading. Neither kind
   // is named until an administrator chooses, so both are selected.
   let dialog = await openCodex();
-  await expect(
-    dialog.getByRole("heading", { name: "Accounts that can run it" }),
-  ).toBeVisible();
   const accounts = dialog.getByRole("group", {
     name: "Accounts that can run it",
   });
@@ -111,15 +94,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   expect((await fixed).postDataJSON().builtIns.codex.settings.accounts).toEqual(
     { llmApiKeyId: KEY_ID },
   );
-  // Saving does not close the settings: the toast confirms it, and with
-  // nothing unsaved the footer's way out reads Close.
-  await expectSavedAndOpen(page, dialog);
-  await expect(
-    dialog.getByRole("button", {
-      name: "Which connection pays Company OpenAI",
-    }),
-  ).toBeVisible();
-  await footerClose(dialog).click();
+  // Saving closes the settings, as before.
   await expect(dialog).toHaveCount(0);
 
   // Reopened, it shows the fixed connection, with a control that clears it.
@@ -138,17 +113,12 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   await expect(
     dialog.getByText("Each agent picks its connection and model."),
   ).toBeVisible();
-  // An unsaved change: the footer's way out reads Cancel until it is saved.
-  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
   const cleared = savedBody();
   await dialog.getByRole("button", { name: "Save runtime" }).click();
   expect(
     (await cleared).postDataJSON().builtIns.codex.settings,
   ).not.toHaveProperty("accounts");
-  await expectSavedAndOpen(page, dialog);
-  await expect(
-    dialog.getByText("Each agent picks its connection and model."),
-  ).toBeVisible();
+  await expect(dialog).toHaveCount(0);
 });
 
 test("an administrator sees both account cards on the Claude Code runtime with nothing stored, and names one kind in its rule", async ({
@@ -163,6 +133,7 @@ test("an administrator sees both account cards on the Claude Code runtime with n
       url: "/api/llm-provider-api-keys/available",
       body: [],
     },
+    { method: "get", url: SETTINGS_URL, body: savedSettings(undefined) },
     {
       method: "put",
       url: SETTINGS_URL,
@@ -180,10 +151,7 @@ test("an administrator sees both account cards on the Claude Code runtime with n
     },
   ]);
   await page.goto("/settings/agents/runtimes");
-  await page.getByRole("button", { name: "Actions for Claude Code" }).click();
-  await page.getByRole("menuitem", { name: "Edit runtime" }).click();
-  const dialog = page.getByRole("dialog", { name: "Edit Claude Code" });
-  await dialog.getByRole("button", { name: "Runtime settings" }).click();
+  const dialog = await openAccounts(page, "Claude Code");
 
   // Nothing is stored, so the runtime names no kind: both cards.
   const accounts = dialog.getByRole("group", {
@@ -196,12 +164,6 @@ test("an administrator sees both account cards on the Claude Code runtime with n
   await expect(
     accounts.getByRole("checkbox", { name: /A company API key/ }),
   ).toBeChecked();
-  // The rule reaches every agent on save; the update is for the rest.
-  await expect(
-    dialog.getByText(
-      "Accounts apply to every agent as soon as you save. Other changes only apply to agents created afterwards.",
-    ),
-  ).toBeVisible();
 
   // One card left names that kind for every agent of the runtime.
   await subscription.click();
@@ -216,31 +178,24 @@ test("an administrator sees both account cards on the Claude Code runtime with n
     accounts: { kind: "key" },
     claudeCode: { authentication: "provider" },
   });
-  // The settings stay open on the rule just saved.
-  await expectSavedAndOpen(page, dialog);
-  await expect(dialog.getByText("Locked to a company API key")).toBeVisible();
-  await expect(subscription).not.toBeChecked();
+  await expect(dialog).toHaveCount(0);
 });
 
-test("someone who may only use a runtime that fixes a connection and model sees both fields disabled, with the note, on a new agent", async ({
+test("a runtime that fixes a connection and model shows both fields disabled, with the note, on a new agent", async ({
   page,
   request,
   mswControl,
 }) => {
   await runtimeOn({ request, mswControl });
   await mswControl.registerMany([
-    // They may put agents on every runtime, and configure none.
+    // They may build agents on runtimes, and may not set a runtime's rule.
     {
       method: "get",
-      url: "/api/agent-runtime-templates/access",
-      body: {
-        runtimes: RUNTIME_IDS.map((id) => ({
-          id,
-          canUse: true,
-          canConfigure: false,
-        })),
-        canConfigureAny: false,
-      },
+      url: "/api/user/permissions",
+      body: makeUserPermissions({
+        agent: ["read", "create", "update", "delete", "configure-runtime"],
+        organizationSettings: ["read"],
+      }),
     },
     // OpenCode fixes its agents' connection and model. The names are filled
     // in by the server: the connection is not one this person can read.
@@ -285,31 +240,17 @@ test("someone who may only use a runtime that fixes a connection and model sees 
   await expect(
     accounts.getByText("An admin locked this connection and model."),
   ).toBeVisible();
-  // The notice names them as the runtime's to change.
-  await expect(
-    page.getByText("Set by the OpenCode runtime").locator("xpath=.."),
-  ).toContainText(
-    "limits, tiers, accounts, connection or model needs agentRuntime:configure on it.",
-  );
 });
 
-/** The footer's way out. The dialog's own X is named Close too, and comes first. */
-function footerClose(dialog: Locator) {
-  return dialog.getByRole("button", { name: "Close" }).last();
-}
-
-/**
- * What a save leaves: the settings still open, the toast that says it
- * worked, nothing unsaved, and Save ready for the next change.
- */
-async function expectSavedAndOpen(page: Page, dialog: Locator) {
-  await expect(page.getByText("Available runtimes updated")).toBeVisible();
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Cancel" })).toHaveCount(0);
-  await expect(footerClose(dialog)).toBeEnabled();
-  await expect(
-    dialog.getByRole("button", { name: "Save runtime" }),
-  ).toBeEnabled();
+/** Opens a maintained runtime's settings on its accounts. */
+async function openAccounts(page: Page, name: string): Promise<Locator> {
+  await page.getByRole("button", { name: `Actions for ${name}` }).click();
+  await page.getByRole("menuitem", { name: "Edit runtime" }).click();
+  const dialog = page.getByRole("dialog", { name: `Edit ${name}` });
+  await dialog
+    .getByRole("button", { name: /^Accounts that can run it/ })
+    .click();
+  return dialog;
 }
 
 /** Agent Runtime on, as on a deployment that runs agents in containers. */
@@ -345,12 +286,6 @@ async function runtimeOn({
       method: "get",
       url: "/api/agent-runs",
       body: { data: [], pagination: {} },
-    },
-    // A runtime's editor counts its agents on older settings: none here.
-    {
-      method: "get",
-      url: "/api/agent-runtime-templates/:id/apply-to-agents",
-      body: { agents: 0 },
     },
   ]);
 }

@@ -356,6 +356,7 @@ function DecisionSection({
   );
   const set = (next: DecisionValue) =>
     form.setValue("decision", next, { shouldDirty: true });
+  const pickProvider = state.decisionProviders.length > 1;
   return (
     <section className="space-y-3">
       <div className="space-y-1">
@@ -365,33 +366,41 @@ function DecisionSection({
           router learning again from its own sessions.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,1.25fr)]">
-        <Select
-          value={decision.provider}
-          disabled={disabled}
-          onValueChange={(value) => {
-            const next = state.decisionProviders.find(
-              (candidate) => candidate.provider === value,
-            );
-            set({
-              provider: value,
-              apiKeyId: DEFAULT_DECISION_KEY,
-              model: next?.models[0]?.id ?? "",
-            });
-          }}
-        >
-          <SelectTrigger className="w-full" aria-label="Decision provider">
-            <SelectValue placeholder="Provider" />
-          </SelectTrigger>
-          <SelectContent>
-            {state.decisionProviders.map((candidate) => (
-              <SelectItem key={candidate.provider} value={candidate.provider}>
-                {DECISION_PROVIDER_LABELS[candidate.provider] ??
-                  candidate.provider}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div
+        className={
+          pickProvider
+            ? "grid gap-3 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,1.25fr)]"
+            : "grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]"
+        }
+      >
+        {pickProvider && (
+          <Select
+            value={decision.provider}
+            disabled={disabled}
+            onValueChange={(value) => {
+              const next = state.decisionProviders.find(
+                (candidate) => candidate.provider === value,
+              );
+              set({
+                provider: value,
+                apiKeyId: DEFAULT_DECISION_KEY,
+                model: next?.models[0]?.id ?? "",
+              });
+            }}
+          >
+            <SelectTrigger className="w-full" aria-label="Decision provider">
+              <SelectValue placeholder="Provider" />
+            </SelectTrigger>
+            <SelectContent>
+              {state.decisionProviders.map((candidate) => (
+                <SelectItem key={candidate.provider} value={candidate.provider}>
+                  {DECISION_PROVIDER_LABELS[candidate.provider] ??
+                    candidate.provider}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select
           value={decision.apiKeyId}
           disabled={disabled}

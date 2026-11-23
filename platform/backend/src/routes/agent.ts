@@ -77,6 +77,7 @@ import {
 } from "@/services/agent-network-policy";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
+  agentPairToCheck,
   assertAgentConnectionModels,
   assertAgentRuntimeModelCompatibility,
   assertAgentRuntimeTiersExist,
@@ -2349,14 +2350,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertAgentRuntimeModelCompatibility({
           runtime:
             body.runtime !== undefined ? body.runtime : existingAgent.runtime,
-          agent: {
-            llmApiKeyId:
-              body.llmApiKeyId !== undefined
-                ? body.llmApiKeyId
-                : existingAgent.llmApiKeyId,
-            modelId:
-              body.modelId !== undefined ? body.modelId : existingAgent.modelId,
-          },
+          agent: agentPairToCheck({
+            sent: body,
+            stored: existingAgent,
+            runtimeConnection,
+          }),
           organizationId,
           userId: user.id,
           // A body that names neither keeps the agent's pair: an image or

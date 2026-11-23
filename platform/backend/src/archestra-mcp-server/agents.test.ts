@@ -1722,6 +1722,7 @@ describe("agent runtime and model tools", () => {
     makeUser,
     makeMember,
     makeCustomRole,
+    makeAgent,
   }) => {
     // A company connection the caller was never granted themselves.
     const fixed = await makeKeyWithModel({
@@ -1798,6 +1799,32 @@ describe("agent runtime and model tools", () => {
         "The selected model and API key must be linked and available to you",
       );
     }
+
+    // An agent that kept its own connection from before the rule: a model
+    // of the runtime's connection, sent alone, is checked against that
+    // connection, and the agent's own stays stored.
+    const kept = await makeAgent({
+      organizationId,
+      authorId: builder.id,
+      agentType: "agent",
+      runtime: buildAgentCatalogRuntime({
+        id: "claude-code",
+        image: config.agentRuntime.catalogImages["claude-code"],
+      }),
+      llmApiKeyId: shared.key.id,
+      modelId: shared.model.id,
+    });
+    const remodelled = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: kept.id,
+      modelId: fixed.model.id,
+    });
+    expect(remodelled.isError, JSON.stringify(remodelled.content)).not.toBe(
+      true,
+    );
+    expect(await AgentModel.findById(kept.id)).toMatchObject({
+      llmApiKeyId: shared.key.id,
+      modelId: fixed.model.id,
+    });
   });
 
   test("a caller who can use only one runtime can't move an agent to an image that is none of them", async ({

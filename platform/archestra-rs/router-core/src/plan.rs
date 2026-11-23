@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 use crate::RouterError;
-use crate::allocate::{Hull, Policy};
+use crate::allocate::{FrontierPoint, Hull, Policy};
 use crate::domain::{HistoryRow, Source, TIER_COUNT, TierSet};
 use crate::estimate::{
     LongShareModel, MAX_NEWTON_ITERATIONS, SessionEstimate, SizeModel, TokenMixes, fit_size,
 };
 
-pub const PLAN_FORMAT_VERSION: u32 = 4;
+pub const PLAN_FORMAT_VERSION: u32 = 5;
 const HOLDOUT_WINDOW_MS: i64 = 10 * 24 * 60 * 60 * 1000;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -26,8 +26,8 @@ pub struct Summary {
     pub value_size_weighted: f64,
     pub tier_session_share: [f64; TIER_COUNT],
     pub tier_token_share: [f64; TIER_COUNT],
-    /// Shadow price λ*/tokens_per_day: value_size_weighted gained per extra USD/day of budget.
-    pub value_per_usd: f64,
+    /// value_size_weighted against USD/day of budget, ascending in spend.
+    pub frontier: Vec<FrontierPoint>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -112,7 +112,7 @@ pub(crate) fn summarize(
         value_size_weighted: 0.0,
         tier_session_share: [0.0; TIER_COUNT],
         tier_token_share: [0.0; TIER_COUNT],
-        value_per_usd: policy.lam_star / tokens_per_day,
+        frontier: Vec::new(),
     };
     for (((s, hull), w), sw) in sessions.iter().zip(hulls).zip(weights).zip(session_weights) {
         let route = hull.route(policy);

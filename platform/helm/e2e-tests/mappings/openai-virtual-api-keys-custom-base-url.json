@@ -12,7 +12,7 @@
       "id": "chatcmpl-custom-base-url",
       "object": "chat.completion",
       "created": 1234567890,
-      "model": "gpt-4o-mini",
+      "model": "gpt-5.5",
       "choices": [
         {
           "index": 0,

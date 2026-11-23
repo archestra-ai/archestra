@@ -66,6 +66,43 @@ export const PROVIDER_KEYS = [
   { name: "Anthropic production", provider: "anthropic", apiKey: "sk-ant-api03-docs-example" },
 ] as const;
 
+/** Keys shared with the whole organization, the only kind an auto router runs on. Jev accepts any key until it is called. */
+export const SHARED_PROVIDER_KEYS = [
+  { name: "OpenAI shared", provider: "openai", apiKey: "sk-docs-example-openai-shared" },
+  { name: "Anthropic shared", provider: "anthropic", apiKey: "sk-ant-api03-docs-example-shared" },
+  { name: "Jev shared", provider: "jev", apiKey: "jev-docs-example" },
+] as const;
+
+/**
+ * The auto router on LLM → Auto Routing, and the scored sessions its plan is
+ * fitted on: more than the backend's default minimum for a first plan (1000).
+ * Each session needs the fast, normal or smart tier with the probabilities
+ * of its kind; harder sessions run longer. Each tier model gets a custom
+ * price, since the plan is priced per tier and the mocked ids have no registry
+ * price to fall back on.
+ */
+export const AUTO_ROUTER = {
+  name: "auto",
+  budgetPreset: "balanced",
+  tiers: {
+    fast: { key: "OpenAI shared", model: "gpt-6-luna", pricePerMillion: { input: "0.40", output: "1.60" } },
+    normal: { key: "Anthropic shared", model: "claude-sonnet-5-5", pricePerMillion: { input: "3.00", output: "15.00" } },
+    smart: { key: "Anthropic shared", model: "claude-opus-5-5", pricePerMillion: { input: "5.00", output: "25.00" } },
+  },
+  decisionModel: { key: "Jev shared", model: "jev-1.13.0" },
+  history: {
+    sessions: 1400,
+    days: 28,
+    kinds: [
+      { share: 0.4, tierNeeded: [0.93, 0.05, 0.02], requests: [1, 2] },
+      { share: 0.4, tierNeeded: [0.15, 0.7, 0.15], requests: [2, 6] },
+      { share: 0.2, tierNeeded: [0.04, 0.21, 0.75], requests: [4, 12] },
+    ],
+    clients: ["anthropic_claude_code", "cursor"],
+    request: { input: [3000, 12000], cacheRead: [0, 8000], output: [300, 2000] },
+  },
+} as const;
+
 export const MCP_GATEWAYS = [{ name: "Engineering Gateway" }, { name: "Support Gateway" }] as const;
 
 export const REMOTE_MCP_SERVERS = [

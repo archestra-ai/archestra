@@ -22,7 +22,7 @@
       "id": "chatcmpl-benchmark-openai-tools",
       "object": "chat.completion",
       "created": 1234567890,
-      "model": "gpt-4o",
+      "model": "gpt-5.5",
       "choices": [
         {
           "index": 0,

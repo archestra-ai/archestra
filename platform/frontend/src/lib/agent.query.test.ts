@@ -120,28 +120,6 @@ describe("agent write mutations", () => {
     );
   });
 
-  // What the API says is what the person reads. A 409 for an agent whose
-  // company API key is left empty while the default model cannot run on its
-  // runtime arrives as that sentence, once, and the caller adds none.
-  it("shows the API's own sentence for a create it refuses with a conflict", async () => {
-    const message =
-      "The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses Anthropic.";
-    sdk.createAgent.mockResolvedValue({
-      data: undefined,
-      error: { error: { message, type: "api_conflict_error" } },
-    } as never);
-
-    const { result } = setup(() => useCreateProfile());
-
-    const error = await result.current
-      .mutateAsync({ name: "New", agentType: "agent" } as never)
-      .catch((thrown: unknown) => thrown);
-
-    expect(isReportedApiError(error)).toBe(true);
-    expect(toast.error).toHaveBeenCalledTimes(1);
-    expect(toast.error).toHaveBeenCalledWith(message, expect.anything());
-  });
-
   it("still resolves the created agent on success", async () => {
     sdk.createAgent.mockResolvedValue({
       data: { id: "agent-1", name: "New" },

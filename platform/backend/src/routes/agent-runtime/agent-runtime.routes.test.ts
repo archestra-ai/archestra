@@ -241,34 +241,6 @@ describe("Agent Runtime routes", () => {
         })
       ).json(),
     ).toMatchObject({ ready: true, configured: ["CLAUDE_CODE_ACCOUNT"] });
-    // A custom image that declares Claude Code uses the same connection,
-    // once its agent is saved with its accounts.
-    const customAgent = await makeAgent({
-      organizationId,
-      authorId: user.id,
-      agentType: "agent",
-      runtime: {
-        ...agent.runtime,
-        command: ["custom-claude-entrypoint"],
-        accountLock: null,
-      },
-    });
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: `/api/agents/${customAgent.id}/runtime/claude-code/account`,
-        })
-      ).json(),
-    ).toMatchObject({ state: "connected" });
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: `/api/agents/${customAgent.id}/runtime/preflight`,
-        })
-      ).json(),
-    ).toMatchObject({ ready: true, configured: ["CLAUDE_CODE_ACCOUNT"] });
     const owner = user;
     user = await makeUser();
     await makeMember(user.id, organizationId);
@@ -316,53 +288,6 @@ describe("Agent Runtime routes", () => {
     }
     expect(JSON.stringify(audits)).not.toContain("never-record-native-code");
     expect(JSON.stringify(audits)).not.toContain("sk-ant-oat");
-  });
-
-  test("starts a run on a person's Claude subscription on a custom image that declares the Claude token, as its setup check says", async ({
-    makeAgent,
-  }) => {
-    assert(agent.runtime);
-    const custom = await makeAgent({
-      organizationId,
-      authorId: user.id,
-      agentType: "agent",
-      runtime: {
-        ...agent.runtime,
-        command: ["custom-claude-entrypoint"],
-        inferenceProtocol: "anthropic",
-        // The image asks each person for a token, and nobody stored one.
-        credentials: [
-          {
-            key: "CLAUDE_CODE_OAUTH_TOKEN",
-            scope: "per_user",
-            label: "Claude Code subscription token",
-            required: true,
-          },
-        ],
-        claudeCode: { authentication: "subscription" },
-        // Saved with its accounts: each person chooses.
-        accountLock: null,
-      },
-    });
-    vi.spyOn(claudeCodeAccountManager, "status").mockResolvedValue({
-      state: "connected",
-    });
-
-    // On their subscription the run sets the token itself: none is asked for.
-    const preflight = await app.inject({
-      method: "GET",
-      url: `/api/agents/${custom.id}/runtime/preflight`,
-    });
-    expect(preflight.json()).toMatchObject({ ready: true, missing: [] });
-    vi.mocked(startDetachedAgentTask).mockResolvedValue(
-      await createTask(custom.id),
-    );
-    const started = await app.inject({
-      method: "POST",
-      url: `/api/agents/${custom.id}/runs`,
-      payload: { message: "Hello" },
-    });
-    expect(started.statusCode, started.body).toBe(200);
   });
 
   test("does not expose another organization or private Agent's native account", async ({

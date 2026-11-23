@@ -38,6 +38,7 @@ export function runtimeFor(
     backend: "kubernetes",
     steerMode: "pipe",
     privileged: false,
+    resources: null,
     environment: null,
     credentials: [],
     ttlHours: null,

@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import {
-  agentRuntimePermissionScope,
-  buildAgentCatalogRuntime,
-  DEFAULT_CLAUDE_CODE_MODEL,
-} from "@archestra/shared";
+import { buildAgentCatalogRuntime } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
@@ -15,46 +11,51 @@ import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { AgentRuntime } from "@/types";
 import agentRoutes from "../agent";
 import {
-  grantRuntime,
   makeTemplate,
   useTemplateRouteTestApp,
 } from "./runtime-template.test-data";
 
 vi.mock("@/observability");
 
-const NOT_THEIRS_TO_LOCK = (runtime: string) =>
-  `Only people who can configure the ${runtime} runtime can lock the account of its agents.`;
+const NOT_THEIRS_TO_LOCK =
+  "Only an administrator can lock the account of this agent.";
 
 describe("whose choice an agent's account is, by its runtime's settings", () => {
   const ctx = useTemplateRouteTestApp();
-  // A custom runtime that sets no Claude account leaves it to each agent.
+  // Custom images that run Claude Code: their command is the maintained
+  // Claude Code one, so their agents can run on each person's Claude
+  // subscription or on a company API key.
+  // One that sets no Claude account leaves it to each agent.
   const open = makeTemplate({
     name: "Open workspace",
     runtime: {
       ...makeTemplate().runtime,
       image: "example.com/open-workspace:latest",
+      command: ["archestra-claude-code"],
       inferenceProtocol: "anthropic",
     },
   });
-  // A custom runtime whose settings store a Claude account and no account
-  // rule: new agents start on it, and it restricts nothing.
+  // One whose settings store a Claude account and no account rule: new
+  // agents start on it, and it restricts nothing.
   const company = makeTemplate({
     name: "Company workspace",
     position: 2,
     runtime: {
       ...makeTemplate().runtime,
       image: "example.com/company-workspace:latest",
+      command: ["archestra-claude-code"],
       inferenceProtocol: "anthropic",
       claudeCode: { authentication: "provider" },
     },
   });
-  // A custom runtime whose account rule names the company key.
+  // One whose account rule names the company key.
   const ruled = makeTemplate({
     name: "Ruled workspace",
     position: 3,
     runtime: {
       ...makeTemplate().runtime,
       image: "example.com/ruled-workspace:latest",
+      command: ["archestra-claude-code"],
       inferenceProtocol: "anthropic",
       claudeCode: { authentication: "provider" },
     },
@@ -75,11 +76,12 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
       settings: { revision: 0, templates: [open, company, ruled] },
       popularAgentOverrides: null,
     });
-    // An agent builder who may use the runtimes but not configure them.
+    // An agent builder who may configure an agent's runtime, not the
+    // organization's settings.
     ctx.member = await makeUser();
     const role = await makeCustomRole(ctx.organizationId, {
       permission: {
-        agent: ["read", "create", "update"],
+        agent: ["read", "create", "update", "configure-runtime"],
         llmProviderApiKey: ["read"],
       },
     });
@@ -96,20 +98,6 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
       roleId: role.id,
       actions: ["read", "use"],
     });
-    for (const scope of [
-      open.id,
-      company.id,
-      ruled.id,
-      agentRuntimePermissionScope({ kind: "built-in", id: "claude-code" }),
-      agentRuntimePermissionScope({ kind: "built-in", id: "codex" }),
-    ]) {
-      await grantRuntime({
-        organizationId: ctx.organizationId,
-        scope,
-        userId: ctx.member.id,
-        actions: ["read", "use"],
-      });
-    }
     anthropic = await makeKeyWithModel({
       organizationId: ctx.organizationId,
       provider: "anthropic",
@@ -157,7 +145,10 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
     authentication: "provider" | "subscription",
   ) => {
     const saved = await saveBuiltIns({
-      "claude-code": { settings: { claudeCode: { authentication } } },
+      "claude-code": {
+        locked: false,
+        settings: { claudeCode: { authentication } },
+      },
     });
     expect(saved.statusCode, saved.body).toBe(200);
   };
@@ -188,8 +179,8 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
   });
 
   /**
-   * Someone who may only use the runtime gives a new agent each account, moves
-   * an agent between them, and is held to the lock-fit rule a configurer is.
+   * A builder gives a new agent each account, moves an agent between them,
+   * and is held to the lock-fit rule an administrator is.
    */
   const builderChoosesTheAccount = async (base: AgentRuntime) => {
     ctx.caller = ctx.member;
@@ -231,31 +222,19 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
     expect(await stored(id)).toMatchObject({ accountLock: null });
   };
 
-  test("on a custom runtime that sets no Claude account, someone who may only use it chooses the agent's account", async () => {
+  test("on a custom runtime that sets no Claude account, a builder chooses the agent's account", async () => {
     await builderChoosesTheAccount(open.runtime);
   });
 
-  test("on the Claude Code runtime with no account named in its settings, someone who may only use it chooses the agent's account", async () => {
-    // Nothing is stored for the runtime: the catalog's subscription only
-    // starts a new agent, and restricts nothing.
+  test("on the Claude Code runtime with no account named in its settings, a builder chooses the agent's account", async () => {
+    // Nothing is stored for the runtime: the catalog's subscription restricts
+    // nothing.
     await builderChoosesTheAccount(claudeCode());
-
-    // An agent that names no Claude account starts from the catalog's.
-    const { claudeCode: _, ...unnamed } = claudeCode();
-    const started = await create({ runtime: unnamed });
-    expect(started.statusCode, started.body).toBe(200);
-    expect(await stored(started.json().id)).toMatchObject({
-      claudeCode: {
-        authentication: "subscription",
-        model: DEFAULT_CLAUDE_CODE_MODEL,
-      },
-      accountLock: null,
-    });
   });
 
   test("a Claude account a runtime's settings store without an account rule leaves the agent's account to whoever builds it", async () => {
-    // It only starts new agents: a builder who may only use the runtime
-    // names the other account, and any lock, like on a runtime storing none.
+    // It restricts nothing on a runtime that is not locked: a builder names
+    // the other account, and any lock, like on a runtime storing none.
     await builderChoosesTheAccount(company.runtime);
     for (const authentication of ["provider", "subscription"] as const) {
       await nameClaudeCodeAccount(authentication);
@@ -339,19 +318,31 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
       }
     }
 
-    // Onto the runtime whose rule names a kind: a lock is not theirs to
-    // bring, and the agent stores the account it is given, not the rule's.
+    // Onto the runtime whose rule names a kind: a lock is not theirs to set
+    // or to bring there, and the agent stores the account it is given, not
+    // the rule's.
     const elsewhere = await create({
-      runtime: subscriptionOnly(open.runtime).runtime,
+      runtime: eachPersonChooses(open.runtime).runtime,
     });
     const id = elsewhere.json().id as string;
     const refused = await update(id, {
-      runtime: { ...ruled.runtime, accountLock: "subscription" },
+      runtime: {
+        ...ruled.runtime,
+        claudeCode: { authentication: "subscription" },
+        accountLock: "subscription",
+      },
     });
     expect(refused.statusCode, refused.body).toBe(403);
-    expect(refused.json().error.message).toBe(
-      NOT_THEIRS_TO_LOCK("Ruled workspace"),
-    );
+    expect(refused.json().error.message).toBe(NOT_THEIRS_TO_LOCK);
+    const locked = await create({
+      runtime: subscriptionOnly(open.runtime).runtime,
+    });
+    expect(locked.statusCode, locked.body).toBe(200);
+    const carried = await update(locked.json().id as string, {
+      runtime: { ...ruled.runtime, accountLock: "subscription" },
+    });
+    expect(carried.statusCode, carried.body).toBe(403);
+    expect(carried.json().error.message).toBe(NOT_THEIRS_TO_LOCK);
     const moved = await update(id, {
       runtime: {
         ...ruled.runtime,
@@ -367,7 +358,7 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
     });
   });
 
-  test("a save by someone who may only use the runtime never changes the agent's own Claude account to the kind the rule names", async () => {
+  test("a builder's save never changes the agent's own Claude account to the kind the rule names", async () => {
     ctx.caller = ctx.admin;
     const created = await create({
       runtime: {
@@ -395,89 +386,6 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
     });
   });
 
-  test("applying the settings of the Claude Code runtime never changes an agent's Claude account", async ({
-    makeAgent,
-  }) => {
-    // Agents with each kind of account, one of them saved before agents
-    // carried an account lock.
-    const agents = await Promise.all(
-      [
-        { claudeCode: { authentication: "provider" }, accountLock: "key" },
-        {
-          claudeCode: { authentication: "subscription" },
-          accountLock: "subscription",
-        },
-        { claudeCode: { authentication: "provider" }, accountLock: null },
-        { claudeCode: { authentication: "provider" } },
-      ].map((own, index) =>
-        makeAgent({
-          organizationId: ctx.organizationId,
-          agentType: "agent",
-          name: `Claude worker ${index}`,
-          ...account(),
-          // With the tier fields a save through the runtime stores.
-          runtime: {
-            ...claudeCode(),
-            tier: null,
-            maxTier: null,
-            ...own,
-          } as AgentRuntime,
-        }),
-      ),
-    );
-    const before = await Promise.all(agents.map(({ id }) => stored(id)));
-    const behind = async () =>
-      (
-        await ctx.app.inject({
-          method: "GET",
-          url: "/api/agent-runtime-templates/claude-code/apply-to-agents",
-        })
-      ).json().agents;
-    const apply = () =>
-      ctx.app.inject({
-        method: "POST",
-        url: "/api/agent-runtime-templates/claude-code/apply-to-agents",
-      });
-
-    // With nothing stored for the runtime, none of its agents is behind it.
-    ctx.caller = ctx.admin;
-    expect(await behind()).toBe(0);
-
-    // Its other settings still apply, to every agent, account untouched.
-    const saved = await saveBuiltIns({
-      "claude-code": { settings: { ttlHours: 6 } },
-    });
-    expect(saved.statusCode, saved.body).toBe(200);
-    expect(await behind()).toBe(agents.length);
-    const applied = await apply();
-    expect(applied.statusCode, applied.body).toBe(200);
-    expect(applied.json()).toEqual({ updated: agents.length });
-    expect(await Promise.all(agents.map(({ id }) => stored(id)))).toEqual(
-      before.map((runtime) => ({ ...runtime, ttlHours: 6 })),
-    );
-    expect(await behind()).toBe(0);
-
-    // A Claude account its settings store only starts new agents: the three
-    // agents on the other account are not behind it, and applying leaves
-    // them on their own.
-    const single = await saveBuiltIns({
-      "claude-code": {
-        settings: {
-          ttlHours: 6,
-          claudeCode: { authentication: "subscription" },
-        },
-      },
-    });
-    expect(single.statusCode, single.body).toBe(200);
-    expect(await behind()).toBe(0);
-    const again = await apply();
-    expect(again.statusCode, again.body).toBe(200);
-    expect(again.json()).toEqual({ updated: 0 });
-    expect(await Promise.all(agents.map(({ id }) => stored(id)))).toEqual(
-      before.map((runtime) => ({ ...runtime, ttlHours: 6 })),
-    );
-  });
-
   test("a save ignores an account lock named on a runtime's settings, wherever it is named", async () => {
     // A lock is each agent's own. Neither a maintained runtime's settings
     // nor a custom runtime's hold one: it is dropped, not stored.
@@ -495,8 +403,8 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
           { ...company, runtime: { ...company.runtime, accountLock: "key" } },
         ],
         builtIns: {
-          "claude-code": { settings: { accountLock: null } },
-          codex: { settings: { accountLock: "key" } },
+          "claude-code": { locked: false, settings: { accountLock: null } },
+          codex: { locked: false, settings: { accountLock: "key" } },
         },
       },
     });
@@ -507,8 +415,8 @@ describe("whose choice an agent's account is, by its runtime's settings", () => 
     );
     expect(stored.templates).toEqual([open, company]);
     expect(stored.builtIns).toEqual({
-      "claude-code": { settings: {} },
-      codex: { settings: {} },
+      "claude-code": { locked: false, settings: {} },
+      codex: { locked: false, settings: {} },
     });
   });
 });

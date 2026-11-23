@@ -344,6 +344,7 @@ describe("a2a v2 task methods", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
+        resources: null,
         environment: null,
         credentials: null,
         ttlHours: null,

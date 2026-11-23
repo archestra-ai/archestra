@@ -38,6 +38,7 @@ test("read-only Vault keeps only a reference, reads rotated tokens, and never wr
   const user = await makeUser();
   const runtime: ResolvedAgentRuntime = {
     agentId: agent.id,
+    accountLock: null,
     organizationId: organization.id,
     secretId: null,
     environmentId: null,

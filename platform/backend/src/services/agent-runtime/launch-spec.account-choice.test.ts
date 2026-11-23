@@ -1,7 +1,4 @@
-import {
-  resolveAgentRuntimeTiers,
-  type SupportedProvider,
-} from "@archestra/shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { assert, vi } from "vitest";
 import config from "@/config";
 import {
@@ -17,7 +14,6 @@ import {
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { makeKeyWithModel } from "@/routes/agent-runtime/agent-runtime-account.test-helpers";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
-import { resolveAgentRunLimits } from "@/services/agent-runtime/runtime-tiers";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, ResolvedAgentRuntime, User } from "@/types";
 import { assertAgentRuntimeModelCompatibility } from "./agent-config-validation";
@@ -26,9 +22,6 @@ import {
   getResolvedAgentRuntimeModelCompatibility,
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
-import { canLaunchAgentRuntimeModel } from "./preflight";
-
-const TIERS = resolveAgentRuntimeTiers(null, { defaultWarmSpares: 0 });
 
 describe("a person's own account for their runs", () => {
   let organizationId: string;
@@ -95,7 +88,6 @@ describe("a person's own account for their runs", () => {
   }) =>
     buildAgentRunLaunchSpec({
       runtime: params.runtime,
-      limits: resolveAgentRunLimits({ runtime: params.runtime, tiers: TIERS }),
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
       agentId: params.agent.id,
@@ -221,19 +213,21 @@ describe("a person's own account for their runs", () => {
   }) => {
     const { agent, own } = await agentWith({
       makeAgent,
-      provider: "xai",
-      modelId: "grok-4.3",
+      provider: "anthropic",
+      modelId: "claude-sonnet-4-6",
     });
-    // The author's own runs now need their SuperGrok subscription.
+    // The author's own runs now use their Claude subscription.
     await chooseSubscription(agent, author.id);
-    const runtime = grokRuntime(agent);
-    await expect(
-      launch({ agent, runtime, actor: { kind: "user", id: author.id } }),
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      message:
-        "Connect your own SuperGrok before starting this Agent, or choose a company API key as your account.",
+    const runtime = claudeCodeRuntime(agent, "provider");
+    const mine = await launch({
+      agent,
+      runtime,
+      actor: { kind: "user", id: author.id },
     });
+    assert(mine.virtualApiKeyId);
+    expect(
+      await VirtualApiKeyModel.findById(mine.virtualApiKeyId),
+    ).toMatchObject({ keyType: "passthrough" });
 
     const run = await launch({
       agent,
@@ -464,38 +458,6 @@ describe("a person's own account for their runs", () => {
       expect(await boundKeyId(run.virtualApiKeyId)).toEqual([own.key.id]);
       expect(run.spec.secretEnv).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
     });
-
-    test("is set aside when a person runs a company-billed custom image on their subscription", async ({
-      makeAgent,
-    }) => {
-      const { agent } = await agentWith({
-        makeAgent,
-        provider: "anthropic",
-        modelId: "claude-sonnet-4-6",
-      });
-      await chooseSubscription(agent, author.id);
-      await pasteToken(agent);
-      const runtime = withToken({
-        ...genericRuntime(agent, "anthropic"),
-        command: ["custom-agent"],
-        claudeCode: { authentication: "provider" },
-      });
-
-      const run = await launch({
-        agent,
-        runtime,
-        actor: { kind: "user", id: author.id },
-      });
-
-      assert(run.virtualApiKeyId);
-      expect(
-        await VirtualApiKeyModel.findById(run.virtualApiKeyId),
-      ).toMatchObject({ keyType: "passthrough" });
-      expect(run.spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toMatch(/^arch_/);
-      expect(JSON.stringify(run.spec)).not.toContain(
-        "pasted-subscription-token",
-      );
-    });
   });
 
   describe("on the maintained Codex runtime", () => {
@@ -521,6 +483,34 @@ describe("a person's own account for their runs", () => {
       expect(await boundKeyId(run.virtualApiKeyId)).toEqual([own.key.id]);
     });
 
+    test("a person's ChatGPT row binds their own ChatGPT key, not the agent's", async ({
+      makeAgent,
+    }) => {
+      const { agent, own } = await agentWith({
+        makeAgent,
+        provider: "openai",
+        modelId: "gpt-5.4",
+      });
+      const chatGpt = await makeKeyWithModel({
+        organizationId,
+        provider: "openai",
+        modelId: "gpt-5.4-own",
+        userId: author.id,
+        apiKeyValue: "chatgpt-oauth:example-subscription",
+      });
+      await chooseSubscription(agent, author.id, chatGpt.model.id);
+
+      const run = await launch({
+        agent,
+        runtime: codexRuntime(agent),
+        actor: { kind: "user", id: author.id },
+      });
+
+      const bound = await boundKeyId(run.virtualApiKeyId);
+      expect(bound).toEqual([chatGpt.key.id]);
+      expect(bound).not.toContain(own.key.id);
+    });
+
     test("a person's subscription choice still needs their ChatGPT subscription", async ({
       makeAgent,
     }) => {
@@ -541,77 +531,6 @@ describe("a person's own account for their runs", () => {
         statusCode: 409,
         message: expect.stringContaining("Connect your own ChatGPT"),
       });
-    });
-  });
-
-  describe("on the maintained Grok Build runtime", () => {
-    test("a person's SuperGrok row binds their own SuperGrok key, not the agent's", async ({
-      makeAgent,
-    }) => {
-      const { agent, own } = await agentWith({
-        makeAgent,
-        provider: "xai",
-        modelId: "grok-4.3",
-      });
-      const superGrok = await makeKeyWithModel({
-        organizationId,
-        provider: "xai",
-        modelId: "grok-4.3-own",
-        userId: author.id,
-        apiKeyValue: "xai-subscription:example-subscription",
-      });
-      await chooseSubscription(agent, author.id, superGrok.model.id);
-
-      const run = await launch({
-        agent,
-        runtime: grokRuntime(agent),
-        actor: { kind: "user", id: author.id },
-      });
-
-      const bound = await boundKeyId(run.virtualApiKeyId);
-      expect(bound).toEqual([superGrok.key.id]);
-      expect(bound).not.toContain(own.key.id);
-    });
-
-    test("a person's SuperGrok row without a model is refused on an agent whose model is another provider's", async ({
-      makeAgent,
-      makeUser,
-      makeMember,
-    }) => {
-      const { agent, own } = await agentWith({
-        makeAgent,
-        provider: "openai",
-        modelId: "gpt-4.1",
-      });
-      await makeKeyWithModel({
-        organizationId,
-        provider: "xai",
-        modelId: "grok-4.3",
-        userId: author.id,
-        apiKeyValue: "xai-subscription:example-subscription",
-      });
-      await chooseSubscription(agent, author.id);
-
-      await expect(
-        launch({
-          agent,
-          runtime: grokRuntime(agent),
-          actor: { kind: "user", id: author.id },
-        }),
-      ).rejects.toMatchObject({
-        statusCode: 409,
-        message:
-          "This agent's model is not available through your SuperGrok. Choose a model on the agent's page.",
-      });
-
-      // Someone who chose nothing still runs the agent's own model and key.
-      const colleague = await member(makeUser, makeMember);
-      const run = await launch({
-        agent,
-        runtime: grokRuntime(agent),
-        actor: { kind: "user", id: colleague.id },
-      });
-      expect(await boundKeyId(run.virtualApiKeyId)).toEqual([own.key.id]);
     });
   });
 
@@ -662,6 +581,12 @@ describe("a person's own account for their runs", () => {
       makeMember,
       makeServiceAccount,
     }) => {
+      // Ignore credentials inherited from a developer's .env: a run with no
+      // person would fall back to their provider.
+      for (const entry of Object.values(config.chat)) {
+        if (entry && typeof entry === "object" && "apiKey" in entry)
+          entry.apiKey = "";
+      }
       const byDefault = await organizationDefault();
       const picked = await makeKeyWithModel({
         organizationId,
@@ -928,13 +853,6 @@ describe("a person's own account for their runs", () => {
         statusCode: 409,
         message: "Choose a connection on the agent's page to run this agent.",
       });
-      expect(
-        await canLaunchAgentRuntimeModel({
-          runtime,
-          agent,
-          actor: { ...actor, organizationId },
-        }),
-      ).toBe(false);
 
       await choose(agent, person.id, {
         llmApiKeyId: openai.key.id,
@@ -1127,8 +1045,8 @@ describe("a person's own account for their runs", () => {
     }) => {
       const { agent } = await agentWith({
         makeAgent,
-        provider: "xai",
-        modelId: "grok-4.3",
+        provider: "openai",
+        modelId: "gpt-5.4",
       });
       const local = await makeKeyWithModel({
         organizationId,
@@ -1141,7 +1059,7 @@ describe("a person's own account for their runs", () => {
       await expect(
         launch({
           agent,
-          runtime: grokRuntime(agent),
+          runtime: codexRuntime(agent),
           actor: { kind: "user", id: author.id },
         }),
       ).rejects.toMatchObject({
@@ -1149,27 +1067,6 @@ describe("a person's own account for their runs", () => {
         message:
           "Your own account for this agent no longer works. local-small cannot run on a personal subscription here. Choose your account again.",
       });
-    });
-
-    test("judges a load-balanced candidate with the caller's choice", async ({
-      makeAgent,
-    }) => {
-      const { agent } = await agentWith({
-        makeAgent,
-        provider: "xai",
-        modelId: "grok-4.3",
-      });
-      const runtime = grokRuntime(agent);
-      const actor = { kind: "user" as const, id: author.id, organizationId };
-      expect(await canLaunchAgentRuntimeModel({ runtime, agent, actor })).toBe(
-        true,
-      );
-      // Their own runs now need a SuperGrok subscription they have not connected.
-      await chooseSubscription(agent, author.id);
-
-      expect(await canLaunchAgentRuntimeModel({ runtime, agent, actor })).toBe(
-        false,
-      );
     });
 
     test("does not hold up saving the agent itself", async ({ makeAgent }) => {
@@ -1236,6 +1133,7 @@ function genericRuntime(
     backend: "kubernetes",
     steerMode: "pipe",
     privileged: false,
+    resources: null,
     environment: null,
     credentials: null,
     ttlHours: null,
@@ -1259,12 +1157,5 @@ function codexRuntime(agent: Agent): ResolvedAgentRuntime {
   return {
     ...genericRuntime(agent, "openai_responses"),
     command: ["archestra-codex"],
-  };
-}
-
-function grokRuntime(agent: Agent): ResolvedAgentRuntime {
-  return {
-    ...genericRuntime(agent, "openai_chat"),
-    command: ["archestra-grok"],
   };
 }

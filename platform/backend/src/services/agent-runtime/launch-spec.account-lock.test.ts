@@ -1,9 +1,9 @@
 import {
   DEFAULT_CLAUDE_CODE_MODEL,
-  resolveAgentRuntimeTiers,
   type SupportedProvider,
 } from "@archestra/shared";
 import { assert, vi } from "vitest";
+import type { A2AActor } from "@/agents/a2a/a2a-base";
 import config from "@/config";
 import {
   AgentModel,
@@ -15,8 +15,6 @@ import {
 } from "@/models";
 import { makeKeyWithModel } from "@/routes/agent-runtime/agent-runtime-account.test-helpers";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
-import { resolveAgentRunLimits } from "@/services/agent-runtime/runtime-tiers";
-import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type Agent,
@@ -25,19 +23,15 @@ import {
   type ResolvedAgentRuntime,
   type User,
 } from "@/types";
-import type { A2AActor } from "@/types/a2a-actor";
 import { assertRunHonoursAccountLock } from "./account-resolution";
+import { kubernetesAgentRuntimeBackendDriver } from "./backends/kubernetes";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import {
   getResolvedAgentRuntimeModelCompatibility,
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
-import {
-  bindRunProviderKey,
-  preflightAgentRuntimeModelReadiness,
-} from "./preflight";
+import { bindRunProviderKey, preflightAgentRuntimeLaunch } from "./preflight";
 
-const TIERS = resolveAgentRuntimeTiers(null, { defaultWarmSpares: 0 });
 const KEY_LOCK_BROKEN_PAIR =
   "This agent is locked to a company API key, but its own API key no longer serves its model.";
 const CHOOSE_MODEL = "Choose a model on the agent's page to run this agent.";
@@ -58,6 +52,11 @@ describe("an agent's account lock at run time", () => {
     vi.spyOn(claudeCodeAccountManager, "status").mockResolvedValue({
       state: "connected",
     } as never);
+    // So is the cluster a run's setup check finds ready.
+    vi.spyOn(
+      kubernetesAgentRuntimeBackendDriver,
+      "assertReady",
+    ).mockResolvedValue();
     organizationId = (await makeOrganization()).id;
     author = await makeUser();
     await makeMember(author.id, organizationId, { role: "admin" });
@@ -94,7 +93,6 @@ describe("an agent's account lock at run time", () => {
   }) =>
     buildAgentRunLaunchSpec({
       runtime: params.runtime,
-      limits: resolveAgentRunLimits({ runtime: params.runtime, tiers: TIERS }),
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
       agentId: params.agent.id,
@@ -107,7 +105,7 @@ describe("an agent's account lock at run time", () => {
     });
 
   const ready = (params: { agent: Agent; runtime: ResolvedAgentRuntime }) =>
-    preflightAgentRuntimeModelReadiness({
+    preflightAgentRuntimeLaunch({
       ...params,
       actor: { kind: "user", id: author.id, organizationId },
     });
@@ -550,15 +548,7 @@ describe("an agent's account lock at run time", () => {
       ],
       [
         "an OAuth client",
-        {
-          kind: "oauthClient",
-          id: "preview-oauth-client",
-          organizationId,
-          oauthExecution: {
-            tokenId: "preview-token",
-            clientId: "preview-oauth-client",
-          },
-        },
+        { kind: "oauthClient", id: "preview-oauth-client", organizationId },
       ],
     ];
 
@@ -570,15 +560,14 @@ describe("an agent's account lock at run time", () => {
       }) => {
         const { agent, own } = await agentWith({
           makeAgent,
-          provider: "xai",
-          modelId: "grok-4.3",
+          provider: "anthropic",
+          modelId: "claude-sonnet-4-6",
         });
-        // A person's own runs would need their SuperGrok subscription.
+        // A person's own runs would use their Claude subscription.
         await choose(agent, "subscription");
 
         const runtime: ResolvedAgentRuntime = {
-          ...genericRuntime(agent, "openai_chat"),
-          command: ["archestra-grok"],
+          ...claudeCodeRuntime(agent, "provider"),
           accountLock: lock,
         };
         const { llm, account } = await preflightAgentRuntimeModelCompatibility({
@@ -641,262 +630,6 @@ describe("an agent's account lock at run time", () => {
     });
   });
 
-  describe("on the maintained Copilot runtime", () => {
-    // A GitHub App key belongs to the organization, not to a person, so a
-    // company-key lock binds it.
-    test("a key lock binds the agent's GitHub App key", async ({
-      makeAgent,
-    }) => {
-      const own = await makeKeyWithModel({
-        organizationId,
-        provider: "github-copilot",
-        modelId: "gpt-5.4",
-        apiKeyValue: encodeGithubAppReference({
-          ref: { organizationId, credentialId: "app" },
-          installationId: "1",
-          organization: "example",
-          githubUrl: "https://github.com",
-        }),
-      });
-      const agent = await makeAgent({
-        organizationId,
-        authorId: author.id,
-        agentType: "agent",
-        llmApiKeyId: own.key.id,
-        modelId: own.model.id,
-      });
-      const runtime: ResolvedAgentRuntime = {
-        ...genericRuntime(agent, "openai_chat"),
-        command: ["archestra-copilot"],
-        accountLock: "key",
-      };
-      const { llm, account, accountError } =
-        await preflightAgentRuntimeModelCompatibility({
-          runtime,
-          agent,
-          agentId: agent.id,
-          organizationId,
-          userId: author.id,
-        });
-      expect(accountError).toBeNull();
-
-      const key = await bindRunProviderKey({
-        organizationId,
-        actor: { kind: "user", id: author.id, organizationId },
-        provider: llm.selectedProvider,
-        model: llm.selectedModel,
-        companyConnectionId: agent.llmApiKeyId,
-        account,
-        accountLock: "key",
-        runtimeCommand: "archestra-copilot",
-      });
-
-      expect(key.id).toBe(own.key.id);
-    });
-
-    // The Copilot CLI has no provider API key: its company account is an
-    // enterprise plan, and a refused run says so.
-    test("a run that breaks a key lock is refused by the name of the enterprise plan, never an API key", async () => {
-      await expect(
-        assertRunHonoursAccountLock({
-          lock: "key",
-          companyConnectionId: null,
-          claudeSubscription: false,
-          boundKeyId: null,
-          provider: "github-copilot",
-          runtimeCommand: "archestra-copilot",
-        }),
-      ).rejects.toMatchObject({
-        statusCode: 409,
-        message:
-          "This agent is locked to the company's enterprise plan, but this run would use another plan than the one set for it, or none. Someone who can configure its runtime must change its account or its lock.",
-      });
-    });
-
-    test("a subscription lock binds each person's own Copilot connection, never the agent's GitHub App key", async ({
-      makeAgent,
-    }) => {
-      const own = await makeKeyWithModel({
-        organizationId,
-        provider: "github-copilot",
-        modelId: "gpt-5.4",
-        apiKeyValue: encodeGithubAppReference({
-          ref: { organizationId, credentialId: "app" },
-          installationId: "1",
-          organization: "example",
-          githubUrl: "https://github.com",
-        }),
-      });
-      const agent = await makeAgent({
-        organizationId,
-        authorId: author.id,
-        agentType: "agent",
-        llmApiKeyId: own.key.id,
-        modelId: own.model.id,
-      });
-      const runtime: ResolvedAgentRuntime = {
-        ...genericRuntime(agent, "openai_chat"),
-        command: ["archestra-copilot"],
-        accountLock: "subscription",
-      };
-      const { llm, account, accountError } =
-        await preflightAgentRuntimeModelCompatibility({
-          runtime,
-          agent,
-          agentId: agent.id,
-          organizationId,
-          userId: author.id,
-        });
-      expect(accountError).toBeNull();
-      const bind = () =>
-        bindRunProviderKey({
-          organizationId,
-          actor: { kind: "user", id: author.id, organizationId },
-          provider: llm.selectedProvider,
-          model: llm.selectedModel,
-          companyConnectionId: agent.llmApiKeyId,
-          account,
-          accountLock: "subscription",
-          runtimeCommand: "archestra-copilot",
-        });
-
-      await expect(bind()).rejects.toMatchObject({
-        statusCode: 409,
-        message:
-          "Connect your own GitHub Copilot before starting this Agent. It is locked to each person's own subscription.",
-      });
-      const personal = await makeKeyWithModel({
-        organizationId,
-        provider: "github-copilot",
-        modelId: "gpt-5.4",
-        userId: author.id,
-        apiKeyValue: "ghu_example_copilot_token",
-      });
-
-      expect((await bind()).id).toBe(personal.key.id);
-    });
-  });
-
-  describe("a subscription lock on an agent whose model is another provider's", () => {
-    // The runtime's subscription serves its own provider's models only, so
-    // the agent's company model cannot run on it: the person picks one.
-    for (const { name, command, label, provider, modelId, apiKeyValue } of [
-      {
-        name: "Copilot",
-        command: "archestra-copilot",
-        label: "GitHub Copilot",
-        provider: "github-copilot",
-        modelId: "gpt-5.4",
-        apiKeyValue: "ghu_example_copilot_token",
-      },
-      {
-        name: "Grok Build",
-        command: "archestra-grok",
-        label: "SuperGrok",
-        provider: "xai",
-        modelId: "grok-4.3",
-        apiKeyValue: "xai-subscription:example-subscription",
-      },
-    ] as const) {
-      test(`on ${name}, the run is refused until the person picks a model of their ${label}`, async ({
-        makeAgent,
-      }) => {
-        const { agent, own } = await agentWith({
-          makeAgent,
-          provider: "openai",
-          modelId: "gpt-4.1",
-        });
-        const runtime: ResolvedAgentRuntime = {
-          ...genericRuntime(agent, "openai_chat"),
-          command: [command],
-          accountLock: "subscription",
-        };
-        // The person's own subscription is connected: only the model is wrong.
-        const personal = await makeKeyWithModel({
-          organizationId,
-          provider,
-          modelId,
-          userId: author.id,
-          apiKeyValue,
-        });
-        const refusal = {
-          statusCode: 409,
-          message: `This agent's model is not available through your ${label}. Choose a model on the agent's page.`,
-        };
-
-        await expect(launch({ agent, runtime })).rejects.toMatchObject(refusal);
-        await expect(ready({ agent, runtime })).rejects.toMatchObject(refusal);
-        expect(
-          await getResolvedAgentRuntimeModelCompatibility({
-            runtime,
-            agent,
-            agentId: agent.id,
-            organizationId,
-            userId: author.id,
-          }),
-        ).toMatchObject({
-          accountError: refusal.message,
-          // Picking a model fixes it, not choosing the account again.
-          accountErrorFromChoice: false,
-          accountErrorFromModel: true,
-        });
-
-        await AgentRuntimeUserAccountModel.upsert({
-          agentId: agent.id,
-          userId: author.id,
-          authentication: "subscription",
-          modelId: personal.model.id,
-        });
-
-        await expect(ready({ agent, runtime })).resolves.toBeUndefined();
-        const bound = await boundKeyId(
-          (await launch({ agent, runtime })).virtualApiKeyId,
-        );
-        expect(bound).toEqual([personal.key.id]);
-        expect(bound).not.toContain(own.key.id);
-      });
-    }
-  });
-
-  describe("on the maintained Grok Build runtime", () => {
-    test("a subscription lock on an agent that stores a company xAI key binds the person's own SuperGrok", async ({
-      makeAgent,
-    }) => {
-      const { agent, own } = await agentWith({
-        makeAgent,
-        provider: "xai",
-        modelId: "grok-4.3",
-      });
-      const runtime: ResolvedAgentRuntime = {
-        ...genericRuntime(agent, "openai_chat"),
-        command: ["archestra-grok"],
-        accountLock: "subscription",
-      };
-
-      const refusal = {
-        statusCode: 409,
-        message:
-          "Connect your own SuperGrok before starting this Agent. It is locked to each person's own subscription.",
-      };
-      await expect(launch({ agent, runtime })).rejects.toMatchObject(refusal);
-      await expect(ready({ agent, runtime })).rejects.toMatchObject(refusal);
-
-      const superGrok = await makeKeyWithModel({
-        organizationId,
-        provider: "xai",
-        modelId: "grok-4.3",
-        userId: author.id,
-        apiKeyValue: "xai-subscription:example-subscription",
-      });
-      const run = await launch({ agent, runtime });
-
-      await expect(ready({ agent, runtime })).resolves.toBeUndefined();
-      const bound = await boundKeyId(run.virtualApiKeyId);
-      expect(bound).toEqual([superGrok.key.id]);
-      expect(bound).not.toContain(own.key.id);
-    });
-  });
-
   describe("on the maintained Codex runtime", () => {
     test("a key lock runs on the agent's OpenAI key without ChatGPT", async ({
       makeAgent,
@@ -915,24 +648,40 @@ describe("an agent's account lock at run time", () => {
       expect(await boundKeyId(run.virtualApiKeyId)).toEqual([own.key.id]);
     });
 
-    test("a subscription lock still needs the person's ChatGPT subscription", async ({
+    test("a subscription lock on an agent that stores a company OpenAI key binds the person's own ChatGPT", async ({
       makeAgent,
     }) => {
-      const { agent } = await agentWith({
+      const { agent, own } = await agentWith({
         makeAgent,
         provider: "openai",
         modelId: "gpt-5.4",
       });
+      const runtime: ResolvedAgentRuntime = {
+        ...codexRuntime(agent),
+        accountLock: "subscription",
+      };
 
-      await expect(
-        launch({
-          agent,
-          runtime: { ...codexRuntime(agent), accountLock: "subscription" },
-        }),
-      ).rejects.toMatchObject({
+      const refusal = {
         statusCode: 409,
-        message: expect.stringContaining("Connect your own ChatGPT"),
+        message:
+          "Connect your own ChatGPT Subscription before starting this Agent. It is locked to each person's own subscription.",
+      };
+      await expect(launch({ agent, runtime })).rejects.toMatchObject(refusal);
+      await expect(ready({ agent, runtime })).rejects.toMatchObject(refusal);
+
+      const chatGpt = await makeKeyWithModel({
+        organizationId,
+        provider: "openai",
+        modelId: "gpt-5.4",
+        userId: author.id,
+        apiKeyValue: "chatgpt-oauth:example-subscription",
       });
+      const run = await launch({ agent, runtime });
+
+      await expect(ready({ agent, runtime })).resolves.toBeUndefined();
+      const bound = await boundKeyId(run.virtualApiKeyId);
+      expect(bound).toEqual([chatGpt.key.id]);
+      expect(bound).not.toContain(own.key.id);
     });
   });
 
@@ -1084,6 +833,7 @@ function genericRuntime(
     backend: "kubernetes",
     steerMode: "pipe",
     privileged: false,
+    resources: null,
     environment: null,
     credentials: null,
     ttlHours: null,

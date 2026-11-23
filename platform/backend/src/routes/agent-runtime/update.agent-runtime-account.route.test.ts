@@ -1,4 +1,3 @@
-import { getAgentRuntimeModelCompatibility } from "@archestra/shared/model-constants";
 import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -11,7 +10,6 @@ import {
   OrganizationModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, User } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
@@ -302,156 +300,6 @@ describe("PUT /api/agents/:id/runtime/account", () => {
     expect(await storedChoice()).toBeNull();
   });
 
-  test("accepts an organization's GitHub App key as the agent's company key on Copilot", async ({
-    makeAgent,
-  }) => {
-    const { key, model } = await makeKeyWithModel({
-      organizationId: ctx.organizationId,
-      provider: "github-copilot",
-      modelId: "gpt-5.4",
-      apiKeyValue: encodeGithubAppReference({
-        ref: { organizationId: ctx.organizationId, credentialId: "app" },
-        installationId: "1",
-        organization: "example",
-        githubUrl: "https://github.com",
-      }),
-    });
-    const copilot = await makeAgent({
-      organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
-      agentType: "agent",
-      llmApiKeyId: key.id,
-      modelId: model.id,
-      runtime: runtimeFor({
-        inferenceProtocol: "openai_chat",
-        command: ["archestra-copilot"],
-      }),
-    });
-
-    const saved = await put({ authentication: "provider" }, copilot.id);
-
-    expect(saved.statusCode, saved.body).toBe(200);
-    expect(saved.json()).toMatchObject({
-      companyKey: true,
-      choice: { authentication: "provider", modelId: null },
-      choiceError: null,
-    });
-  });
-
-  describe("on a Copilot agent that leaves its enterprise plan to each person", () => {
-    const CHOOSE_PLAN = "Choose a plan on the agent's page to run this agent.";
-    const planOf = (organization: string) =>
-      makeKeyWithModel({
-        organizationId: ctx.organizationId,
-        provider: "github-copilot",
-        modelId: "gpt-5.4",
-        apiKeyValue: encodeGithubAppReference({
-          ref: {
-            organizationId: ctx.organizationId,
-            credentialId: organization,
-          },
-          installationId: "1",
-          organization,
-          githubUrl: "https://github.com",
-        }),
-      });
-    const copilotAgent = (makeAgent: (overrides: object) => Promise<Agent>) =>
-      makeAgent({
-        organizationId: ctx.organizationId,
-        authorId: ctx.user.id,
-        agentType: "agent",
-        runtime: runtimeFor({
-          inferenceProtocol: "openai_chat",
-          command: ["archestra-copilot"],
-        }),
-      });
-    // An API key of another provider, which the runtime can call and the
-    // organization runs its chats on by default.
-    const anthropicDefault = async () => {
-      const set = await makeKeyWithModel({
-        organizationId: ctx.organizationId,
-        provider: "anthropic",
-        modelId: "claude-sonnet-4-5",
-      });
-      await OrganizationModel.patch(ctx.organizationId, {
-        defaultModelId: set.model.id,
-        defaultLlmApiKeyId: set.key.id,
-      });
-      return set;
-    };
-
-    test("the one plan the organization connected is the default, named after its GitHub organization, and never another provider's key", async ({
-      makeAgent,
-    }) => {
-      await anthropicDefault();
-      const plan = await planOf("example");
-      const copilot = await copilotAgent(makeAgent);
-
-      expect(await read(copilot.id)).toMatchObject({
-        companyKey: true,
-        companyAccount: {
-          connection: {
-            id: plan.key.id,
-            name: "GitHub Copilot example",
-            provider: "github-copilot",
-            fixedBy: null,
-          },
-          model: { id: plan.model.id, fixedBy: null },
-          usesOrganizationDefault: true,
-        },
-      });
-      expect(await preflight(copilot.id)).toMatchObject({
-        ready: true,
-        accountError: null,
-      });
-    });
-
-    test("with several plans and none chosen the person is asked for one, and may not pick another provider's key", async ({
-      makeAgent,
-    }) => {
-      const anthropic = await anthropicDefault();
-      await planOf("example");
-      const research = await planOf("example-research");
-      const copilot = await copilotAgent(makeAgent);
-
-      expect(await read(copilot.id)).toMatchObject({
-        companyKey: false,
-        companyAccount: {
-          connection: { id: null, fixedBy: null },
-          usesOrganizationDefault: false,
-        },
-      });
-      expect(await preflight(copilot.id)).toMatchObject({
-        ready: false,
-        accountError: CHOOSE_PLAN,
-        accountErrorFromConnection: true,
-      });
-
-      const notAPlan = await put(
-        { authentication: "provider", llmApiKeyId: anthropic.key.id },
-        copilot.id,
-      );
-      expect(notAPlan.statusCode, notAPlan.body).toBe(409);
-      expect(notAPlan.json().error.message).toBe(
-        "The GitHub Copilot CLI runs on the company's enterprise plan, not on a provider API key. Choose an enterprise plan.",
-      );
-
-      const picked = await put(
-        { authentication: "provider", llmApiKeyId: research.key.id },
-        copilot.id,
-      );
-      expect(picked.statusCode, picked.body).toBe(200);
-      expect(picked.json()).toMatchObject({
-        companyAccount: {
-          connection: {
-            id: research.key.id,
-            name: "GitHub Copilot example-research",
-          },
-        },
-      });
-    });
-  });
-
   test("refuses a service account, which has no runs of its own", async ({
     makeServiceAccountToken,
   }) => {
@@ -517,49 +365,6 @@ describe("PUT /api/agents/:id/runtime/account", () => {
 
     expect(refused.statusCode).toBe(409);
     expect(refused.json().error.message).toContain("Codex runtime requires");
-  });
-
-  test("refuses a GitHub Copilot key on a Claude runtime, as the agent's own account is refused", async ({
-    makeAgent,
-  }) => {
-    const { key, model } = await makeKeyWithModel({
-      organizationId: ctx.organizationId,
-      provider: "github-copilot",
-      modelId: "claude-sonnet-4-5",
-      apiKeyValue: encodeGithubAppReference({
-        ref: { organizationId: ctx.organizationId, credentialId: "app" },
-        installationId: "1",
-        organization: "example",
-        githubUrl: "https://github.com",
-      }),
-    });
-    const runtime = runtimeFor({
-      inferenceProtocol: "anthropic",
-      command: ["archestra-claude-code"],
-      claudeCode: { authentication: "provider" },
-    });
-    const claude = await makeAgent({
-      organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
-      agentType: "agent",
-      llmApiKeyId: key.id,
-      modelId: model.id,
-      runtime,
-    });
-
-    const refused = await put({ authentication: "provider" }, claude.id);
-
-    const agentAccount = getAgentRuntimeModelCompatibility({
-      inferenceProtocol: "anthropic",
-      runtimeCommand: runtime.command,
-      provider: "github-copilot",
-      modelId: "claude-sonnet-4-5",
-    });
-    expect(agentAccount.compatible).toBe(false);
-    expect(refused.statusCode).toBe(409);
-    expect(refused.json().error.message).toBe(
-      agentAccount.compatible ? null : agentAccount.message,
-    );
   });
 
   test("refuses the company key of an agent whose key does not serve its model", async () => {
@@ -1223,12 +1028,6 @@ describe("PUT /api/agents/:id/runtime/account", () => {
         command: ["archestra-opencode"],
         ownModelId: superGrok.model.id,
       },
-      {
-        provider: "kimi-code",
-        modelId: "k3.1-pro",
-        command: ["archestra-kimi"],
-        ownModelId: null,
-      },
       // A custom image that does not declare Claude Code.
       {
         provider: "openai",
@@ -1356,17 +1155,17 @@ describe("PUT /api/agents/:id/runtime/account", () => {
   }) => {
     const own = await makeKeyWithModel({
       organizationId: ctx.organizationId,
-      provider: "xai",
-      modelId: "grok-4.3",
+      provider: "openai",
+      modelId: "gpt-5.4",
     });
-    const superGrok = await makeKeyWithModel({
+    const chatGpt = await makeKeyWithModel({
       organizationId: ctx.organizationId,
-      provider: "xai",
-      modelId: "grok-4.3-own",
+      provider: "openai",
+      modelId: "gpt-5.4-own",
       userId: ctx.user.id,
-      apiKeyValue: "xai-subscription:example-subscription",
+      apiKeyValue: "chatgpt-oauth:example-subscription",
     });
-    const grok = await makeAgent({
+    const codex = await makeAgent({
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
@@ -1374,23 +1173,23 @@ describe("PUT /api/agents/:id/runtime/account", () => {
       modelId: own.model.id,
       runtime: runtimeFor({
         inferenceProtocol: "openai_responses",
-        command: ["archestra-grok"],
+        command: ["archestra-codex"],
       }),
     });
 
     const saved = await put(
-      { authentication: "subscription", modelId: superGrok.model.id },
-      grok.id,
+      { authentication: "subscription", modelId: chatGpt.model.id },
+      codex.id,
     );
 
     expect(saved.statusCode, saved.body).toBe(200);
     expect(saved.json()).toMatchObject({
-      choice: { authentication: "subscription", modelId: superGrok.model.id },
+      choice: { authentication: "subscription", modelId: chatGpt.model.id },
       choiceError: null,
       subscription: {
-        kind: "x-premium",
+        kind: "chatgpt",
         connected: true,
-        keyId: superGrok.key.id,
+        keyId: chatGpt.key.id,
       },
     });
   });
@@ -1400,44 +1199,44 @@ describe("PUT /api/agents/:id/runtime/account", () => {
   }) => {
     const own = await makeKeyWithModel({
       organizationId: ctx.organizationId,
-      provider: "xai",
-      modelId: "grok-4.3",
-    });
-    const chatgpt = await makeKeyWithModel({
-      organizationId: ctx.organizationId,
       provider: "openai",
-      modelId: "gpt-5.4-own",
-      userId: ctx.user.id,
-      apiKeyValue: "chatgpt-oauth:example-subscription",
+      modelId: "gpt-5.4",
     });
-    const grok = await makeAgent({
+    const superGrok = await makeKeyWithModel({
+      organizationId: ctx.organizationId,
+      provider: "xai",
+      modelId: "grok-4.3-own",
+      userId: ctx.user.id,
+      apiKeyValue: "xai-subscription:example-subscription",
+    });
+    const codex = await makeAgent({
       organizationId: ctx.organizationId,
       authorId: ctx.user.id,
       agentType: "agent",
       llmApiKeyId: own.key.id,
       modelId: own.model.id,
       runtime: runtimeFor({
-        inferenceProtocol: "openai_chat",
-        command: ["archestra-grok"],
+        inferenceProtocol: "openai_responses",
+        command: ["archestra-codex"],
       }),
     });
 
-    // Grok Build runs on SuperGrok: a ChatGPT model is not one of its.
+    // Codex runs on ChatGPT: a SuperGrok model is not one of its.
     const wrongVendor = await put(
-      { authentication: "subscription", modelId: chatgpt.model.id },
-      grok.id,
+      { authentication: "subscription", modelId: superGrok.model.id },
+      codex.id,
     );
     expect(wrongVendor.statusCode, wrongVendor.body).toBe(400);
     expect(wrongVendor.json().error.message).toBe(
-      "gpt-5.4-own cannot run on a personal subscription here. Choose one of your subscription's models.",
+      "grok-4.3-own cannot run on a personal subscription here. Choose one of your subscription's models.",
     );
 
-    // A choice made on Grok Build stops applying once the agent moves to a
+    // A choice made on Codex stops applying once the agent moves to a
     // runtime with no subscription of its own.
     expect(
-      (await put({ authentication: "subscription" }, grok.id)).statusCode,
+      (await put({ authentication: "subscription" }, codex.id)).statusCode,
     ).toBe(200);
-    await AgentModel.update(grok.id, {
+    await AgentModel.update(codex.id, {
       runtime: runtimeFor({
         inferenceProtocol: "openai_chat",
         command: ["archestra-opencode"],
@@ -1445,7 +1244,7 @@ describe("PUT /api/agents/:id/runtime/account", () => {
     });
     const read = await app.inject({
       method: "GET",
-      url: `/api/agents/${grok.id}/runtime/account`,
+      url: `/api/agents/${codex.id}/runtime/account`,
     });
     expect(read.json()).toMatchObject({
       subscription: null,
@@ -1455,7 +1254,7 @@ describe("PUT /api/agents/:id/runtime/account", () => {
     });
   });
 
-  test("refuses a model with a Claude subscription and a custom image off the Anthropic protocol", async ({
+  test("refuses a model with a Claude subscription, the subscription off the Anthropic protocol, and on a custom image", async ({
     makeAgent,
   }) => {
     const claude = await makeAgent({
@@ -1473,8 +1272,19 @@ describe("PUT /api/agents/:id/runtime/account", () => {
       agentType: "agent",
       runtime: runtimeFor({
         inferenceProtocol: "openai_chat",
+        command: ["archestra-claude-code"],
+      }),
+    });
+    // Only the maintained Claude Code runtime runs on a Claude subscription,
+    // whatever Claude account a custom image stores.
+    const custom = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      runtime: runtimeFor({
+        inferenceProtocol: "anthropic",
         command: ["my-claude-agent"],
-        claudeCode: { authentication: "provider" },
+        claudeCode: { authentication: "subscription" },
       }),
     });
     const { model } = await makeKeyWithModel({
@@ -1491,6 +1301,7 @@ describe("PUT /api/agents/:id/runtime/account", () => {
       { authentication: "subscription" },
       offProtocol.id,
     );
+    const onCustom = await put({ authentication: "subscription" }, custom.id);
 
     expect(withModel.statusCode).toBe(400);
     expect(withModel.json().error.message).toBe(
@@ -1500,7 +1311,11 @@ describe("PUT /api/agents/:id/runtime/account", () => {
     expect(wrongProtocol.json().error.message).toBe(
       "A Claude subscription needs an image that uses the Anthropic API inference protocol.",
     );
-    for (const agentId of [claude.id, offProtocol.id]) {
+    expect(onCustom.statusCode).toBe(400);
+    expect(onCustom.json().error.message).toBe(
+      "This agent's runtime cannot run on a personal subscription. Choose the company API key instead.",
+    );
+    for (const agentId of [claude.id, offProtocol.id, custom.id]) {
       expect(
         await AgentRuntimeUserAccountModel.find({
           agentId,
@@ -1555,24 +1370,6 @@ describe("PUT /api/agents/:id/runtime/account", () => {
     // The agent's company key is what a key lock gives everyone anyway.
     const allowed = await put(company, byKey.id);
     expect(allowed.statusCode, allowed.body).toBe(200);
-
-    // The Copilot CLI has no provider API key: the refusal names the
-    // company's enterprise plan.
-    const copilot = await makeAgent({
-      organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
-      agentType: "agent",
-      runtime: runtimeFor({
-        inferenceProtocol: "openai_chat",
-        command: ["archestra-copilot"],
-        accountLock: "subscription",
-      }),
-    });
-    const refusedOnCopilot = await put(company, copilot.id);
-    expect(refusedOnCopilot.statusCode).toBe(409);
-    expect(refusedOnCopilot.json().error.message).toBe(
-      "This agent is locked to each person's own subscription, so you cannot choose the company's enterprise plan for it.",
-    );
     expect(allowed.json()).toMatchObject({
       lock: "key",
       choice: { authentication: "provider", modelId: null },

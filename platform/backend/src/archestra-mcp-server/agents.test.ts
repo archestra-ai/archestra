@@ -27,8 +27,6 @@ import {
   ToolModel,
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import { makeKeyWithModel } from "@/routes/agent-runtime/agent-runtime-account.test-helpers";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";

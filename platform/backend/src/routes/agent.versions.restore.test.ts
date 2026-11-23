@@ -387,63 +387,6 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     }
   });
 
-  test("restores a version whose stored snapshot carries legacy fast/smart tier keys", async ({
-    makeAgent,
-    makeLlmProviderApiKey,
-  }) => {
-    const key = await makeLlmProviderApiKey(organizationId, null);
-    const [first, second] = await Promise.all(
-      ["gpt-first", "gpt-second"].map((modelId) =>
-        ModelModel.create({
-          externalId: `openai/${modelId}`,
-          provider: "openai",
-          modelId,
-          inputModalities: ["text"],
-          outputModalities: ["text"],
-          supportsToolCalling: true,
-          lastSyncedAt: new Date(),
-        }),
-      ),
-    );
-    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
-      first.id,
-      second.id,
-    ]);
-    const agent = await makeAgent({
-      organizationId,
-      modelId: first.id,
-      llmApiKeyId: key.id,
-    });
-    const withFirst = await AgentModel.findById(agent.id, user.id, true);
-    const [row] = await db
-      .select()
-      .from(schema.agentVersionsTable)
-      .where(
-        and(
-          eq(schema.agentVersionsTable.agentId, agent.id),
-          eq(schema.agentVersionsTable.version, withFirst?.latestVersion ?? 0),
-        ),
-      );
-    await db
-      .update(schema.agentVersionsTable)
-      .set({
-        snapshot: {
-          ...row.snapshot,
-          fastModel: { id: second.id, externalId: "openai/gpt-second" },
-          smartModel: { id: second.id, externalId: "openai/gpt-second" },
-        } as typeof row.snapshot,
-      })
-      .where(eq(schema.agentVersionsTable.id, row.id));
-    await AgentModel.update(agent.id, { modelId: second.id });
-
-    const response = await restore(agent.id, row.version);
-    expect(response.statusCode).toBe(200);
-
-    const agentRow = await AgentModel.findById(agent.id, user.id, true);
-    expect(agentRow?.modelId).toBe(first.id);
-    expect(agentRow?.llmApiKeyId).toBe(key.id);
-  });
-
   test("replaces the whole hook set", async ({ makeAgent }) => {
     const agent = await makeAgent({ organizationId });
     await HookFileModel.create({

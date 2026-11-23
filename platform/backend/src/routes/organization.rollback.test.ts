@@ -430,6 +430,7 @@ describe("organization routes", () => {
           backend: "kubernetes",
           steerMode: "pipe",
           privileged: false,
+          resources: null,
           environment: null,
           credentials: null,
           ttlHours: null,
@@ -450,7 +451,9 @@ describe("organization routes", () => {
           settings: {
             revision,
             templates: [],
-            builtIns: { "claude-code": { settings: { accounts } } },
+            builtIns: {
+              "claude-code": { locked: false, settings: { accounts } },
+            },
           },
           popularAgentOverrides: null,
         });

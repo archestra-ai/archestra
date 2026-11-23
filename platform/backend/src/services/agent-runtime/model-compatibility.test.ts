@@ -297,6 +297,7 @@ test("uses provider credentials after switching away from the Claude Code runtim
       runtime: {
         command: ["custom-runtime"],
         inferenceProtocol: "anthropic",
+        claudeCode: { authentication: "subscription", model: "sonnet" },
         image: "agent-image:dev",
         accountLock: null,
       },
@@ -314,7 +315,7 @@ test("uses provider credentials after switching away from the Claude Code runtim
   });
 });
 
-test("keeps main's result with no choice and no lock: Vertex on, maintained Claude, account unset, a non-Anthropic stored model", async ({
+test("keeps the result runs had before people could choose, with no choice and no lock: Vertex on, maintained Claude, account unset, a non-Anthropic stored model", async ({
   makeAgent,
   makeAdmin,
   makeLlmProviderApiKey,
@@ -345,7 +346,7 @@ test("keeps main's result with no choice and no lock: Vertex on, maintained Clau
 
   // The subscription decision is made on the stored model (OpenAI: no
   // cloud), and the cloud is judged on the model the run then gets
-  // (Anthropic through Vertex), as the launch spec on main did.
+  // (Anthropic through Vertex), as the launch spec did before.
   await expect(
     getResolvedAgentRuntimeModelCompatibility({
       runtime: {
@@ -366,7 +367,7 @@ test("keeps main's result with no choice and no lock: Vertex on, maintained Clau
   });
 });
 
-test("a custom image uses the Claude subscription only when it declares it", async ({
+test("only the maintained Claude Code runtime runs on the Claude subscription", async ({
   makeAgent,
   makeAdmin,
   makeLlmProviderApiKey,
@@ -391,57 +392,35 @@ test("a custom image uses the Claude subscription only when it declares it", asy
     modelId: model.id,
     llmApiKeyId: providerKey.id,
   });
-  const check = (runtime: {
-    command: string[];
-    inferenceProtocol: "anthropic" | "openai_chat";
-    claudeCode?: { authentication: "provider" | "subscription" };
-  }) =>
+  const check = (command: string[]) =>
     getResolvedAgentRuntimeModelCompatibility({
-      runtime: { ...runtime, image: "agent-image:dev", accountLock: null },
+      runtime: {
+        command,
+        inferenceProtocol: "anthropic",
+        claudeCode: { authentication: "subscription" },
+        image: "agent-image:dev",
+        accountLock: null,
+      },
       agent,
       organizationId: organization.id,
       userId: user.id,
     });
 
-  await expect(
-    check({
-      command: ["custom-runtime"],
-      inferenceProtocol: "anthropic",
-      claudeCode: { authentication: "subscription" },
-    }),
-  ).resolves.toMatchObject({
+  await expect(check(["archestra-claude-code"])).resolves.toMatchObject({
     usesClaudeCodeSubscription: true,
-    compatibility: { compatible: true },
     llm: { chatApiKeyId: null, selectedProvider: "anthropic" },
   });
-  await expect(
-    check({
-      command: ["custom-runtime"],
-      inferenceProtocol: "anthropic",
-      claudeCode: { authentication: "provider" },
-    }),
-  ).resolves.toMatchObject({
-    usesClaudeCodeSubscription: false,
-    llm: { chatApiKeyId: providerKey.id, selectedModel: model.modelId },
-  });
-  await expect(
-    check({
-      command: ["custom-runtime"],
-      inferenceProtocol: "openai_chat",
-      claudeCode: { authentication: "subscription" },
-    }),
-  ).resolves.toMatchObject({
-    usesClaudeCodeSubscription: true,
-    compatibility: { compatible: false },
-  });
-  // A maintained runtime other than Claude Code never takes the subscription.
-  await expect(
-    check({
-      command: ["archestra-opencode"],
-      inferenceProtocol: "anthropic",
-      claudeCode: { authentication: "subscription" },
-    }),
-  ).resolves.toMatchObject({ usesClaudeCodeSubscription: false });
+  // The Claude Code wrapper and any other maintained runtime run on the
+  // agent's key, whatever Claude account their settings store.
+  for (const command of [
+    "archestra-claude-code-runtime",
+    "archestra-opencode",
+  ]) {
+    await expect(check([command]), command).resolves.toMatchObject({
+      usesClaudeCodeSubscription: false,
+      llm: { chatApiKeyId: providerKey.id, selectedModel: model.modelId },
+    });
+  }
 });
 
 async function createModelSelection(params: {

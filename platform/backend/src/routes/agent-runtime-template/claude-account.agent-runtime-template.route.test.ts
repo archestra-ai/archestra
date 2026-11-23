@@ -3,7 +3,6 @@ import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import agentRoutes from "@/routes/agent";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
-  grantRuntime,
   makeTemplate,
   useTemplateRouteTestApp,
 } from "./runtime-template.test-data";
@@ -17,9 +16,11 @@ describe("a custom runtime's Claude account", () => {
   beforeEach(async ({ makeUser, makeCustomRole, makeMember }) => {
     await ctx.app.register(agentRoutes);
     vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
+    // An agent builder who may configure an agent's runtime, not the
+    // organization's settings.
     ctx.member = await makeUser();
     const role = await makeCustomRole(ctx.organizationId, {
-      permission: { agent: ["read", "create"] },
+      permission: { agent: ["read", "create", "configure-runtime"] },
     });
     await makeMember(ctx.member.id, ctx.organizationId, { role: role.role });
   });
@@ -59,12 +60,6 @@ describe("a custom runtime's Claude account", () => {
       model: "opus",
     });
 
-    await grantRuntime({
-      organizationId: ctx.organizationId,
-      scope: template.id,
-      userId: ctx.member.id,
-      actions: ["read", "use"],
-    });
     ctx.caller = ctx.member;
     const listed = await ctx.app.inject({
       url: "/api/agent-runtime-templates",
@@ -88,12 +83,6 @@ describe("a custom runtime's Claude account", () => {
       runtime: { ...makeTemplate().runtime, inferenceProtocol: "anthropic" },
     });
     expect((await saveSettings([template])).statusCode).toBe(200);
-    await grantRuntime({
-      organizationId: ctx.organizationId,
-      scope: template.id,
-      userId: ctx.member.id,
-      actions: ["read", "use"],
-    });
     ctx.caller = ctx.member;
     const resolved = await ctx.app.inject({
       url: `/api/agent-runtime-templates/${template.id}`,
@@ -105,15 +94,9 @@ describe("a custom runtime's Claude account", () => {
   test.for([
     "provider",
     "subscription",
-  ] as const)("starts the agent of a builder who may use but not configure it on the runtime's account, and leaves them the one they name (%s)", async (authentication) => {
+  ] as const)("stores the Claude account a builder's agent names, or none, whatever the runtime's is (%s)", async (authentication) => {
     const template = claudeTemplate(authentication);
     expect((await saveSettings([template])).statusCode).toBe(200);
-    await grantRuntime({
-      organizationId: ctx.organizationId,
-      scope: template.id,
-      userId: ctx.member.id,
-      actions: ["read", "use"],
-    });
     ctx.caller = ctx.member;
     const create = (runtime: object) =>
       ctx.app.inject({
@@ -130,17 +113,14 @@ describe("a custom runtime's Claude account", () => {
     const { claudeCode: _, ...unnamed } = template.runtime;
     const started = await create(unnamed);
 
-    // The runtime's account is no rule: the one they name is stored as sent.
+    // An unlocked runtime's account is no rule: the one they name is stored
+    // as sent, and nothing is written on an agent that names none.
     expect(named.statusCode, named.body).toBe(200);
     expect(named.json().runtime.claudeCode).toEqual({
       authentication: other,
       model: "sonnet",
     });
-    // An agent that names none starts on the runtime's.
     expect(started.statusCode, started.body).toBe(200);
-    expect(started.json().runtime.claudeCode).toEqual({
-      authentication,
-      model: "opus",
-    });
+    expect(started.json().runtime).not.toHaveProperty("claudeCode");
   });
 });

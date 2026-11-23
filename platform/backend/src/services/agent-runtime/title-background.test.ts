@@ -230,6 +230,7 @@ test("titles a run on the model it is bound to, not on what the agent itself sto
     backend: "kubernetes",
     steerMode: "pipe",
     privileged: false,
+    resources: null,
     environment: null,
     credentials: null,
     ttlHours: null,

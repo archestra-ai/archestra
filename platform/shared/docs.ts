@@ -52,6 +52,7 @@ export const DocsPage = {
   PlatformAgentHooks: "agents/hooks",
   PlatformAgentRuntime: "agents/runtime",
   PlatformAgentRuntimeSetup: "agents/runtime/setup",
+  PlatformAgentRuntimeCustomImages: "agents/runtime/custom-images",
   PlatformCredentials: "admin/credentials",
   PlatformAgents: "agents",
   PlatformApps: "chat/apps",

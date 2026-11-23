@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-20
+lastUpdated: 2026-11-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -45,13 +45,53 @@ Each change saves as you make it. The Create Agent cards and Configuration runti
 Decide once how a runtime's agents start, such as whether Claude Code bills each person's Claude subscription or a company API key. This uses [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
 1. Go to **Settings → Agents → Runtimes**, open a runtime's **⋯** menu, and click **Edit runtime**.
-2. Under **Runtime settings**, set its defaults. A built-in runtime has **Claude account** (Claude Code only), run limits, and tiers. A custom runtime also has its image, protocol, and follow-up delivery.
+2. Under **Runtime settings**, set its defaults. Every runtime has **Accounts that can run it**, run limits, and tiers. A custom runtime also has its image, protocol, and follow-up delivery.
 3. Click **Save runtime**.
 
 Saved settings apply to agents created afterwards. To bring existing agents up to date, reopen the runtime: **Existing agents** shows how many still use older settings, and **Update** gives them the saved ones.
 
-- Each agent keeps its own environment, credentials, ports, and model.
-- An update is refused, naming the agents, when the new settings would no longer work with an agent's model. Change that agent's model first.
+- [Accounts](#set-the-accounts-of-a-runtimes-agents) are the exception. They apply to every agent on the runtime as soon as you save, so an update does not carry them.
+- Each agent keeps its own environment, credentials, and ports.
+- An update is refused, naming the agents, when the new settings would no longer work with an agent's model or its account lock. Change that agent first.
+
+### Set the Accounts of a Runtime's Agents
+
+Decide once which accounts every agent on a runtime runs on, or leave it to whoever builds each agent. **Accounts that can run it**, in the runtime's settings, shows the same cards an agent on that runtime shows in its own.
+
+What you set there is the runtime's rule. It applies to every agent on the runtime as soon as you save, for every person, including people with **Can use and configure**. Each agent keeps its own stored settings underneath: remove the rule, and every agent runs on its own again.
+
+On a runtime with a personal subscription (Claude Code, Codex, Grok Build, GitHub Copilot CLI), what you tick names the kind of account:
+
+- **One card ticked:** every agent on the runtime runs on that kind of account. An agent's settings then show only that card, with no checkbox.
+- **Both ticked:** the runtime names no account. Whoever builds an agent chooses its accounts, as under [Lock the Account](#lock-the-account).
+
+Every other runtime has one company API key card, with no checkbox.
+
+The company API key card has two optional fields, **Which connection pays** and **Model**. What you set there is fixed for every agent on the runtime. Only connections shared with a team or the organization are offered, not personal keys.
+
+| You Set | Agents on the Runtime |
+| --- | --- |
+| Neither | Each agent picks its connection and model |
+| A connection | All run on that connection. Each agent picks one of its models |
+| A connection and a model | All run on that connection and model |
+
+On GitHub Copilot CLI, an enterprise plan's card is the connection, so it has only **Model**.
+
+The connection and model are decided at three levels. What a level sets is fixed below it. What it leaves empty goes to the next one:
+
+| Level | Where | Decides For |
+| --- | --- | --- |
+| Runtime | The runtime's settings | Every agent on the runtime |
+| Agent | The agent's settings, on the company API key card | Every person who runs the agent |
+| Person | The agent's page, on [their account card](#choose-your-own-account) | Their own runs |
+
+With nothing set at any level, runs use the organization's default model. Where the runtime cannot run that model, each person picks a connection before their first run.
+
+What to know:
+
+- A field the runtime fixes shows disabled in an agent's settings, under **An admin locked this connection.**
+- Only the cards and fields set here restrict agents. A Claude account a runtime stored in an earlier version restricts nobody: it only decides which card a new agent starts on.
+- When a fixed connection or model is deleted, its card says so: **This connection no longer exists. Choose another or clear it.** Until you do, agents on the runtime show that it no longer works.
 
 ### Choose Who Can Use Each Runtime
 
@@ -65,6 +105,7 @@ Admin and Platform Admin have full access to every runtime, and a new custom run
 
 - Running an image that isn't one of your runtimes needs **Can use and configure** on every runtime.
 - Running or chatting with an existing agent is decided by the agent's own permissions, not the runtime's.
+- A runtime's [account rule](#set-the-accounts-of-a-runtimes-agents) holds for everyone, whatever their access. It changes only in the runtime's settings.
 
 ### Update the Image
 
@@ -76,17 +117,89 @@ If you change a custom image or the **Privileged mode** setting, which grants ac
 
 Each run gets a temporary virtual key. Provider keys stay in Archestra.
 
-- **Claude Code:** your Claude Pro or Max subscription, or an API key for Anthropic, Amazon Bedrock, or Anthropic on Vertex AI.
-- **Codex:** your ChatGPT subscription, connected under **Model Providers**. An OpenAI API key does not replace it.
-- **Grok Build:** your SuperGrok subscription, connected under **Model Providers**, or an xAI API key. Pick an xAI model, such as `grok-4.7`.
+- **Claude Code:** your Claude Pro or Max subscription, or an API key for Anthropic, Amazon Bedrock, or Anthropic on Vertex AI. A [custom image](/docs/agents/runtime/custom-images#run-on-personal-claude-subscriptions) that runs Claude Code can use the subscription too.
+- **Codex:** your ChatGPT subscription, or an OpenAI API key.
+- **Grok Build:** your SuperGrok subscription, or an xAI API key. Pick an xAI model, such as `grok-4.7`.
+- **GitHub Copilot CLI:** your GitHub Copilot subscription, or an enterprise plan your organization connected under **Model Providers**.
 - **Kimi Code:** a Kimi Code membership key, added as a Kimi Code key under **Model Providers**, for yourself or shared with a team. Pick a Kimi Code model, such as `k3.1-pro`.
-- **Other agents:** any [model provider](/docs/llm-proxy/providers) configured in Archestra.
+- **Other agents:** any [model provider](/docs/llm-proxy/providers) configured in Archestra. They run on a company API key only.
 
 What to know:
 
-- Each person connects their own Claude, ChatGPT or SuperGrok subscription before their first run. Subscription usage, Kimi Code included, shows in the logs, but it does not count toward cost limits.
-- Claude subscription runs use Opus unless you select another **Model**. **Claude account default** follows Claude Code's choice for your account.
+- Each person signs in to their own Claude, ChatGPT, SuperGrok or GitHub Copilot subscription [on the agent's page](#choose-your-own-account) before their first run. Subscription usage, Kimi Code included, shows in the logs, but it does not count toward cost limits.
+- Claude subscription runs use Opus until you pick another model on the agent's page. **Claude account default** follows Claude Code's choice for your account.
 - Tools run with the permissions of the person who started the run.
+
+### Choose Your Own Account
+
+Run a shared agent on your own subscription instead of the company's API key, or the other way round, without changing it for anyone else. Your choice applies only to the runs you start.
+
+1. Open the agent. Under **Give it work**, the first card says what your runs use: **Uses your personal subscription** or **Uses company's API key**.
+2. Click **Use personal subscription instead** or **Use API key instead**. The card then says what your next run uses.
+3. On a subscription you have not connected, click **Sign in** on the card and finish the sign-in there. Once you are signed in, pick your model next to the line. The plug icon beside the model disconnects your subscription at once, for every agent that uses it.
+4. On the company's API key, pick your connection and model next to the line, where the agent leaves them to you.
+
+The button shows only on an agent that allows both ways. What you pick is your own: it does not change anyone else's runs.
+
+The card shows a field only for what neither the runtime nor the agent fixes:
+
+- **Both fields:** pick any connection you can use, then one of its models.
+- **Model only:** the connection is fixed. Pick one of its models.
+- **No field:** the connection and model are both fixed.
+
+What a field reads while you have picked nothing for it:
+
+| Field Reads | Your Runs |
+| --- | --- |
+| **Default connection**, **Default model** | Use the organization's default |
+| **Choose a connection** | Wait until you pick a connection |
+| **Choose a model** | Wait until you pick a model |
+
+A connection you pick is saved without a model. Its model then reads **Default model** where the connection serves the organization's default model, and **Choose a model** where it does not.
+
+When your choice stops working, for example because the connection or model you picked was deleted, your runs stop and the card offers **Choose account**. They never move to the organization's default on their own. Pick again there. A connection or model you picked that no longer works reads **Choose a connection** or **Choose a model** again.
+
+What to know:
+
+- Runs without a person, started by a service account, a team, or the organization, use the agent's own setting.
+- A change takes effect from your next turn. A run already going keeps its account.
+- Switching to your subscription forgets the connection and model you picked for the company's API key.
+- An agent locked to a company API key still uses the connection and model you picked, where it leaves them to you.
+
+### Lock the Account
+
+Decide for everyone which account one agent runs on, for example to keep a company agent off personal plans. This is for a runtime that names no account. On one that does, [the runtime's rule](#set-the-accounts-of-a-runtimes-agents) decides for all its agents, and an agent's settings show only that account's card.
+
+Setting the lock takes **Can use** on the agent's runtime, granted under [Choose Who Can Use Each Runtime](#choose-who-can-use-each-runtime).
+
+In the agent's settings, under **Accounts that can run it**, each account the runtime can use is a card with a checkbox:
+
+- **Both ticked:** no lock. Each person chooses as above. Until someone chooses, their runs use the agent's own setting.
+- **Only the subscription ticked:** everyone runs on their own subscription.
+- **Only the company API key ticked:** everyone runs on a company API key.
+
+The company API key card has the same two optional fields as a runtime's settings, **Which connection pays** and **Model**. What you set is fixed for every run of the agent. What you leave empty, each person picks [on the agent's page](#choose-your-own-account).
+
+Which cards a runtime shows:
+
+| Runtime | Cards |
+| --- | --- |
+| Claude Code, Codex, Grok Build | Each person's subscription, and a company API key |
+| GitHub Copilot CLI | Each person's subscription, and one card per connected enterprise plan |
+| GitHub Copilot CLI, with no enterprise plan connected | Each person's subscription only, with no checkbox |
+| Every other runtime | A company API key only, with no checkbox |
+
+What to know:
+
+- A new Claude Code agent starts with only the subscription ticked. Where the runtime fixes a connection, it starts with only the company API key ticked.
+- On any other runtime with both cards, a new agent starts with neither ticked. It cannot be saved until at least one is.
+- The connection and model fields of a new agent start empty.
+- Where the runtime cannot run the organization's default model, the empty company API key card says so. Each person then picks a connection before they run the agent, unless you set one on the card.
+- On GitHub Copilot CLI, every plan ticked leaves the plan to each person. One plan ticked alone is fixed for every run.
+- An agent's own lock is kept while its runtime names an account, and applies again once the runtime names none.
+- On Codex, runs on a company API key need no ChatGPT subscription. With both options ticked, Codex runs start on each person's ChatGPT subscription.
+- A new Codex agent that offers only subscriptions takes its model from your own ChatGPT subscription, so you sign in first.
+- A copy of an agent starts with both options ticked.
 
 ### Clone a Private GitHub Repository
 

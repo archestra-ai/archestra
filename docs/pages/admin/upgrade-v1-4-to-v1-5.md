@@ -3,10 +3,16 @@ title: Upgrade from v1.4 to v1.5
 description: What v1.5 changes for your deployment, and the steps to upgrade from v1.4 with Helm or Docker
 order: 11
 draft: true
-lastUpdated: 2026-11-20
+lastUpdated: 2026-11-23
 ---
 
 <!-- Draft: `draft: true` keeps this page off the docs site. Add each operator-facing v1.5 change here as it lands on main. Before 1.5.0, finish the page with the archestra-upgrade-guide skill and remove `draft: true`. Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
+## What Changes for Your Deployment
+
+### Behavior Changes
+
+- **Agent Runtime accounts:** a runtime's **Claude account** setting from v1.4 no longer restricts its agents. After the upgrade the runtime shows both cards selected under **Accounts that can run it**, and whoever builds an agent on it chooses the agent's accounts. Existing agents keep the account they run on. To keep a runtime on one account, go to **Settings → Agents → Runtimes**, open the runtime with **Edit runtime**, select one card under **Accounts that can run it** on **Runtime settings**, and save. That rule applies to every agent on the runtime at once.
 
 ## Helm Values
 

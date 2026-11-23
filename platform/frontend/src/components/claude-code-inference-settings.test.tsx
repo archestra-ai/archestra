@@ -278,9 +278,7 @@ describe("Claude Code authentication", () => {
     ).toBeChecked();
     // The image hint is about subscriptions, so it waits for that way.
     expect(
-      screen.queryByText(
-        /Choose a personal subscription only for an image that runs Claude Code/,
-      ),
+      screen.queryByRole("link", { name: /What the image must do/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();
 

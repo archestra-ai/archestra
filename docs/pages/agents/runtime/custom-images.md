@@ -3,7 +3,7 @@ title: Custom Images
 description: Run your own coding agent image in Agent Runtime
 order: 3
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-16
+lastUpdated: 2026-11-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -31,7 +31,7 @@ Requires [`organizationSettings:update`](/docs/reference/permissions#organizatio
 
 1. Go to **Settings → Agents → Runtimes** and choose **Add runtime → Create custom runtime…**.
 2. Enter a **Name** and **Description**, and optionally choose a **Display icon**.
-3. Under **Container**, set the **Container image** and **Command**. Open **Inference API**, **Follow-up messages**, **Environment**, and **Limits** to change those settings; each row shows its current value while closed.
+3. Under **Container**, set the **Container image** and **Command**. Open **Inference API**, **Follow-up messages**, **Environment**, and **Limits** to change those settings; each row shows its current value while closed. Under [**Accounts that can run it**](/docs/agents/runtime#set-the-accounts-of-a-runtimes-agents), optionally fix the connection and model every agent on it runs on. A runtime that runs Claude Code, through the Anthropic protocol, starts with both cards ticked, which leaves the choice to whoever builds an agent. Leave only **A company API key** ticked for an image that does not meet the [subscription contract](#run-on-personal-claude-subscriptions).
 4. Click **Add runtime**. The runtime is saved and appears among the choices when creating an agent.
 
 Drag runtime rows to order the choices, or focus a drag handle and press the arrow keys. Use a runtime’s **… → Remove from list** action to hide it. Choose **Add runtime** to add it back at the end of the list. Each change saves as you make it. Built-in configurations cannot be edited; custom templates can be edited from their **…** menu. Existing agents keep their saved configuration when a template changes or disappears.
@@ -92,6 +92,30 @@ What to know:
 - This example uses the Debian-based built-in image and Debian's packaged Go version. Install the version your project requires if it differs.
 - The Kubernetes cluster must be able to pull your published image.
 - Supply repository tokens through the agent's [environment settings](/docs/agents/runtime#clone-a-private-github-repository), rather than including them in the image.
+
+## Run on Personal Claude Subscriptions
+
+Let each person run your Claude Code image on their own Pro or Max plan, with no company API key. Each person signs in once, and their token never enters the container.
+
+Turn it on in one of two places:
+
+- **One agent:** in the agent's settings, under **Accounts that can run it**, tick **Each person's Claude subscription**.
+- **Every agent of a runtime:** in the runtime's settings, under **Accounts that can run it**, tick only **Each person's Claude subscription**.
+
+A subscription run gets these variables instead of `ANTHROPIC_API_KEY`:
+
+| Variable | What It Holds |
+| --- | --- |
+| `CLAUDE_CODE_OAUTH_TOKEN` | A short-lived run key. The LLM Proxy swaps it for the person's Claude token. |
+| `ANTHROPIC_BASE_URL` | The agent's LLM Proxy endpoint. |
+| `ANTHROPIC_CUSTOM_HEADERS` | The run headers Claude Code must send, including the run key. |
+| `ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH` | `subscription`. |
+
+What to know:
+
+- Pass `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_BASE_URL` to Claude Code unchanged. A launcher that replaces them, or that sets its own `ANTHROPIC_API_KEY`, fails to authenticate.
+- Keep the lines `ANTHROPIC_CUSTOM_HEADERS` holds, and append the session and binding [run headers](#send-the-run-headers), one `Name: value` per line. With Guardrails on, a run without the binding header gets every model request refused.
+- Choose this only for an image that runs Claude Code. Until it is turned on, a custom image bills the agent's API key, and people cannot [choose their own](/docs/agents/runtime#choose-your-own-account) Claude subscription for it.
 
 ## Send the Run Headers
 

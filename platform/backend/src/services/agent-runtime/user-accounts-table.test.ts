@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, expect, test } from "vitest";
 import db from "@/database";
 import {
+  AGENT_RUNTIME_USER_ACCOUNT_CHOSEN_PARTS_SQL,
   AGENT_RUNTIME_USER_ACCOUNTS_SQL,
   AGENT_RUNTIME_USER_ACCOUNTS_STATEMENTS,
 } from "@/database/agent-runtime-user-accounts-sql";
@@ -19,12 +20,17 @@ afterEach(async () => {
   }
 });
 
-test("runs the statements of migration 0659_agent_runtime_user_accounts on main, byte for byte", () => {
-  // Version 1.5 runs that migration on a database this branch upgraded. It
-  // creates nothing there only while both create the same table.
-  expect(
-    createHash("sha256").update(AGENT_RUNTIME_USER_ACCOUNTS_SQL).digest("hex"),
-  ).toBe("5ad91a55652d7e4bfab0e7cabe1906635ac8d8e698e571289f81b27848e7a4ce");
+test("runs the statements of migrations 0659 and 0660 on main, byte for byte", () => {
+  // Version 1.5 runs those migrations on a database this branch upgraded.
+  // They create nothing there only while both create the same table.
+  const digest = (text: string) =>
+    createHash("sha256").update(text).digest("hex");
+  expect(digest(AGENT_RUNTIME_USER_ACCOUNTS_SQL)).toBe(
+    "5ad91a55652d7e4bfab0e7cabe1906635ac8d8e698e571289f81b27848e7a4ce",
+  );
+  expect(digest(AGENT_RUNTIME_USER_ACCOUNT_CHOSEN_PARTS_SQL)).toBe(
+    "c3f42088f2c5c419f9f08ed74f305449aafe9cdb095e5dd84815b56ea12db5bc",
+  );
 });
 
 test("creates the table once, on a database that lacks it", async () => {

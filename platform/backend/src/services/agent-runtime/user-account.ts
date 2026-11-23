@@ -230,6 +230,8 @@ async function resolvedCompanyAccount(params: {
             userId: params.userId,
             llmApiKeyId: choice.llmApiKeyId,
             modelId: choice.modelId,
+            llmApiKeyChosen: choice.llmApiKeyChosen,
+            modelChosen: choice.modelChosen,
           }
         : null,
   });

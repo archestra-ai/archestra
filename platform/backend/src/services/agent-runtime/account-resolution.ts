@@ -116,6 +116,16 @@ type AgentAccountPair = {
   modelId: string | null;
 };
 
+/**
+ * Whether a stored choice picked a connection, and a model. Deleting one
+ * empties its id, and only these tell that apart from a part never picked.
+ * A choice being saved has none: its ids are what it picks.
+ */
+type ChosenParts = {
+  llmApiKeyChosen?: boolean;
+  modelChosen?: boolean;
+};
+
 type ChoiceRuntime = Pick<
   ResolvedAgentRuntime,
   "command" | "inferenceProtocol" | "claudeCode"
@@ -144,14 +154,14 @@ export async function loadPersonAccountChoice(params: {
   const row = await AgentRuntimeUserAccountModel.find({ agentId, userId });
   if (!row) return null;
   // Under a `key` lock a choice of the company API key says what the lock
-  // already does, unless it names a part left to each person. The lock
-  // decides the run, so a broken key is reported as the agent's to fix, not
-  // as a choice the person could change.
+  // already does, unless it names a part left to each person, or named one
+  // that was deleted since. The lock decides the run, so a broken key is
+  // reported as the agent's to fix, not as a choice the person could change.
   if (
     params.lock === "key" &&
     row.authentication === "provider" &&
-    !(!params.fixedBy.connection && row.llmApiKeyId) &&
-    !(!params.fixedBy.model && row.modelId)
+    !(!params.fixedBy.connection && (row.llmApiKeyId || row.llmApiKeyChosen)) &&
+    !(!params.fixedBy.model && (row.modelId || row.modelChosen))
   ) {
     return null;
   }
@@ -210,7 +220,7 @@ export async function validateAccountChoice(params: {
     llmApiKeyId: string | null;
     modelId: string | null;
     claudeModel: string | null;
-  };
+  } & ChosenParts;
   /** The choice is being saved, not read back for a run. */
   saving?: boolean;
 }): Promise<
@@ -266,7 +276,9 @@ export async function validateAccountChoice(params: {
       );
     }
     if (choice.claudeModel) return problem(400, CLAUDE_MODEL_MISPLACED_MESSAGE);
-    if (!choice.modelId) {
+    // A model they picked that was deleted since leaves no model to run,
+    // not the subscription's default.
+    if (!choice.modelId && !choice.modelChosen) {
       return {
         choice: {
           authentication: "subscription",
@@ -275,7 +287,9 @@ export async function validateAccountChoice(params: {
         },
       };
     }
-    const model = await ModelModel.findById(choice.modelId);
+    const model = choice.modelId
+      ? await ModelModel.findById(choice.modelId)
+      : null;
     if (!model) {
       return problem(
         400,
@@ -307,6 +321,8 @@ export async function validateAccountChoice(params: {
       userId: params.userId,
       llmApiKeyId: choice.llmApiKeyId,
       modelId: choice.modelId,
+      llmApiKeyChosen: choice.llmApiKeyChosen,
+      modelChosen: choice.modelChosen,
     },
     saving: params.saving,
   });
@@ -333,9 +349,9 @@ export async function validateAccountChoice(params: {
  * read under a connection set above, and a model they stored that is none
  * of that connection's is no pick at all, so the model is open again. A
  * choice with nothing set above it that no longer works is a problem, never
- * a move to another connection: its connection was deleted (its model then
- * stands alone) or is no longer the person's to use, or its model is no
- * longer one of the models of the connection they picked.
+ * a move to another connection or model: its connection or its model was
+ * deleted, its connection is no longer the person's to use, or its model is
+ * no longer one of the models of the connection they picked.
  */
 export async function resolveCompanyOption(params: {
   runtime: ChoiceRuntime;
@@ -344,11 +360,13 @@ export async function resolveCompanyOption(params: {
   agent: AgentAccountPair;
   fixedBy: AccountFixedBy;
   /** What the person picked for the parts left to them. */
-  chosen?: {
-    userId: string;
-    llmApiKeyId: string | null;
-    modelId: string | null;
-  } | null;
+  chosen?:
+    | ({
+        userId: string;
+        llmApiKeyId: string | null;
+        modelId: string | null;
+      } & ChosenParts)
+    | null;
   /** A choice being saved may not name a part a level above sets. */
   saving?: boolean;
 }): Promise<CompanyOption | { problem: AccountChoiceProblem }> {
@@ -375,6 +393,8 @@ export async function resolveCompanyOption(params: {
   const fixed = (reason: string, stale: string = reason) => ({
     problem: { status: 409 as const, reason, stale, fixed: true as const },
   });
+  // Only a stored choice records what it picked, so only a run reads these.
+  const modelDeleted = () => own(400, "The model you chose no longer exists.");
 
   if (params.saving && chosen?.llmApiKeyId && fixedBy.connection) {
     return own(409, fixedPartMessage("connection", fixedBy.connection));
@@ -394,9 +414,18 @@ export async function resolveCompanyOption(params: {
   }
   if (fixedBy.model && !modelId) return gone(fixedBy.model, "model");
   if (!llmApiKeyId) {
-    if (!modelId) return { key: null, model: null };
-    // Only a person's model stands without a connection: the one they
-    // picked it with was deleted, or the agent no longer sets its own.
+    // A connection or a model the person picked and that was deleted since:
+    // deleting it empties its id, and the run does not take the
+    // organization's default instead.
+    if (chosen?.llmApiKeyChosen) {
+      return own(400, `The ${words.connection} you chose no longer exists.`);
+    }
+    if (!modelId) {
+      if (chosen?.modelChosen) return modelDeleted();
+      return { key: null, model: null };
+    }
+    // Only a person's model stands without a connection: they picked it
+    // under the agent's own, which the agent no longer sets.
     return own(
       400,
       `Choose ${words.aConnection} before its model.`,
@@ -457,7 +486,22 @@ export async function resolveCompanyOption(params: {
       llmApiKeyId,
     }),
   });
-  if (!modelId) return withOpenModel();
+  // A model the person stored with another connection of their own, picked
+  // before a level above set this one, is no pick for this connection:
+  // nothing of theirs broke, and the model is theirs to pick, as if they had
+  // not yet. One they picked for this connection that it no longer serves,
+  // or that was deleted, is a choice that stopped working, never a quiet
+  // move to another model.
+  const modelPickedElsewhere =
+    !!fixedBy.connection &&
+    !params.saving &&
+    (chosen?.llmApiKeyId
+      ? chosen.llmApiKeyId !== llmApiKeyId
+      : !!chosen?.llmApiKeyChosen);
+  if (!modelId) {
+    if (chosen?.modelChosen && !modelPickedElsewhere) return modelDeleted();
+    return withOpenModel();
+  }
   const pair = await checkCompanyConnection({
     runtime,
     organizationId: params.organizationId,
@@ -469,19 +513,7 @@ export async function resolveCompanyOption(params: {
     return modelFixedBy ? fixed(pair.message) : own(409, pair.message);
   }
   if (modelFixedBy) return gone(modelFixedBy, "model");
-  // A model the person stored with another connection of their own, picked
-  // before a level above set this one, is no pick for this connection:
-  // nothing of theirs broke, and the model is theirs to pick, as if they had
-  // not yet. One they picked for this connection that it no longer serves
-  // is a choice that stopped working, never a quiet move to another model.
-  if (
-    fixedBy.connection &&
-    !params.saving &&
-    !!chosen?.llmApiKeyId &&
-    chosen.llmApiKeyId !== llmApiKeyId
-  ) {
-    return withOpenModel();
-  }
+  if (modelPickedElsewhere) return withOpenModel();
   return own(
     400,
     `The selected model is not one of the ${words.connection}'s models. Choose one of them.`,

@@ -7,6 +7,7 @@ import {
   AgentRuntimeUserAccountModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
+  ModelModel,
   OrganizationModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -976,13 +977,68 @@ describe("PUT /api/agents/:id/runtime/account", () => {
       });
       await stale("You can no longer use the connection you chose.");
 
-      // The connection is deleted: its model stands alone.
+      // The connection is deleted, and its model stays stored alone.
       await LlmProviderApiKeyModel.delete(shared.key.id);
       expect(await storedChoice(agent.id, member.id)).toMatchObject({
         llmApiKeyId: null,
         modelId: shared.model.id,
       });
-      await stale("The model you chose has no connection any more.");
+      await stale("The connection you chose no longer exists.");
+
+      // A connection picked without a model leaves no id behind once it is
+      // deleted, and the run still does not move to the default.
+      const alone = await makeKeyWithModel({
+        organizationId: ctx.organizationId,
+        provider: "openai",
+        modelId: "gpt-5.4-alone",
+      });
+      expect((await choose({ llmApiKeyId: alone.key.id })).statusCode).toBe(
+        200,
+      );
+      await LlmProviderApiKeyModel.delete(alone.key.id);
+      expect(await storedChoice(agent.id, member.id)).toMatchObject({
+        llmApiKeyId: null,
+        modelId: null,
+      });
+      await stale("The connection you chose no longer exists.");
+
+      // Nor does a connection deleted with the one model it served, which
+      // the deletion removes after it.
+      const both = await makeKeyWithModel({
+        organizationId: ctx.organizationId,
+        provider: "openai",
+        modelId: "gpt-5.4-both",
+      });
+      expect(
+        (await choose({ llmApiKeyId: both.key.id, modelId: both.model.id }))
+          .statusCode,
+      ).toBe(200);
+      await LlmProviderApiKeyModel.delete(both.key.id);
+      await ModelModel.deleteOrphanedModels();
+      expect(await storedChoice(agent.id, member.id)).toMatchObject({
+        llmApiKeyId: null,
+        modelId: null,
+      });
+      await stale("The connection you chose no longer exists.");
+
+      // A model deleted while its connection stays is not replaced by the
+      // connection's default.
+      const kept = await makeKeyWithModel({
+        organizationId: ctx.organizationId,
+        provider: "openai",
+        modelId: "gpt-5.4-kept",
+      });
+      expect(
+        (await choose({ llmApiKeyId: kept.key.id, modelId: kept.model.id }))
+          .statusCode,
+      ).toBe(200);
+      await LlmProviderApiKeyModelLinkModel.deleteLinksForApiKey(kept.key.id);
+      await ModelModel.deleteOrphanedModels();
+      expect(await storedChoice(agent.id, member.id)).toMatchObject({
+        llmApiKeyId: kept.key.id,
+        modelId: null,
+      });
+      await stale("The model you chose no longer exists.");
 
       // Choosing again is what fixes it.
       const again = await choose({
@@ -1191,6 +1247,16 @@ describe("PUT /api/agents/:id/runtime/account", () => {
         connected: true,
         keyId: chatGpt.key.id,
       },
+    });
+
+    // Once the model is deleted, their runs wait for them to choose again
+    // instead of taking the subscription's default model.
+    await LlmProviderApiKeyModelLinkModel.deleteLinksForApiKey(chatGpt.key.id);
+    await ModelModel.deleteOrphanedModels();
+    expect(await read(codex.id)).toMatchObject({
+      choice: { authentication: "subscription", modelId: null },
+      choiceError:
+        "Your own account for this agent no longer works. Its model no longer exists. Choose your account again.",
     });
   });
 

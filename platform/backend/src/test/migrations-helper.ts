@@ -10,7 +10,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AGENT_RUNTIME_USER_ACCOUNTS_SQL } from "../database/agent-runtime-user-accounts-sql";
+import {
+  AGENT_RUNTIME_USER_ACCOUNT_CHOSEN_PARTS_SQL,
+  AGENT_RUNTIME_USER_ACCOUNTS_SQL,
+} from "../database/agent-runtime-user-accounts-sql";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +42,7 @@ export function getMigrationsSql(): string[] {
     ),
     KEYV_CACHE_TABLE_SQL,
     AGENT_RUNTIME_USER_ACCOUNTS_SQL,
+    AGENT_RUNTIME_USER_ACCOUNT_CHOSEN_PARTS_SQL,
   ];
 
   return cachedMigrationsSql;

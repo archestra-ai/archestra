@@ -76,8 +76,64 @@ DO $$ BEGIN
 END $$;
 `;
 
-/** The statements of AGENT_RUNTIME_USER_ACCOUNTS_SQL, in order. */
-export const AGENT_RUNTIME_USER_ACCOUNTS_STATEMENTS =
-  AGENT_RUNTIME_USER_ACCOUNTS_SQL.split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
+/**
+ * The statements that record what each choice picked: the bytes of
+ * migration 0660_agent_runtime_user_account_chosen_parts on main, run after
+ * the ones above, as main runs that migration after 0659. Change neither
+ * copy alone.
+ *
+ * @public — the test database adds the columns from this text, as the
+ * migrations would on main.
+ */
+export const AGENT_RUNTIME_USER_ACCOUNT_CHOSEN_PARTS_SQL = `-- Each column and the check are added only where the catalog has none of its name, and the check is validated only while it is not. A release/1.4 database adds them with these same statements in its one-time startup upgrade, and what exists needs no table ownership: the migration may run as another database user than the one that created the table. A constant default adds a column without rewriting the table. Where a column is added, the rows saved before it record the id they store as picked, so a connection or model deleted later still stops their runs; what anyone runs on does not change.
+DO $$ BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM pg_attribute
+  WHERE attrelid = 'public.agent_runtime_user_accounts'::regclass
+   AND attname = 'llm_api_key_chosen'
+   AND NOT attisdropped
+ ) THEN
+  ALTER TABLE "agent_runtime_user_accounts" ADD COLUMN "llm_api_key_chosen" boolean DEFAULT false NOT NULL;
+  UPDATE "agent_runtime_user_accounts" SET "llm_api_key_chosen" = true WHERE "llm_api_key_id" IS NOT NULL;
+ END IF;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM pg_attribute
+  WHERE attrelid = 'public.agent_runtime_user_accounts'::regclass
+   AND attname = 'model_chosen'
+   AND NOT attisdropped
+ ) THEN
+  ALTER TABLE "agent_runtime_user_accounts" ADD COLUMN "model_chosen" boolean DEFAULT false NOT NULL;
+  UPDATE "agent_runtime_user_accounts" SET "model_chosen" = true WHERE "model_id" IS NOT NULL;
+ END IF;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM pg_constraint
+  WHERE conrelid = 'public.agent_runtime_user_accounts'::regclass
+   AND conname = 'agent_runtime_user_accounts_chosen_check'
+ ) THEN
+  ALTER TABLE "agent_runtime_user_accounts" ADD CONSTRAINT "agent_runtime_user_accounts_chosen_check" CHECK (("agent_runtime_user_accounts"."llm_api_key_id" is null or "agent_runtime_user_accounts"."llm_api_key_chosen") and ("agent_runtime_user_accounts"."model_id" is null or "agent_runtime_user_accounts"."model_chosen")) NOT VALID;
+ END IF;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ IF EXISTS (
+  SELECT 1 FROM pg_constraint
+  WHERE conrelid = 'public.agent_runtime_user_accounts'::regclass
+   AND conname = 'agent_runtime_user_accounts_chosen_check'
+   AND NOT convalidated
+ ) THEN
+  ALTER TABLE "agent_runtime_user_accounts" VALIDATE CONSTRAINT "agent_runtime_user_accounts_chosen_check";
+ END IF;
+END $$;
+`;
+
+/** The statements of both, in the order main's migrations run them. */
+export const AGENT_RUNTIME_USER_ACCOUNTS_STATEMENTS = [
+  AGENT_RUNTIME_USER_ACCOUNTS_SQL,
+  AGENT_RUNTIME_USER_ACCOUNT_CHOSEN_PARTS_SQL,
+]
+  .flatMap((text) => text.split("--> statement-breakpoint"))
+  .map((statement) => statement.trim())
+  .filter(Boolean);

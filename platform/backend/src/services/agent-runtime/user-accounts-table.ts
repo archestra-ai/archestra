@@ -12,8 +12,8 @@ import StartupMigrationModel from "@/models/startup-migration";
  * for it. Never throws, so a database that cannot take the table keeps
  * running as before, with no choice for anyone.
  *
- * The statements create an empty table, its keys and its indexes, and change
- * no row. Each foreign key locks its referenced table (agents, user,
+ * The statements create an empty table, its keys, its checks and its indexes,
+ * and change no row. Each foreign key locks its referenced table (agents, user,
  * chat_api_keys or models) against writes until the upgrade commits, which
  * takes milliseconds once the locks are held. A transaction that keeps
  * writing to one of those tables makes an attempt give up after

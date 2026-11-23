@@ -39,11 +39,14 @@ class AgentRuntimeUserAccountModel {
   }): Promise<AgentRuntimeUserAccount> {
     const { agentId, userId, ...given } = params;
     // A new choice replaces the whole row, an earlier connection and Claude
-    // model included.
+    // model included. What it picks is kept apart from the ids, which a
+    // deleted connection or model empties.
     const choice = {
       ...given,
       llmApiKeyId: given.llmApiKeyId ?? null,
       claudeModel: given.claudeModel ?? null,
+      llmApiKeyChosen: !!given.llmApiKeyId,
+      modelChosen: !!given.modelId,
     };
     const [row] = await db
       .insert(agentRuntimeUserAccountsTable)

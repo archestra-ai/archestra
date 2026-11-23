@@ -459,6 +459,15 @@ describe("an agent's account lock at run time", () => {
       expect(run.spec.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL).toBe(
         "gpt-5.4-mini",
       );
+
+      // Once the model they picked is deleted too, the run names their own
+      // pick as what stopped working.
+      await ModelModel.delete(other.model.provider, other.model.modelId);
+      await expect(launch({ agent: reloaded, runtime })).rejects.toMatchObject({
+        statusCode: 409,
+        message:
+          "Your own account for this agent no longer works. The model you chose no longer exists. Choose your account again.",
+      });
     });
 
     test("a key lock refuses the agent's key once it holds a personal subscription", async ({

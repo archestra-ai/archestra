@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   pgTable,
@@ -33,19 +34,24 @@ const agentRuntimeUserAccountsTable = pgTable(
       .$type<AgentRuntimeAccountAuthentication>()
       .notNull(),
     // The connection a person picked for the company API key, where neither
-    // the agent nor its runtime sets one. The row outlives it, with the
-    // model it was picked with: their runs are refused until they choose
-    // again, and never move to another connection on their own.
+    // the agent nor its runtime sets one. The row outlives it: their runs
+    // are refused until they choose again, and never move to another
+    // connection on their own.
     llmApiKeyId: uuid("llm_api_key_id").references(
       () => llmProviderApiKeysTable.id,
       { onDelete: "set null" },
     ),
     // The model a person picked: of their subscription, or of the company
-    // API key's connection. The row outlives it: they stay on the account
-    // they chose, without a model of their own.
+    // API key's connection. The row outlives it, and their runs are refused
+    // until they choose again.
     modelId: uuid("model_id").references(() => modelsTable.id, {
       onDelete: "set null",
     }),
+    // Whether the person picked a connection, and a model. Deleting one
+    // empties its column, so only these tell a deleted pick from a part
+    // the person never picked.
+    llmApiKeyChosen: boolean("llm_api_key_chosen").notNull().default(false),
+    modelChosen: boolean("model_chosen").notNull().default(false),
     // The model of a person's own Claude subscription, as Claude Code names
     // it: an alias such as "opus", not a catalog row.
     claudeModel: text("claude_model"),

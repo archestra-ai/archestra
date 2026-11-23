@@ -33,7 +33,7 @@ import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
-import { useLlmModels } from "@/lib/llm-models.query";
+import { type LlmModel, useLlmModels } from "@/lib/llm-models.query";
 import {
   type LlmProviderApiKey,
   useAvailableLlmProviderApiKeys,
@@ -97,6 +97,15 @@ export function useChatSetupOptions(params: {
   /** The model pool the chat is set to; it stands in for the key and model. */
   modelPoolId?: string | null;
   onModelPoolChange?: (modelPoolId: string | null) => void;
+  /** Narrows the keys on offer, for a caller that can only use some. */
+  keyFilter?: (key: LlmProviderApiKey) => boolean;
+  /** Narrows the models on offer; the selected one keeps its name either way. */
+  modelFilter?: (model: LlmModel) => boolean;
+  /**
+   * The models on offer, for a caller whose list is not the catalog's, such
+   * as the models of a person's own subscription. Nothing is fetched then.
+   */
+  models?: LlmModel[];
 }) {
   const catalog = useModelProviderCatalog();
   const { data: session } = useSession();
@@ -110,7 +119,11 @@ export function useChatSetupOptions(params: {
     search: agentSearch,
     enabled: agentsEnabled,
   });
-  const { data: roster = [] } = useChatAgents({ ids: [params.agentId] });
+  // A caller with no agent and no way to switch to one has no roster to read.
+  const { data: roster = [] } = useChatAgents({
+    ids: [params.agentId],
+    enabled: agentsEnabled || !!params.agentId,
+  });
   const { data: pinnedIds } = usePinnedAgentIds({ enabled: agentsEnabled });
   const { data: pinnedAgents = [] } = useChatAgentReferences(
     pinnedIds ?? [],
@@ -187,15 +200,20 @@ export function useChatSetupOptions(params: {
 
   // ---- models
   const {
-    data: models = [],
+    data: catalogModels = [],
     isLoading: modelsLoading,
     isPlaceholderData,
-  } = useLlmModels({ apiKeyId: params.apiKeyId ?? undefined });
+  } = useLlmModels({
+    apiKeyId: params.apiKeyId ?? undefined,
+    enabled: !params.models,
+  });
+  const models = params.models ?? catalogModels;
   const activeModel = models.find((m) => m.dbId === params.selectedModel);
+  const { keyFilter, modelFilter } = params;
   const modelSections = useMemo(
     () =>
       groupByProvider({
-        items: models,
+        items: modelFilter ? models.filter(modelFilter) : models,
         currentProvider: params.currentProvider,
         label: catalog.label,
       }).map(({ provider, label, items }) => ({
@@ -208,7 +226,7 @@ export function useChatSetupOptions(params: {
           ),
         ),
       })),
-    [models, catalog, params.currentProvider],
+    [models, modelFilter, catalog, params.currentProvider],
   );
 
   // Same guard as the model picker: when the key changes and the selected
@@ -251,9 +269,10 @@ export function useChatSetupOptions(params: {
           providerSupportsChat(k.provider) &&
           // A GitHub Copilot key follows its own plan's switch.
           !catalog.isKeyHidden(k) &&
-          (!isPersonalSubscription(k) || k.userId === userId),
+          (!isPersonalSubscription(k) || k.userId === userId) &&
+          (!keyFilter || keyFilter(k)),
       ),
-    [allKeys, catalog, userId],
+    [allKeys, catalog, userId, keyFilter],
   );
   const keySections = useMemo(
     () =>

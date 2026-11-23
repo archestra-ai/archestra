@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AgentForm, type AgentFormSection } from "@/components/agent-form";
+import { AgentRuntimeBadge } from "@/components/chat/runtime-capable-indicator";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourcePermissions } from "@/components/resource-permissions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -217,10 +218,20 @@ function AgentEditor({ agent }: { agent: Agent }) {
       onBackRequest={() => requestNavigate(overviewHref)}
       header={{
         // One line beside the progress bar: a long name truncates rather
-        // than wrapping under it.
+        // than wrapping under it. The people who administer runtimes see
+        // which one the agent is on beside it; nobody else sees a mark here.
         title: (
-          <span className="block min-w-0 truncate" title={`Edit ${agent.name}`}>
-            Edit {agent.name}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate" title={`Edit ${agent.name}`}>
+              Edit {agent.name}
+            </span>
+            {agent.runtime && (
+              // From `sm` up, as on the agent's own page: on a phone the
+              // name needs the row.
+              <span className="hidden sm:contents">
+                <AgentRuntimeBadge runtime={agent.runtime} appearance="icon" />
+              </span>
+            )}
           </span>
         ),
         documentTitle: `Edit ${agent.name}`,

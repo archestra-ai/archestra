@@ -77,7 +77,7 @@ import {
   resolveAgentRuntime,
   runTaskInAgentRuntime,
 } from "@/services/agent-runtime/pod-run";
-import { ensureProviderApiKeySupportsSelectedModel } from "@/services/agent-runtime/preflight";
+import { bindRunProviderKey } from "@/services/agent-runtime/preflight";
 import {
   agentRunFailure,
   tagAgentRunFailure,
@@ -2353,20 +2353,26 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     // and enforce the subscription model-link check instead of bypassing it.
     const sm = secretManager();
     const originalGetSecret = sm.getSecret.bind(sm);
+    // An agent pinned to the actor's own ChatGPT key, on a runtime with no
+    // subscription of its own: resolving the key reads its secret once, then
+    // the link check reads it again, and that second read is the one failing.
     const getSecretSpy = vi
       .spyOn(sm, "getSecret")
+      .mockImplementationOnce(originalGetSecret)
       .mockImplementationOnce(async () => {
         throw new Error("Transient secrets manager timeout");
       });
-    await ensureProviderApiKeySupportsSelectedModel({
-      providerApiKey: {
-        id: actorChatgptKey.id,
-        provider: "openai",
-        secretId: chatgptSecret.id,
-      },
+    await bindRunProviderKey({
+      organizationId,
+      actor: { kind: "user", id: actorId, organizationId },
       provider: "openai",
       model: "gpt-5.4",
+      companyConnectionId: actorChatgptKey.id,
+      account: { source: "agent", subscriptionKind: null },
+      accountLock: null,
+      runtimeCommand: null,
     });
+    expect(getSecretSpy).toHaveBeenCalledTimes(2);
     getSecretSpy.mockImplementation(originalGetSecret);
 
     // Mock modelSyncService.syncModelsForApiKey so that:

@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
+import config from "@/config";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   A2AContextModel,
@@ -14,7 +15,7 @@ import { afterEach, expect, test, vi } from "@/test";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { kubernetesAgentRuntimeBackendDriver } from "./backends/kubernetes";
 import {
-  getClaudeCodeCloudProvider,
+  getResolvedAgentRuntimeModelCompatibility,
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
 
@@ -143,7 +144,12 @@ test("rejects a Bedrock model for an Anthropic runtime image", async ({
 
   await expect(
     preflightAgentRuntimeModelCompatibility({
-      runtime: { command: null, inferenceProtocol: "anthropic" },
+      runtime: {
+        command: null,
+        inferenceProtocol: "anthropic",
+        image: "agent-image:dev",
+        accountLock: null,
+      },
       agent,
       organizationId: organization.id,
       userId: user.id,
@@ -194,6 +200,8 @@ test.for([
     runtime: {
       inferenceProtocol: "anthropic",
       command: ["archestra-claude-code"],
+      image: "agent-image:dev",
+      accountLock: null,
     },
     agent,
     organizationId: organization.id,
@@ -242,7 +250,12 @@ test("accepts an inherited compatible organization default model", async ({
 
   await expect(
     preflightAgentRuntimeModelCompatibility({
-      runtime: { command: null, inferenceProtocol: "anthropic" },
+      runtime: {
+        command: null,
+        inferenceProtocol: "anthropic",
+        image: "agent-image:dev",
+        accountLock: null,
+      },
       agent,
       organizationId: organization.id,
       userId: user.id,
@@ -285,6 +298,8 @@ test("uses provider credentials after switching away from the Claude Code runtim
         command: ["archestra-claude-code-runtime"],
         inferenceProtocol: "anthropic",
         claudeCode: { authentication: "subscription", model: "sonnet" },
+        image: "agent-image:dev",
+        accountLock: null,
       },
       agent,
       organizationId: organization.id,
@@ -303,7 +318,8 @@ test("uses provider credentials after switching away from the Claude Code runtim
       runtime: {
         command: ["custom-runtime"],
         inferenceProtocol: "anthropic",
-        claudeCode: { authentication: "subscription", model: "sonnet" },
+        image: "agent-image:dev",
+        accountLock: null,
       },
       agent,
       organizationId: organization.id,
@@ -317,15 +333,160 @@ test("uses provider credentials after switching away from the Claude Code runtim
       selectedModel: model.modelId,
     },
   });
-  expect(
-    getClaudeCodeCloudProvider({
+  const bedrock = await createModelSelection({
+    organizationId: organization.id,
+    provider: "bedrock",
+    modelId: "us.anthropic.claude-preflight-test",
+    makeSecret,
+    makeLlmProviderApiKey,
+  });
+  await expect(
+    preflightAgentRuntimeModelCompatibility({
       runtime: {
         command: ["archestra-claude-code-runtime"],
+        inferenceProtocol: "anthropic",
         claudeCode: { authentication: "provider" },
+        image: "agent-image:dev",
+        accountLock: null,
       },
-      provider: "bedrock",
+      agent: { modelId: bedrock.model.id, llmApiKeyId: bedrock.providerKey.id },
+      organizationId: organization.id,
+      userId: user.id,
     }),
-  ).toBe("bedrock");
+  ).resolves.toMatchObject({
+    usesClaudeCodeSubscription: false,
+    claudeCodeCloudProvider: "bedrock",
+  });
+});
+
+test("keeps main's result with no choice and no lock: Vertex on, maintained Claude, account unset, a non-Anthropic stored model", async ({
+  makeAgent,
+  makeAdmin,
+  makeLlmProviderApiKey,
+  makeMember,
+  makeOrganization,
+  makeSecret,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeAdmin();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const { model, providerKey } = await createModelSelection({
+    organizationId: organization.id,
+    provider: "openai",
+    modelId: "gpt-vertex-order-test",
+    makeSecret,
+    makeLlmProviderApiKey,
+  });
+  const agent = await makeAgent({
+    organizationId: organization.id,
+    authorId: user.id,
+    agentType: "agent",
+    modelId: model.id,
+    llmApiKeyId: providerKey.id,
+  });
+  vi.spyOn(config.llm.anthropic.vertexAi, "enabled", "get").mockReturnValue(
+    true,
+  );
+
+  // The subscription decision is made on the stored model (OpenAI: no
+  // cloud), and the cloud is judged on the model the run then gets
+  // (Anthropic through Vertex), as the launch spec on main did.
+  await expect(
+    getResolvedAgentRuntimeModelCompatibility({
+      runtime: {
+        command: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic",
+        image: "agent-image:dev",
+        accountLock: null,
+      },
+      agent,
+      agentId: agent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    }),
+  ).resolves.toMatchObject({
+    usesClaudeCodeSubscription: true,
+    claudeCodeCloudProvider: "vertex",
+    llm: { selectedProvider: "anthropic", chatApiKeyId: null },
+  });
+});
+
+test("a custom image uses the Claude subscription only when it declares it", async ({
+  makeAgent,
+  makeAdmin,
+  makeLlmProviderApiKey,
+  makeMember,
+  makeOrganization,
+  makeSecret,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeAdmin();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const { model, providerKey } = await createModelSelection({
+    organizationId: organization.id,
+    provider: "anthropic",
+    modelId: "claude-preflight-test",
+    makeSecret,
+    makeLlmProviderApiKey,
+  });
+  const agent = await makeAgent({
+    organizationId: organization.id,
+    authorId: user.id,
+    agentType: "agent",
+    modelId: model.id,
+    llmApiKeyId: providerKey.id,
+  });
+  const check = (runtime: {
+    command: string[];
+    inferenceProtocol: "anthropic" | "openai_chat";
+    claudeCode?: { authentication: "provider" | "subscription" };
+  }) =>
+    getResolvedAgentRuntimeModelCompatibility({
+      runtime: { ...runtime, image: "agent-image:dev", accountLock: null },
+      agent,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+
+  await expect(
+    check({
+      command: ["custom-runtime"],
+      inferenceProtocol: "anthropic",
+      claudeCode: { authentication: "subscription" },
+    }),
+  ).resolves.toMatchObject({
+    usesClaudeCodeSubscription: true,
+    compatibility: { compatible: true },
+    llm: { chatApiKeyId: null, selectedProvider: "anthropic" },
+  });
+  await expect(
+    check({
+      command: ["custom-runtime"],
+      inferenceProtocol: "anthropic",
+      claudeCode: { authentication: "provider" },
+    }),
+  ).resolves.toMatchObject({
+    usesClaudeCodeSubscription: false,
+    llm: { chatApiKeyId: providerKey.id, selectedModel: model.modelId },
+  });
+  await expect(
+    check({
+      command: ["custom-runtime"],
+      inferenceProtocol: "openai_chat",
+      claudeCode: { authentication: "subscription" },
+    }),
+  ).resolves.toMatchObject({
+    usesClaudeCodeSubscription: true,
+    compatibility: { compatible: false },
+  });
+  // A maintained runtime other than Claude Code never takes the subscription.
+  await expect(
+    check({
+      command: ["archestra-opencode"],
+      inferenceProtocol: "anthropic",
+      claudeCode: { authentication: "subscription" },
+    }),
+  ).resolves.toMatchObject({ usesClaudeCodeSubscription: false });
 });
 
 async function createModelSelection(params: {

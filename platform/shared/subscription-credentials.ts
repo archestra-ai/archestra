@@ -24,6 +24,9 @@
 
 import { z } from "zod";
 import {
+  isCodexRuntimeCommand,
+  isCopilotRuntimeCommand,
+  isGrokRuntimeCommand,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "./model-constants";
@@ -251,6 +254,21 @@ export function subscriptionKindFromKeyMetadata(
   key: SubscriptionKeyMetadata,
 ): SubscriptionCredentialKind | null {
   return key.subscriptionKind ?? null;
+}
+
+/**
+ * The personal subscription a maintained runtime can run on, by the command
+ * it starts: Codex on ChatGPT, Grok Build on SuperGrok, the Copilot CLI on
+ * GitHub Copilot. Claude Code keeps an account of its own and is not listed.
+ * Every other runtime, a custom image included, runs on a company API key.
+ */
+export function subscriptionKindForRuntimeCommand(
+  command?: string | null,
+): SubscriptionCredentialKind | null {
+  if (isCodexRuntimeCommand(command)) return "chatgpt";
+  if (isGrokRuntimeCommand(command)) return "x-premium";
+  if (isCopilotRuntimeCommand(command)) return "github-copilot";
+  return null;
 }
 
 /**

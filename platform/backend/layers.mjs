@@ -689,6 +689,7 @@ const layerTable = [
       "src/services/agent-export.ts",
       "src/services/agent-knowledge-source-exclusions.ts",
       "src/services/agent-ownership.ts",
+      "src/services/agent-runtime/account-resolution.ts",
       "src/services/agent-runtime/agent-config-validation.ts",
       "src/services/agent-runtime/agent-run-attachments.ts",
       "src/services/agent-runtime/backends/index.ts",

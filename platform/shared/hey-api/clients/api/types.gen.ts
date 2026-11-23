@@ -17234,6 +17234,10 @@ export type GetAgentCatalogResponses = {
                         required: boolean;
                     }> | null;
                     allowAgentSuppliedCredentialValues?: boolean;
+                    accountLock?: 'subscription' | 'key' | null;
+                    connectionModels?: {
+                        [key: string]: string;
+                    };
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
                         model?: string;
@@ -17635,6 +17639,10 @@ export type GetAgentsResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -17803,6 +17811,10 @@ export type CreateAgentData = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -18086,6 +18098,10 @@ export type CreateAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -18489,6 +18505,10 @@ export type GetChatAgentRosterResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -18636,6 +18656,10 @@ export type GetChatAgentRosterPageResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -18802,6 +18826,10 @@ export type GetAgentOptionsResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -18984,6 +19012,10 @@ export type GetAgentOptionsPageResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -19364,6 +19396,10 @@ export type GetDefaultMcpGatewayResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -19684,6 +19720,10 @@ export type ImportAgentResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -20013,6 +20053,10 @@ export type GetAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -20163,6 +20207,10 @@ export type UpdateAgentData = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -20352,6 +20400,10 @@ export type UpdateAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -21149,6 +21201,10 @@ export type RestoreAgentVersionResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -21410,6 +21466,10 @@ export type CloneAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -23907,6 +23967,10 @@ export type RestoreAgentResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            accountLock?: 'subscription' | 'key' | null;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -24823,10 +24887,402 @@ export type GetAgentRuntimePreflightResponses = {
             reconnect?: boolean;
         }>;
         incompatible: string | null;
+        accountError: string | null;
+        accountErrorFromChoice: boolean;
+        accountErrorFromModel: boolean;
+        accountErrorFromConnection: boolean;
+        companyAccountIsPlan: boolean;
+        missingSubscription: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium' | null;
     };
 };
 
 export type GetAgentRuntimePreflightResponse = GetAgentRuntimePreflightResponses[keyof GetAgentRuntimePreflightResponses];
+
+export type ClearAgentRuntimeAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/account';
+};
+
+export type ClearAgentRuntimeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ClearAgentRuntimeAccountError = ClearAgentRuntimeAccountErrors[keyof ClearAgentRuntimeAccountErrors];
+
+export type ClearAgentRuntimeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agentAccount: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+        };
+        companyKey: boolean;
+        companyAccount: {
+            connection: {
+                id: string | null;
+                name: string | null;
+                provider: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            model: {
+                id: string | null;
+                name: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+            usesOrganizationDefault: boolean;
+        };
+        choice: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+            claudeModel: string | null;
+        } | null;
+        choiceError: string | null;
+        lock: 'subscription' | 'key' | null;
+        subscription: {
+            kind: 'claude' | 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            label: string;
+            connected: boolean;
+            keyId: string | null;
+        } | null;
+    };
+};
+
+export type ClearAgentRuntimeAccountResponse = ClearAgentRuntimeAccountResponses[keyof ClearAgentRuntimeAccountResponses];
+
+export type GetAgentRuntimeAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/account';
+};
+
+export type GetAgentRuntimeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRuntimeAccountError = GetAgentRuntimeAccountErrors[keyof GetAgentRuntimeAccountErrors];
+
+export type GetAgentRuntimeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agentAccount: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+        };
+        companyKey: boolean;
+        companyAccount: {
+            connection: {
+                id: string | null;
+                name: string | null;
+                provider: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            model: {
+                id: string | null;
+                name: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+            usesOrganizationDefault: boolean;
+        };
+        choice: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+            claudeModel: string | null;
+        } | null;
+        choiceError: string | null;
+        lock: 'subscription' | 'key' | null;
+        subscription: {
+            kind: 'claude' | 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            label: string;
+            connected: boolean;
+            keyId: string | null;
+        } | null;
+    };
+};
+
+export type GetAgentRuntimeAccountResponse = GetAgentRuntimeAccountResponses[keyof GetAgentRuntimeAccountResponses];
+
+export type UpdateAgentRuntimeAccountData = {
+    body: {
+        authentication: 'provider' | 'subscription';
+        llmApiKeyId?: string | null;
+        modelId?: string | null;
+        claudeModel?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/account';
+};
+
+export type UpdateAgentRuntimeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAgentRuntimeAccountError = UpdateAgentRuntimeAccountErrors[keyof UpdateAgentRuntimeAccountErrors];
+
+export type UpdateAgentRuntimeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agentAccount: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+        };
+        companyKey: boolean;
+        companyAccount: {
+            connection: {
+                id: string | null;
+                name: string | null;
+                provider: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            model: {
+                id: string | null;
+                name: string | null;
+                fixedBy: 'runtime' | 'agent' | null;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+            usesOrganizationDefault: boolean;
+        };
+        choice: {
+            authentication: 'provider' | 'subscription';
+            llmApiKeyId: string | null;
+            modelId: string | null;
+            claudeModel: string | null;
+        } | null;
+        choiceError: string | null;
+        lock: 'subscription' | 'key' | null;
+        subscription: {
+            kind: 'claude' | 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            label: string;
+            connected: boolean;
+            keyId: string | null;
+        } | null;
+    };
+};
+
+export type UpdateAgentRuntimeAccountResponse = UpdateAgentRuntimeAccountResponses[keyof UpdateAgentRuntimeAccountResponses];
 
 export type DisconnectClaudeCodeAccountData = {
     body?: never;
@@ -27065,6 +27521,28 @@ export type ListAgentRuntimeTemplatesResponses = {
         icon: string | null;
         hidden: boolean;
         position: number;
+        accounts?: {
+            kind?: 'subscription' | 'key';
+            llmApiKeyId?: string;
+            modelId?: string;
+            connectionModels?: {
+                [key: string]: string;
+            };
+            keyName?: string;
+            keyProvider?: string;
+            modelName?: string;
+            keyMissing?: boolean;
+            modelMissing?: boolean;
+            connectionModelNames?: {
+                [key: string]: string;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+        };
         image: string;
     }>;
 };
@@ -27159,6 +27637,28 @@ export type ListBuiltInAgentRuntimeSettingsResponses = {
             idleTimeoutMinutes?: number | null;
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
+            };
+            accounts?: {
+                kind?: 'subscription' | 'key';
+                llmApiKeyId?: string;
+                modelId?: string;
+                connectionModels?: {
+                    [key: string]: string;
+                };
+                keyName?: string;
+                keyProvider?: string;
+                modelName?: string;
+                keyMissing?: boolean;
+                modelMissing?: boolean;
+                connectionModelNames?: {
+                    [key: string]: string;
+                };
+                models?: Array<{
+                    id: string;
+                    modelId: string;
+                    displayName: string;
+                    provider: string;
+                }>;
             };
         };
         id: 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot';
@@ -27522,6 +28022,28 @@ export type GetRuntimeTemplateSettingsResponses = {
             icon: string | null;
             hidden: boolean;
             position: number;
+            accounts?: {
+                kind?: 'subscription' | 'key';
+                llmApiKeyId?: string;
+                modelId?: string;
+                connectionModels?: {
+                    [key: string]: string;
+                };
+                keyName?: string;
+                keyProvider?: string;
+                modelName?: string;
+                keyMissing?: boolean;
+                modelMissing?: boolean;
+                connectionModelNames?: {
+                    [key: string]: string;
+                };
+                models?: Array<{
+                    id: string;
+                    modelId: string;
+                    displayName: string;
+                    provider: string;
+                }>;
+            };
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27545,6 +28067,9 @@ export type GetRuntimeTemplateSettingsResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -27564,6 +28089,28 @@ export type GetRuntimeTemplateSettingsResponses = {
                     idleTimeoutMinutes?: number | null;
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
+                    };
+                    accounts?: {
+                        kind?: 'subscription' | 'key';
+                        llmApiKeyId?: string;
+                        modelId?: string;
+                        connectionModels?: {
+                            [key: string]: string;
+                        };
+                        keyName?: string;
+                        keyProvider?: string;
+                        modelName?: string;
+                        keyMissing?: boolean;
+                        modelMissing?: boolean;
+                        connectionModelNames?: {
+                            [key: string]: string;
+                        };
+                        models?: Array<{
+                            id: string;
+                            modelId: string;
+                            displayName: string;
+                            provider: string;
+                        }>;
                     };
                 };
             };
@@ -27620,6 +28167,14 @@ export type SaveRuntimeTemplateSettingsData = {
             icon: string | null;
             hidden: boolean;
             position: number;
+            accounts?: {
+                kind?: 'subscription' | 'key';
+                llmApiKeyId?: string;
+                modelId?: string;
+                connectionModels?: {
+                    [key: string]: string;
+                };
+            };
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27643,6 +28198,9 @@ export type SaveRuntimeTemplateSettingsData = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -27662,6 +28220,14 @@ export type SaveRuntimeTemplateSettingsData = {
                     idleTimeoutMinutes?: number | null;
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
+                    };
+                    accounts?: {
+                        kind?: 'subscription' | 'key';
+                        llmApiKeyId?: string;
+                        modelId?: string;
+                        connectionModels?: {
+                            [key: string]: string;
+                        };
                     };
                 };
             };
@@ -27790,6 +28356,28 @@ export type SaveRuntimeTemplateSettingsResponses = {
             icon: string | null;
             hidden: boolean;
             position: number;
+            accounts?: {
+                kind?: 'subscription' | 'key';
+                llmApiKeyId?: string;
+                modelId?: string;
+                connectionModels?: {
+                    [key: string]: string;
+                };
+                keyName?: string;
+                keyProvider?: string;
+                modelName?: string;
+                keyMissing?: boolean;
+                modelMissing?: boolean;
+                connectionModelNames?: {
+                    [key: string]: string;
+                };
+                models?: Array<{
+                    id: string;
+                    modelId: string;
+                    displayName: string;
+                    provider: string;
+                }>;
+            };
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -27813,6 +28401,9 @@ export type SaveRuntimeTemplateSettingsResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -27832,6 +28423,28 @@ export type SaveRuntimeTemplateSettingsResponses = {
                     idleTimeoutMinutes?: number | null;
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
+                    };
+                    accounts?: {
+                        kind?: 'subscription' | 'key';
+                        llmApiKeyId?: string;
+                        modelId?: string;
+                        connectionModels?: {
+                            [key: string]: string;
+                        };
+                        keyName?: string;
+                        keyProvider?: string;
+                        modelName?: string;
+                        keyMissing?: boolean;
+                        modelMissing?: boolean;
+                        connectionModelNames?: {
+                            [key: string]: string;
+                        };
+                        models?: Array<{
+                            id: string;
+                            modelId: string;
+                            displayName: string;
+                            provider: string;
+                        }>;
                     };
                 };
             };
@@ -27966,6 +28579,28 @@ export type GetAgentRuntimeTemplateResponses = {
         icon: string | null;
         hidden: boolean;
         position: number;
+        accounts?: {
+            kind?: 'subscription' | 'key';
+            llmApiKeyId?: string;
+            modelId?: string;
+            connectionModels?: {
+                [key: string]: string;
+            };
+            keyName?: string;
+            keyProvider?: string;
+            modelName?: string;
+            keyMissing?: boolean;
+            modelMissing?: boolean;
+            connectionModelNames?: {
+                [key: string]: string;
+            };
+            models?: Array<{
+                id: string;
+                modelId: string;
+                displayName: string;
+                provider: string;
+            }>;
+        };
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -27989,6 +28624,9 @@ export type GetAgentRuntimeTemplateResponses = {
                 required: boolean;
             }> | null;
             allowAgentSuppliedCredentialValues?: boolean;
+            connectionModels?: {
+                [key: string]: string;
+            };
             claudeCode?: {
                 authentication: 'provider' | 'subscription';
                 model?: string;
@@ -45259,6 +45897,10 @@ export type GetNewChatBootstrapResponses = {
                     required: boolean;
                 }> | null;
                 allowAgentSuppliedCredentialValues?: boolean;
+                accountLock?: 'subscription' | 'key' | null;
+                connectionModels?: {
+                    [key: string]: string;
+                };
                 claudeCode?: {
                     authentication: 'provider' | 'subscription';
                     model?: string;
@@ -45453,6 +46095,10 @@ export type GetNewChatBootstrapResponses = {
                         required: boolean;
                     }> | null;
                     allowAgentSuppliedCredentialValues?: boolean;
+                    accountLock?: 'subscription' | 'key' | null;
+                    connectionModels?: {
+                        [key: string]: string;
+                    };
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
                         model?: string;
@@ -45865,6 +46511,10 @@ export type GetConversationBootstrapResponses = {
                         required: boolean;
                     }> | null;
                     allowAgentSuppliedCredentialValues?: boolean;
+                    accountLock?: 'subscription' | 'key' | null;
+                    connectionModels?: {
+                        [key: string]: string;
+                    };
                     claudeCode?: {
                         authentication: 'provider' | 'subscription';
                         model?: string;
@@ -46059,6 +46709,10 @@ export type GetConversationBootstrapResponses = {
                             required: boolean;
                         }> | null;
                         allowAgentSuppliedCredentialValues?: boolean;
+                        accountLock?: 'subscription' | 'key' | null;
+                        connectionModels?: {
+                            [key: string]: string;
+                        };
                         claudeCode?: {
                             authentication: 'provider' | 'subscription';
                             model?: string;

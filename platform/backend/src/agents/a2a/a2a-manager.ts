@@ -532,10 +532,23 @@ export class A2AManager {
             ? task.history
             : [];
 
+      // A task run of an Agent Runtime agent goes to its container, which
+      // takes the turn's own text and keeps its history itself: compacting
+      // the context for it would spend a call, on the agent's own model
+      // rather than the account the run is bound to, for nothing.
+      const turnRunsInRuntime =
+        !!runtime &&
+        fullTaskMode &&
+        (params.taskRun?.createTask || Boolean(task));
       // Stateful contexts accumulate history forever; apply the persisted
       // cross-turn compaction (and create a new one when the history crosses
       // the model-window threshold) before building the request.
-      if (!this.config.stateless && context && contextDbMessages.length > 0) {
+      if (
+        !this.config.stateless &&
+        context &&
+        contextDbMessages.length > 0 &&
+        !turnRunsInRuntime
+      ) {
         const compactionResult = await applyA2AContextCompaction({
           oauthExecution: actor.oauthExecution,
           contextId: context.id,

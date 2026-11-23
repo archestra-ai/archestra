@@ -123,6 +123,7 @@ test.for([
     runTaskInAgentRuntime({
       runtime: {
         agentId: agent.id,
+        accountLock: null,
         organizationId: org.id,
         environmentId: null,
         secretId: null,

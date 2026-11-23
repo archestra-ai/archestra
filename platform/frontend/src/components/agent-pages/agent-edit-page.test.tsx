@@ -2,9 +2,10 @@ import {
   archestraApiClient,
   BUILT_IN_AGENT_IDS,
   E2eTestId,
+  getAgentCatalogImages,
 } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -98,6 +99,21 @@ let access = {
   isPending: false,
 };
 vi.mock("./use-agent-access", () => ({ useAgentAccess: () => access }));
+// The organization's runtimes, as the header's runtime badge reads them.
+const teamRuntime = {
+  id: "c0ffee00-0000-4000-8000-000000000001",
+  name: "Review workspace",
+  icon: null,
+  image: "registry.example.com/platform/review:v3",
+};
+vi.mock("@/lib/agent-runtime-templates.query", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useRuntimeTemplateCatalogShared: () => ({
+    data: [teamRuntime],
+    isPending: false,
+    isError: false,
+  }),
+}));
 
 const agent = {
   id: "a1",
@@ -163,6 +179,46 @@ describe("AgentEditPage", () => {
       screen.getByText("showing: configuration,runtime"),
     ).toBeInTheDocument();
     expect(screen.getByTestId("resource-permissions")).toBeVisible();
+  });
+
+  it("names the agent's runtime beside its name for someone who administers runtimes, and shows no mark there to anyone else", () => {
+    vi.mocked(useFeature).mockImplementation(((flag: string) =>
+      flag === "agentRuntimeCatalogImages"
+        ? getAgentCatalogImages({
+            registry: "mirror.example.com/archestra",
+            tag: "1.5.0",
+          })
+        : true) as unknown as typeof useFeature);
+    vi.mocked(useProfile).mockReturnValue({
+      data: {
+        ...agent,
+        runtime: { image: teamRuntime.image, command: ["review-agent"] },
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    const administrator = render(<AgentEditPage id="a1" />);
+    const title = () =>
+      screen.getByText("Edit Support Agent").parentElement as HTMLElement;
+    expect(
+      within(title()).getByRole("link", {
+        name: "Runtime: Review workspace, open its settings",
+      }),
+    ).toHaveAttribute(
+      "href",
+      `/settings/agents/runtimes?edit=${teamRuntime.id}`,
+    );
+    administrator.unmount();
+
+    // The header had no runtime mark before, and has none for them now.
+    vi.mocked(useHasPermissions).mockImplementation(((
+      permissions: Record<string, string[]>,
+    ) => ({
+      data: !("organizationSettings" in permissions),
+      isPending: false,
+    })) as unknown as typeof useHasPermissions);
+    render(<AgentEditPage id="a1" />);
+    expect(title()).toHaveTextContent(/^Edit Support Agent$/);
+    expect(screen.queryByRole("link", { name: /^Runtime: / })).toBeNull();
   });
 
   it("keeps permissions editable for the built-in SRE agent", () => {

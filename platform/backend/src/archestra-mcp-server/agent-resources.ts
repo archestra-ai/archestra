@@ -44,13 +44,19 @@ import {
   syncAgentNetworkRuntimes,
 } from "@/services/agent-network-policy";
 import {
+  assertAgentConnectionModels,
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
   assertAgentRuntimeTiersExist,
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
-import { applyAgentRuntimeAccess } from "@/services/agent-runtime/agent-runtime-access";
+import {
+  applyAgentAccountWrite,
+  applyAgentRuntimeAccess,
+  assertAccountLockWrite,
+  withStoredAccountLock,
+} from "@/services/agent-runtime/agent-runtime-access";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
@@ -176,6 +182,7 @@ export const CreateBaseToolArgsSchema = z
 export const AgentRuntimeToolInputSchema = z
   .union([
     AgentRuntimeSchema.omit({
+      accountLock: true,
       image: true,
       command: true,
       inferenceProtocol: true,
@@ -189,7 +196,8 @@ export const AgentRuntimeToolInputSchema = z
           ),
       })
       .strict(),
-    AgentRuntimeSchema.partial()
+    AgentRuntimeSchema.omit({ accountLock: true })
+      .partial()
       .required({ image: true })
       .strict()
       .describe(
@@ -199,7 +207,8 @@ export const AgentRuntimeToolInputSchema = z
   .describe(
     "Run this agent in its own container (Agent Runtime) instead of the built-in chat harness. " +
       "Pass { template } for a maintained CLI, or { image } for a custom image. Other fields override the defaults: " +
-      "claudeCode.authentication is 'subscription' (each user signs in with their own Claude account, the default) or 'provider' (bill through llmApiKeyId/modelId); " +
+      "claudeCode.authentication is 'subscription' (each user signs in with their own Claude account, the default for the claude-code template) or 'provider' (bill through llmApiKeyId/modelId); " +
+      "a custom image that runs Claude Code may set claudeCode too, and uses provider billing without it; " +
       "credentials declares environment variables a run needs (users supply values later, or use " +
       `${TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}); ttlHours, idleTimeoutMinutes, and maxCostUsd bound each run; privileged requires an agent administrator.`,
   );
@@ -208,7 +217,7 @@ type AgentRuntimeToolInput = z.infer<typeof AgentRuntimeToolInputSchema>;
 
 export const AgentModelToolInputSchemas = {
   llmApiKeyId: UuidIdSchema.describe(
-    `Provider API key the agent uses. Set together with modelId. Use ${TOOL_LIST_LLM_MODELS_SHORT_NAME} to find both.`,
+    `Provider API key the agent uses. Set together with modelId; an Agent Runtime agent may set it alone, and each person who runs it then picks the model. Use ${TOOL_LIST_LLM_MODELS_SHORT_NAME} to find both.`,
   ),
   modelId: UuidIdSchema.describe(
     `Model the agent uses: the model's id from ${TOOL_LIST_LLM_MODELS_SHORT_NAME}, not its provider name. Set together with llmApiKeyId.`,
@@ -1011,11 +1020,15 @@ async function resolveRuntimeAndModelForWrite(params: {
   runtimeInput: AgentRuntimeToolInput | null | undefined;
   llmApiKeyId: string | null | undefined;
   modelId: string | null | undefined;
-  existing: Pick<Agent, AgentModelField> | null;
-}): Promise<Partial<Pick<Agent, AgentModelField>>> {
-  const { context, runtimeInput, llmApiKeyId, modelId, existing } = params;
-  const touchesModel = llmApiKeyId !== undefined || modelId !== undefined;
-  if (runtimeInput === undefined && !touchesModel) return {};
+  existing: Pick<Agent, AgentModelField | "modelPoolId"> | null;
+}): Promise<Partial<Pick<Agent, AgentModelField | AgentAccountField>>> {
+  const { context, runtimeInput, existing } = params;
+  if (
+    runtimeInput === undefined &&
+    params.llmApiKeyId === undefined &&
+    params.modelId === undefined
+  )
+    return {};
   if (params.agentType !== "agent") {
     throw new ApiError(
       400,
@@ -1026,17 +1039,22 @@ async function resolveRuntimeAndModelForWrite(params: {
     throw new ApiError(400, "user/organization context not available.");
   }
 
+  // The tools take no account lock: a rebuilt runtime keeps the stored one.
   const runtime = await applyAgentRuntimeAccess({
     organizationId: context.organizationId,
     userId: context.userId,
     previous: existing?.runtime,
-    runtime:
-      runtimeInput == null
-        ? runtimeInput
-        : await resolveAgentRuntimeToolInput({
-            input: runtimeInput,
-            organizationId: context.organizationId,
-          }),
+    runtime: withStoredAccountLock({
+      runtime:
+        runtimeInput == null
+          ? runtimeInput
+          : await resolveAgentRuntimeToolInput({
+              input: runtimeInput,
+              organizationId: context.organizationId,
+              existing: existing?.runtime ?? null,
+            }),
+      previous: existing?.runtime,
+    }),
   });
   await requireAgentRuntimePermission({
     agentType: params.agentType,
@@ -1054,6 +1072,32 @@ async function resolveRuntimeAndModelForWrite(params: {
     next: runtime,
   });
 
+  // The same account an agent saved through the REST routes ends with: a
+  // picked model leaves an auto router and a pool, as an Agent Runtime agent
+  // leaves the router. The tools pick neither a router nor a pool themselves.
+  const account: {
+    [Field in AgentAccountField | "llmApiKeyId" | "modelId"]?: string | null;
+  } = { llmApiKeyId: params.llmApiKeyId, modelId: params.modelId };
+  const { runtimeConnection } = await applyAgentAccountWrite({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    previous: existing,
+    runtime,
+    account,
+  });
+  const { llmApiKeyId, modelId } = account;
+  const touchesModel = llmApiKeyId !== undefined || modelId !== undefined;
+
+  // The whole account the write settles, a pool it leaves included, as the
+  // REST routes pass it: a locked agent's account is not theirs to change.
+  await assertAccountLockWrite({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    previous: existing,
+    runtime,
+    account,
+  });
+
   const merged = {
     runtime: runtime !== undefined ? runtime : (existing?.runtime ?? null),
     llmApiKeyId:
@@ -1068,23 +1112,44 @@ async function resolveRuntimeAndModelForWrite(params: {
   // caller's keys even for a chat agent, so the tool never stores a pairing
   // the caller could not have picked in the UI.
   if (touchesModel) {
-    await assertAgentModelSelectionAvailable({ ...scope, agent: merged });
+    await assertAgentModelSelectionAvailable({
+      ...scope,
+      agent: merged,
+      runtime: merged.runtime,
+      runtimeConnection,
+    });
   }
   await assertAgentRuntimeModelCompatibility({
     ...scope,
     runtime: merged.runtime,
     agent: merged,
     selectsModel: touchesModel,
+    runtimeConnection,
+  });
+  await assertAgentConnectionModels({
+    ...scope,
+    runtime: merged.runtime,
+    previous: existing?.runtime,
+    agent: merged,
+    runtimeConnection,
   });
 
   return {
     ...(runtime !== undefined && { runtime }),
     ...(llmApiKeyId !== undefined && { llmApiKeyId }),
     ...(modelId !== undefined && { modelId }),
+    ...(account.modelPoolId !== undefined && {
+      modelPoolId: account.modelPoolId,
+    }),
+    ...(account.autoRouterId !== undefined && {
+      autoRouterId: account.autoRouterId,
+    }),
   };
 }
 
 type AgentModelField = "runtime" | "llmApiKeyId" | "modelId";
+/** What a model write also settles, though the tools never pick them. */
+type AgentAccountField = "modelPoolId" | "autoRouterId";
 
 function describeRuntime(runtime: AgentRuntime | null): string {
   if (!runtime) return "built-in chat harness";
@@ -1097,11 +1162,15 @@ function describeRuntime(runtime: AgentRuntime | null): string {
 /**
  * Expand a runtime tool argument into the stored runtime the create and edit
  * pages would save: a template's image and launch settings, or a custom
- * image's starting values, under any fields the caller set.
+ * image's starting values, under any fields the caller set. An agent already
+ * on the template keeps its own Claude account unless the caller names one:
+ * the template's is only what a new agent starts on.
  */
 async function resolveAgentRuntimeToolInput(params: {
   input: AgentRuntimeToolInput;
   organizationId: string;
+  /** The agent's saved runtime, when it has one. */
+  existing: AgentRuntime | null;
 }): Promise<AgentRuntime> {
   const { input } = params;
   if (!("template" in input)) {
@@ -1129,16 +1198,26 @@ async function resolveAgentRuntimeToolInput(params: {
   const { builtIns } = await AgentRuntimeTemplateModel.getSettings(
     params.organizationId,
   );
-  return AgentRuntimeSchema.parse({
-    ...withAgentRuntimeDefaults({
-      runtime: buildAgentCatalogRuntime({
-        id: template,
-        image: config.agentRuntime.catalogImages[template],
-      }),
-      defaults: builtIns[template]?.settings,
+  const started = withAgentRuntimeDefaults({
+    runtime: buildAgentCatalogRuntime({
+      id: template,
+      image: config.agentRuntime.catalogImages[template],
     }),
-    ...overrides,
+    defaults: builtIns[template]?.settings,
   });
+  const sameRuntime =
+    !!params.existing && params.existing.command?.[0] === started.command?.[0];
+  const own = {
+    ...(sameRuntime &&
+      params.existing?.claudeCode &&
+      started.claudeCode && { claudeCode: params.existing.claudeCode }),
+    // The tools set no model per connection: a rebuilt runtime keeps them.
+    ...(sameRuntime &&
+      params.existing?.connectionModels && {
+        connectionModels: params.existing.connectionModels,
+      }),
+  };
+  return AgentRuntimeSchema.parse({ ...started, ...own, ...overrides });
 }
 
 async function validateKnowledgeAssignments(params: {

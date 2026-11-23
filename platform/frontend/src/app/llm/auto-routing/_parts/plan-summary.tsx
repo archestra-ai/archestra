@@ -96,11 +96,8 @@ export function PlanSummaryPlaceholder({
 function ExtraBudgetTile({ summary }: { summary: PlanSummary }) {
   const extra = extraBudgetGain(summary);
   if (!extra) return <PendingTile label="Extra budget" />;
-  const amount = Number.isInteger(extra.extraUsdPerDay)
-    ? `$${extra.extraUsdPerDay.toLocaleString("en-US")}`
-    : formatCurrency(extra.extraUsdPerDay);
   return (
-    <SummaryTile label={`Extra ${amount}/day`}>
+    <SummaryTile label={`Extra ${formatStep(extra.extraUsdPerDay)}/day`}>
       <span className="text-2xl font-semibold tabular-nums">
         +{extra.points.toFixed(1)} points
       </span>
@@ -242,4 +239,14 @@ export function SummaryTile({
 
 export function formatPercent(share: number): string {
   return `${(share * 100).toFixed(1)}%`;
+}
+
+/** An extra-budget step (1, 2 or 5 × 10ⁿ) exactly: "$2", "$1,000", "$0.20", "$0.005". */
+function formatStep(usd: number): string {
+  return usd.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: usd < 1 ? 2 : 0,
+    maximumFractionDigits: 3,
+  });
 }

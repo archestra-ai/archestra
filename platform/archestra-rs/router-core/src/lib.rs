@@ -23,7 +23,7 @@ pub use plan::{Diagnostics, Holdout, PLAN_FORMAT_VERSION, Plan, Summary, Version
 
 use serde::Serialize;
 
-use crate::allocate::{Draw, Hull, WeightedSession, frontier, solve};
+use crate::allocate::{Draw, Hull, Steps, WeightedSession, frontier, solve};
 use crate::estimate::{
     BlockPrices, Estimator, MAX_NEWTON_ITERATIONS, SessionEstimate, fit_long_share, fit_mixes,
     fit_size,
@@ -137,9 +137,10 @@ pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
             tokens_per_day: w,
         })
         .collect();
-    let policy = solve(&weighted, budget.get())?;
+    let steps = Steps::within(&weighted, budget.get())?;
+    let policy = solve(&steps, budget.get());
     let summary = Summary {
-        frontier: frontier(&weighted, budget.get()),
+        frontier: frontier(&weighted, &steps, budget.get()),
         ..summarize(
             &estimates,
             &hulls,

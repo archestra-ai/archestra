@@ -2,7 +2,7 @@ import { z } from "zod";
 import { formatCurrency } from "@/lib/utils/format-currency";
 
 // router-core plan documents travel as untyped JSON; these mirror the Rust
-// structs (plan.rs) at plan format version 2.
+// structs (plan.rs) at plan format version 5.
 
 const TierTriple = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -13,23 +13,21 @@ const PlanSummarySchema = z.object({
   value_size_weighted: z.number(),
   tier_session_share: TierTriple,
   tier_token_share: TierTriple,
-  /** Quality against USD/day of budget, ascending; empty in plans fitted before it existed. */
-  frontier: z
-    .array(z.object({ spend: z.number(), value: z.number() }))
-    .default([]),
+  /** Quality against USD/day of budget, ascending in spend. */
+  frontier: z.array(z.object({ spend: z.number(), value: z.number() })).min(1),
 });
 export type PlanSummary = z.infer<typeof PlanSummarySchema>;
 
 /**
  * What a round extra budget, about a quarter of the plan's spend, buys:
  * read off the plan's frontier, so it never exceeds what the tiers can give.
- * Null for a plan without a frontier.
+ * Null for a plan that spends nothing.
  */
 export function extraBudgetGain(
   summary: PlanSummary,
 ): { extraUsdPerDay: number; points: number } | null {
   const { frontier, expected_spend } = summary;
-  if (frontier.length === 0 || expected_spend <= 0) return null;
+  if (expected_spend <= 0) return null;
   const extraUsdPerDay = roundDownToOneTwoFive(
     expected_spend * EXTRA_BUDGET_SHARE,
   );

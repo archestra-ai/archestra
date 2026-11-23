@@ -156,14 +156,14 @@ curl -X POST "https://<archestra-host>/api/auto-routing/routers/<router-id>/prev
 
 ## Learning From Past Sessions
 
-Only the organization's first router, `auto`, can learn from past proxy traffic. Routers you create after it start cold. For that router, past sessions can bootstrap a plan immediately instead of waiting for live `auto` traffic.
+A router learns from past proxy traffic only when its **Overview** has a **Past sessions** card: the `auto` router of an organization that used Auto Routing before it could hold several routers. Every router you create starts cold. For the `auto` router, past sessions can bootstrap a plan immediately instead of waiting for live `auto` traffic.
 
-Both steps run from the **Past sessions** card on the router's **Overview**, which lists each run and what it cost.
+Both steps run from the **Past sessions** card, which lists each run and what it cost.
 
 1. **Find past sessions.** Runs on its own when you first enable auto routing, and again when you click **Score** and the last count is more than a day old. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
-2. **Score them.** You start this with **Score**, which shows what was found and the estimated cost before anything is sent. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set, then fits a plan. **Stop** ends a run early, and the sessions it already scored still count.
+2. **Score them.** You start this with **Score**, which shows what was found and the estimated cost before anything is sent. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set, then fits a plan. The limit is checked against estimated cost, so actual charges can run slightly over it. **Stop** ends a run early, and the sessions it already scored still count.
 
-Only sessions with a client-supplied session ID that began inside the window are used, and sessions whose content was not logged or is end-to-end encrypted are skipped. After a decision-model change, the old scores stop counting, and the router uses its normal model until you score the sessions again.
+Only sessions with a client-supplied session ID that began inside the window are used, and sessions whose content was not logged or is end-to-end encrypted are skipped. After a decision-model change, the old scores stop counting, and the router uses its normal model until enough live or past sessions are scored again.
 
 ## When It Falls Back to the Normal Model
 

@@ -151,7 +151,8 @@ describe("POST /api/auto-routing/routers/:id/replan", () => {
     const historyScans = statements.filter((statement) =>
       /having max\("routing_usage"\."created_at"\)/i.test(statement),
     );
-    expect(historyScans).toHaveLength(1);
+    // The fit's one read: the history window, then the reach-back of a router below the minimum.
+    expect(historyScans).toHaveLength(2);
   });
 
   test("does not fit while auto routing is disabled", async () => {

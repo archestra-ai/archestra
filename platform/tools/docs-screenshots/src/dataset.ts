@@ -85,7 +85,7 @@ export const AUTO_ROUTER = {
   name: "auto",
   budgetPreset: "balanced",
   tiers: {
-    fast: { key: "OpenAI shared", model: "gpt-6-mini", pricePerMillion: { input: "0.40", output: "1.60" } },
+    fast: { key: "OpenAI shared", model: "gpt-6-luna", pricePerMillion: { input: "0.40", output: "1.60" } },
     normal: { key: "Anthropic shared", model: "claude-sonnet-5-5", pricePerMillion: { input: "3.00", output: "15.00" } },
     smart: { key: "Anthropic shared", model: "claude-opus-5-5", pricePerMillion: { input: "5.00", output: "25.00" } },
   },

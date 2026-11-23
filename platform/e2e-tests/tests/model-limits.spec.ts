@@ -63,8 +63,8 @@ test.describe("Model context and output limits", () => {
     // cells, and so the row survives pagination.
     await page.getByPlaceholder(/search models/i).fill(model.modelId);
     // Exact matches throughout: the search is a substring filter, so an id
-    // like `gpt-6` also brings up `gpt-6-mini`, whose row would otherwise
-    // answer the assertions below.
+    // like `gpt-6.1-sol` also brings up `gpt-6.1-sol-2026-09-15`, whose row
+    // would otherwise answer the assertions below.
     const row = page
       .getByRole("row")
       .filter({ has: page.getByText(model.modelId, { exact: true }) });

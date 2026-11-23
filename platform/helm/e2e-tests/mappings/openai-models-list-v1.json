@@ -18,11 +18,11 @@
       "object": "list",
       "data": [
         {
-          "id": "gpt-6",
+          "id": "gpt-6.1-sol",
           "name": "GPT-6"
         },
         {
-          "id": "gpt-6-mini",
+          "id": "gpt-6-luna",
           "name": "GPT-6 Mini"
         },
         {

@@ -17,7 +17,7 @@
       "id": "chatcmpl-raw-key-compat-e2e",
       "object": "chat.completion",
       "created": 1234567890,
-      "model": "gpt-6-mini",
+      "model": "gpt-6-luna",
       "choices": [
         {
           "index": 0,

@@ -17,15 +17,15 @@
       "object": "list",
       "data": [
         {
-          "id": "gpt-6",
+          "id": "gpt-6.1-sol",
           "name": "GPT-6"
         },
         {
-          "id": "gpt-6-2026-09-15",
+          "id": "gpt-6.1-sol-2026-09-15",
           "name": "GPT-6 (2026-09-15)"
         },
         {
-          "id": "gpt-6-mini",
+          "id": "gpt-6-luna",
           "name": "GPT-6 Mini"
         },
         {

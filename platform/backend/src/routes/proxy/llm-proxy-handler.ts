@@ -1773,8 +1773,12 @@ async function handleObservedLLMProxy<
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
             body: requestAdapter.getOriginalRequest(),
+            // Converse translation requires the pool's request-level
+            // compatibility checks. Keep auto-routing native to Bedrock.
             reachable: (tierProvider) =>
               isPoolableProvider(tierProvider) &&
+              (autoRouteWire !== "bedrock-converse" ||
+                tierProvider === "bedrock") &&
               canReachMember(autoRouteWire, tierProvider),
           })
         : null;

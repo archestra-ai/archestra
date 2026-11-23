@@ -4635,13 +4635,6 @@
       "when": 1795458484460,
       "tag": "0661_absent_glorian",
       "breakpoints": true
-    },
-    {
-      "idx": 662,
-      "version": "7",
-      "when": 1795472252827,
-      "tag": "0662_slack_mcp_existing_credentials",
-      "breakpoints": true
     }
   ]
 }

@@ -45496,6 +45496,8 @@ export type GetBootstrapResponses = {
             metadata: string | null;
             onboardingComplete: boolean;
             onboardingSurveyCompletedAt: string | null;
+            firstRunSetupCompletedAt: string | null;
+            telemetryEnabled: boolean;
             theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
             customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
             onlineMcpCatalogEnabled: boolean;
@@ -122775,14 +122777,14 @@ export type MarkOnboardingNavItemsSeenResponses = {
 
 export type MarkOnboardingNavItemsSeenResponse = MarkOnboardingNavItemsSeenResponses[keyof MarkOnboardingNavItemsSeenResponses];
 
-export type GetOnboardingSurveyEligibilityData = {
+export type GetFirstRunSetupData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/onboarding/survey-eligibility';
+    url: '/api/onboarding/first-run-setup';
 };
 
-export type GetOnboardingSurveyEligibilityErrors = {
+export type GetFirstRunSetupErrors = {
     /**
      * Default Response
      */
@@ -122848,32 +122850,29 @@ export type GetOnboardingSurveyEligibilityErrors = {
     };
 };
 
-export type GetOnboardingSurveyEligibilityError = GetOnboardingSurveyEligibilityErrors[keyof GetOnboardingSurveyEligibilityErrors];
+export type GetFirstRunSetupError = GetFirstRunSetupErrors[keyof GetFirstRunSetupErrors];
 
-export type GetOnboardingSurveyEligibilityResponses = {
+export type GetFirstRunSetupResponses = {
     /**
      * Default Response
      */
     200: {
-        eligible: boolean;
+        show: boolean;
     };
 };
 
-export type GetOnboardingSurveyEligibilityResponse = GetOnboardingSurveyEligibilityResponses[keyof GetOnboardingSurveyEligibilityResponses];
+export type GetFirstRunSetupResponse = GetFirstRunSetupResponses[keyof GetFirstRunSetupResponses];
 
-export type SubmitOnboardingSurveyData = {
+export type CompleteFirstRunSetupData = {
     body: {
-        role: string;
-        workEnvironment: string;
-        referralSource: string;
-        workEmail?: string;
+        telemetryEnabled: boolean;
     };
     path?: never;
     query?: never;
-    url: '/api/onboarding/survey';
+    url: '/api/onboarding/first-run-setup';
 };
 
-export type SubmitOnboardingSurveyErrors = {
+export type CompleteFirstRunSetupErrors = {
     /**
      * Default Response
      */
@@ -122939,9 +122938,9 @@ export type SubmitOnboardingSurveyErrors = {
     };
 };
 
-export type SubmitOnboardingSurveyError = SubmitOnboardingSurveyErrors[keyof SubmitOnboardingSurveyErrors];
+export type CompleteFirstRunSetupError = CompleteFirstRunSetupErrors[keyof CompleteFirstRunSetupErrors];
 
-export type SubmitOnboardingSurveyResponses = {
+export type CompleteFirstRunSetupResponses = {
     /**
      * Default Response
      */
@@ -122950,7 +122949,7 @@ export type SubmitOnboardingSurveyResponses = {
     };
 };
 
-export type SubmitOnboardingSurveyResponse = SubmitOnboardingSurveyResponses[keyof SubmitOnboardingSurveyResponses];
+export type CompleteFirstRunSetupResponse = CompleteFirstRunSetupResponses[keyof CompleteFirstRunSetupResponses];
 
 export type OpenAiAudioSpeechWithDefaultAgentData = {
     body: {
@@ -131979,6 +131978,8 @@ export type GetOrganizationResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -132457,6 +132458,8 @@ export type UpdateAppearanceSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -132703,6 +132706,8 @@ export type UpdateSecuritySettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -132945,6 +132950,8 @@ export type UpdateMcpSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -133186,6 +133193,8 @@ export type UpdateSkillsSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -133851,6 +133860,8 @@ export type UpdateAgentSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -134116,6 +134127,8 @@ export type UpdateConnectionSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -134417,6 +134430,8 @@ export type UpdateIntegrationSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -134668,6 +134683,8 @@ export type UpdateDefaultEnvironmentResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -134914,6 +134931,8 @@ export type UpdateAuthSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -135162,6 +135181,8 @@ export type UpdateKnowledgeSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -135400,6 +135421,8 @@ export type DropEmbeddingConfigResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -136000,6 +136023,8 @@ export type CompleteOnboardingResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;

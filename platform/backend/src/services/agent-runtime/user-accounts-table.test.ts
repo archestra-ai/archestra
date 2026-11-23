@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import db from "@/database";
 import {
   AGENT_RUNTIME_USER_ACCOUNT_CHOSEN_PARTS_SQL,
@@ -9,16 +9,34 @@ import {
 } from "@/database/agent-runtime-user-accounts-sql";
 import startupMigrationsTable from "@/database/schemas/startup-migration";
 import AgentRuntimeUserAccountModel from "@/models/agent-runtime-user-account";
+import StartupMigrationModel from "@/models/startup-migration";
 import { ensureAgentRuntimeUserAccountsTable } from "./user-accounts-table";
+
+// The pauses between attempts pass at once, and are recorded.
+const pauses = vi.hoisted(() => [] as number[]);
+vi.mock("node:timers/promises", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:timers/promises")>()),
+  setTimeout: async (ms: number) => {
+    pauses.push(ms);
+  },
+}));
 
 // Tests run in any order, and resets keep the schema: each one ends with the
 // table back in place.
 afterEach(async () => {
+  vi.restoreAllMocks();
+  pauses.length = 0;
   AgentRuntimeUserAccountModel.tableAvailable = true;
   for (const statement of AGENT_RUNTIME_USER_ACCOUNTS_STATEMENTS) {
     await db.execute(sql.raw(statement));
   }
 });
+
+// What PostgreSQL answers once `lock_timeout` runs out.
+const lockTimeout = Object.assign(
+  new Error("canceling statement due to lock timeout"),
+  { code: "55P03" },
+);
 
 test("runs the statements of migrations 0659 and 0660 on main, byte for byte", () => {
   // Version 1.5 runs those migrations on a database this branch upgraded.
@@ -75,6 +93,36 @@ test("a database user that cannot create the table leaves everyone without a cho
       userId: "person",
     }),
   ).toBeNull();
+});
+
+test("a lock timeout is tried again after a pause, until the table is created", async () => {
+  await db.execute(sql`DROP TABLE IF EXISTS "agent_runtime_user_accounts"`);
+  const tryRun = vi
+    .spyOn(StartupMigrationModel, "tryRun")
+    .mockRejectedValueOnce(lockTimeout)
+    .mockRejectedValueOnce(lockTimeout);
+
+  await ensureAgentRuntimeUserAccountsTable();
+
+  expect(tryRun).toHaveBeenCalledTimes(3);
+  expect(pauses).toEqual([5_000, 10_000]);
+  expect(await tableExists()).toBe(true);
+  expect(AgentRuntimeUserAccountModel.tableAvailable).toBe(true);
+});
+
+test("after the last attempt it gives up, and the process keeps running without choices", async () => {
+  await db.execute(sql`DROP TABLE IF EXISTS "agent_runtime_user_accounts"`);
+  const tryRun = vi
+    .spyOn(StartupMigrationModel, "tryRun")
+    .mockRejectedValue(lockTimeout);
+
+  await expect(ensureAgentRuntimeUserAccountsTable()).resolves.toBeUndefined();
+
+  expect(tryRun).toHaveBeenCalledTimes(8);
+  expect(pauses).toEqual([
+    5_000, 10_000, 20_000, 40_000, 60_000, 60_000, 60_000,
+  ]);
+  expect(AgentRuntimeUserAccountModel.tableAvailable).toBe(false);
 });
 
 async function tableExists(): Promise<boolean> {

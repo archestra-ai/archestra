@@ -1452,7 +1452,12 @@ const startWorker = async () => {
     await initializeDatabase();
 
     // Scheduled runs read each person's account choice: wait for the web
-    // server's upgrade to create its table, or create it here.
+    // server's upgrade to create its table, or create it here. The wait can
+    // last minutes while other transactions write to the tables it
+    // references, so the probes are answered meanwhile, as the web server's
+    // are, and the pod is not restarted for it.
+    const startupHealth = createStartupHealthServer();
+    await startupHealth.listen({ port, host });
     await ensureAgentRuntimeUserAccountsTable();
 
     // SPDX-SnippetBegin
@@ -1587,6 +1592,7 @@ const startWorker = async () => {
       enableDefaultMetrics: true,
     });
 
+    await startupHealth.close();
     await healthServer.listen({ port: port, host });
     logger.info(
       `Worker server started on port ${port} with ${labelKeys.length} agent label keys`,

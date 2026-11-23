@@ -5,6 +5,7 @@ import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import { secretManager } from "@/secrets-manager";
 import { consumeMcpOAuthCredentialGrant } from "@/services/mcp-oauth-credential-grant";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -953,20 +954,19 @@ describe("OAuth routes", () => {
 
   test("starts Slack authorization with a stored app secret", async ({
     makeInternalMcpCatalog,
+    makeSecret,
   }) => {
     const origin = "https://mcp.slack.com";
     const serverUrl = `${origin}/mcp`;
     const authorizationEndpoint = "https://slack.com/oauth/v2_user/authorize";
-    const secret = await secretManager().createSecret(
-      { client_secret: "fixture-slack-secret" },
-      "fixture-slack-app-credentials",
-    );
+    const secret = await makeSecret({
+      secret: { client_secret: "fixture-slack-secret" },
+    });
     const catalog = await makeInternalMcpCatalog({
       name: "Slack with saved credentials",
       organizationId,
       serverType: "remote",
       serverUrl,
-      clientSecretId: secret.id,
       oauthConfig: {
         name: "Slack",
         server_url: serverUrl,
@@ -977,6 +977,9 @@ describe("OAuth routes", () => {
         default_scopes: [],
         supports_resource_metadata: false,
       },
+    });
+    await InternalMcpCatalogModel.update(catalog.id, {
+      clientSecretId: secret.id,
     });
     globalThis.fetch = vi.fn<typeof fetch>().mockImplementation(async () =>
       Response.json({

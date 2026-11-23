@@ -1,4 +1,3 @@
-import config from "@/config";
 import type { Transaction } from "@/database";
 import {
   AgentModel,
@@ -505,6 +504,14 @@ async function describe(
     tierSetting(index),
   );
   const ownScorerKey = keys.find((key) => key.id === router.scorerApiKeyId);
+  const progress =
+    fitted?.scorerVersionId === scorerVersion.id
+      ? fitted
+      : await readFitWindow({
+          router,
+          scorerVersionId: scorerVersion.id,
+          inputWatermark: new Date(),
+        });
   return {
     id: router.id,
     name: router.name,
@@ -531,17 +538,8 @@ async function describe(
         : null,
       coldStart: {
         scorerVersionId: scorerVersion.id,
-        sessions:
-          fitted?.scorerVersionId === scorerVersion.id
-            ? fitted.sessions
-            : (
-                await readFitWindow({
-                  router,
-                  scorerVersionId: scorerVersion.id,
-                  inputWatermark: new Date(),
-                })
-              ).sessions,
-        required: config.autoRouting.minSessions,
+        sessions: progress.sessions,
+        required: progress.minSessions,
       },
       lastFitError: latest?.status === "failed" ? latest.error : null,
       scorer,

@@ -156,7 +156,7 @@ curl -X POST "https://<archestra-host>/api/auto-routing/routers/<router-id>/prev
 
 ## Learning From Past Sessions
 
-A router learns from past proxy traffic only when its **Overview** has a **Past sessions** card: the `auto` router of an organization that used Auto Routing before it could hold several routers. Every router you create starts cold. For the `auto` router, past sessions can bootstrap a plan immediately instead of waiting for live `auto` traffic.
+A router learns from past proxy traffic only when its **Overview** has a **Past sessions** card: the `auto` router of an organization that used Auto Routing before it could hold several routers. Every router you create starts cold. For the `auto` router, past sessions can bootstrap a plan immediately instead of waiting for live `auto` traffic. Once a router has 200 finished sessions of its own, its plan is fitted on those alone.
 
 Both steps run from the **Past sessions** card, which lists each run and what it cost.
 
@@ -171,7 +171,7 @@ Archestra routes a session to the router's normal model whenever it cannot make 
 
 | Condition | What happens |
 | --- | --- |
-| **Cold start** | The router has fewer finished sessions than [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS). |
+| **Cold start** | The router has fewer than 200 finished sessions of its own, and its own and scored past sessions together are fewer than [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS). |
 | **No valid plan** | No plan has been published yet, or the active plan is stale because the tier models or their prices changed. |
 | **Scorer error or timeout** | Jev fails, is unreachable, or exceeds [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS). |
 | **No user text** | The request has no user text to score, such as Bedrock Converse payloads. |

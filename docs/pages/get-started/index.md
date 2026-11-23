@@ -1,25 +1,19 @@
 ---
 title: Get Started
-description: Run Archestra, connect your clients, and see your first governed request
+description: What Archestra is, how its parts fit together, and how to run it
 order: 1
 explore: false
-lastUpdated: 2026-10-05
+lastUpdated: 2026-11-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Three steps take you from nothing to a working setup:
+Archestra connects your agents to tools from MCP servers and context from your enterprise documents, then governs every model and tool call they make.
 
-1. **Run Archestra** on your machine. This page.
-2. **[Connect your agents](/docs/get-started/connect)**, such as Claude Code or Cursor.
-3. **[See it work](/docs/get-started/see-it-work)** in Chat and in the logs.
-
-Already have an agent set up in Claude Code or OpenClaw? [Migrate it](/docs/get-started/migrate) after step 1.
+:::architecture-diagram:::
 
 <span id="run-it-locally-to-try"></span>
 
 ## Run Archestra
 
 :::quickstart:::
-
-**Next:** [Connect your agents](/docs/get-started/connect).

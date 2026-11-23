@@ -188,6 +188,7 @@
     {"source": "/docs/agents/managed-agents/handoff", "destination": "/docs/agents/runtime/handoff", "permanent": true},
     {"source": "/docs/agents/managed-agents/custom-images", "destination": "/docs/agents/runtime/custom-images", "permanent": true},
     {"source": "/docs/admin/deployment/upgrades", "destination": "/docs/admin/deployment/helm#upgrade", "permanent": true},
-    {"source": "/docs/get-started/pricing-model", "destination": "/pricing", "permanent": true}
+    {"source": "/docs/get-started/pricing-model", "destination": "/pricing", "permanent": true},
+    {"source": "/docs/get-started/see-it-work", "destination": "/docs/get-started", "permanent": true}
   ]
 }

@@ -224,7 +224,7 @@ function ValidationCard() {
             <span>Write a validation</span>
           </OpenAppaChatButton>
           <Button size="sm" variant="outline" asChild>
-            <Link href="/openappa/policy">
+            <Link href="/openappa/validation">
               <span>View Validations</span>
               <ArrowRight />
             </Link>

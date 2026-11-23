@@ -254,7 +254,7 @@ for (const width of [320, 375]) {
           body: { files: [{ path: "mail/send-external.appa", error: null }] },
         },
       ]);
-      await page.goto("/openappa/policy");
+      await page.goto("/openappa/policy?validations=1");
       // The column beside the editor has no room on a phone.
       const tree = page.getByRole("navigation", { name: "Policy files" });
       await expect(tree).toBeHidden();
@@ -352,7 +352,7 @@ for (const width of [320, 375]) {
           ],
         },
       ]);
-      await page.goto("/openappa/policy");
+      await page.goto("/openappa/policy?validations=1");
       const panel = page.getByRole("region", { name: "Validation problems" });
       const problem = panel.getByRole("button", {
         name: /expected deny, got allow/,

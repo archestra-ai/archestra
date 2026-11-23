@@ -201,6 +201,10 @@ function mount(query = "") {
   );
   return client;
 }
+/** The editor with its validations, which only `validations=1` shows. */
+function mountWithValidations(query = "") {
+  return mount(query ? `${query}&validations=1` : "validations=1");
+}
 const entryQuery = (entry: string) => new URLSearchParams({ entry }).toString();
 /** The URL the page last moved to. */
 const lastUrl = () => pushState.mock.calls.at(-1)?.[2];
@@ -961,7 +965,7 @@ function saveValidations() {
 
 test("the explorer lists the validations with how their last run went, and one opens from it", async () => {
   saveValidations();
-  mount();
+  mountWithValidations();
   const explorer = screen.getByRole("navigation", { name: "Policy files" });
 
   expect(
@@ -983,13 +987,26 @@ test("the explorer lists the validations with how their last run went, and one o
     within(explorer).getByRole("button", { name: /send-external\.appa/ }),
   );
   expect(lastUrl()).toBe(
-    `/openappa/policy?${entryQuery("validation:mail/send-external.appa")}`,
+    `/openappa/policy?${entryQuery("validation:mail/send-external.appa")}&validations=1`,
   );
+});
+
+test("the editor leaves the validations out unless its URL asks for them", async () => {
+  saveValidations();
+  mount(entryQuery("validation:mail/send-external.appa"));
+  const explorer = screen.getByRole("navigation", { name: "Policy files" });
+
+  // The organization policy opens in place of the validation the URL names.
+  expect(await screen.findByRole("textbox", { name: /policy/i })).toBeVisible();
+  expect(
+    within(explorer).queryByRole("button", { name: /^Validations/ }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByTestId("validation-status")).not.toBeInTheDocument();
 });
 
 test("an open validation shows what its last run decided, under the step that failed", async () => {
   saveValidations();
-  mount(entryQuery("validation:mail/send-external.appa"));
+  mountWithValidations(entryQuery("validation:mail/send-external.appa"));
 
   expect(
     await screen.findByRole("textbox", {
@@ -1009,7 +1026,7 @@ test("an open validation shows what its last run decided, under the step that fa
 
 test("a run's dot shows that run's result, and Back to latest returns", async () => {
   saveValidations();
-  mount(entryQuery("validation:mail/send-external.appa"));
+  mountWithValidations(entryQuery("validation:mail/send-external.appa"));
   await waitFor(() =>
     expect(screen.getByTestId("validation-status")).toHaveTextContent("Failed"),
   );
@@ -1026,7 +1043,7 @@ test("a run's dot shows that run's result, and Back to latest returns", async ()
 
 test("the problems panel lists each failure and opens it at its line", async () => {
   saveValidations();
-  mount();
+  mountWithValidations();
   const problems = await screen.findByRole("region", {
     name: "Validation problems",
   });
@@ -1070,7 +1087,7 @@ test("an edited validation is tested as a draft, then saved", async () => {
       });
     }),
   );
-  mount(entryQuery("validation:mail/send-external.appa"));
+  mountWithValidations(entryQuery("validation:mail/send-external.appa"));
   const editor = await screen.findByRole("textbox", {
     name: "Policy validation mail/send-external.appa",
   });
@@ -1102,7 +1119,7 @@ test("an edited validation is tested as a draft, then saved", async () => {
 
 test("New validation opens the chat with the policy agent, on a request to write one", async () => {
   saveValidations();
-  mount();
+  mountWithValidations();
 
   const link = await screen.findByRole("link", { name: "New validation" });
   const href = new URL(link.getAttribute("href") ?? "", origin);
@@ -1121,7 +1138,7 @@ test("validations kept in a repository are read-only", async () => {
       }),
     ),
   );
-  mount(entryQuery("validation:mail/send-external.appa"));
+  mountWithValidations(entryQuery("validation:mail/send-external.appa"));
 
   expect(
     await screen.findByRole("textbox", {

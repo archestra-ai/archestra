@@ -43,8 +43,12 @@ export function usePolicyWorkspace() {
   const serverRules = useServerRulesAccess();
   const scoped = serverRules.scoped === true;
   const declarations = usePolicyDeclarations(serverRules.scoped === false);
-  // The organization's validations: files of the policy like any other.
-  const suite = useValidationSuite();
+  // The organization's validations: files of the policy like any other. They
+  // have their own Validations page; the editor lists them only when its URL
+  // asks for them with `validations=1`, which nothing links to yet.
+  const withValidations = searchParams.get("validations") === "1";
+  const loadedSuite = useValidationSuite();
+  const suite = withValidations ? loadedSuite : null;
   const validationsLink = useManagedValidationsLink(
     suite?.collection.activeDirectory ?? "",
   );
@@ -68,7 +72,10 @@ export function usePolicyWorkspace() {
     );
   }, [suite, scoped]);
 
-  const activeEntry = searchParams.get("entry");
+  // Without the validations, an entry naming one opens the first file.
+  const entryParam = searchParams.get("entry");
+  const activeEntry =
+    withValidations || !validationPathOf(entryParam) ? entryParam : null;
   const lineParam = Number(searchParams.get("line"));
   const focusLine =
     Number.isSafeInteger(lineParam) && lineParam > 0 ? lineParam : undefined;
@@ -179,6 +186,7 @@ export function usePolicyWorkspace() {
       if (next.entry) params.set("entry", next.entry);
       if (next.line) params.set("line", String(next.line));
       if (next.view === "effective") params.set("view", "effective");
+      if (withValidations) params.set("validations", "1");
       const query = params.toString();
       window.history.pushState(
         null,
@@ -186,7 +194,7 @@ export function usePolicyWorkspace() {
         query ? `${pathname}?${query}` : pathname,
       );
     },
-    [pathname],
+    [pathname, withValidations],
   );
   const open = useCallback(
     (entry: string | null, line?: number) =>

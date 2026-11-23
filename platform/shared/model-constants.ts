@@ -1,5 +1,4 @@
 import { z } from "zod";
-import AGENT_CATALOG_IMAGE_NAMES from "./agent-catalog-images.json";
 import type { ThinkingEffort } from "./thinking-effort";
 
 /** Claude Code's stable alias follows the current Opus release. */
@@ -633,55 +632,10 @@ export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
   );
 }
 
-/**
- * The maintained catalog runtime a command launches, or null for any other
- * command: `archestra-<id>` or its standalone `archestra-<id>-runtime` wrapper.
- */
-export function agentCatalogIdForCommand(
-  command?: string | null,
-): keyof typeof AGENT_CATALOG_IMAGE_NAMES | null {
-  if (!command?.startsWith("archestra-")) return null;
-  const id = command.slice("archestra-".length).replace(/-runtime$/, "");
-  return Object.hasOwn(AGENT_CATALOG_IMAGE_NAMES, id)
-    ? (id as keyof typeof AGENT_CATALOG_IMAGE_NAMES)
-    : null;
-}
-
-type ClaudeSubscriptionRuntime = {
+export type ClaudeSubscriptionRuntime = {
   command?: readonly string[] | null;
   claudeCode?: { authentication: "provider" | "subscription" } | null;
 };
-
-/**
- * Whether a runtime can run on a person's own Claude subscription: the
- * maintained Claude Code runtime, or a custom image that declares Claude Code
- * settings. A custom image without them is never offered the subscription.
- */
-export function runtimeSupportsClaudeSubscription(
-  runtime: ClaudeSubscriptionRuntime,
-): boolean {
-  const command = runtime.command?.[0];
-  if (isClaudeCodeRuntimeCommand(command)) return true;
-  return !agentCatalogIdForCommand(command) && !!runtime.claudeCode;
-}
-
-/**
- * Whether a runtime's settings ask for the person's Claude subscription. The
- * maintained Claude Code runtime does unless set to provider authentication;
- * a custom image only when it declares subscription authentication. Callers
- * still apply the Bedrock and Vertex exception for the maintained runtime.
- */
-export function runtimeRequestsClaudeSubscription(
-  runtime: ClaudeSubscriptionRuntime,
-): boolean {
-  if (isClaudeCodeRuntimeCommand(runtime.command?.[0])) {
-    return runtime.claudeCode?.authentication !== "provider";
-  }
-  return (
-    runtimeSupportsClaudeSubscription(runtime) &&
-    runtime.claudeCode?.authentication === "subscription"
-  );
-}
 
 /**
  * An agent's runtime with the Claude account its runs read. An agent saved
@@ -892,37 +846,6 @@ export function getAgentRuntimeModelCompatibility(params: {
     };
   }
   return { compatible: true };
-}
-
-/**
- * Whether an Agent Runtime agent that follows the organization's default model
- * can run `provider`/`modelId` as that default. A Claude Code runtime not set
- * to provider authentication runs a default it can't use from a provider on
- * the person's own Claude subscription instead, except a Bedrock model, which
- * it runs with provider billing (so that one must be a Claude model).
- */
-export function getAgentRuntimeDefaultModelCompatibility(
-  params: Parameters<typeof getAgentRuntimeModelCompatibility>[0] & {
-    claudeCodeAuthentication?: "provider" | "subscription" | null;
-  },
-): { compatible: true } | { compatible: false; message: string } {
-  const { claudeCodeAuthentication, ...model } = params;
-  const command = params.runtimeCommand?.[0];
-  if (
-    isClaudeCodeRuntimeCommand(command) &&
-    (claudeCodeAuthentication === "subscription" ||
-      (claudeCodeAuthentication !== "provider" &&
-        params.provider !== "bedrock"))
-  ) {
-    return { compatible: true };
-  }
-  if (
-    !agentCatalogIdForCommand(command) &&
-    claudeCodeAuthentication === "subscription"
-  ) {
-    return { compatible: true };
-  }
-  return getAgentRuntimeModelCompatibility(model);
 }
 
 export function getProvidersWithOptionalApiKey(params?: {

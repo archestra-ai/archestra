@@ -1,11 +1,15 @@
 import { describe, expect, test } from "vitest";
 import {
+  getAgentRuntimeDefaultModelCompatibility,
+  runtimeRequestsClaudeSubscription,
+  runtimeSupportsClaudeSubscription,
+} from "./agent-catalog-images";
+import {
   anthropicEffortForThinkingEffort,
   anthropicSupportsThinkingEffort,
   anthropicThinksByDefault,
   findTierDefault,
   getAgentRuntimeAllowedProtocols,
-  getAgentRuntimeDefaultModelCompatibility,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getProvidersWithOptionalApiKey,
@@ -23,8 +27,6 @@ import {
   providerSearchTerms,
   requiresOpenAiResponsesApi,
   resolveClaudeContextVariant,
-  runtimeRequestsClaudeSubscription,
-  runtimeSupportsClaudeSubscription,
   SMALL_MODEL_MAX_PARAMETERS,
   startingClaudeAuthentication,
   stripClaudeContextVariantSuffix,

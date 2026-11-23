@@ -3,11 +3,9 @@ import {
   type AgentCatalogId,
   agentCatalogIdForImage,
   resolveAgentCatalogId,
-} from "./agent-catalog-images";
-import {
-  isCopilotRuntimeCommand,
   runtimeSupportsClaudeSubscription,
-} from "./model-constants";
+} from "./agent-catalog-images";
+import { isCopilotRuntimeCommand } from "./model-constants";
 import { subscriptionKindForRuntimeCommand } from "./subscription-credentials";
 
 /**

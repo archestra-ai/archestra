@@ -160,6 +160,9 @@ describe("ModelPoolsPage", () => {
       expect(
         screen.queryByRole("button", { name: /^Create (a )?pool$/ }),
       ).not.toBeInTheDocument();
+      expect(
+        screen.getByText("A pool serves one model from several provider keys."),
+      ).toBeVisible();
     } finally {
       resolve();
     }

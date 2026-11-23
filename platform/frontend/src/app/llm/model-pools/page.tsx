@@ -138,6 +138,11 @@ export default function ModelPoolsPage() {
     (canReadProviders === true && providerKeys.isPending);
   const isResolvingFirstUseAction =
     firstUsePermission.isPending || isResolvingProvider;
+  const firstUseDescription = isResolvingProvider
+    ? "A pool serves one model from several provider keys."
+    : needsFirstProvider
+      ? "A pool serves one model from several provider keys. Start by connecting your first provider."
+      : "A pool serves one model, such as claude-sonnet-5-5, from several provider keys. If one fails, the next takes over.";
   // Nothing to list and nothing filtered: the page explains pools instead of
   // showing an empty table.
   const isFirstUse = query.isSuccess && pools.length === 0 && !hasActiveFilters;
@@ -265,11 +270,7 @@ export default function ModelPoolsPage() {
           variant="firstUse"
           icon={Layers}
           title="Keep your models answering when a provider fails"
-          description={
-            needsFirstProvider
-              ? "A pool serves one model from several provider keys. Start by connecting your first provider."
-              : "A pool serves one model, such as claude-sonnet-5-5, from several provider keys. If one fails, the next takes over."
-          }
+          description={firstUseDescription}
           canAct={
             isResolvingFirstUseAction ? undefined : firstUsePermission.data
           }

@@ -370,6 +370,49 @@ describe("an agent's account lock at run time", () => {
       ).resolves.toBeUndefined();
     });
 
+    test("once a key-locked agent's key is deleted, a person who had picked that connection must choose again, never the default", async ({
+      makeAgent,
+    }) => {
+      const { agent, own } = await agentWith({
+        makeAgent,
+        provider: "openai",
+        modelId: "gpt-5.4",
+      });
+      // Another usable company key, which the organization's default gives.
+      await makeKeyWithModel({
+        organizationId,
+        provider: "openai",
+        modelId: "gpt-5.4",
+      });
+      // They picked the connection before the agent set it: a pick of a
+      // connection the agent sets is refused when it is saved.
+      await AgentRuntimeUserAccountModel.upsert({
+        agentId: agent.id,
+        userId: author.id,
+        authentication: "provider",
+        llmApiKeyId: own.key.id,
+        modelId: null,
+      });
+      await LlmProviderApiKeyModel.delete(own.key.id);
+      const reloaded = await AgentModel.findById(agent.id);
+      assert(reloaded);
+      const runtime = {
+        ...genericRuntime(reloaded, "openai_chat"),
+        accountLock: "key" as const,
+      };
+
+      const refused =
+        "Your own account for this agent no longer works. The connection you chose no longer exists. Choose your account again.";
+      await expect(launch({ agent: reloaded, runtime })).rejects.toMatchObject({
+        statusCode: 409,
+        message: refused,
+      });
+      await expect(ready({ agent: reloaded, runtime })).rejects.toMatchObject({
+        statusCode: 409,
+        message: refused,
+      });
+    });
+
     test("a key lock refuses the run where an unlocked run would swap keys", async ({
       makeAgent,
     }) => {

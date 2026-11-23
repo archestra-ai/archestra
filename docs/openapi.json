@@ -381568,7 +381568,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Approve a local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`mcpServerInstallation:update`](/docs/reference/permissions#mcpServerInstallation:update): Modify installed MCP server configuration",
+        "description": "Approve a local catalog item's image so its installs proceed. Requires update on every MCP registry entry.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`mcpServerInstallation:update`](/docs/reference/permissions#mcpServerInstallation:update): Modify installed MCP server configuration",
         "parameters": [
           {
             "schema": {

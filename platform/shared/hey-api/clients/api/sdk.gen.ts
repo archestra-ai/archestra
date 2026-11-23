@@ -7115,7 +7115,7 @@ export const refreshInternalMcpCatalogImage = <ThrowOnError extends boolean = fa
 export const listPendingImageApprovalCatalogItems = <ThrowOnError extends boolean = false>(options?: Options<ListPendingImageApprovalCatalogItemsData, ThrowOnError>) => (options?.client ?? client).get<ListPendingImageApprovalCatalogItemsResponses, ListPendingImageApprovalCatalogItemsErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/pending-image-approval', ...options });
 
 /**
- * Approve a local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.
+ * Approve a local catalog item's image so its installs proceed. Requires update on every MCP registry entry.
  *
  * Authentication:
  *

@@ -153,6 +153,11 @@ describe("PluginsPage", () => {
       screen.getByText("Extend the coding tools your team already uses"),
     ).toBeVisible();
     expect(
+      screen.getByText(/A skill teaches an agent how to do a task/),
+    ).toHaveTextContent(
+      "A plugin bundles files such as skills, commands, and hooks for one coding tool.",
+    );
+    expect(
       screen.getByRole("link", { name: /Create a plugin/ }),
     ).toHaveAttribute("href", "/plugins/new?source=blank");
     // The wizard's first step is where the popular marketplaces are listed.

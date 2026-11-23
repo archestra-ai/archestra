@@ -853,7 +853,7 @@ function PluginsEmptyState() {
       variant="firstUse"
       icon={Puzzle}
       title="Extend the coding tools your team already uses"
-      description="A plugin adds commands, hooks and other files to one tool, such as Claude Code, Codex or Cursor. Share it, and each person installs it with one command."
+      description="A skill teaches an agent how to do a task. A plugin bundles files such as skills, commands, and hooks for one coding tool. Share it, and each person installs it with one command."
       canAct={isPending ? undefined : canCreate}
       readerMessage="Your admins haven't shared a plugin yet."
       action={

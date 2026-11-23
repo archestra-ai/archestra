@@ -8644,7 +8644,7 @@ type NativeAppaGuidanceWire =
 
 /**
  * Governed Chat Completions providers that reject `role: "developer"` and must
- * receive OpenAPPA guidance in the leading `system` prompt or last `user` turn.
+ * receive OpenAPPA guidance in the leading `system` prompt or final message.
  * All other governed interaction types fall back to `appaWireFamily`.
  */
 const CHAT_COMPLETIONS_NO_DEVELOPER: ReadonlySet<SupportedProviderDiscriminator> =
@@ -8779,8 +8779,8 @@ function appendQuestionContinuation(params: {
   scope?: "request" | "turn";
   /**
    * On a provider-thread continue: `skip` guidance the thread already holds
-   * (fixed for the session), or deliver `turn` guidance in the new user turn,
-   * which the thread keeps, instead of the system prompt it owns.
+   * (fixed for the session), or deliver `turn` guidance in the final message
+   * after its last cache breakpoint, instead of the system prompt it owns.
    */
   onContinue?: "skip" | "turn";
 }): void {
@@ -8854,8 +8854,8 @@ function appendQuestionContinuation(params: {
   }
   if (wire === "chatCompletions:noDeveloper") {
     // Kimi and xAI Chat Completions reject `developer`; fixed guidance merges
-    // into the leading `system` prompt and transient turn guidance trails in
-    // the user turn after the cached prefix.
+    // into the leading `system` prompt and transient guidance ends the final
+    // message after the cached prefix.
     if (params.scope === "request") {
       mergeLeadingSystemMessage(params.request, guidance);
       return;
@@ -8864,8 +8864,8 @@ function appendQuestionContinuation(params: {
     return;
   }
   if (wire === "anthropic:messages") {
-    // Keep transient guidance after the cached prefix. Changing system would
-    // invalidate all cached messages, including signed thinking blocks.
+    // Transient guidance goes after the last cache breakpoint in the final
+    // message. Earlier messages and system stay unchanged.
     if (params.scope !== "request") {
       appendToLastUserTurn(params.request, guidance);
       return;
@@ -8888,7 +8888,7 @@ function appendQuestionContinuation(params: {
   }
 }
 
-/** Adds turn guidance without placing user text before leading system prompts or after native SDK control frames. */
+/** Adds turn guidance after the last cache breakpoint in the final message. */
 function appendToLastUserTurn(
   request: Record<string, unknown>,
   text: string,
@@ -8905,18 +8905,12 @@ function appendToLastUserTurn(
   ) {
     conversationStart++;
   }
-  let index = messages.length - 1;
-  // Native SDKs can end a turn with system control messages. They must remain
-  // last (or immediately before an assistant); they are not conversation turns.
-  while (
-    index >= conversationStart &&
-    isRecord(messages[index]) &&
-    messages[index].role === "system"
-  )
-    index--;
-  const last = messages[index];
-  if (!isRecord(last) || last.role !== "user") {
-    messages.splice(index + 1, 0, {
+  const lastIndex = messages.length - 1;
+  const last = messages[lastIndex];
+  const trailingSystem =
+    lastIndex >= conversationStart && isRecord(last) && last.role === "system";
+  if (!isRecord(last) || (last.role !== "user" && !trailingSystem)) {
+    messages.push({
       role: "user",
       content: options?.plainText ? text : [{ type: "text", text }],
     });
@@ -8928,6 +8922,10 @@ function appendToLastUserTurn(
       if (last.content.includes(text)) return;
       last.content =
         last.content.length > 0 ? `${last.content}\n\n${text}` : text;
+      return;
+    }
+    if (trailingSystem && last.content.length === 0) {
+      last.content = [{ type: "text", text }];
       return;
     }
     last.content = [

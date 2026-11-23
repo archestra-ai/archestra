@@ -156,9 +156,9 @@ export const SHOTS: Shot[] = [
           contentType: "application/json",
           body: JSON.stringify([
             {
-              id: "claude-3-5-sonnet-20241022",
+              id: "claude-sonnet-5-5",
               dbId: "m0000000-0000-4000-8000-000000000001",
-              displayName: "Claude 3.5 Sonnet",
+              displayName: "Claude Sonnet 5.5",
               provider: "anthropic",
               isBest: true,
               isFree: false,
@@ -187,7 +187,7 @@ export const SHOTS: Shot[] = [
       );
     },
     prepare: async (page) => {
-      await page.getByText("Claude 3.5 Sonnet").first().waitFor();
+      await page.getByText("Claude Sonnet 5.5").first().waitFor();
     },
   },
   {
@@ -219,9 +219,9 @@ export const SHOTS: Shot[] = [
           contentType: "application/json",
           body: JSON.stringify([
             {
-              id: "claude-3-5-sonnet-20241022",
+              id: "claude-sonnet-5-5",
               dbId: "m0000000-0000-4000-8000-000000000001",
-              displayName: "Claude 3.5 Sonnet",
+              displayName: "Claude Sonnet 5.5",
               provider: "anthropic",
               isBest: true,
               isFree: false,
@@ -262,7 +262,7 @@ export const SHOTS: Shot[] = [
               title: "Incident INC-4091 Command Center",
               selectedModel: "m0000000-0000-4000-8000-000000000001",
               selectedProvider: "anthropic",
-              modelId: "claude-3-5-sonnet-20241022",
+              modelId: "claude-sonnet-5-5",
               thinkingEffort: "medium",
               hasCustomToolSelection: false,
               hooksDebugEnabled: false,

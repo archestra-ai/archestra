@@ -18,12 +18,12 @@
       "object": "list",
       "data": [
         {
-          "id": "gpt-4o",
-          "name": "GPT-4o"
+          "id": "gpt-6",
+          "name": "GPT-6"
         },
         {
-          "id": "gpt-4o-mini",
-          "name": "GPT-4o Mini"
+          "id": "gpt-6-mini",
+          "name": "GPT-6 Mini"
         },
         {
           "id": "text-embedding-3-small",

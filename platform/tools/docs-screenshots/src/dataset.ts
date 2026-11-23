@@ -70,24 +70,26 @@ export const PROVIDER_KEYS = [
 export const SHARED_PROVIDER_KEYS = [
   { name: "OpenAI shared", provider: "openai", apiKey: "sk-docs-example-openai-shared" },
   { name: "Anthropic shared", provider: "anthropic", apiKey: "sk-ant-api03-docs-example-shared" },
-  { name: "Jev", provider: "jev", apiKey: "jev-docs-example" },
+  { name: "Jev shared", provider: "jev", apiKey: "jev-docs-example" },
 ] as const;
 
 /**
  * The auto router on LLM → Auto Routing, and the scored sessions its plan is
  * fitted on: more than the backend's default minimum for a first plan (1000).
  * Each session needs the fast, normal or smart tier with the probabilities
- * of its kind; harder sessions run longer.
+ * of its kind; harder sessions run longer. Each tier model gets a custom
+ * price, since the plan is priced per tier and the mocked ids have no registry
+ * price to fall back on.
  */
 export const AUTO_ROUTER = {
   name: "auto",
   budgetPreset: "balanced",
   tiers: {
-    fast: { key: "OpenAI shared", model: "gpt-4o-mini" },
-    normal: { key: "OpenAI shared", model: "gpt-4o" },
-    smart: { key: "Anthropic shared", model: "claude-3-5-sonnet-20241022" },
+    fast: { key: "OpenAI shared", model: "gpt-6-mini", pricePerMillion: { input: "0.40", output: "1.60" } },
+    normal: { key: "Anthropic shared", model: "claude-sonnet-5-5", pricePerMillion: { input: "3.00", output: "15.00" } },
+    smart: { key: "Anthropic shared", model: "claude-opus-5-5", pricePerMillion: { input: "5.00", output: "25.00" } },
   },
-  decisionModel: { key: "Jev", model: "jev-1.13.0" },
+  decisionModel: { key: "Jev shared", model: "jev-1.13.0" },
   history: {
     sessions: 1400,
     days: 28,

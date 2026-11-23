@@ -262,7 +262,7 @@ async function seedProviderKeys(
 type AutoRouterResponse = Named & { status: { coldStart: { scorerVersionId: string } } };
 
 /**
- * Turns auto routing on and creates the router on the shared keys. Its plan
+ * Turns auto routing on, prices the tier models and creates the router on the shared keys. Its plan
  * needs scored sessions, which only SQL can add, so `planAutoRouter` fits it
  * after the database seed.
  */
@@ -272,27 +272,32 @@ async function seedAutoRouter(
   record: (kind: string, name: string, id: string) => void,
 ): Promise<void> {
   await api.put("/api/auto-routing/state", { enabled: true });
+  const models = await api.get<{ id: string; modelId: string; apiKeys: { id: string }[] }[]>(
+    "/api/llm-models?includeAssignments=false",
+  );
+  const { tiers, decisionModel } = AUTO_ROUTER;
+  const tier = async ({ key, model, pricePerMillion }: (typeof tiers)[keyof typeof tiers]) => {
+    const providerApiKeyId = state.providerKeys[key];
+    const found = models.find(
+      (candidate) =>
+        candidate.modelId === model && candidate.apiKeys.some((linked) => linked.id === providerApiKeyId),
+    );
+    if (!found) throw new Error(`No model ${model} on the provider key "${key}"`);
+    await api.patch(`/api/llm-models/${found.id}`, {
+      customPricePerMillionInput: pricePerMillion.input,
+      customPricePerMillionOutput: pricePerMillion.output,
+    });
+    return { modelId: found.id, providerApiKeyId };
+  };
+  const tierModels = { fast: await tier(tiers.fast), normal: await tier(tiers.normal), smart: await tier(tiers.smart) };
   let router = (await api.get<AutoRouterResponse[]>("/api/auto-routing/routers")).find(
     (existing) => existing.name === AUTO_ROUTER.name,
   );
   if (!router) {
-    const models = await api.get<{ id: string; modelId: string; apiKeys: { id: string }[] }[]>(
-      "/api/llm-models?includeAssignments=false",
-    );
-    const tier = ({ key, model }: { key: string; model: string }) => {
-      const providerApiKeyId = state.providerKeys[key];
-      const found = models.find(
-        (candidate) =>
-          candidate.modelId === model && candidate.apiKeys.some((linked) => linked.id === providerApiKeyId),
-      );
-      if (!found) throw new Error(`No model ${model} on the provider key "${key}"`);
-      return { modelId: found.id, providerApiKeyId };
-    };
-    const { tiers, decisionModel } = AUTO_ROUTER;
     router = await api.post<AutoRouterResponse>("/api/auto-routing/routers", {
       name: AUTO_ROUTER.name,
       budgetPreset: AUTO_ROUTER.budgetPreset,
-      tiers: { fast: tier(tiers.fast), normal: tier(tiers.normal), smart: tier(tiers.smart) },
+      tiers: tierModels,
       decisionModel: { apiKeyId: state.providerKeys[decisionModel.key], model: decisionModel.model },
     });
   }

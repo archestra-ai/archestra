@@ -17,16 +17,16 @@
       "object": "list",
       "data": [
         {
-          "id": "gpt-4o",
-          "name": "GPT-4o"
+          "id": "gpt-6",
+          "name": "GPT-6"
         },
         {
-          "id": "gpt-4o-2024-08-06",
-          "name": "GPT-4o (2024-08-06)"
+          "id": "gpt-6-2026-09-15",
+          "name": "GPT-6 (2026-09-15)"
         },
         {
-          "id": "gpt-4o-mini",
-          "name": "GPT-4o Mini"
+          "id": "gpt-6-mini",
+          "name": "GPT-6 Mini"
         },
         {
           "id": "text-embedding-3-small",
@@ -37,8 +37,8 @@
           "name": "Text Embedding 3 Large"
         },
         {
-          "id": "claude-3-5-sonnet-20241022",
-          "name": "Claude 3.5 Sonnet"
+          "id": "claude-sonnet-5-5",
+          "name": "Claude Sonnet 5.5"
         },
         {
           "id": "gemini-2.5-flash",

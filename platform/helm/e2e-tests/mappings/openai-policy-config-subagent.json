@@ -18,7 +18,7 @@
       "id": "chatcmpl-policy-config-e2e",
       "object": "chat.completion",
       "created": 1234567890,
-      "model": "gpt-4o-2024-08-06",
+      "model": "gpt-6-2026-09-15",
       "choices": [
         {
           "index": 0,

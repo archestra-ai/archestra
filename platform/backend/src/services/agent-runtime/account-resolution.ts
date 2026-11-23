@@ -2,10 +2,11 @@ import {
   AGENT_CATALOG_NAMES,
   agentRuntimeCanNameAccountKind,
   buildAgentCatalogRuntime,
-  type CompanyAccountWords,
   COMPANY_ACCOUNT_WORDS,
+  type CompanyAccountWords,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
+  type LockableAgentRuntime,
   PopularAgentIdSchema,
   resolveAgentRuntimeTemplate,
   runtimeSupportsClaudeSubscription,
@@ -13,7 +14,6 @@ import {
   type SubscriptionCredentialKind,
   type SupportedProvider,
   subscriptionKindForRuntimeCommand,
-  type LockableAgentRuntime,
   withAgentRuntimeDefaults,
 } from "@archestra/shared";
 import { actorFromUserId } from "@/auth/service-account-user-id";
@@ -94,7 +94,7 @@ export type AccountFixedBy = {
  * `provider` choice is the company API key as it resolves for them, with
  * the connection and model they picked where those were left to them.
  */
-export type PersonAccountChoice =
+type PersonAccountChoice =
   | ({ authentication: "provider" } & CompanyOption)
   | {
       authentication: "subscription";
@@ -180,7 +180,7 @@ export async function loadPersonAccountChoice(params: {
 }
 
 /** Why a choice cannot be saved (`reason`) or no longer runs (`stale`). */
-export type AccountChoiceProblem = {
+type AccountChoiceProblem = {
   status: 400 | 403 | 409;
   reason: string;
   stale: string;
@@ -377,10 +377,10 @@ export async function resolveCompanyOption(params: {
   });
 
   if (params.saving && chosen?.llmApiKeyId && fixedBy.connection) {
-    return own(409, fixedPartMessage("connection", fixedBy.connection, words));
+    return own(409, fixedPartMessage("connection", fixedBy.connection));
   }
   if (params.saving && chosen?.modelId && fixedBy.model) {
-    return own(409, fixedPartMessage("model", fixedBy.model, words));
+    return own(409, fixedPartMessage("model", fixedBy.model));
   }
   const llmApiKeyId = fixedBy.connection
     ? agent.llmApiKeyId
@@ -1122,10 +1122,7 @@ export async function fixedRuntimeAccount(params: {
         });
   return {
     llmApiKeyId,
-    keyName:
-      key?.organizationId === params.organizationId
-        ? key.name
-        : null,
+    keyName: key?.organizationId === params.organizationId ? key.name : null,
     keyProvider:
       key?.organizationId === params.organizationId ? key.provider : null,
     keyMissing,
@@ -1226,11 +1223,7 @@ type RuntimeSettings = Pick<RuntimeTemplateSettings, "templates" | "builtIns">;
 /** What of a runtime the account rule is laid over, and found by. */
 type RuleRuntime = Pick<
   ResolvedAgentRuntime,
-  | "image"
-  | "command"
-  | "inferenceProtocol"
-  | "claudeCode"
-  | "accountLock"
+  "image" | "command" | "inferenceProtocol" | "claudeCode" | "accountLock"
 >;
 
 /**
@@ -1267,7 +1260,6 @@ const CLAUDE_MODEL_MISPLACED_MESSAGE =
 function fixedPartMessage(
   part: "connection" | "model",
   by: "runtime" | "agent",
-  words: CompanyAccountWords,
 ): string {
   const who = by === "runtime" ? "This agent's runtime" : "This agent";
   return `${who} sets the ${part} of its company API key, so you cannot choose another.`;

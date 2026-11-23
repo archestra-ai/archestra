@@ -19,8 +19,6 @@ import {
   AgentModel,
   AgentWorkspaceModel,
   LimitModel,
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
@@ -33,7 +31,6 @@ import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identit
 import { archestraMarkWithText } from "@/services/archestra-mark";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
-import { modelSyncService } from "@/services/model-sync";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import type {

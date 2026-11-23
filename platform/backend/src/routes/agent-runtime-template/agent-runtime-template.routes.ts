@@ -9,13 +9,13 @@ import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import {
-  applyLockedRuntimesToAgents,
-  assertLockedRuntimesFitAgents,
-} from "@/services/agent-runtime/agent-runtime-lock";
-import {
   assertRuntimeAccountSettings,
   withRuntimeAccountNames,
 } from "@/services/agent-runtime/agent-runtime-access";
+import {
+  applyLockedRuntimesToAgents,
+  assertLockedRuntimesFitAgents,
+} from "@/services/agent-runtime/agent-runtime-lock";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   AgentRuntimeTemplateSummarySchema,

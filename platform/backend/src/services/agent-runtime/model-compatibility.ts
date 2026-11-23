@@ -118,11 +118,7 @@ type ModelCompatibilityParams = {
   /** With its image, by which the runtime's own account rule is found. */
   runtime: Pick<
     ResolvedAgentRuntime,
-    | "image"
-    | "command"
-    | "inferenceProtocol"
-    | "claudeCode"
-    | "accountLock"
+    "image" | "command" | "inferenceProtocol" | "claudeCode" | "accountLock"
   >;
   agent: Pick<Agent, "llmApiKeyId" | "modelId">;
   organizationId: string;
@@ -616,9 +612,7 @@ async function resolveAccount(
     // No model is in effect while the person has one to choose, or a
     // connection to choose first.
     compatibility:
-      needsModel ||
-      unfitDefault ||
-      unfitSubscriptionDefault
+      needsModel || unfitDefault || unfitSubscriptionDefault
         ? { compatible: true as const }
         : compatibility,
     llm,

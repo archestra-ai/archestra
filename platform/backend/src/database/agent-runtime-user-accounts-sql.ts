@@ -4,6 +4,9 @@
  * where version 1.5 creates the table. This branch takes no migration, so a
  * one-time startup upgrade runs these statements instead; 0659 then finds the
  * table and creates nothing. Change neither copy alone.
+ *
+ * @public — the test database creates the table from this text, as the
+ * migrations would on main.
  */
 export const AGENT_RUNTIME_USER_ACCOUNTS_SQL = `-- drizzle-migration-linter: allow-breaking
 -- drizzle-migration-linter: reason=Every constraint and index here targets agent_runtime_user_accounts, a table created empty in this same migration (mirrors agent_pins): validating the foreign keys scans no existing rows, and CONCURRENTLY is unnecessary on a brand-new empty table. Each ADD CONSTRAINT ... FOREIGN KEY takes a SHARE ROW EXCLUSIVE lock on its referenced table (agents, user, chat_api_keys and models), and those four locks are held until the transaction that runs this migration batch commits: writes to those tables wait for the rest of the batch, not for this DDL alone. ON DELETE cascade on agent_id and user_id is intentional because a person's account choice is meaningless without its agent or its user; llm_api_key_id and model_id are ON DELETE SET NULL so a removed connection or model keeps the row: the person stays on the account they chose, and their runs are refused until they choose again instead of being moved silently to another connection or model. No existing row is read or changed: what agents and runtimes already store keeps its meaning. Every statement is idempotent: a release/1.4 database creates the same table with these same statements in a one-time startup upgrade, so this migration creates only what is missing there. A foreign key or an index is created only where the catalog has none of its name, so one that exists needs no table ownership: the migration may run as another database user than the one that created the table.

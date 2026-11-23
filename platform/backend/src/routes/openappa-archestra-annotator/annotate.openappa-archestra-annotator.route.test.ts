@@ -616,6 +616,29 @@ describe("archestra annotator", () => {
     );
   });
 
+  test.each([
+    { upstream: 429, consult: 429 },
+    { upstream: 402, consult: 429 },
+    { upstream: 503, consult: 502 },
+    { upstream: 504, consult: 502 },
+  ])("sends a call the LLM proxy answers with $upstream only once", async ({
+    upstream,
+    consult,
+  }) => {
+    await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
+    const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, () =>
+      HttpResponse.json(
+        { error: { message: "Upstream failed.", type: "api_error" } },
+        { status: upstream, headers: { "retry-after": "0" } },
+      ),
+    );
+
+    const response = await annotate(bearer());
+
+    expect(response.statusCode).toBe(consult);
+    expect(sent).toHaveLength(1);
+  });
+
   test("cancels its LLM proxy call when the runtime hangs up", async () => {
     await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
     let reach = () => {};

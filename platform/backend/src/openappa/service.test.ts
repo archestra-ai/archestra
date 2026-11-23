@@ -26,7 +26,7 @@ import { ApiError } from "@/types/api";
 import { openappaActor } from "./actor";
 import { recoverDiagnosticTurn } from "./diagnostic-recovery";
 import { enterOpenappaEncryptedChat } from "./encrypted-chat";
-import { OpenappaRootOnlyError } from "./failure";
+import { OpenappaRefusal, OpenappaRootOnlyError } from "./failure";
 import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
 import {
   addressRuntimeChild,
@@ -34,6 +34,7 @@ import {
   approveSpawnReturn,
   cancelCalls,
   endChild,
+  endChildTurn,
   evaluateHostedToolCalls,
   evaluateToolCalls,
   executeRemedyByOffer,
@@ -2838,6 +2839,44 @@ describe("APPA feature boundary", () => {
         output: "secret",
       }),
     ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("reports the runtime's ruling against an empty child return as a refusal that is not retried", async () => {
+    const ruling =
+      "[appa] Blocked: this subagent ended without the return its spawn requires.";
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({ decision: "block", reason: ruling }),
+    );
+
+    const failure = await endChildTurn({
+      session: { ...session, parent_id: "parent", session_id: "child" },
+      operationId: "child_turn_end:ruled",
+      spawnCallId: "spawn-call",
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      statusCode: 400,
+      shouldRetry: false,
+      retryAfterSeconds: undefined,
+      cause: expect.any(OpenappaRefusal),
+    });
+    expect(failure).toHaveProperty("cause.ruling", ruling);
+  });
+
+  test.each([
+    { decision: "refuse", detail: "storage failure: internal detail" },
+    { decision: "child_return", value: "bytes" },
+  ])("keeps any other answer to an empty child return a defect: %j", async (decision) => {
+    native.dispatchHook.mockResolvedValueOnce(JSON.stringify(decision));
+
+    const failure = await endChildTurn({
+      session: { ...session, parent_id: "parent", session_id: "child" },
+      operationId: "child_turn_end:defect",
+      spawnCallId: "spawn-call",
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ statusCode: 500, shouldRetry: false });
+    expect(failure).not.toHaveProperty("cause.ruling");
   });
 
   test("submits the exact crossed child value as the parent SpawnResult", async () => {

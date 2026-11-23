@@ -30,6 +30,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
+import { openappaFailure } from "@/openappa/failure";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
 import { superyellSession } from "@/openappa/unenforced";
@@ -47,7 +48,11 @@ import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { ApiError } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { runTaskInAgentRuntime } from "./pod-run";
-import { crossRuntimeFile, crossRuntimeOutput } from "./runtime-crossing";
+import {
+  crossingRefusal,
+  crossRuntimeFile,
+  crossRuntimeOutput,
+} from "./runtime-crossing";
 import { runtimeOpenAppaSession } from "./runtime-identity";
 import * as startTask from "./start-task";
 import { workspaceTransferTickets } from "./workspace-transfers";
@@ -170,6 +175,65 @@ describe("runtime crossing", () => {
     ).rejects.toThrow("protected runtime could not be bound");
     expect(backend.launch).not.toHaveBeenCalled();
     expect(backend.stageInputs).not.toHaveBeenCalled();
+  });
+
+  test.for([
+    {
+      failure: () =>
+        openappaFailure(
+          Object.assign(new Error("connection pool exhausted"), {
+            code: "pool_exhausted",
+          }),
+        ),
+      statusCode: 503,
+      shouldRetry: true,
+    },
+    {
+      failure: () =>
+        openappaFailure(
+          Object.assign(new Error("the persisted log is refused"), {
+            code: "untrusted_log",
+          }),
+        ),
+      statusCode: 409,
+      shouldRetry: false,
+    },
+  ])("a classified bind failure keeps its status, retry guidance and text ($statusCode)", async ({
+    failure,
+    statusCode,
+    shouldRetry,
+  }, {
+    makeAgent,
+    makeAdmin,
+    makeMember,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const started = await runnable({
+      makeAgent,
+      makeAdmin,
+      makeMember,
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const classified = failure();
+    vi.spyOn(openappa, "startRuntimeChild").mockRejectedValue(classified);
+
+    const refused = await runTaskInAgentRuntime({
+      ...started.params,
+      runtimeCrossing: crossing(true, started.organizationId),
+    }).catch((error: unknown) => error);
+
+    expect(refused).toMatchObject({
+      statusCode,
+      shouldRetry,
+      retryAfterSeconds: classified.retryAfterSeconds,
+      message: classified.message,
+    });
+    expect(crossingRefusal(refused)).toBe(classified.message);
+    expect(backend.launch).not.toHaveBeenCalled();
   });
 
   test("an unbound human start does not bind a parent", async ({

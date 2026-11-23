@@ -29,6 +29,7 @@ import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { scopedSessionId } from "@/openappa/actor";
 import { currentTrajectory } from "@/openappa/current-trajectory";
+import { openappaFailure } from "@/openappa/failure";
 import {
   observeUnenforcedSession,
   startedUnenforced,
@@ -436,6 +437,63 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
         `user:${user.id}|parent-session`,
       );
     }
+  });
+
+  test.for([
+    "contended",
+    "engine_invariant",
+  ])("a classified %s failure of a remedy reaches the model as its classified message", async (code, {
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const { value: token } = await UserTokenModel.create(
+      user.id,
+      agent.organizationId,
+    );
+    const cause = Object.assign(new Error("OpenAPPA remedy interrupted"), {
+      code,
+    });
+    native.executeRemedyByOffer.mockClear();
+    native.executeRemedyByOffer.mockRejectedValueOnce(cause);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: "archestra__execute_remedy_plan",
+          arguments: {
+            offer_id: "offer-1",
+            protected: "e30",
+            payload: "{}",
+            signature: "sig",
+            trajectory: currentTrajectory({ session_id: "remedy-session" }),
+          },
+          _meta: { "com.archestra/logicalToolCallId": "logical-remedy-1" },
+        },
+        id: "remedy-1",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(native.executeRemedyByOffer).toHaveBeenCalledOnce();
+    expect(response.json().result).toMatchObject({
+      isError: true,
+      content: [
+        { type: "text", text: `Error: ${openappaFailure(cause).message}` },
+      ],
+    });
   });
 
   test("uses untracked mode when an anonymous-token remedy has no logical id", async ({

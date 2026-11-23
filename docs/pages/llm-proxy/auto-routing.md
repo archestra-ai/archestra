@@ -40,7 +40,7 @@ You need [`llmProxy:update`](/docs/reference/permissions#llmProxy:update) to cre
 
 1. Add a Jev API key shared with the whole organization under [Model Providers](/docs/llm-proxy/providers#jev). Jev scores each new session.
 2. Go to **LLM → Auto Routing** and click **Create auto router**.
-3. Give it a name. Clients request `auto:` followed by that name, such as `auto:support`. The first router is named `auto`.
+3. Give it a name. Clients request `auto:` followed by that name, such as `auto:support`; leave it empty to name the router `auto`.
 4. Pick an organization-wide provider key and model for each of the three tiers: fast, normal, and smart. Each tier can use a different provider.
 5. Pick a daily budget and the decision model.
 6. Turn auto routing on under **Settings → LLM**. This switch covers every router in the organization.

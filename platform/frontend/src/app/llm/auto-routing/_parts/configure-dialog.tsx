@@ -327,7 +327,7 @@ function NameSection({
       </div>
       <p className="text-xs text-muted-foreground">
         {autoFree
-          ? "The model name clients request. Leave the name empty to call the router auto."
+          ? "The model name clients request. Leave it empty to name the router auto."
           : "The model name clients request. Lowercase letters, numbers, dots, dashes and underscores."}
       </p>
     </section>

@@ -245,27 +245,13 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
                 if matches!(builtin_name.as_str(), "approve" | "hitl" | "redact-email" | "redact-secrets" | "archestra")
         )
     };
-    let authorities = externals
+    if externals
         .authorities
-        .iter()
-        .map(|(name, binding)| ("authority", name.as_str(), binding));
-    let sanitizers = externals
-        .sanitizers
-        .iter()
-        .map(|(name, binding)| ("sanitizer", name.as_str(), binding));
-    if let Some((role, name, binding)) = authorities
-        .chain(sanitizers)
-        .find(|(_, _, binding)| !allowed(binding))
+        .values()
+        .chain(externals.sanitizers.values())
+        .any(|binding| !allowed(binding))
     {
-        let implementation = match binding {
-            Implementation::Builtin(builtin_name) => {
-                format!("the built-in implementation {builtin_name:?}")
-            }
-            _ => "an external implementation".to_string(),
-        };
-        return Err(format!(
-            "Replay does not support {implementation} for {role} {name:?}."
-        ));
+        return Err("Validation supports only certain built-in authorities and sanitizers.".into());
     }
     let unanswered = Arc::new(Unanswered::default());
     // The deployment `appa replay` runs, under the Archestra adapter: no person is asked,
@@ -700,11 +686,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn replay_names_unsupported_remedies_without_dispatch() {
+    async fn unsupported_remedies_are_refused_without_dispatch() {
+        let unsupported = "Validation supports only certain built-in authorities and sanitizers.";
         for (extra, error) in [
             (
                 "\n[externals.authorities.remote]\nurl = 'https://example.test/authority'\n",
-                "Replay does not support an external implementation for authority \"remote\".",
+                unsupported,
             ),
             (
                 "\n[externals.authorities.remote]\ncommand = ['touch', '/tmp/forbidden-replay']\n",
@@ -712,7 +699,7 @@ mod tests {
             ),
             (
                 "\n[externals.sanitizers.'mail.scrub']\nbuiltin = 'claude-code'\n",
-                "Replay does not support the built-in implementation \"claude-code\" for sanitizer \"mail.scrub\".",
+                unsupported,
             ),
         ] {
             let response = run(request(

@@ -1926,7 +1926,7 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `runtime.image` | `string` | No |  |
 | `runtime.command` | `string[] \| null` | No |  |
 | `runtime.inferenceProtocol` | `"openai_responses" \| "openai_chat" \| "anthropic"` | No |  |
-| `llmApiKeyId` | `string` | No | Provider API key the agent uses. Set together with modelId. Use list_llm_models to find both. |
+| `llmApiKeyId` | `string` | No | Provider API key the agent uses. Set together with modelId; an Agent Runtime agent may set it alone, and each person who runs it then picks the model. Use list_llm_models to find both. |
 | `modelId` | `string` | No | Model the agent uses: the model's id from list_llm_models, not its provider name. Set together with llmApiKeyId. |
 
 
@@ -1995,6 +1995,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `runtime.credentials[].description` | `string` | No |  |
 | `runtime.credentials[].required` | `boolean` | Yes |  |
 | `runtime.allowAgentSuppliedCredentialValues` | `boolean` | No |  |
+| `runtime.accountLock` | `"subscription" \| "key" \| null` | No |  |
 | `runtime.claudeCode` | `object` | No |  |
 | `runtime.claudeCode.authentication` | `"provider" \| "subscription"` | Yes |  |
 | `runtime.claudeCode.model` | `string` | No |  |
@@ -2092,7 +2093,7 @@ Required RBAC permission: `update` on the agent (granted per item)
 | `suggestedPrompts[].prompt` | `string` | Yes | Suggested prompt text users can click to start a conversation. |
 | `systemPrompt` | `string \| null` | No | New system prompt for the agent. |
 | `runtime` | `object \| null` | No | Run this agent in its own container (Agent Runtime) instead of the built-in chat harness. Pass { template } for a maintained CLI, or { image } for a custom image. Other fields override the defaults: claudeCode.authentication is 'subscription' (each user signs in with their own Claude account, the default) or 'provider' (bill through llmApiKeyId/modelId); credentials declares environment variables a run needs (users supply values later, or use transfer_credential); ttlHours, idleTimeoutMinutes, and maxCostUsd bound each run; privileged requires an agent administrator. Replaces the whole runtime: pass every field to keep. Pass null to return the agent to the built-in chat harness. |
-| `llmApiKeyId` | `string \| null` | No | Provider API key the agent uses. Set together with modelId. Use list_llm_models to find both. Pass null for both to use the default model. |
+| `llmApiKeyId` | `string \| null` | No | Provider API key the agent uses. Set together with modelId; an Agent Runtime agent may set it alone, and each person who runs it then picks the model. Use list_llm_models to find both. Pass null for both to use the default model. |
 | `modelId` | `string \| null` | No | Model the agent uses: the model's id from list_llm_models, not its provider name. Set together with llmApiKeyId. Pass null for both to use the default model. |
 
 

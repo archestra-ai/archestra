@@ -20,6 +20,15 @@ import {
 import type { AgentActivationSkillPolicyRule } from "@/models/agent-activation-skill-rule";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
+import {
+  agentPairToCheck,
+  assertAgentModelSelectionAvailable,
+  assertAgentRuntimeModelCompatibility,
+} from "@/services/agent-runtime/agent-config-validation";
+import {
+  assertAccountLockWrite,
+  runtimeConnectionFor,
+} from "@/services/agent-runtime/agent-runtime-access";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import {
   assignToolToAgent,
@@ -496,25 +505,100 @@ async function planScalars(params: {
     snapshotModelId !== (current.modelId ?? null) ||
     snapshotKeyId !== (current.llmApiKeyId ?? null)
   ) {
-    if ((snapshotModelId === null) !== (snapshotKeyId === null)) {
+    if (snapshotModelId !== null && snapshotKeyId === null) {
+      // A model alone is whole on a runtime that fixes its agents'
+      // connection: it runs on that connection, of which it must be a model.
+      const runtimeConnection = await runtimeConnectionFor({
+        organizationId,
+        runtime: current.runtime,
+      });
+      if (!runtimeConnection) {
+        throw unrestorable("its model and API key were not captured as a pair");
+      }
+      await assertAgentModelSelectionAvailable({
+        agent: { llmApiKeyId: null, modelId: snapshotModelId },
+        organizationId,
+        userId,
+        runtime: current.runtime,
+        runtimeConnection,
+      });
+    }
+    // A model restored beside the connection the agent keeps is judged as
+    // one sent alone: on a runtime that fixes its agents' connection, it runs
+    // on that connection, of which it must be a model.
+    if (
+      snapshotModelId !== null &&
+      snapshotKeyId !== null &&
+      snapshotKeyId === (current.llmApiKeyId ?? null)
+    ) {
+      const runtimeConnection = await runtimeConnectionFor({
+        organizationId,
+        runtime: current.runtime,
+      });
+      if (runtimeConnection) {
+        await assertAgentModelSelectionAvailable({
+          agent: agentPairToCheck({
+            sent: { modelId: snapshotModelId },
+            stored: current,
+            runtimeConnection,
+          }),
+          organizationId,
+          userId,
+          runtime: current.runtime,
+          runtimeConnection,
+        });
+      }
+    }
+    // An API key alone is whole on an Agent Runtime agent: it leaves the
+    // model to each person who runs the agent.
+    if (
+      snapshotModelId === null &&
+      snapshotKeyId !== null &&
+      !current.runtime
+    ) {
       throw unrestorable("its model and API key were not captured as a pair");
     }
-    if (snapshotModelId !== null && snapshotKeyId !== null) {
-      const [model, apiKey] = await Promise.all([
-        ModelModel.findById(snapshotModelId),
-        LlmProviderApiKeyModel.findById(snapshotKeyId),
-      ]);
-      if (!model) {
-        throw unrestorable(
-          `model "${snapshot.model?.externalId}" no longer exists`,
-        );
-      }
-      if (!apiKey || apiKey.organizationId !== organizationId) {
-        throw unrestorable(
-          `API key "${snapshot.llmApiKey?.name}" no longer exists`,
-        );
-      }
+    const [model, apiKey] = await Promise.all([
+      snapshotModelId !== null && snapshotKeyId !== null
+        ? ModelModel.findById(snapshotModelId)
+        : null,
+      snapshotKeyId !== null
+        ? LlmProviderApiKeyModel.findById(snapshotKeyId)
+        : null,
+    ]);
+    if (snapshotModelId !== null && snapshotKeyId !== null && !model) {
+      throw unrestorable(
+        `model "${snapshot.model?.externalId}" no longer exists`,
+      );
     }
+    if (
+      snapshotKeyId !== null &&
+      (!apiKey || apiKey.organizationId !== organizationId)
+    ) {
+      throw unrestorable(
+        `API key "${snapshot.llmApiKey?.name}" no longer exists`,
+      );
+    }
+    // A key alone gets the checks an edit gives it: one the restoring person
+    // may use, that holds an API key rather than someone's subscription, on
+    // a provider the runtime runs on.
+    if (snapshotModelId === null && snapshotKeyId !== null && current.runtime) {
+      await assertAgentRuntimeModelCompatibility({
+        runtime: current.runtime,
+        agent: { llmApiKeyId: snapshotKeyId, modelId: null },
+        organizationId,
+        userId,
+        selectsModel: true,
+      });
+    }
+    // A locked agent's account follows the same rule as an ordinary edit.
+    await assertAccountLockWrite({
+      organizationId,
+      userId,
+      previous: current,
+      runtime: undefined,
+      account: { llmApiKeyId: snapshotKeyId, modelId: snapshotModelId },
+    });
     scalars.modelId = snapshotModelId;
     scalars.llmApiKeyId = snapshotKeyId;
   }

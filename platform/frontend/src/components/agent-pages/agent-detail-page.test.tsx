@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { getAgentCatalogImages } from "@archestra/shared";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useDeleteProfile,
@@ -63,12 +65,32 @@ vi.mock("./agent-connect-content", () => ({
   AgentConnectContent: () => <div>connect content</div>,
 }));
 // One recorded run, so the Runs section is offered wherever runs are enabled.
+// What the setup check answers for the reader; undefined while it has not.
+let preflight: unknown;
 vi.mock("@/lib/agent-runtime.query", () => ({
   useAgentRuns: () => ({ data: [{ id: "run-1" }], isError: false }),
+  useAgentRuntimePreflight: () => ({ data: preflight }),
 }));
 vi.mock("./agent-runs", () => ({
   AgentRuns: () => <div>run history</div>,
 }));
+const catalogImages = getAgentCatalogImages({
+  registry: "mirror.example.com/archestra",
+  tag: "1.5.0",
+});
+/** An agent's saved runtime: the organization's custom runtime. */
+const savedRuntime = {
+  image: "registry.example.com/platform/review:v3",
+  command: ["review-agent"],
+};
+/** Agent Runtime on, with the deployment's maintained images. */
+const runtimeFeatureOn = () =>
+  vi
+    .mocked(useFeature)
+    .mockImplementation(((flag: string) =>
+      flag === "agentRuntimeCatalogImages"
+        ? catalogImages
+        : true) as unknown as typeof useFeature);
 vi.mock("@/components/scheduled-tasks/agent-schedules-section", () => ({
   AgentSchedulesSection: ({
     agentId,
@@ -86,12 +108,15 @@ vi.mock("./agent-work-sources", () => ({
   AgentWorkSources: ({
     hasRuntime,
     onShowA2a,
+    account,
   }: {
     hasRuntime: boolean;
     onShowA2a?: () => void;
+    account?: ReactNode;
   }) => (
-    <div>
+    <div data-testid="work-sources">
       <span>{hasRuntime ? "give it work" : "where people use it"}</span>
+      {account}
       {onShowA2a && (
         <button type="button" onClick={onShowA2a}>
           Show A2A details
@@ -102,6 +127,9 @@ vi.mock("./agent-work-sources", () => ({
 }));
 vi.mock("@/components/agent-saved-setup-banner", () => ({
   AgentSavedSetupBanner: () => null,
+}));
+vi.mock("@/components/agent-runtime-account-row", () => ({
+  AgentRuntimeAccountRow: () => <div data-testid="account-row" />,
 }));
 vi.mock("@/components/clone-agent-dialog", () => ({
   CloneAgentDialog: () => null,
@@ -175,6 +203,7 @@ describe("AgentDetailPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    preflight = undefined;
     access = { ...access, resource: "agent", canEdit: true, isBuiltIn: false };
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useEnvironments).mockReturnValue({
@@ -545,8 +574,8 @@ describe("AgentDetailPage", () => {
   });
 
   it("names delegated task history Runs and gives it a section", () => {
-    vi.mocked(useFeature).mockReturnValue(true);
-    mockAgent({ ...baseAgent, runtime: {} });
+    runtimeFeatureOn();
+    mockAgent({ ...baseAgent, runtime: savedRuntime });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(
@@ -558,8 +587,55 @@ describe("AgentDetailPage", () => {
     ).toBe(true);
   });
 
+  it("offers Start run as a link, and as a disabled button with what to do while the reader's runs cannot start", async () => {
+    runtimeFeatureOn();
+    mockAgent({ ...baseAgent, runtime: savedRuntime });
+    const { unmount } = render(<AgentDetailPage kind="agent" id="a1" />);
+    expect(screen.getByRole("link", { name: "Start run" })).toBeVisible();
+    unmount();
+
+    preflight = {
+      ready: false,
+      configured: [],
+      misconfigured: [],
+      incompatible: null,
+      accountError: null,
+      accountErrorFromChoice: false,
+      missing: [{ key: "CLAUDE_CODE_ACCOUNT", label: "Claude" }],
+    };
+    render(<AgentDetailPage kind="agent" id="a1" />);
+    expect(screen.queryByRole("link", { name: "Start run" })).toBeNull();
+    const button = screen.getByRole("button", { name: "Start run" });
+    expect(button).toBeDisabled();
+    await userEvent.hover(button.parentElement as HTMLElement);
+    expect(
+      (await screen.findAllByText("Sign in with Claude to run this agent."))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("shows the account card under Give it work on a runtime agent, and not without a runtime or with runs off", () => {
+    runtimeFeatureOn();
+    mockAgent({ ...baseAgent, runtime: savedRuntime });
+    const { unmount } = render(<AgentDetailPage kind="agent" id="a1" />);
+    expect(
+      within(screen.getByTestId("work-sources")).getByTestId("account-row"),
+    ).toBeInTheDocument();
+    unmount();
+
+    mockAgent({ ...baseAgent, runtime: null });
+    const withoutRuntime = render(<AgentDetailPage kind="agent" id="a1" />);
+    expect(screen.queryByTestId("account-row")).toBeNull();
+    withoutRuntime.unmount();
+
+    vi.mocked(useFeature).mockReturnValue(false);
+    mockAgent({ ...baseAgent, runtime: savedRuntime });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+    expect(screen.queryByTestId("account-row")).toBeNull();
+  });
+
   it("keeps run UI invisible when its feature flag is disabled", () => {
-    mockAgent({ ...baseAgent, runtime: {} });
+    mockAgent({ ...baseAgent, runtime: savedRuntime });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();

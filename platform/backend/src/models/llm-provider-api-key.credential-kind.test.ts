@@ -315,4 +315,51 @@ describe("LLM provider key credential kind", () => {
 
     expect(await storedKind(key.id)).toBe("chatgpt");
   });
+  test("a key whose kind cannot be told counts as personal", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const company = await sharedKey({
+      organizationId: org.id,
+      apiKeyValue: "sk-metered",
+    });
+    const subscription = await sharedKey({
+      organizationId: org.id,
+      apiKeyValue: subscriptionValue(),
+    });
+    const vaultSecret = await SecretModel.create({
+      name: "vault-backed",
+      secret: { apiKey: "sk-in-vault" },
+      isVault: true,
+    });
+    const legacy = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        name: "Shared from Vault",
+        provider: "openai",
+        secretId: vaultSecret.id,
+        scope: "org",
+        userId: null,
+        teamId: null,
+      },
+      { publishToOrganization: true },
+    );
+
+    expect(await LlmProviderApiKeyModel.isPersonalCredential(company)).toBe(
+      false,
+    );
+    expect(
+      await LlmProviderApiKeyModel.isPersonalCredential(subscription),
+    ).toBe(true);
+    const vaultDown = vi
+      .spyOn(secretManager(), "getSecret")
+      .mockRejectedValue(new Error("vault unreachable"));
+    expect(await LlmProviderApiKeyModel.isPersonalCredential(legacy)).toBe(
+      true,
+    );
+    vaultDown.mockRestore();
+    expect(await LlmProviderApiKeyModel.isPersonalCredential(legacy)).toBe(
+      false,
+    );
+  });
 });

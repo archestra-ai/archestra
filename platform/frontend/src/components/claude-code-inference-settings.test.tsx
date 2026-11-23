@@ -14,10 +14,12 @@ import {
   it,
   vi,
 } from "vitest";
-import { ClaudeCodeAccount } from "./claude-code-account";
+import type { AgentAccountLock } from "./agent-account-ways-field";
 import { ClaudeCodeInferenceSettings } from "./claude-code-inference-settings";
+import { ClaudeSubscriptionModelPicker } from "./claude-connection-pickers";
 
 vi.mock("sonner");
+vi.mock("next/navigation");
 
 const origin = "http://localhost:9000";
 const accountUrl = `${origin}/api/agents/agent-1/runtime/claude-code/account`;
@@ -102,162 +104,58 @@ afterAll(() => {
 });
 
 describe("Claude Code authentication", () => {
-  it("discovers models only after native authentication and removes them on disconnect", async () => {
-    // A cached provider catalog must never populate the native account picker.
-    client.setQueryData(
-      ["llm-models", null],
-      [
-        {
-          id: "unrelated-api-model",
-          provider: "anthropic",
-          displayName: "API catalog model",
-        },
-      ],
-    );
+  it("shows each option's setup under it, and asks for one option when none is selected", async () => {
     render(
       <QueryClientProvider client={client}>
-        <Account />
+        <Settings />
       </QueryClientProvider>,
     );
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled(),
-    );
-    expect(modelRequests).toBe(0);
-    expect(screen.queryByText("API catalog model")).not.toBeInTheDocument();
+    const subscription = () =>
+      screen.getByRole("checkbox", {
+        name: /Each person's Claude subscription/,
+      });
+    const companyKey = () =>
+      screen.getByRole("checkbox", { name: /A company API key/ });
+    // Both options start selected: each person chooses.
+    await waitFor(() => expect(subscription()).toBeChecked());
+    expect(companyKey()).toBeChecked();
     expect(
-      screen.queryByRole("button", { name: "Provider key" }),
-    ).not.toBeInTheDocument();
-    // Sign in starts Claude's flow at once; there is no second button.
-    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    await screen.findByLabelText("Authorization code");
-    expect(modelRequests).toBe(0);
-    fireEvent.change(screen.getByLabelText("Authorization code"), {
-      target: { value: "native-authorization-code" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Complete sign-in" }));
-    await screen.findByText("Signed in for you");
-    await waitFor(() => expect(modelRequests).toBe(1));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Opus/i }));
-    fireEvent.click(
-      await screen.findByRole("option", { name: /Runtime model/ }),
-    );
-    expect(screen.getByRole("button", { name: /Runtime model/ })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
-    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
-    await screen.findByRole("button", { name: "Sign in with Claude" });
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      screen.queryByRole("button", { name: /Runtime model/ }),
-    ).not.toBeInTheDocument();
-    expect(modelRequests).toBe(1);
-  });
-
-  it("finishes an asynchronous token flow without resubmitting the authorization code", async () => {
-    let polls = 0;
-    server.use(
-      http.get(accountUrl, () =>
-        HttpResponse.json(
-          connected
-            ? { state: "connected" }
-            : { state: "connecting", flowId: pendingSignIn.flowId },
-        ),
+      screen.getByText(
+        "Each person chooses between their own subscription and a company API key.",
       ),
-      http.post(`${accountUrl}/complete`, async ({ request }) => {
-        expect(await request.json()).toEqual({ flowId: pendingSignIn.flowId });
-        polls++;
-        connected = true;
-        return HttpResponse.json({ state: "connected" });
-      }),
-    );
-    render(
-      <QueryClientProvider client={client}>
-        <Account />
-      </QueryClientProvider>,
-    );
-    await screen.findByText("Sign in to use this agent.");
-    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    await screen.findByText("Signed in for you", {}, { timeout: 5000 });
-    expect(polls).toBe(1);
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-    );
-  });
-
-  it("connects a read-only Vault reference and shows expired connections as requiring sign-in", async () => {
-    let reference: unknown;
-    server.use(
-      http.get(accountUrl, () =>
-        HttpResponse.json({ state: "expired", requiresVaultReference: true }),
-      ),
-      http.post(accountUrl, async ({ request }) => {
-        reference = await request.json();
-        return HttpResponse.json({
-          state: "connecting",
-          flowId: pendingSignIn.flowId,
-          requiresVaultReference: true,
-        });
-      }),
-    );
-    render(
-      <QueryClientProvider client={client}>
-        <Account />
-      </QueryClientProvider>,
-    );
-    await screen.findByText("Connection expired. Sign in again.");
-    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    const button = screen.getByRole("button", {
-      name: "Connect Vault credential",
-    });
-    expect(button).toBeDisabled();
-    expect(
-      screen.queryByRole("button", { name: "Sign in with Claude" }),
-    ).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Vault reference"), {
-      target: { value: "secret/data/personal#token" },
-    });
-    fireEvent.click(button);
-    await waitFor(() =>
-      expect(reference).toEqual({
-        vaultReference: "secret/data/personal#token",
-      }),
-    );
-  });
-
-  it("switches to provider billing without treating Vertex configuration as a personal sign-in", async () => {
-    render(
-      <QueryClientProvider client={client}>
-        <Settings vertexEnabled />
-      </QueryClientProvider>,
-    );
-    // Signing in belongs to the setup banner; the settings stay quiet.
-    await waitFor(() =>
-      expect(
-        screen.getByRole("radio", {
-          name: /Each person's Claude subscription/,
-        }),
-      ).toBeChecked(),
-    );
-    expect(
-      screen.queryByRole("button", { name: "Sign in" }),
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("radio", { name: /A company API key/ }));
+    ).toBeVisible();
     expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Provider model" }),
-    ).toBeVisible();
-    expect(
-      screen.getByText(/Billed through Google Cloud \(Vertex AI\)/),
-    ).toBeVisible();
+    // Each person signs in and picks their model on the agent's page; the
+    // settings only say which accounts are allowed.
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("radio", { name: /Each person's Claude subscription/ }),
-    );
+    // Without the company key, its connection goes too.
+    fireEvent.click(companyKey());
+    expect(companyKey()).not.toBeChecked();
     expect(
       screen.queryByRole("button", { name: "Provider key" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Locked to each user's personal subscription"),
+    ).toBeVisible();
+    // The last option can be unticked too; the form then asks for one.
+    fireEvent.click(subscription());
+    expect(subscription()).not.toBeChecked();
+    expect(
+      screen.getByText(
+        "Selecting more than one option allows users to choose.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Select at least one option.",
+    );
+    fireEvent.click(companyKey());
+    expect(companyKey()).toBeChecked();
+    expect(subscription()).not.toBeChecked();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Locked to a company API key")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();
     expect(modelRequests).toBe(0);
   });
 
@@ -272,116 +170,84 @@ describe("Claude Code authentication", () => {
     );
     render(
       <QueryClientProvider client={client}>
-        <Account />
+        <ClaudeSubscriptionModelPicker
+          agentId="agent-1"
+          onModelChange={vi.fn()}
+        />
       </QueryClientProvider>,
     );
-    await screen.findByText("Could not check connection");
+    await waitFor(() =>
+      expect(
+        client.getQueryState(["claude-code-account", "agent-1"])?.status,
+      ).toBe("error"),
+    );
+    // No account, so no list to ask for and no field to show.
     expect(modelRequests).toBe(0);
-    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    await screen.findByText("Could not check Claude Code");
     expect(
-      screen.queryByRole("button", { name: "Sign in with Claude" }),
+      screen.queryByRole("button", { name: /^Model/ }),
     ).not.toBeInTheDocument();
   });
 
-  it("disables personal subscription and explains how to restore the command when runtimeCommand is not archestra-claude-code", () => {
-    render(
-      <QueryClientProvider client={client}>
-        <ClaudeCodeInferenceSettings
-          agentId="agent-1"
-          authentication="subscription"
-          onAuthenticationChange={vi.fn()}
-          model="opus"
-          onModelChange={vi.fn()}
-          provider="anthropic"
-          vertexEnabled={false}
-          runtimeCommand="archestra-claude-code-runtime"
-          apiKeySelector={<button type="button">Provider key</button>}
-          modelSelector={<button type="button">Provider model</button>}
-        />
-      </QueryClientProvider>,
-    );
-
-    const subscriptionRadio = screen.getByRole("radio", {
-      name: /Each person's Claude subscription/,
-    });
-    const providerRadio = screen.getByRole("radio", {
-      name: /A company API key/,
-    });
-    expect(subscriptionRadio).toBeDisabled();
-    expect(subscriptionRadio).not.toBeChecked();
-    expect(providerRadio).toBeChecked();
-    expect(
-      screen.getByText(
-        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current archestra-claude-code-runtime entrypoint will be lost.",
+  it.each([
+    [undefined, "Opus"],
+    ["default", "Claude account default"],
+    ["claude-sonnet-example", "Sonnet (example)"],
+  ] as const)("shows the effective subscription model %s without overwriting the saved one", async (model, label) => {
+    connected = true;
+    const onModelChange = vi.fn();
+    server.use(
+      http.get(modelsUrl, () =>
+        HttpResponse.json({
+          models: [
+            {
+              value: "opus",
+              displayName: "Opus",
+              description: "Default for new runs",
+            },
+            {
+              value: "default",
+              displayName: "Claude account default",
+              description: "Selected by Claude",
+            },
+            {
+              value: "claude-sonnet-example",
+              displayName: "Sonnet (example)",
+              description: "Explicit selection",
+            },
+          ],
+        }),
       ),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Provider model" }),
-    ).toBeVisible();
-  });
-
-  it("treats a command with surrounding whitespace as not matching archestra-claude-code", () => {
+    );
     render(
       <QueryClientProvider client={client}>
-        <ClaudeCodeInferenceSettings
+        <ClaudeSubscriptionModelPicker
           agentId="agent-1"
-          authentication="subscription"
-          onAuthenticationChange={vi.fn()}
-          model="opus"
-          onModelChange={vi.fn()}
-          provider="anthropic"
-          vertexEnabled={false}
-          runtimeCommand=" archestra-claude-code "
-          apiKeySelector={<button type="button">Provider key</button>}
-          modelSelector={<button type="button">Provider model</button>}
+          model={model}
+          onModelChange={onModelChange}
         />
       </QueryClientProvider>,
     );
 
     expect(
-      screen.getByRole("radio", {
-        name: /Each person's Claude subscription/,
-      }),
-    ).toBeDisabled();
-    expect(
-      screen.getByText(
-        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current entrypoint will be lost.",
-      ),
+      await screen.findByRole("button", { name: `Model ${label}` }),
     ).toBeVisible();
+    expect(onModelChange).not.toHaveBeenCalled();
   });
 });
 
-/** The account control the agent's setup banner shows until sign-in. */
-function Account() {
-  const [model, setModel] = useState<string>();
-  return (
-    <ClaudeCodeAccount
-      agentId="agent-1"
-      variant="compact"
-      model={model}
-      onModelChange={setModel}
-    />
-  );
-}
-
-function Settings({ vertexEnabled = false }: { vertexEnabled?: boolean }) {
-  const [authentication, setAuthentication] = useState<
-    "provider" | "subscription"
-  >("subscription");
-  const [model, setModel] = useState<string>();
+function Settings() {
+  const [lock, setLock] = useState<AgentAccountLock | null>(null);
+  const [none, setNone] = useState(false);
   return (
     <ClaudeCodeInferenceSettings
-      agentId="agent-1"
-      authentication={authentication}
-      onAuthenticationChange={setAuthentication}
-      model={model}
-      onModelChange={setModel}
-      provider="anthropic"
-      vertexEnabled={vertexEnabled}
-      apiKeySelector={<button type="button">Provider key</button>}
-      modelSelector={<button type="button">Provider model</button>}
+      lock={lock}
+      noWaySelected={none}
+      onLockChange={(next) => {
+        setNone(false);
+        setLock(next);
+      }}
+      onNoWaySelected={() => setNone(true)}
+      connectionPickers={<button type="button">Provider key</button>}
     />
   );
 }

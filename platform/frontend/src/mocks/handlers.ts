@@ -664,6 +664,26 @@ export const handlers: HttpHandler[] = [
     agents: [],
     hiddenBlockingCount: 0,
   }),
+  // A runtime agent's page and composer read the viewer's own account.
+  ...getJson("/api/agents/:id/runtime/account", {
+    agentAccount: {
+      authentication: "provider",
+      llmApiKeyId: null,
+      modelId: null,
+    },
+    // Nothing is set for the company API key at any level, and nothing
+    // resolves: its connection and model are the viewer's to pick.
+    companyKey: false,
+    companyAccount: {
+      connection: { id: null, name: null, provider: null, fixedBy: null },
+      model: { id: null, name: null, fixedBy: null },
+      usesOrganizationDefault: false,
+    },
+    choice: null,
+    choiceError: null,
+    lock: null,
+    subscription: null,
+  }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",

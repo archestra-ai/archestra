@@ -131,3 +131,44 @@ export function excludedSubagentsSummary(count: number): string {
   if (count === 0) return "All local agents are subagents.";
   return `All local agents are subagents, except ${count} excluded.`;
 }
+
+/**
+ * The model a connection starts on once it is picked: its best model if the
+ * runtime can run it, otherwise the first one it can.
+ */
+export function pickConnectionModel<T extends { dbId: string }>(params: {
+  bestModelId: string | null | undefined;
+  compatibleModels: readonly T[];
+}): string | null {
+  const best = params.compatibleModels.find(
+    (model) => model.dbId === params.bestModelId,
+  );
+  return best?.dbId ?? params.compatibleModels[0]?.dbId ?? null;
+}
+
+/**
+ * The connection and model an agent's save sends. Each is optional: one left
+ * empty is each person's to pick. A connection the agent's runtime fixes is
+ * the runtime's own and is never stored on an agent: the save then sends no
+ * connection, which leaves the agent's own stored one as it is, and sends
+ * the agent's model only where the runtime fixes none.
+ */
+export function accountPairToSave(params: {
+  llmApiKeyId: string | null;
+  /** Under a fixed connection, the model set among that connection's. */
+  modelId: string | null;
+  /**
+   * The runtime fixes the connection, with this model or none; null when it
+   * fixes nothing.
+   */
+  fixed: { modelId: string | null } | null;
+}): { llmApiKeyId?: string | null; modelId?: string | null } {
+  const { fixed } = params;
+  if (!fixed) {
+    return {
+      llmApiKeyId: params.llmApiKeyId || null,
+      modelId: params.modelId || null,
+    };
+  }
+  return fixed.modelId ? {} : { modelId: params.modelId || null };
+}

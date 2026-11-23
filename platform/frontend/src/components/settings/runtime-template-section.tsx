@@ -4,10 +4,12 @@ import {
   AGENT_CATALOG_IDS,
   AGENT_CATALOG_NAMES,
   type AgentCatalogId,
+  agentRuntimeCanNameAccountKind,
   type archestraApiTypes,
   buildAgentCatalogRuntime,
   CUSTOM_IMAGE_RUNTIME_ID,
   isIntegrationHidden,
+  runtimeSupportsClaudeSubscription,
   withAgentRuntimeDefaults,
 } from "@archestra/shared";
 import {
@@ -38,8 +40,9 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
+import type { AgentAccountLock } from "@/components/agent-account-ways-field";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   CatalogAgentIcon,
@@ -59,6 +62,11 @@ import {
 import { ConfigurationRow } from "@/components/configuration-row";
 import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  type RuntimeAccountsChange,
+  RuntimeAccountsField,
+  runtimeAccountsAfter,
+} from "@/components/settings/runtime-accounts-field";
 import { Accordion } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,19 +97,14 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
+  type RuntimeAccounts,
+  runtimeAccountsToSave,
   useRuntimeTemplateCatalog,
   useRuntimeTemplateSettings,
   useSaveRuntimeTemplateSettings,
@@ -606,6 +609,30 @@ function RuntimeTemplateDialog({
   const runtimeError = form.formState.errors.runtime?.message;
   const imageAttention =
     typeof runtimeError === "string" ? runtimeError : undefined;
+  const accounts = useRuntimeAccountCards({
+    runtime,
+    stored: template?.accounts,
+  });
+  const save = ({ accounts: _stored, ...values }: TemplateDraft) => {
+    const saved = accounts.toSave();
+    // The runtime's Claude account follows the kind its rule names, as on a
+    // maintained runtime. Where the rule names none, it stays as it was.
+    const { claudeCode } = values.runtime;
+    const withAccount =
+      claudeCode && accounts.lock
+        ? {
+            ...values,
+            runtime: {
+              ...values.runtime,
+              claudeCode: {
+                ...claudeCode,
+                authentication: claudeAccount(accounts.lock),
+              },
+            },
+          }
+        : values;
+    onSave(saved ? { ...withAccount, accounts: saved } : withAccount);
+  };
 
   return (
     <Dialog
@@ -626,12 +653,21 @@ function RuntimeTemplateDialog({
         <Form {...form}>
           <form
             className="contents"
-            onSubmit={form.handleSubmit(onSave, (errors) => {
-              if (errors.runtime)
+            onSubmit={(event) => {
+              if (accounts.noAccount) {
+                event.preventDefault();
                 setOpenRows((rows) =>
-                  rows.includes("container") ? rows : [...rows, "container"],
+                  rows.includes("accounts") ? rows : [...rows, "accounts"],
                 );
-            })}
+                return;
+              }
+              void form.handleSubmit(save, (errors) => {
+                if (errors.runtime)
+                  setOpenRows((rows) =>
+                    rows.includes("container") ? rows : [...rows, "container"],
+                  );
+              })(event);
+            }}
           >
             <DialogHeader>
               <div className="flex items-center gap-2">
@@ -767,6 +803,11 @@ function RuntimeTemplateDialog({
                           hideLabel
                         />
                       </ConfigurationRow>
+                      <RuntimeAccountsRow
+                        id={`${id}-accounts`}
+                        runtime={field.value}
+                        accounts={accounts}
+                      />
                       <ConfigurationRow
                         id={`${id}-steering`}
                         value="steering"
@@ -829,7 +870,7 @@ function RuntimeTemplateDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit">
+              <Button type="submit" disabled={accounts.noAccount}>
                 {template ? "Save runtime" : "Add runtime"}
               </Button>
             </DialogFooter>
@@ -863,6 +904,29 @@ function BuiltInRuntimeDialog({
   const [locked, setLocked] = useState(value?.locked ?? false);
   const rowId = useId();
   const limits = useLimitsSummary(runtime);
+  const accounts = useRuntimeAccountCards({
+    runtime,
+    stored: value?.settings.accounts,
+  });
+  const save = () => {
+    const saved = accounts.toSave();
+    // The runtime's Claude account follows the kind its rule names. Where
+    // the rule names none, the one it stores stays as it was.
+    const claudeCode =
+      runtime.claudeCode && accounts.lock
+        ? { authentication: claudeAccount(accounts.lock) }
+        : value?.settings.claudeCode;
+    onSave({
+      locked,
+      settings: {
+        ttlHours: runtime.ttlHours,
+        maxCostUsd: runtime.maxCostUsd,
+        idleTimeoutMinutes: runtime.idleTimeoutMinutes,
+        ...(claudeCode && { claudeCode }),
+        ...(saved && { accounts: saved }),
+      },
+    });
+  };
   return (
     <Dialog
       open
@@ -903,27 +967,11 @@ function BuiltInRuntimeDialog({
                 release.
               </FieldDescription>
             </ConfigurationRow>
-            {runtime.claudeCode && (
-              <ConfigurationRow
-                id={`${rowId}-account`}
-                value="account"
-                title="Claude account"
-                description="Whose account runs the model."
-                summary={
-                  CLAUDE_ACCOUNT_LABELS[runtime.claudeCode.authentication]
-                }
-              >
-                <ClaudeAccountField
-                  value={runtime.claudeCode.authentication}
-                  onChange={(authentication) =>
-                    setRuntime({
-                      ...runtime,
-                      claudeCode: { ...runtime.claudeCode, authentication },
-                    })
-                  }
-                />
-              </ConfigurationRow>
-            )}
+            <RuntimeAccountsRow
+              id={`${rowId}-accounts`}
+              runtime={runtime}
+              accounts={accounts}
+            />
             <ConfigurationRow
               id={`${rowId}-limits`}
               value="limits"
@@ -940,24 +988,7 @@ function BuiltInRuntimeDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            type="button"
-            onClick={() =>
-              onSave({
-                locked,
-                settings: {
-                  ttlHours: runtime.ttlHours,
-                  maxCostUsd: runtime.maxCostUsd,
-                  idleTimeoutMinutes: runtime.idleTimeoutMinutes,
-                  ...(runtime.claudeCode && {
-                    claudeCode: {
-                      authentication: runtime.claudeCode.authentication,
-                    },
-                  }),
-                },
-              })
-            }
-          >
+          <Button type="button" disabled={accounts.noAccount} onClick={save}>
             Save runtime
           </Button>
         </DialogFooter>
@@ -966,41 +997,95 @@ function BuiltInRuntimeDialog({
   );
 }
 
-function ClaudeAccountField({
-  value,
-  onChange,
+/**
+ * A runtime's "Accounts that can run it" cards, as one row of its settings:
+ * the cards an agent on it shows under the same heading.
+ */
+function RuntimeAccountsRow({
+  id,
+  runtime,
+  accounts,
 }: {
-  value: "provider" | "subscription";
-  onChange: (value: "provider" | "subscription") => void;
+  id: string;
+  runtime: Pick<AgentRuntimeConfig, "command" | "inferenceProtocol">;
+  accounts: RuntimeAccountCards;
 }) {
-  const id = useId();
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id} className="sr-only">
-        Claude account
-      </Label>
-      <Select
-        value={value}
-        onValueChange={(next) => onChange(next as "provider" | "subscription")}
-      >
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="subscription">
-            {CLAUDE_ACCOUNT_LABELS.subscription}
-          </SelectItem>
-          <SelectItem value="provider">
-            {CLAUDE_ACCOUNT_LABELS.provider}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-      <FieldDescription>
-        Each person signs in with their own Pro or Max plan, or runs are billed
-        to an LLM provider connection.
-      </FieldDescription>
-    </div>
+    <ConfigurationRow
+      id={id}
+      value="accounts"
+      title="Accounts that can run it"
+      description="The accounts every agent on this runtime can use."
+      summary={accounts.summary}
+      attention={accounts.noAccount ? "Select at least one option." : undefined}
+    >
+      <RuntimeAccountsField
+        runtime={runtime}
+        claude={runtimeSupportsClaudeSubscription(runtime)}
+        lock={accounts.lock}
+        noneSelected={accounts.noAccount}
+        accounts={accounts.rule}
+        onChange={accounts.change}
+      />
+    </ConfigurationRow>
   );
+}
+
+type RuntimeAccountCards = ReturnType<typeof useRuntimeAccountCards>;
+
+/**
+ * The account rule a runtime's editor holds: the kind it names, where its
+ * agents have two kinds of account, and the company connection and model it
+ * fixes. Every card unticked is no rule at all: it is held here, and the
+ * runtime cannot be saved until one is ticked again. It belongs to the cards
+ * it was said on: another command or protocol shows its own.
+ */
+function useRuntimeAccountCards(params: {
+  runtime: Pick<AgentRuntimeConfig, "command" | "inferenceProtocol">;
+  stored: RuntimeAccounts | undefined;
+}) {
+  const [rule, setRule] = useState(params.stored);
+  const [noAccount, setNoAccount] = useState(false);
+  const namesKind = agentRuntimeCanNameAccountKind(params.runtime);
+  const lock = namesKind ? (rule?.kind ?? null) : null;
+  const cardsOf = `${params.runtime.command?.[0] ?? ""}:${params.runtime.inferenceProtocol}`;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the cards the runtime shows change
+  useEffect(() => {
+    setNoAccount(false);
+  }, [cardsOf]);
+  return {
+    rule,
+    lock,
+    noAccount,
+    summary: noAccount
+      ? "None selected"
+      : lock === "subscription"
+        ? "Personal subscriptions"
+        : lock === "key" || !namesKind
+          ? "Company API key"
+          : "Each agent chooses",
+    change: (change: RuntimeAccountsChange) => {
+      if (change.lock === "none") {
+        setNoAccount(true);
+        return;
+      }
+      setNoAccount(false);
+      setRule(runtimeAccountsAfter({ previous: rule, change, namesKind }));
+    },
+    /**
+     * What a save writes: the kind only where the runtime's agents have two
+     * kinds of account, and none of the names the server adds.
+     */
+    toSave: () =>
+      runtimeAccountsToSave(
+        rule && { ...rule, kind: namesKind ? rule.kind : undefined },
+      ),
+  };
+}
+
+/** The Claude account a runtime's settings store for one ticked card. */
+function claudeAccount(lock: AgentAccountLock): "provider" | "subscription" {
+  return lock === "key" ? "provider" : "subscription";
 }
 
 function Permission({ children }: { children: string }) {
@@ -1121,8 +1206,3 @@ function useLimitsSummary(value: AgentRuntimeConfig): string {
   if (ttl != null) parts.push(`${ttl} h`);
   return parts.length ? parts.join(" · ") : "Installation defaults";
 }
-
-const CLAUDE_ACCOUNT_LABELS = {
-  subscription: "Each person's Claude subscription",
-  provider: "A company API key",
-} as const;

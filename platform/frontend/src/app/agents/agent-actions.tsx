@@ -13,6 +13,7 @@ import {
   TerminalSquare,
   Trash2,
 } from "lucide-react";
+import { useState } from "react";
 import {
   agentAction,
   getAgentActionModel,
@@ -26,6 +27,7 @@ import {
 import type { useProfilesPaginated } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
+import { useAgentRunBlock } from "@/lib/hooks/use-agent-run-block";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 
 type Agent = NonNullable<
@@ -92,6 +94,18 @@ export function AgentActions({
   });
   const connectAction = agentAction(actionModel, "connect");
   const chatAction = agentAction(actionModel, "chat");
+  // A run the reader's account cannot start is not offered as a click. The
+  // check is one request per agent, so a list asks for none of them on load:
+  // a row asks once the pointer or the keyboard reaches its actions.
+  const [reached, setReached] = useState(false);
+  const reach = () => setReached(true);
+  const runBlock = useAgentRunBlock(
+    agent.id,
+    reached &&
+      chatAction.visible &&
+      chatAction.startsRun === true &&
+      !agent.deletedAt,
+  );
   const editAction = agentAction(actionModel, "edit");
   const cloneAction = agentAction(actionModel, "clone");
   const exportAction = agentAction(actionModel, "export");
@@ -166,6 +180,8 @@ export function AgentActions({
             ),
             label: chatAction.label,
             href: chatAction.href,
+            disabled: !!runBlock,
+            disabledTooltip: runBlock ?? undefined,
           },
         ]
       : []),
@@ -248,17 +264,25 @@ export function AgentActions({
 
   if (variant === "menu") {
     return (
-      <TableRowActions
-        permissionScope={agent.id}
-        itemName={agent.name}
-        actions={[]}
-        dropdownActions={[...primaryActions, ...dropdownActions]}
-      />
+      // biome-ignore lint/a11y/noStaticElementInteractions: it only notices the pointer or the focus arriving, to start the run check; the controls inside take the interaction
+      <span className="contents" onPointerOver={reach} onFocus={reach}>
+        <TableRowActions
+          permissionScope={agent.id}
+          itemName={agent.name}
+          actions={[]}
+          dropdownActions={[...primaryActions, ...dropdownActions]}
+        />
+      </span>
     );
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    // biome-ignore lint/a11y/noStaticElementInteractions: it only notices the pointer or the focus arriving, to start the run check; the controls inside take the interaction
+    <div
+      className="flex items-center gap-1.5"
+      onPointerOver={reach}
+      onFocus={reach}
+    >
       <RowPinButton
         name={agent.name}
         pinned={Boolean(agent.pinnedAt)}

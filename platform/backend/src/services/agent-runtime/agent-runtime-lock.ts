@@ -15,6 +15,7 @@ import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import type { AgentRuntime } from "@/types";
 import { ApiError } from "@/types";
 import type { RuntimeTemplateSettings } from "@/types/agent-runtime-template";
+import { lockedRuntimeAccountKind } from "./account-resolution";
 import { assertAgentRuntimeModelCompatibility } from "./agent-config-validation";
 
 // SPDX-SnippetBegin
@@ -153,9 +154,19 @@ function applyLock(params: {
     runtime: params.runtime,
     template: params.lock.runtime,
   });
-  return params.lock.setsImage
+  const runtime = params.lock.setsImage
     ? { ...locked, image: params.lock.runtime.image }
     : locked;
+  // A locked Claude runtime holds its agents to its Claude account. An agent
+  // saved since people could choose carries that as its account lock; one
+  // saved before carries none, and runs on the Claude account written here.
+  const accountLock = lockedRuntimeAccountKind({
+    locked: true,
+    runtime: params.lock.runtime,
+  });
+  return accountLock && runtime.accountLock !== undefined
+    ? { ...runtime, accountLock }
+    : runtime;
 }
 
 function modelSettings(runtime: AgentRuntime) {

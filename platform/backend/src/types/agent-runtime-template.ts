@@ -1,5 +1,7 @@
 import {
   AGENT_CATALOG_NAMES,
+  AgentRuntimeAccountsSchema,
+  AgentRuntimeAccountsViewSchema,
   PopularAgentIdSchema,
   PopularAgentOverridesSchema,
 } from "@archestra/shared";
@@ -33,6 +35,14 @@ const TemplateEnvironmentSchema = z
     }
   });
 
+/** A runtime's account rule as stored and written: see the shared schema. */
+export const RuntimeAccountsSchema = AgentRuntimeAccountsSchema;
+export type RuntimeAccounts = z.infer<typeof RuntimeAccountsSchema>;
+
+/** The rule as the API returns it. */
+export const RuntimeAccountsViewSchema = AgentRuntimeAccountsViewSchema;
+export type RuntimeAccountsView = z.infer<typeof RuntimeAccountsViewSchema>;
+
 export const AgentRuntimeTemplateSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(100),
@@ -45,7 +55,10 @@ export const AgentRuntimeTemplateSchema = z.object({
    * people who can update organization settings may change them there.
    */
   locked: z.boolean().default(false),
-  runtime: AgentRuntimeSchema.extend({
+  // Beside the runtime, not in it: an agent's stored runtime never carries it.
+  accounts: RuntimeAccountsSchema.optional(),
+  // A runtime-wide account lock is not offered; each agent carries its own.
+  runtime: AgentRuntimeSchema.omit({ accountLock: true }).extend({
     image: z
       .string()
       .trim()
@@ -76,12 +89,24 @@ export const BuiltInRuntimeSettingsSchema = AgentRuntimeSchema.pick({
     claudeCode: z
       .object({ authentication: z.enum(["provider", "subscription"]) })
       .optional(),
+    accounts: RuntimeAccountsSchema.optional(),
   });
 
 const BuiltInRuntimeSchema = z.object({
   /** Same meaning as a custom runtime's `locked`. */
   locked: z.boolean(),
   settings: BuiltInRuntimeSettingsSchema,
+});
+
+/** A custom runtime as the API returns it. */
+export const AgentRuntimeTemplateViewSchema = AgentRuntimeTemplateSchema.extend(
+  { accounts: RuntimeAccountsViewSchema.optional() },
+);
+
+const BuiltInRuntimeViewSchema = BuiltInRuntimeSchema.extend({
+  settings: BuiltInRuntimeSettingsSchema.extend({
+    accounts: RuntimeAccountsViewSchema.optional(),
+  }),
 });
 
 export const RuntimeTemplateSettingsSchema = z.object({
@@ -98,16 +123,30 @@ export type RuntimeTemplateSettingsInput = z.input<
   typeof RuntimeTemplateSettingsSchema
 >;
 
+/**
+ * The settings as the API returns them: each runtime's account rule with
+ * the names the server fills in.
+ */
 export const RuntimeTemplateEditorSettingsSchema =
   RuntimeTemplateSettingsSchema.extend({
+    templates: z.array(AgentRuntimeTemplateViewSchema).max(100),
+    builtIns: z
+      .partialRecord(PopularAgentIdSchema, BuiltInRuntimeViewSchema)
+      .default({}),
     popularAgentOverrides: PopularAgentOverridesSchema.nullable(),
   });
 export type RuntimeTemplateEditorSettings = z.infer<
   typeof RuntimeTemplateEditorSettingsSchema
 >;
 
+/**
+ * The settings as a save takes them: what is stored, and nothing a read
+ * adds. A save that sends a read back has those additions dropped.
+ */
 export const SaveRuntimeTemplateSettingsSchema =
-  RuntimeTemplateEditorSettingsSchema.superRefine(({ templates }, ctx) => {
+  RuntimeTemplateSettingsSchema.extend({
+    popularAgentOverrides: PopularAgentOverridesSchema.nullable(),
+  }).superRefine(({ templates }, ctx) => {
     const ids = new Set<string>();
     const names = new Set(
       Object.values(AGENT_CATALOG_NAMES).map((name) =>
@@ -150,12 +189,12 @@ export const SaveRuntimeTemplateSettingsSchema =
   });
 
 /** What any agent builder may read about the maintained runtimes. */
-export const BuiltInRuntimeSummarySchema = BuiltInRuntimeSchema.extend({
+export const BuiltInRuntimeSummarySchema = BuiltInRuntimeViewSchema.extend({
   id: PopularAgentIdSchema,
 });
 
 /** Catalog lists never carry environment values or other runtime configuration. */
 export const AgentRuntimeTemplateSummarySchema =
-  AgentRuntimeTemplateSchema.omit({ runtime: true }).extend({
+  AgentRuntimeTemplateViewSchema.omit({ runtime: true }).extend({
     image: z.string(),
   });

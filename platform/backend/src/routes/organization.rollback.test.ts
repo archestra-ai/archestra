@@ -9,6 +9,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import KbConnectorDocumentCountModel from "@/models/kb-connector-document-count";
 import KbDocumentModel from "@/models/kb-document";
@@ -390,6 +391,89 @@ describe("organization routes", () => {
       }
     });
 
+    test("judges an inheriting agent by the account rule of its runtime, before what the agent stores", async ({
+      makeAgent,
+      makeLlmProviderApiKey,
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      // An OpenAI model: Claude Code cannot run it on a company API key.
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "openai",
+      });
+      const model = await ModelModel.create({
+        externalId: "openai/rule-default-model",
+        provider: "openai",
+        modelId: "rule-default-model",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+      const fixed = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "anthropic",
+      });
+      // The agent itself runs on each person's Claude subscription.
+      await makeAgent({
+        organizationId,
+        authorId: user.id,
+        name: "Claude on subscriptions",
+        agentType: "agent",
+        access: "personal",
+        runtime: {
+          image: "example.com/claude-code:latest",
+          command: ["archestra-claude-code"],
+          inferenceProtocol: "anthropic",
+          backend: "kubernetes",
+          steerMode: "pipe",
+          privileged: false,
+          resources: null,
+          environment: null,
+          credentials: null,
+          ttlHours: null,
+          maxCostUsd: null,
+          idleTimeoutMinutes: null,
+          claudeCode: { authentication: "subscription" },
+        },
+      });
+      const setDefault = () =>
+        app.inject({
+          method: "PATCH",
+          url: "/api/organization/agent-settings",
+          payload: { defaultModelId: model.id, defaultLlmApiKeyId: key.id },
+        });
+      const ruleOf = (revision: number, accounts: Record<string, unknown>) =>
+        AgentRuntimeTemplateModel.saveSettings({
+          organizationId,
+          settings: {
+            revision,
+            templates: [],
+            builtIns: {
+              "claude-code": { locked: false, settings: { accounts } },
+            },
+          },
+          popularAgentOverrides: null,
+        });
+
+      // On subscriptions it never runs the default.
+      expect((await setDefault()).statusCode).toBe(200);
+
+      // Its runtime names company API keys: it runs on one, so the default
+      // must be a model Claude Code can run.
+      await ruleOf(0, { kind: "key" });
+      const held = await setDefault();
+      expect(held.statusCode, held.body).toBe(409);
+      expect(held.json().error.message).toContain('"Claude on subscriptions"');
+
+      // Its runtime fixes the connection too: no agent of it runs on the
+      // default any more.
+      await ruleOf(1, { kind: "key", llmApiKeyId: fixed.id });
+      expect((await setDefault()).statusCode).toBe(200);
+    });
+
     test("does not apply the default compatibility check to explicit runtime overrides", async ({
       makeAgent,
       makeLlmProviderApiKey,
@@ -508,9 +592,11 @@ describe("organization routes", () => {
       await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
         model.id,
       ]);
+      // Agents saved before people could choose their account name no lock.
       const agent = (
         name: string,
         own: { llmApiKeyId?: string; modelId?: string } = {},
+        accountLock?: null,
       ) =>
         makeAgent({
           organizationId,
@@ -518,7 +604,10 @@ describe("organization routes", () => {
           name,
           agentType: "agent",
           access: "personal",
-          runtime,
+          runtime: {
+            ...runtime,
+            ...(accountLock !== undefined && { accountLock }),
+          },
           ...own,
         });
       const noPair = await agent("No model of its own");
@@ -533,6 +622,17 @@ describe("organization routes", () => {
         llmApiKeyId: key.id,
         modelId: model.id,
       });
+      // Its runs took the organization's default, as they always did.
+      const keyAlone = await agent("Key without a model", {
+        llmApiKeyId: key.id,
+      });
+      // Saved with its accounts, its model is each person's to pick among its
+      // key's: never the organization's default.
+      await agent(
+        "Key without a model, saved with its accounts",
+        { llmApiKeyId: key.id },
+        null,
+      );
       await makeAgent({
         organizationId,
         authorId: user.id,
@@ -560,9 +660,10 @@ describe("organization routes", () => {
           dependent(noPair.id, "No model of its own"),
           dependent(halfPair.id, "Model without a key"),
           dependent(unlinkedPair.id, "Model no longer on its key"),
+          dependent(keyAlone.id, "Key without a model"),
         ]),
       });
-      expect(response.json().agents).toHaveLength(3);
+      expect(response.json().agents).toHaveLength(4);
     });
 
     test("marks agents the caller can read but not update", async ({

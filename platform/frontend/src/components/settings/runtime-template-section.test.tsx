@@ -21,6 +21,7 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { makeLlmProviderApiKey } from "@/mocks/data/llm-keys";
 import { makeOrganization } from "@/mocks/data/organization";
 import { RuntimeTemplateSection } from "./runtime-template-section";
 
@@ -28,11 +29,49 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
+// The connection and model fields open the chat composer's menu.
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/settings/agents/runtimes",
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 type Settings = archestraApiTypes.GetRuntimeTemplateSettingsResponses["200"];
 let settings: Settings;
 let overrides: archestraApiTypes.SaveRuntimeTemplateSettingsData["body"]["popularAgentOverrides"];
+/** The connections the administrator can pick for a runtime's agents. */
+let keys: ReturnType<typeof makeLlmProviderApiKey>[];
+const companyKey = (id: string, name: string, provider: string) =>
+  makeLlmProviderApiKey({
+    id,
+    name,
+    provider: provider as never,
+    scope: "org",
+    userId: null,
+  });
+const model = (
+  dbId: string,
+  id: string,
+  displayName: string,
+  provider: string,
+) => ({ dbId, id, displayName, provider, isFree: false });
+/** Each connection's models, as the model field lists them. */
+const modelsByKey: Record<string, ReturnType<typeof model>[]> = {
+  "key-anthropic": [
+    model("model-sonnet", "claude-sonnet-4-6", "Claude Sonnet", "anthropic"),
+  ],
+  "key-openai": [model("model-gpt", "gpt-5", "GPT-5", "openai")],
+};
 const server = setupServer(
+  http.get("http://localhost:9000/api/llm-provider-api-keys/available", () =>
+    HttpResponse.json(keys),
+  ),
+  http.get("http://localhost:9000/api/llm-models/available", ({ request }) =>
+    HttpResponse.json(
+      modelsByKey[new URL(request.url).searchParams.get("apiKeyId") ?? ""] ??
+        [],
+    ),
+  ),
   http.get("http://localhost:9000/api/organization", () =>
     HttpResponse.json(makeOrganization({ popularAgentOverrides: overrides })),
   ),
@@ -91,6 +130,10 @@ beforeEach(() => {
     popularAgentOverrides: null,
   };
   overrides = null;
+  keys = [
+    companyKey("key-anthropic", "Company Anthropic", "anthropic"),
+    companyKey("key-openai", "Company OpenAI", "openai"),
+  ];
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "admin" } },
@@ -131,6 +174,50 @@ const saved = () =>
     expect(screen.getByRole("button", { name: "Add runtime" })).toBeEnabled(),
   );
 
+/** Opens a runtime's settings on its accounts. */
+const openAccounts = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) => {
+  await user.click(
+    await screen.findByRole("button", { name: `Actions for ${name}` }),
+  );
+  await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
+  const dialog = screen.getByRole("dialog", { name: `Edit ${name}` });
+  await user.click(
+    within(dialog).getByRole("button", { name: /^Accounts that can run it/ }),
+  );
+  return dialog;
+};
+/** Saves the open runtime, which closes its settings. */
+const saveRuntime = async (
+  user: ReturnType<typeof userEvent.setup>,
+  dialog: HTMLElement,
+) => {
+  await user.click(
+    within(dialog).getByRole("button", { name: "Save runtime" }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  await saved();
+};
+const card = (dialog: HTMLElement, name: RegExp) =>
+  within(dialog).getByRole("checkbox", { name });
+/** Opens a field's list and picks one of its options. */
+const pick = async (
+  user: ReturnType<typeof userEvent.setup>,
+  field: HTMLElement,
+  option: RegExp,
+) => {
+  await user.click(field);
+  await user.click(await screen.findByRole("option", { name: option }));
+};
+const connectionField = (dialog: HTMLElement) =>
+  within(dialog).getByRole("button", { name: /^Which connection pays/ });
+const modelField = (dialog: HTMLElement) =>
+  within(dialog).getByRole("button", { name: /^Model/ });
+
 describe("RuntimeTemplateSection", () => {
   it("edits and locks a built-in runtime's settings", async () => {
     const user = userEvent.setup();
@@ -141,13 +228,11 @@ describe("RuntimeTemplateSection", () => {
     await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
     const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
     await user.click(
-      within(dialog).getByRole("button", { name: /^Claude account/ }),
+      within(dialog).getByRole("button", { name: /^Accounts that can run it/ }),
     );
     await user.click(within(dialog).getByRole("button", { name: /^Limits/ }));
-    await user.click(
-      within(dialog).getByRole("combobox", { name: "Claude account" }),
-    );
-    await user.click(screen.getByRole("option", { name: "A company API key" }));
+    // The company card alone: every agent on it runs on a company API key.
+    await user.click(card(dialog, /Each person's Claude subscription/));
     await user.type(
       within(dialog).getByRole("spinbutton", { name: /Maximum duration/ }),
       "8",
@@ -165,6 +250,7 @@ describe("RuntimeTemplateSection", () => {
         settings: {
           ttlHours: 8,
           claudeCode: { authentication: "provider" },
+          accounts: { kind: "key" },
         },
       }),
     );
@@ -486,5 +572,153 @@ describe("RuntimeTemplateSection", () => {
       "New workspace",
     ]);
     expect(ordered.at(-1)?.position).toBeLessThan(1000);
+  });
+
+  describe("Accounts that can run it", () => {
+    it("fixes the connection and model of Claude Code's company card, and keeps them when both cards are ticked again", async () => {
+      const user = userEvent.setup();
+      mount();
+      let dialog = await openAccounts(user, "Claude Code");
+      // No rule yet: both cards, and each agent chooses.
+      expect(card(dialog, /Each person's Claude subscription/)).toBeChecked();
+      expect(card(dialog, /A company API key/)).toBeChecked();
+      await user.click(card(dialog, /Each person's Claude subscription/));
+      await pick(user, connectionField(dialog), /Company Anthropic/);
+      await pick(user, modelField(dialog), /Claude Sonnet/);
+      expect(
+        within(dialog).getByText("Every agent uses this connection and model."),
+      ).toBeVisible();
+      await saveRuntime(user, dialog);
+      expect(settings.builtIns["claude-code"]?.settings).toMatchObject({
+        claudeCode: { authentication: "provider" },
+        accounts: {
+          kind: "key",
+          llmApiKeyId: "key-anthropic",
+          modelId: "model-sonnet",
+        },
+      });
+
+      dialog = await openAccounts(user, "Claude Code");
+      expect(
+        card(dialog, /Each person's Claude subscription/),
+      ).not.toBeChecked();
+      await user.click(card(dialog, /Each person's Claude subscription/));
+      await saveRuntime(user, dialog);
+      // Each agent chooses again; the company card keeps its connection and
+      // model, and the Claude account new agents start on stays as stored.
+      expect(settings.builtIns["claude-code"]?.settings).toMatchObject({
+        claudeCode: { authentication: "provider" },
+        accounts: { llmApiKeyId: "key-anthropic", modelId: "model-sonnet" },
+      });
+      expect(
+        settings.builtIns["claude-code"]?.settings.accounts,
+      ).not.toHaveProperty("kind");
+    });
+
+    it("cannot save Codex with neither card selected", async () => {
+      const user = userEvent.setup();
+      mount();
+      const dialog = await openAccounts(user, "Codex");
+      await user.click(card(dialog, /Each person's ChatGPT subscription/));
+      await user.click(card(dialog, /A company API key/));
+      expect(within(dialog).getByRole("alert")).toHaveTextContent(
+        "Select at least one option.",
+      );
+      expect(
+        within(dialog).getByRole("button", { name: "Save runtime" }),
+      ).toBeDisabled();
+      await user.click(card(dialog, /Each person's ChatGPT subscription/));
+      expect(
+        within(dialog).getByRole("button", { name: "Save runtime" }),
+      ).toBeEnabled();
+    });
+
+    it("gives a custom runtime without a subscription its one company card, and fixes the connection its agents use", async () => {
+      settings.templates = [
+        {
+          id: "00000000-0000-4000-8000-000000000001",
+          name: "Engineering workspace",
+          description: "Development",
+          icon: null,
+          hidden: false,
+          position: 0,
+          locked: false,
+          runtime: {
+            ...buildCustomAgentRuntime({
+              image: "registry.example.com/engineering:v1",
+            }),
+            command: ["engineering-agent"],
+            inferenceProtocol: "openai_chat",
+            privileged: false,
+          },
+        },
+      ];
+      const user = userEvent.setup();
+      mount();
+      const dialog = await openAccounts(user, "Engineering workspace");
+      // One account, so nothing to tick.
+      expect(within(dialog).queryByRole("checkbox")).toBeNull();
+      expect(within(dialog).getByText("A company API key")).toBeVisible();
+      await pick(user, connectionField(dialog), /Company OpenAI/);
+      await saveRuntime(user, dialog);
+      expect(settings.templates[0].accounts).toEqual({
+        llmApiKeyId: "key-openai",
+      });
+    });
+
+    it("sets a custom Claude Code runtime's Claude account to the one card left, and keeps it once both are ticked again", async () => {
+      settings.templates = [
+        {
+          id: "00000000-0000-4000-8000-000000000002",
+          name: "Claude workspace",
+          description: "Development",
+          icon: null,
+          hidden: false,
+          position: 0,
+          locked: false,
+          runtime: {
+            ...buildCustomAgentRuntime({
+              image: "registry.example.com/claude:v1",
+            }),
+            command: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCode: { authentication: "provider" },
+            privileged: false,
+          },
+        },
+      ];
+      const user = userEvent.setup();
+      mount();
+
+      // Personal subscriptions only: the server refuses a Claude account
+      // of the other kind beside that rule.
+      let dialog = await openAccounts(user, "Claude workspace");
+      await user.click(card(dialog, /A company API key/));
+      await saveRuntime(user, dialog);
+      expect(settings.templates[0]).toMatchObject({
+        accounts: { kind: "subscription" },
+        runtime: { claudeCode: { authentication: "subscription" } },
+      });
+
+      // The company API key only.
+      dialog = await openAccounts(user, "Claude workspace");
+      await user.click(card(dialog, /A company API key/));
+      await user.click(card(dialog, /Each person's Claude subscription/));
+      await saveRuntime(user, dialog);
+      expect(settings.templates[0]).toMatchObject({
+        accounts: { kind: "key" },
+        runtime: { claudeCode: { authentication: "provider" } },
+      });
+
+      // Both again: each agent chooses, and the account new agents start on
+      // stays as stored.
+      dialog = await openAccounts(user, "Claude workspace");
+      await user.click(card(dialog, /Each person's Claude subscription/));
+      await saveRuntime(user, dialog);
+      expect(settings.templates[0].accounts ?? {}).not.toHaveProperty("kind");
+      expect(settings.templates[0].runtime.claudeCode).toEqual({
+        authentication: "provider",
+      });
+    });
   });
 });

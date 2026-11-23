@@ -263,7 +263,7 @@ describe("AgentRuntimePicker", () => {
       screen.queryByRole("button", { name: /^Inference API/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
+      screen.getByRole("button", { name: /^Accounts that can run it/ }),
     ).toBeVisible();
 
     fireEvent.change(screen.getByLabelText("Command"), {
@@ -271,7 +271,13 @@ describe("AgentRuntimePicker", () => {
     });
     expect(savedRuntime().inferenceProtocol).toBe("openai_responses");
     expect(screen.getByLabelText("Inference API")).toBeEnabled();
-    expect(screen.getByRole("button", { name: /^Model/ })).toBeVisible();
+    // The section keeps its title whatever the command runs.
+    expect(
+      screen.getByRole("button", { name: /^Accounts that can run it/ }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /^Model/ }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByLabelText("Inference API"));
     await user.click(
       screen.getByRole("option", { name: "OpenAI Chat Completions" }),
@@ -384,14 +390,14 @@ describe("AgentRuntimePicker", () => {
     await user.tab();
     await user.tab();
     expect(
-      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
+      screen.getByRole("button", { name: /^Accounts that can run it/ }),
     ).toHaveFocus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       props.modelAttention,
     );
     expect(screen.getByText("Model settings content")).toBeVisible();
     await user.click(
-      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
+      screen.getByRole("button", { name: /^Accounts that can run it/ }),
     );
     expect(
       screen.queryByText("Model settings content"),
@@ -411,10 +417,10 @@ describe("AgentRuntimePicker", () => {
         modelAttention={undefined}
       />,
     );
-    expect(screen.getByRole("button", { name: /^Model/ })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
+    // Another runtime's section has the same title and opens the same way.
+    expect(
+      screen.getByRole("button", { name: /^Accounts that can run it/ }),
+    ).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Model settings content")).toBeVisible();
   });
 });

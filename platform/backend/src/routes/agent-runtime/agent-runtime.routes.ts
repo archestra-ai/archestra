@@ -3,7 +3,9 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
+  SubscriptionCredentialKindSchema,
 } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
@@ -25,6 +27,11 @@ import {
 import ResourcePermissionAccessModel from "@/models/resource-permission-access";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import {
+  missingPersonalSubscription,
+  withResolvedClaudeAccount,
+  withRuntimeAccountRule,
+} from "@/services/agent-runtime/account-resolution";
+import {
   isAnyAgentRuntimeBackendDriverEnabled,
   resolveAgentRuntimeBackendDriver,
 } from "@/services/agent-runtime/backends";
@@ -36,11 +43,18 @@ import {
 } from "@/services/agent-runtime/credentials";
 import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { runAccountBindProblem } from "@/services/agent-runtime/preflight";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
+import {
+  clearAgentRuntimeAccountChoice,
+  getAgentRuntimeAccount,
+  saveAgentRuntimeAccountChoice,
+  storedAgentRuntimeAccountChoice,
+} from "@/services/agent-runtime/user-account";
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
 import {
@@ -65,6 +79,11 @@ import {
   UpdateAgentRunSchema,
 } from "@/types";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
+import {
+  type AgentRuntimeAccount,
+  AgentRuntimeAccountSchema,
+  UpdateAgentRuntimeAccountSchema,
+} from "@/types/agent-runtime-user-account";
 import {
   AgentWorkspaceFileRequestSchema,
   AgentWorkspaceFileResultSchema,
@@ -197,12 +216,81 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
             missing: z.array(MissingAgentRuntimeCredentialSchema),
             misconfigured: z.array(MissingAgentRuntimeCredentialSchema),
             incompatible: z.string().nullable(),
+            /** Why the account the caller's runs use cannot run. */
+            accountError: z.string().nullable(),
+            /**
+             * Whether the caller can fix `accountError` by choosing their
+             * account again; otherwise it is the agent's account or lock.
+             */
+            accountErrorFromChoice: z.boolean(),
+            /**
+             * Whether `accountError` is that the account in effect has no
+             * model it can run: the caller fixes it by picking one, of their
+             * subscription or of the company API key's connection.
+             */
+            accountErrorFromModel: z.boolean(),
+            /**
+             * Whether `accountError` is that the company API key has no
+             * connection: none is set or chosen, and the organization's
+             * default gives none this runtime can run. The caller fixes it
+             * by choosing one.
+             */
+            accountErrorFromConnection: z.boolean(),
+            /**
+             * The personal subscription the caller must connect before their
+             * runs can start, when that is what `accountError` is about. A
+             * Claude subscription is reported under `missing` instead.
+             */
+            // A union, not `.nullable()`, so the generated client keeps the null.
+            missingSubscription: z.union([
+              SubscriptionCredentialKindSchema,
+              z.null(),
+            ]),
           }),
         ),
       },
     },
     async (request, reply) => {
       const { agent, runtime } = await requireReadableAgentRuntime(request);
+      const modelCompatibility =
+        await getResolvedAgentRuntimeModelCompatibility({
+          runtime,
+          agent,
+          agentId: agent.id,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
+      const missingSubscription = modelCompatibility.accountError
+        ? null
+        : await missingPersonalSubscription({
+            account: modelCompatibility.account,
+            accountLock: modelCompatibility.accountLock,
+            organizationId: request.organizationId,
+            userId: request.user.id,
+          });
+      // What starting a run would refuse once it binds a key: the agent's
+      // account lock, or no credential that serves the selected model.
+      const bindProblem =
+        modelCompatibility.accountError ||
+        missingSubscription ||
+        !modelCompatibility.compatibility.compatible
+          ? null
+          : await runAccountBindProblem(
+              {
+                runtime,
+                agent,
+                actor: {
+                  ...actorFromUserId(request.user.id),
+                  organizationId: request.organizationId,
+                },
+              },
+              modelCompatibility,
+            );
+      const accountError =
+        modelCompatibility.accountError ??
+        missingSubscription?.message ??
+        bindProblem?.message ??
+        null;
       const preflight = await preflightAgentRuntimeCredentials({
         runtime,
         organizationId: request.organizationId,
@@ -210,16 +298,12 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reportAdminOnlyCredentials: true,
         reportOptionalReconnect: true,
       });
-      const modelCompatibility =
-        await getResolvedAgentRuntimeModelCompatibility({
-          runtime,
-          agent,
-          organizationId: request.organizationId,
-          userId: request.user.id,
-        });
       if (modelCompatibility.usesClaudeCodeSubscription) {
         const account = await claudeCodeAccountManager.status({
-          runtime,
+          runtime: withResolvedClaudeAccount(
+            runtime,
+            modelCompatibility.inputs.runtime,
+          ),
           userId: request.user.id,
         });
         if (account.state === "connected")
@@ -244,12 +328,88 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ready:
           !hasBlockingMissing &&
           preflight.misconfigured.length === 0 &&
-          modelCompatibility.compatibility.compatible,
+          modelCompatibility.compatibility.compatible &&
+          !accountError,
         incompatible: modelCompatibility.compatibility.compatible
           ? null
           : modelCompatibility.compatibility.message,
+        accountError,
+        accountErrorFromChoice: modelCompatibility.accountErrorFromChoice,
+        accountErrorFromModel: modelCompatibility.accountErrorFromModel,
+        accountErrorFromConnection:
+          modelCompatibility.accountErrorFromConnection ||
+          (bindProblem?.fromConnection ?? false),
+        missingSubscription: missingSubscription?.kind ?? null,
         ...preflight,
       });
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/runtime/account",
+    {
+      schema: {
+        operationId: RouteId.GetAgentRuntimeAccount,
+        description:
+          "The account the caller's runs of this agent use: the agent's own, the caller's choice, the company API key as it resolves for them (its connection and model, and who sets each), and the personal subscription they can use.",
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(AgentRuntimeAccountSchema),
+      },
+    },
+    async (request) =>
+      getAgentRuntimeAccount(await requireUsableAgentRuntime(request)),
+  );
+
+  fastify.put(
+    "/api/agents/:id/runtime/account",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentRuntimeAccount,
+        description:
+          "Choose the account the caller's own runs of this agent use: their personal subscription, or the company API key, with the connection and model of it that the agent and its runtime leave to each person.",
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        body: UpdateAgentRuntimeAccountSchema,
+        response: constructResponseSchema(AgentRuntimeAccountSchema),
+      },
+    },
+    async (request) => {
+      const context = await requireUsableAgentRuntime(request);
+      const before = await storedAgentRuntimeAccountChoice({
+        agentId: context.agent.id,
+        userId: context.userId,
+      });
+      const after = await saveAgentRuntimeAccountChoice({
+        ...context,
+        choice: request.body,
+      });
+      recordAccountChoiceAudit({ request, before, after });
+      return after;
+    },
+  );
+
+  fastify.delete(
+    "/api/agents/:id/runtime/account",
+    {
+      schema: {
+        operationId: RouteId.ClearAgentRuntimeAccount,
+        description:
+          "Forget the caller's account choice for this agent, so their runs follow the agent's default again.",
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(AgentRuntimeAccountSchema),
+      },
+    },
+    async (request) => {
+      const context = await requireUsableAgentRuntime(request);
+      const before = await storedAgentRuntimeAccountChoice({
+        agentId: context.agent.id,
+        userId: context.userId,
+      });
+      const after = await clearAgentRuntimeAccountChoice(context);
+      recordAccountChoiceAudit({ request, before, after });
+      return after;
     },
   );
 
@@ -264,7 +424,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const { runtime } = await requireReadableAgentRuntime(request);
+      const runtime = await requireClaudeAccountRuntime(request);
       return claudeCodeAccountManager.status({
         runtime,
         userId: request.user.id,
@@ -288,7 +448,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const { runtime } = await requireReadableAgentRuntime(request);
+      const runtime = await requireClaudeAccountRuntime(request);
       const owner = { runtime, userId: request.user.id };
       const before = await claudeCodeAccountManager.status({
         ...owner,
@@ -326,7 +486,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const { runtime } = await requireReadableAgentRuntime(request);
+      const runtime = await requireClaudeAccountRuntime(request);
       const result = await claudeCodeAccountManager.complete({
         runtime,
         userId: request.user.id,
@@ -360,7 +520,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const { runtime } = await requireReadableAgentRuntime(request);
+      const runtime = await requireClaudeAccountRuntime(request);
       const owner = { runtime, userId: request.user.id };
       const before = await claudeCodeAccountManager.status({
         ...owner,
@@ -391,7 +551,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const { runtime } = await requireReadableAgentRuntime(request);
+      const runtime = await requireClaudeAccountRuntime(request);
       return claudeCodeAccountManager.models({
         runtime,
         userId: request.user.id,
@@ -609,14 +769,21 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await getResolvedAgentRuntimeModelCompatibility({
           runtime,
           agent,
+          agentId: agent.id,
           organizationId: request.organizationId,
           userId: request.user.id,
         });
+      if (modelCompatibility.accountError) {
+        throw new ApiError(409, modelCompatibility.accountError);
+      }
       if (
         modelCompatibility.usesClaudeCodeSubscription &&
         (
           await claudeCodeAccountManager.status({
-            runtime,
+            runtime: withResolvedClaudeAccount(
+              runtime,
+              modelCompatibility.inputs.runtime,
+            ),
             userId: request.user.id,
           })
         ).state !== "connected"
@@ -1272,6 +1439,61 @@ async function requireReadableAgentRuntime(
   }
   resolveAgentRuntimeBackendDriver(runtime.backend);
   return { agent, runtime };
+}
+
+/**
+ * The agent's runtime for the caller's own Claude sign-in: with the Claude
+ * account the account rule of its runtime names, as its runs resolve it. An
+ * agent that stores no Claude account of its own, on a runtime whose rule
+ * names subscriptions, is one a person signs in to Claude for.
+ */
+async function requireClaudeAccountRuntime(
+  request: AgentRequest,
+): Promise<ResolvedAgentRuntime> {
+  const { agent, runtime } = await requireReadableAgentRuntime(request);
+  const resolved = await withRuntimeAccountRule({
+    organizationId: request.organizationId,
+    runtime,
+    agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+  });
+  return withResolvedClaudeAccount(runtime, resolved.runtime);
+}
+
+/** The caller's stored choice, read without resolving their whole account. */
+function recordAccountChoiceAudit(params: {
+  request: FastifyRequest;
+  before: AgentRuntimeAccount["choice"];
+  after: AgentRuntimeAccount;
+}) {
+  const { request, before, after } = params;
+  if (JSON.stringify(before) === JSON.stringify(after.choice)) {
+    request.auditSkip = true;
+    return;
+  }
+  request.auditBefore = { runtimeAccountChoice: before };
+  request.auditAfter = { runtimeAccountChoice: after.choice };
+}
+
+/** The checks of starting a run: a readable runtime the caller may use. */
+async function requireUsableAgentRuntime(request: AgentRequest) {
+  const { agent, runtime } = await requireReadableAgentRuntime(request);
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.require({
+    organizationId: request.organizationId,
+    userId: request.user.id,
+    resource: "agent",
+    scope: agent.id,
+    action: "use",
+  });
+  // SPDX-SnippetEnd
+  return {
+    agent,
+    runtime,
+    organizationId: request.organizationId,
+    userId: request.user.id,
+  };
 }
 
 async function requireReadableAgent(request: AgentRequest): Promise<Agent> {

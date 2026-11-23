@@ -17,15 +17,20 @@ import {
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
   isCodexRuntimeCommand,
+  isSupportedProvider,
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
   providerSupportsChat,
   resolveAgentCatalogId,
+  runtimeRequestsClaudeSubscription,
+  runtimeSupportsClaudeSubscription,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   SupportedProviders,
+  startingClaudeAuthentication,
+  withClaudeAccountItRuns,
 } from "@archestra/shared";
 import {
   AlertTriangle,
@@ -34,6 +39,7 @@ import {
   Globe,
   InfoIcon,
   Loader2,
+  Lock,
   Plus,
   RotateCcw,
   X,
@@ -49,6 +55,17 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import {
+  type AccountOption,
+  AccountSectionError,
+  type AccountWay,
+  type AgentAccountLock,
+  AgentAccountOptions,
+  accountWays,
+  accountWaysMeaning,
+  lockToWay,
+  toggleAccountWay,
+} from "@/components/agent-account-ways-field";
 import {
   AgentActivationSkillsEditor,
   type AgentActivationSkillsEditorRef,
@@ -99,7 +116,10 @@ import {
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
-import { ClaudeProviderConnections } from "@/components/claude-provider-connections";
+import {
+  type CompanyAccountChange,
+  CompanyAccountFields,
+} from "@/components/company-account-fields";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { IdentityFields } from "@/components/identity-fields";
@@ -114,6 +134,16 @@ import {
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { McpConflictServerList } from "@/components/mcp-conflict-server-list";
 import { PageHeaderBanner } from "@/components/page-header-banner";
+import {
+  CLAUDE_SUBSCRIPTION_CARD,
+  companyApiKeyCard,
+  LOCKED_IN,
+  personalSubscriptionCard,
+  runtimeCallsProvider,
+  runtimeCompanyProviderFits,
+  runtimeModelFits,
+  runtimeSubscriptionKind,
+} from "@/components/runtime-account-cards";
 import { SettingIcon } from "@/components/setting-icon";
 import {
   SettingsSection,
@@ -181,7 +211,10 @@ import {
 } from "@/lib/agent-knowledge-source-exclusions.query";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
-import { useLockedRuntimeName } from "@/lib/agent-runtime-templates.query";
+import {
+  useLockedRuntimeName,
+  useRuntimeAccountRule,
+} from "@/lib/agent-runtime-templates.query";
 import {
   useAgentSkillExclusions,
   useAgentSkills,
@@ -226,10 +259,12 @@ import { cn } from "@/lib/utils/tailwind";
 import { AccessModeCards, accessModeCountStat } from "./access-mode-cards";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 import {
+  accountPairToSave,
   excludedSourcesSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
   normalizeSuggestedPrompts,
+  pickConnectionModel,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-form.utils";
@@ -239,6 +274,9 @@ type AgentOption =
   archestraApiTypes.GetAgentOptionsResponses["200"]["data"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
+type RuntimePayload = NonNullable<
+  archestraApiTypes.UpdateAgentData["body"]["runtime"]
+>;
 type A2aRemoteAgent =
   archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number];
 type A2aDelegation =
@@ -1296,6 +1334,16 @@ export function AgentForm({
   // scope, so the control below reads (scope, userIds) as a fourth choice.
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  // Both account ways unticked in this edit; see `noAccountWay`.
+  const [accountWaysCleared, setAccountWaysCleared] = useState(false);
+  // What a saved Claude agent's account held before its ways were first
+  // changed in this edit; see `setAccountLock`.
+  const accountBeforeWaysRef = useRef<{
+    shownLock: AgentAccountLock | null;
+    runtime: AgentRuntimeConfig;
+    llmApiKeyId: string | null;
+    llmModel: string | null;
+  } | null>(null);
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
@@ -1501,14 +1549,144 @@ export function AgentForm({
   const supportsClaudeCodeSubscription =
     runtimeSupportsClaudeCodeSubscription(runtime);
   const isClaudeCodeRuntime = isClaudeCodeRuntimeConfig(runtime);
+  // Only the maintained Claude Code runtime offers a personal Claude
+  // subscription beside the company key. A custom image that runs Claude Code
+  // has the company key alone.
+  const claudeAccountCards =
+    isClaudeCodeRuntime && supportsClaudeCodeSubscription;
   const agentCatalogImages = useAgentCatalogImages();
   // Its Agent Runtime's settings, when locked, are this agent's: read-only.
-  // An existing agent's runtime is the saved one, never the unsaved draft.
+  // Only someone who may change the organization's settings changes them,
+  // and an agent's account on a runtime whose account rule names a kind.
+  const { data: canConfigureRuntimeSettings } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  // The account rule of the agent's Agent Runtime. An existing agent's
+  // runtime is the saved one, never the unsaved draft.
+  const runtimeAccounts = useRuntimeAccountRule(
+    agent ? agent.runtime : runtime,
+    agentCatalogImages,
+  );
   const lockedRuntimeName = useLockedRuntimeName(
     agent ? agent.runtime : runtime,
     agentCatalogImages,
   );
+  // What the runtime's settings say of its agents' accounts is known: the
+  // start of a new agent, and what the reader may change, wait for it.
+  const runtimeAccountsKnown = runtimeAccounts !== undefined;
+  // The runtime's rule names a kind of account. It holds for every agent on
+  // the runtime and for every person, whatever the agent itself stores, so
+  // nobody changes it here: it is changed in the runtime's settings.
+  // A locked Claude runtime writes its Claude account on every agent of its
+  // type, so it names the kind as a rule does.
+  const lockedClaudeKind: AccountWay | null =
+    lockedRuntimeName && runtime && runtimeSupportsClaudeSubscription(runtime)
+      ? runtime.claudeCode?.authentication === "provider"
+        ? "provider"
+        : "subscription"
+      : null;
+  const runtimeRuleKind: AccountWay | null = runtimeAccounts?.kind
+    ? runtimeAccounts.kind === "key"
+      ? "provider"
+      : "subscription"
+    : lockedClaudeKind;
+  // A runtime with a subscription card of its own that does not run Claude
+  // Code: Codex.
+  const runtimeHasSubscriptionCard =
+    !!runtime &&
+    !isClaudeCodeRuntime &&
+    !!runtimeSubscriptionKind(runtime.command?.[0]);
+  // A runtime with two kinds of account whose rule names none leaves the
+  // kind to each agent: whoever builds one chooses, with or without
+  // `configure` on the runtime. Only the rule restricts. A Claude account a
+  // runtime's settings store is what a new agent starts on, and holds
+  // nobody to it.
+  const runtimeLeavesAccountToAgent =
+    !runtimeRuleKind &&
+    runtimeAccountsKnown &&
+    (isClaudeCodeRuntime || runtimeHasSubscriptionCard);
+  // The company connection and model the rule fixes, for every agent and
+  // every person alike. They are the runtime's own: an agent never stores
+  // them, and keeps its own stored connection underneath.
+  const runtimeFixedKeyId = runtimeAccounts?.llmApiKeyId ?? null;
+  const runtimeFixedModelId = runtimeFixedKeyId
+    ? (runtimeAccounts?.modelId ?? null)
+    : null;
+  const connectionLockedByRuntime = !!runtimeFixedKeyId;
+  // What the rule fixes no longer works. The fields stay the runtime's, and
+  // say so, until someone who configures the runtime chooses another.
+  const fixedAccountMissing: "connection" | "model" | null =
+    !connectionLockedByRuntime
+      ? null
+      : runtimeAccounts?.keyMissing
+        ? "connection"
+        : runtimeFixedModelId && runtimeAccounts?.modelMissing
+          ? "model"
+          : null;
+  // With only the connection fixed, its model is each agent's to pick, from
+  // the models the rule lists: the reader may not be able to list that
+  // connection's models themselves. The rule names a model as an agent
+  // stores it (`id`) and as its provider does (`modelId`); the model lists
+  // here call those `dbId` and `id`.
+  const ruleModels = runtimeAccounts?.models;
+  const fixedConnectionModels = useMemo<LlmModel[] | null>(() => {
+    if (!runtime || !connectionLockedByRuntime || runtimeFixedModelId) {
+      return null;
+    }
+    return (ruleModels ?? [])
+      .flatMap((model) =>
+        isSupportedProvider(model.provider)
+          ? [
+              {
+                id: model.modelId,
+                dbId: model.id,
+                displayName: model.displayName,
+                provider: model.provider,
+                isFree: false,
+              },
+            ]
+          : [],
+      )
+      .filter((model) => runtimeModelFits(runtime, model));
+  }, [runtime, connectionLockedByRuntime, runtimeFixedModelId, ruleModels]);
+  // The connection has no model this runtime can run: nothing to pick.
+  const fixedModelsEmpty =
+    !fixedAccountMissing && fixedConnectionModels?.length === 0;
+  const modelLockedByRuntime =
+    connectionLockedByRuntime &&
+    (!!runtimeFixedModelId || !!fixedAccountMissing || fixedModelsEmpty);
+  const runtimeFixes = !connectionLockedByRuntime
+    ? null
+    : runtimeFixedModelId
+      ? ("connection-and-model" as const)
+      : ("connection" as const);
+  // What the agent's company option runs on. Under a fixed connection that
+  // is the runtime's, with the model it fixes or the one picked for this
+  // agent among that connection's models.
+  const companyKeyId = connectionLockedByRuntime
+    ? runtimeFixedKeyId
+    : llmApiKeyId;
+  const companyModelRow = connectionLockedByRuntime
+    ? (fixedConnectionModels?.find((model) => model.dbId === llmModel) ?? null)
+    : null;
+  const companyModelId = connectionLockedByRuntime
+    ? (runtimeFixedModelId ?? companyModelRow?.dbId ?? null)
+    : llmModel;
+  // Where the rule names no kind, an agent's accounts belong to the people
+  // who configure its runtime, and to everyone who may use a runtime that
+  // leaves them to its agents.
+  const canLockAccount =
+    runtimeAccountsKnown &&
+    !runtimeRuleKind &&
+    (canConfigureRuntimeSettings === true ||
+      (canConfigureRuntime === true &&
+        runtimeLeavesAccountToAgent &&
+        !lockedRuntimeName));
+
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  // The agent runs in a runtime, so its accounts show as that runtime's
+  // cards.
+  const runtimeCards = !!runtime && agentRuntimeEnabled;
   // A runtime saved before the deployment turned Agent Runtime off stays
   // editable, so it can be switched off.
   const runtimeEditable = agentRuntimeEnabled || !!agent?.runtime;
@@ -1763,6 +1941,7 @@ export function AgentForm({
       setInitialGrants(nextValues.initialGrants);
       setPassthroughHeaders(nextValues.passthroughHeaders);
       setAgentRuntime(nextValues.runtime);
+      accountBeforeWaysRef.current = null;
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
@@ -1897,8 +2076,36 @@ export function AgentForm({
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
   );
+  const isCodexRuntime = isCodexRuntimeCommand(runtime?.command?.[0]);
+  // A runtime names a lock (null: each person chooses) or names none. None
+  // named on a saved agent means it runs only the way its own settings say,
+  // as every agent did before people could choose; on a new agent it means
+  // nobody has chosen yet.
+  const accountLockNamed = runtime?.accountLock !== undefined;
+  const accountLock = runtime?.accountLock ?? null;
+  const savedAccountLock = agent?.runtime?.accountLock ?? null;
+  const accountLockChanged =
+    !!runtime && runtime.accountLock !== agent?.runtime?.accountLock;
+  // A custom image never runs on a personal Claude subscription: a company
+  // key is its only way.
+  const claudeSubscriptionUndeclared =
+    !!runtime &&
+    isClaudeCodeRuntime &&
+    !runtimeSupportsClaudeSubscription(runtime);
+  // A company-key lock puts the maintained Codex runtime on its OpenAI key, so
+  // the creator's ChatGPT subscription is required only without one.
+  const codexOnCompanyKey = isCodexRuntime && accountLock === "key";
+  // With the company key way open, a new Codex agent runs on the connection
+  // and model set for it. Only one that offers subscriptions alone still
+  // takes its model from its creator's own ChatGPT subscription.
   const requiredSubscriptionKind =
-    !agent && isCodexRuntimeCommand(runtime?.command?.[0])
+    !agent &&
+    isCodexRuntime &&
+    // Under the runtime's rule the agent runs on the kind it names; without
+    // one, on the ways the agent itself opens.
+    !(runtimeRuleKind
+      ? runtimeRuleKind === "provider"
+      : accountLockNamed && accountLock !== "subscription")
       ? "chatgpt"
       : undefined;
   const requiredSubscription = requiredSubscriptionKind
@@ -1914,42 +2121,46 @@ export function AgentForm({
     selectedApiKey?.subscriptionKind === requiredSubscriptionKind;
   const selectedApiKeyIsSubscription =
     selectedApiKey !== undefined && isPersonalSubscription(selectedApiKey);
+  // The provider of the agent's company connection. The reader may not be
+  // able to read a connection the runtime fixes: the rule then says the
+  // provider.
+  const selectedKeyProvider: SupportedProvider | undefined =
+    connectionLockedByRuntime
+      ? (availableApiKeys.find((key) => key.id === runtimeFixedKeyId)
+          ?.provider ??
+        (isSupportedProvider(runtimeAccounts?.keyProvider)
+          ? runtimeAccounts.keyProvider
+          : undefined))
+      : selectedApiKey?.provider;
 
   // The selected model's row: source of the derived provider (like prompt
   // input's initialProvider/currentProvider) and of the capability gating
   // for the no-tools notice below.
-  const selectedLlmModelRow = useMemo(() => {
-    if (!llmModel) return null;
-    for (const models of Object.values(modelsByProvider)) {
-      const match = models?.find((m) => m.dbId === llmModel);
-      if (match) return match;
-    }
-    return null;
-  }, [llmModel, modelsByProvider]);
+  const modelRow = useCallback(
+    (modelDbId: string) => {
+      for (const models of Object.values(modelsByProvider)) {
+        const match = models?.find((m) => m.dbId === modelDbId);
+        if (match) return match;
+      }
+      return null;
+    },
+    [modelsByProvider],
+  );
+  const selectedLlmModelRow = useMemo(
+    () => (llmModel ? modelRow(llmModel) : null),
+    [llmModel, modelRow],
+  );
 
   const currentLlmProvider: SupportedProvider | null =
     selectedLlmModelRow?.provider ?? null;
 
   const runtimeModelFilter = useCallback(
-    (model: LlmModel) =>
-      !runtime ||
-      getAgentRuntimeModelCompatibility({
-        inferenceProtocol: runtime.inferenceProtocol,
-        runtimeCommand: runtime.command,
-        provider: model.provider,
-        modelId: model.id,
-        supportedEndpoints: model.capabilities?.supportedEndpoints,
-      }).compatible,
+    (model: LlmModel) => !runtime || runtimeModelFits(runtime, model),
     [runtime],
   );
   const runtimeProviderFilter = useCallback(
     (provider: SupportedProvider) =>
-      !runtime ||
-      getAgentRuntimeProviderCompatibility({
-        inferenceProtocol: runtime.inferenceProtocol,
-        runtimeCommand: runtime.command,
-        provider,
-      }).compatible,
+      !runtime || runtimeCallsProvider(runtime, provider),
     [runtime],
   );
   // The agent's key answers its conversations, so only providers that can
@@ -1959,21 +2170,218 @@ export function AgentForm({
       providerSupportsChat(provider) && runtimeProviderFilter(provider),
     [runtimeProviderFilter],
   );
-  const allowedApiKeyProviders = useMemo(
-    () => SupportedProviders.filter(apiKeyProviderFilter),
-    [apiKeyProviderFilter],
+  // The model the agent itself sets, checked against its runtime before a
+  // create or a runtime change. A model left empty is each person's to pick,
+  // so there is none to check. Under a connection the runtime fixes, the
+  // model is one of that connection's, checked when the rule was saved.
+  // Without the runtime's cards, as on a deployment that turned Agent Runtime
+  // off, an agent with no model of its own still inherits the organization
+  // default, and that one is checked.
+  const effectiveLlmModelRow = connectionLockedByRuntime
+    ? companyModelRow
+    : (selectedLlmModelRow ??
+      (llmModel || runtimeCards ? null : organizationDefaultModel.model));
+  // What a Claude agent with no connection and model of its own falls back
+  // to: the organization default, which the Bedrock exception below reads.
+  const defaultedModelProvider =
+    effectiveLlmModelRow?.provider ??
+    (connectionLockedByRuntime || llmModel
+      ? undefined
+      : organizationDefaultModel.model?.provider);
+  // The shared rule the backend applies; the Bedrock and Vertex exception
+  // only lifts the maintained runtime's default, not an explicit choice.
+  // A connection the runtime fixes is every agent's company key.
+  const hasCompanyKey = connectionLockedByRuntime
+    ? fixedAccountMissing !== "connection"
+    : !!llmApiKeyId && !selectedApiKeyIsSubscription;
+  // With both ways open, a Claude agent's own setting follows its connection:
+  // the company key when one is set, otherwise each person's subscription.
+  // That holds for a new agent and from the edit that moves the connection or
+  // the ways: a stored agent keeps what its runs use today until then. Under
+  // the runtime's rule the agent's own setting is not what its runs use, and
+  // stays as it is.
+  const ownAccountEdited =
+    !agent ||
+    accountLockChanged ||
+    (llmApiKeyId ?? null) !== (agent.llmApiKeyId ?? null);
+  const ownClaudeAuthentication =
+    runtime &&
+    isClaudeCodeRuntime &&
+    accountLockNamed &&
+    accountLock === null &&
+    ownAccountEdited &&
+    !claudeSubscriptionUndeclared &&
+    !runtimeRuleKind
+      ? hasCompanyKey
+        ? ("provider" as const)
+        : ("subscription" as const)
+      : runtime?.claudeCode?.authentication;
+  const runtimeWithOwnAccount = useMemo(
+    () =>
+      runtime &&
+      ownClaudeAuthentication &&
+      runtime.claudeCode?.authentication !== ownClaudeAuthentication
+        ? {
+            ...runtime,
+            claudeCode: {
+              ...runtime.claudeCode,
+              authentication: ownClaudeAuthentication,
+            },
+          }
+        : runtime,
+    [runtime, ownClaudeAuthentication],
   );
-  // A runtime with no explicit model inherits the organization default. Validate
-  // that effective model locally before allowing a create or runtime change.
-  const effectiveLlmModelRow =
-    selectedLlmModelRow ?? organizationDefaultModel.model;
+  // Under the runtime's rule a Claude agent runs on the kind it names. A
+  // saved agent with no lock named runs on the Claude account it always ran
+  // on: on a custom image, its company API key.
   const usesClaudeSubscription =
-    supportsClaudeCodeSubscription &&
-    (runtime?.claudeCode?.authentication === "subscription" ||
-      (!runtime?.claudeCode &&
-        (selectedApiKey?.provider ?? effectiveLlmModelRow?.provider) !==
-          "bedrock" &&
-        !anthropicVertexAiEnabled));
+    isClaudeCodeRuntime && runtimeRuleKind
+      ? runtimeRuleKind === "subscription"
+      : !!runtimeWithOwnAccount &&
+        runtimeRequestsClaudeSubscription(
+          withClaudeAccountItRuns({
+            runtime: runtimeWithOwnAccount,
+            savedBeforeChoosing: !!agent && !accountLockNamed,
+          }),
+        ) &&
+        (ownClaudeAuthentication === "subscription" ||
+          ((selectedKeyProvider ?? defaultedModelProvider) !== "bedrock" &&
+            !anthropicVertexAiEnabled));
+  // The personal subscription a runtime other than Claude Code can run on:
+  // Codex on ChatGPT. Every other runtime has only the company key.
+  const offeredSubscriptionKind =
+    !runtime || isClaudeCodeRuntime
+      ? null
+      : runtimeSubscriptionKind(runtime.command?.[0]);
+  const offeredSubscription = offeredSubscriptionKind
+    ? SUBSCRIPTION_CREDENTIALS[offeredSubscriptionKind]
+    : null;
+  // A runtime with a subscription of its own runs its company key on that
+  // vendor too: Codex on OpenAI.
+  const companyProviderFilter = useCallback(
+    (provider: SupportedProvider) =>
+      runtime
+        ? runtimeCompanyProviderFits(runtime, provider)
+        : apiKeyProviderFilter(provider),
+    [apiKeyProviderFilter, runtime],
+  );
+  // A key added from the picker is selected at once, so its dialog offers the
+  // providers the picker lists and no others.
+  const allowedApiKeyProviders = useMemo(
+    () => SupportedProviders.filter(companyProviderFilter),
+    [companyProviderFilter],
+  );
+  // More than one account to allow or leave out: someone has to choose.
+  const choosesAmongAccounts = isClaudeCodeRuntime || !!offeredSubscription;
+  const ownAccountKind: "subscription" | "provider" = isClaudeCodeRuntime
+    ? usesClaudeSubscription
+      ? "subscription"
+      : "provider"
+    : selectedApiKeyIsSubscription
+      ? "subscription"
+      : "provider";
+  // A lock to subscriptions needs a subscription to run on: the runtime's
+  // own, or the one the agent's own account is.
+  const subscriptionLockAllowed =
+    !!offeredSubscriptionKind || ownAccountKind === "subscription";
+  // Checked only for people who see the lock and only when this edit moves
+  // the lock or the agent's account: the backend leaves an unchanged pair be.
+  const accountChangedInEdit =
+    !agent ||
+    accountLockChanged ||
+    (llmApiKeyId ?? null) !== (agent.llmApiKeyId ?? null) ||
+    (llmModel ?? null) !== (agent.modelId ?? null) ||
+    (ownClaudeAuthentication ?? null) !==
+      (agent.runtime?.claudeCode?.authentication ?? null);
+  // The company card asks for nothing: its connection and model are each
+  // set here for every run, or left to each person.
+  const accountLockProblem =
+    canLockAccount &&
+    accountChangedInEdit &&
+    accountLock === "subscription" &&
+    !subscriptionLockAllowed
+      ? "To allow only personal subscriptions, this agent's own connection must be a personal subscription."
+      : null;
+  const accountLockedForViewer = !!savedAccountLock && !canLockAccount;
+  // Who changes an agent's accounts, as the lines under the cards say it:
+  // whoever may configure an agent's runtime where the runtime leaves the
+  // kind to each agent, an administrator where it is locked, its rule names
+  // the kind or it has one account.
+  const accountChangers =
+    runtimeLeavesAccountToAgent && !lockedRuntimeName
+      ? "people who can configure an agent's runtime"
+      : "an administrator";
+  // Under the kind its runtime's rule names, an agent's own connection and
+  // model stay its builder's to pick. The agent's own lock holds them as
+  // well, for someone who may not change it.
+  const accountPairLockedForViewer = !runtimeRuleKind && accountLockedForViewer;
+  // The cards show the ways without taking a tick: said under them, where
+  // the locked line does not already say it. Not while access is unknown,
+  // and not under the runtime's rule, which shows one card with no box.
+  const accountWaysReadOnlyForViewer =
+    !runtimeRuleKind &&
+    canConfigureRuntimeSettings === false &&
+    runtimeAccountsKnown &&
+    !canLockAccount &&
+    !accountLockedForViewer &&
+    !!runtime &&
+    agentRuntimeEnabled &&
+    choosesAmongAccounts;
+  // The one way the agent's own settings give its runs.
+  const ownWay: "subscription" | "provider" = isClaudeCodeRuntime
+    ? usesClaudeSubscription
+      ? "subscription"
+      : "provider"
+    : isCodexRuntime
+      ? codexOnCompanyKey
+        ? "provider"
+        : "subscription"
+      : ownAccountKind;
+  // What the cards show. With no lock named: a saved agent runs only its own
+  // way, and stays on its own connection; a new agent leaves both ways open
+  // until its start is applied. Under the runtime's rule they show the kind
+  // it names, whatever the agent stores.
+  const shownAccountLock: AgentAccountLock | null = runtimeRuleKind
+    ? lockToWay(runtimeRuleKind)
+    : accountLockNamed
+      ? claudeSubscriptionUndeclared && accountLock === null
+        ? "key"
+        : accountLock
+      : agent
+        ? lockToWay(ownWay)
+        : claudeSubscriptionUndeclared
+          ? "key"
+          : null;
+  // A new agent whose ways nobody has chosen yet: someone who may choose must
+  // tick one or both before it is created.
+  const accountWaysUnchosen =
+    !agent &&
+    !!runtime &&
+    agentRuntimeEnabled &&
+    !accountLockNamed &&
+    canLockAccount &&
+    choosesAmongAccounts &&
+    !claudeSubscriptionUndeclared;
+  // No way ticked: not chosen yet, or both unticked in this edit. No lock
+  // says that, so the form holds it and cannot be saved until one is ticked.
+  // Only where there are cards to tick: a runtime with one always-on card,
+  // or none, has nothing to select.
+  const noAccountWay =
+    accountWaysUnchosen ||
+    (accountWaysCleared && !!runtime && choosesAmongAccounts);
+  const subscriptionWayOpen =
+    !noAccountWay && accountWays(shownAccountLock).subscription;
+  const companyWayOpen =
+    !noAccountWay && accountWays(shownAccountLock).provider;
+  // "Both unticked" belongs to the cards it was said on. Another runtime, or
+  // none, starts from what its own lock says.
+  const accountCardsOf = runtime
+    ? `${runtime.command?.[0] ?? ""}:${runtime.inferenceProtocol}`
+    : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the runtime that shows the cards changes
+  useEffect(() => {
+    setAccountWaysCleared(false);
+  }, [accountCardsOf]);
   const effectiveRuntimeModelCompatibility =
     runtime && effectiveLlmModelRow
       ? getAgentRuntimeModelCompatibility({
@@ -2002,6 +2410,7 @@ export function AgentForm({
   // agent is allowed — chat omits the tools for that model — but the user
   // must learn that before the first message, not from a silent no-op.
   const showNoToolsModelNotice =
+    !connectionLockedByRuntime &&
     selectedLlmModelRow?.capabilities?.supportsToolCalling === false &&
     (accessAllTools || selectedToolsCount > 0);
 
@@ -2016,12 +2425,31 @@ export function AgentForm({
     llmModelsQuery.data !== undefined ||
     Object.keys(modelsByProvider).length > 0;
 
+  // A saved agent can hold a model and no connection: one picked on a
+  // connection its runtime fixed. Once the runtime fixes none, the agent
+  // still holds that model, and its connection field is empty and asks for
+  // one.
+  const savedWithModelAlone =
+    !!agent &&
+    !agent.llmApiKeyId &&
+    !llmApiKeyId &&
+    !!llmModel &&
+    llmModel === (agent.modelId ?? null);
+
   // Reactive Model → Key: auto-select key when provider changes
   // (mirrors LlmProviderApiKeySelector's auto-select useEffect in prompt input)
   useEffect(() => {
+    // The connection is the runtime's: a model picked on it moves no key.
+    if (connectionLockedByRuntime) return;
     // Don't auto-select if no model/provider is set
     if (!currentLlmProvider) {
       lastAutoSelectedProviderRef.current = null;
+      return;
+    }
+    // That is how the agent was saved, not a model just picked: no
+    // connection is chosen for it here.
+    if (savedWithModelAlone) {
+      lastAutoSelectedProviderRef.current = currentLlmProvider;
       return;
     }
     // Don't auto-select if no keys available (still loading)
@@ -2048,7 +2476,13 @@ export function AgentForm({
       setLlmApiKeyId(providerKeys[0].id);
     }
     lastAutoSelectedProviderRef.current = currentLlmProvider;
-  }, [currentLlmProvider, availableApiKeys, selectedApiKey]);
+  }, [
+    currentLlmProvider,
+    availableApiKeys,
+    selectedApiKey,
+    connectionLockedByRuntime,
+    savedWithModelAlone,
+  ]);
 
   // A missing catalog is not evidence that a key has no compatible model. Keep
   // this pending until the selected key's model rows have arrived.
@@ -2070,7 +2504,17 @@ export function AgentForm({
     onAddApiKey,
   } = useLlmProviderApiKeyCreateDialog({
     availableKeys: availableApiKeys,
-    onSelectKey: handleLlmApiKeyChange,
+    // On a runtime's cards a new key is the connection alone: its model is
+    // picked after it, or left to each person.
+    onSelectKey: (keyId) => {
+      if (!runtimeCards) {
+        handleLlmApiKeyChange(keyId);
+        return;
+      }
+      pendingModelAutoSelectionRef.current = null;
+      setLlmApiKeyId(keyId);
+      setLlmModel(null);
+    },
     onBeforeOpen: () => setApiKeySelectorOpen(false),
     allowedProviders: allowedApiKeyProviders,
   });
@@ -2102,10 +2546,12 @@ export function AgentForm({
     const compatibleModels = (modelsByProvider[key.provider] ?? []).filter(
       runtimeModelFilter,
     );
-    const bestCompatibleModel = compatibleModels.find(
-      (model) => model.dbId === key.bestModelId,
+    setLlmModel(
+      pickConnectionModel({
+        bestModelId: key.bestModelId,
+        compatibleModels,
+      }),
     );
-    setLlmModel(bestCompatibleModel?.dbId ?? compatibleModels[0]?.dbId ?? null);
     pendingModelAutoSelectionRef.current = null;
   }, [
     availableApiKeys,
@@ -2145,16 +2591,20 @@ export function AgentForm({
     !!persistedAgent && (environmentId ?? null) !== savedEnvironmentId;
   // The API validates the key and the model against each other, so whichever
   // one moved, both go.
+  // Under a connection the runtime fixes, only the model is the agent's to
+  // set or clear, where the runtime fixes none.
   const llmSelectionChanged =
     !!persistedAgent &&
-    ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
-      (llmModel ?? null) !== (persistedAgent.modelId ?? null));
-  const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
-  const needsClaudeProviderKey =
-    !agent &&
-    supportsClaudeCodeSubscription &&
-    !usesClaudeSubscription &&
-    (!selectedApiKey || !runtimeProviderFilter(selectedApiKey.provider));
+    (connectionLockedByRuntime
+      ? !runtimeFixedModelId &&
+        (llmModel ?? null) !== (persistedAgent.modelId ?? null)
+      : (llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
+        (llmModel ?? null) !== (persistedAgent.modelId ?? null));
+  // An agent the platform runs itself names a key and a model together. On
+  // a runtime's cards each is optional: what is left empty is each person's
+  // to pick.
+  const hasCompleteLlmSelection =
+    runtimeCards || Boolean(llmApiKeyId) === Boolean(llmModel);
   // Nothing provides a default command any more, so a new runtime or a new
   // image names its own. A saved runtime without one keeps its image's command.
   const needsRuntimeContainer =
@@ -2203,18 +2653,37 @@ export function AgentForm({
       !agent && showActivationSkills
         ? agentActivationSkillsEditorRef.current?.getCreatePolicy()
         : undefined;
-    const runtimeToSave =
-      runtime &&
+    const runtimeWithClaudeAccount =
+      runtimeWithOwnAccount &&
       !supportsClaudeCodeSubscription &&
-      runtime.claudeCode?.authentication === "subscription"
+      runtimeWithOwnAccount.claudeCode?.authentication === "subscription"
         ? {
-            ...runtime,
+            ...runtimeWithOwnAccount,
             claudeCode: {
-              ...runtime.claudeCode,
+              ...runtimeWithOwnAccount.claudeCode,
               authentication: "provider" as const,
             },
           }
-        : runtime;
+        : runtimeWithOwnAccount;
+    // The lock is sent only when it moved (null unlocks); an absent field
+    // keeps the stored one.
+    let runtimeToSave: RuntimePayload | null = runtimeWithClaudeAccount;
+    if (runtimeWithClaudeAccount) {
+      const { accountLock: lock, ...rest } = runtimeWithClaudeAccount;
+      runtimeToSave = accountLockChanged
+        ? { ...rest, accountLock: lock ?? null }
+        : rest;
+    }
+
+    // A connection the runtime fixes is never the agent's to store: no
+    // connection is sent, and a model only where one was picked on it.
+    const accountPair = accountPairToSave({
+      llmApiKeyId,
+      modelId: companyModelId,
+      fixed: connectionLockedByRuntime
+        ? { modelId: runtimeFixedModelId }
+        : null,
+    });
 
     setIsSaving(true);
 
@@ -2306,15 +2775,15 @@ export function AgentForm({
               }),
               ...(isInternalAgent && {
                 systemPrompt: trimmedSystemPrompt || null,
-                ...(isClaudeCodeRuntime &&
+                ...(((isClaudeCodeRuntime &&
                   (runtimeHasLocalChanges ||
                     (canConfigureRuntime === true &&
-                      runtimeToSave !== runtime)) && {
-                    runtime: runtimeToSave,
-                  }),
+                      runtimeWithClaudeAccount !== runtime))) ||
+                  (accountLockChanged && canLockAccount)) && {
+                  runtime: runtimeToSave,
+                }),
                 ...(llmSelectionChanged && {
-                  llmApiKeyId: llmApiKeyId || null,
-                  modelId: llmModel || null,
+                  ...accountPair,
                 }),
               }),
             }),
@@ -2380,8 +2849,7 @@ export function AgentForm({
           }),
           ...(isInternalAgent && {
             systemPrompt: trimmedSystemPrompt || null,
-            llmApiKeyId: llmApiKeyId || null,
-            modelId: llmModel || null,
+            ...accountPair,
             suggestedPrompts: validSuggestedPrompts,
             ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
@@ -2613,6 +3081,9 @@ export function AgentForm({
       setIsSaving(false);
     }
   }, [
+    accountLockChanged,
+    canLockAccount,
+    runtimeWithOwnAccount,
     name,
     icon,
     description,
@@ -2684,6 +3155,9 @@ export function AgentForm({
     isClaudeCodeRuntime,
     supportsClaudeCodeSubscription,
     runtimeHasLocalChanges,
+    connectionLockedByRuntime,
+    companyModelId,
+    runtimeFixedModelId,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2693,16 +3167,17 @@ export function AgentForm({
     }
     if (
       !requiredSubscriptionSatisfied ||
-      needsClaudeProviderKey ||
       needsRuntimeContainer ||
-      runtimeModelIncompatibility
+      runtimeModelIncompatibility ||
+      accountLockProblem ||
+      noAccountWay
     ) {
       toast.error("Complete the runtime setup before saving");
       return;
     }
     if (!hasCompleteLlmSelection) {
       toast.error(
-        llmApiKeyId
+        companyKeyId
           ? "Select a model for the selected API key"
           : "Select an API key for the selected model",
       );
@@ -2731,10 +3206,11 @@ export function AgentForm({
     name,
     hasCompleteLlmSelection,
     requiredSubscriptionSatisfied,
-    needsClaudeProviderKey,
     needsRuntimeContainer,
     runtimeModelIncompatibility,
-    llmApiKeyId,
+    accountLockProblem,
+    noAccountWay,
+    companyKeyId,
     channelAssignmentsDirty,
     performSave,
   ]);
@@ -2853,9 +3329,10 @@ export function AgentForm({
     (!showActivationSkills || readOnly || activationSkillsReady) &&
     requiredSubscriptionSatisfied &&
     hasCompleteLlmSelection &&
-    !needsClaudeProviderKey &&
     !needsRuntimeContainer &&
     !runtimeModelIncompatibility &&
+    !accountLockProblem &&
+    !noAccountWay &&
     (!runtimeHasLocalChanges || canConfigureRuntime === true) &&
     mcpEnvConflicts.length === 0 &&
     !environmentConflicts.blocksSave;
@@ -2905,53 +3382,283 @@ export function AgentForm({
       {createApiKeyDialog}
     </>
   );
-  const setClaudeAuthentication = (
-    authentication: "provider" | "subscription",
-  ) => {
-    if (!runtime || canConfigureRuntime !== true) return;
+  // A new agent of someone who may choose its accounts, on a runtime that
+  // says what it runs.
+  const newAgentChoosesAccount =
+    !agent &&
+    !!runtime &&
+    agentRuntimeEnabled &&
+    canLockAccount &&
+    // Not before the runtime has said whether it names an account: the
+    // start depends on it.
+    runtimeAccountsKnown &&
+    !claudeSubscriptionUndeclared;
+  // Which ways are open, and with them the agent's own setting: a Claude
+  // agent locked to subscriptions drops its connection, one locked to company
+  // keys runs on its connection.
+  const setAccountLock = (next: AgentAccountLock | null) => {
+    if (!runtime || !canLockAccount) return;
+    setAccountWaysCleared(false);
+    if (!isClaudeCodeRuntime) {
+      setAgentRuntime({ ...runtime, accountLock: next });
+      if (next === "subscription") {
+        // Subscriptions alone need no connection: one that is set stays
+        // stored for when the company card is ticked again. A new agent that
+        // takes its creator's own subscription takes it again here.
+        catalogSubscriptionAppliedRef.current = false;
+      } else if (selectedApiKeyIsSubscription) {
+        // The company option's connection is a company one. A personal
+        // subscription the agent held for its subscription runs is not: the
+        // company fields start empty.
+        clearConnection();
+      }
+      return;
+    }
+    // A saved agent's first change of its ways remembers what it found, so
+    // ticking back to those ways puts its own account back as it was: the
+    // edit then changes nothing, and saves nothing.
+    if (agent && !accountBeforeWaysRef.current) {
+      accountBeforeWaysRef.current = {
+        shownLock: shownAccountLock,
+        runtime,
+        llmApiKeyId,
+        llmModel,
+      };
+    }
+    const before = accountBeforeWaysRef.current;
+    if (before && next === before.shownLock) {
+      setAgentRuntime(restoreOwnClaudeAccount(runtime, before.runtime));
+      // A lock to subscriptions dropped the connection; it comes back unless
+      // another was picked meanwhile.
+      if (!llmApiKeyId && before.llmApiKeyId) {
+        pendingModelAutoSelectionRef.current = null;
+        setLlmApiKeyId(before.llmApiKeyId);
+        setLlmModel(before.llmModel);
+      }
+      return;
+    }
     setAgentRuntime({
       ...runtime,
+      accountLock: next,
+      // Opening the subscription way declares Claude Code on a custom image.
       claudeCode: {
         ...runtime.claudeCode,
-        authentication,
+        authentication:
+          next === "subscription"
+            ? "subscription"
+            : next
+              ? "provider"
+              : (runtime.claudeCode?.authentication ??
+                (hasCompanyKey ? "provider" : "subscription")),
       },
-      credentials:
-        runtime.credentials?.filter(
-          ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
-        ) ?? null,
+      credentials: withoutClaudeTokenCredential(runtime.credentials),
     });
-    if (authentication === "subscription") {
-      handleLlmApiKeyChange(null);
-      setLlmModel(null);
+    // The agent's own connection stays stored under one its runtime fixes.
+    if (next === "subscription" && !connectionLockedByRuntime) {
+      clearConnection();
     }
   };
-  // Claude Code chooses among the few connections that can run Claude, so
-  // they are listed outright instead of behind a dropdown of every key.
-  const claudeConnectionControl = (
+  const clearConnection = () => {
+    handleLlmApiKeyChange(null);
+    setLlmModel(null);
+  };
+  // Which cards a new agent starts on. Under the runtime's rule there is
+  // nothing to start on: the cards show the kind the rule names, and no lock
+  // of its own is named. A connection the runtime fixes starts the company
+  // card alone. Otherwise a Claude agent starts on the Claude account its
+  // runtime comes with, as that card alone: each person's subscription, which
+  // is how the maintained runtime comes, or a company API key, which is what
+  // a custom image ran every agent on. Any other runtime with two accounts
+  // starts with neither ticked, and its creator chooses. The company card's
+  // fields start empty in every case: nothing is picked for the creator.
+  const startingClaude = runtime
+    ? startingClaudeAuthentication({ runtime, ruleKind: null })
+    : undefined;
+  const runtimeStartKind: AgentAccountLock | null = runtimeRuleKind
+    ? null
+    : connectionLockedByRuntime
+      ? "key"
+      : !isClaudeCodeRuntime
+        ? null
+        : startingClaude === "subscription"
+          ? "subscription"
+          : startingClaude === "provider"
+            ? "key"
+            : null;
+  const startsOnRuntimeKind =
+    newAgentChoosesAccount && !accountLockNamed && choosesAmongAccounts
+      ? runtimeStartKind
+      : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: applied once per new agent, when its runtime says so
+  useEffect(() => {
+    if (startsOnRuntimeKind) setAccountLock(startsOnRuntimeKind);
+  }, [startsOnRuntimeKind]);
+  // What the company card's two fields show. A connection the runtime fixes
+  // shows by the name the rule gives: the reader may not be able to read the
+  // connection itself. Its model's name comes from the rule too.
+  const shownKeyName = connectionLockedByRuntime
+    ? (runtimeAccounts?.keyName ??
+      availableApiKeys.find((key) => key.id === runtimeFixedKeyId)?.name)
+    : selectedApiKey?.name;
+  const shownModelName = connectionLockedByRuntime
+    ? runtimeFixedModelId
+      ? (runtimeAccounts?.modelName ?? null)
+      : (companyModelRow?.displayName ?? null)
+    : (selectedLlmModelRow?.displayName ?? null);
+  const shownModelProvider = connectionLockedByRuntime
+    ? (companyModelRow?.provider ?? selectedKeyProvider ?? null)
+    : (selectedLlmModelRow?.provider ?? selectedKeyProvider ?? null);
+  const lockedConnection = connectionLockedByRuntime
+    ? { name: shownKeyName ?? "", reason: LOCKED_IN.runtime }
+    : null;
+  // Said directly under the two fields: they are not the reader's to change.
+  // One that no longer works says that instead, and who can put it right.
+  const runtimeLockNote =
+    !connectionLockedByRuntime ? null : fixedAccountMissing ? (
+      <AccountSectionError>
+        {fixedAccountMissing === "connection"
+          ? "The connection this runtime fixes no longer works. Ask someone who can configure the runtime to choose another."
+          : "The model this runtime fixes no longer works. Ask someone who can configure the runtime to choose another."}
+      </AccountSectionError>
+    ) : fixedModelsEmpty ? (
+      <AccountSectionError>
+        The connection this runtime fixes has no model the runtime can run. Ask
+        someone who can configure the runtime to choose another.
+      </AccountSectionError>
+    ) : (
+      <p className="text-xs text-muted-foreground">
+        {runtimeFixes === "connection-and-model"
+          ? "An admin locked this connection and model."
+          : "An admin locked this connection."}
+      </p>
+    );
+  // The company card's connection is a company one. A personal subscription
+  // an agent holds for its subscription runs is not: the fields show none.
+  const companyConnectionId =
+    selectedApiKeyIsSubscription && !connectionLockedByRuntime
+      ? null
+      : companyKeyId;
+  // What the two fields hold after a change. A connection the runtime fixes
+  // is not the agent's to set: only the model follows.
+  const changeCompanyAccount = (next: CompanyAccountChange) => {
+    cancelPendingCreatedKeySelection();
+    pendingModelAutoSelectionRef.current = null;
+    lastAutoSelectedProviderRef.current = null;
+    if (!connectionLockedByRuntime) setLlmApiKeyId(next.llmApiKeyId ?? null);
+    setLlmModel(next.modelId ?? null);
+    // A runtime whose only account is the company key cannot stay locked to
+    // subscriptions once it is given a connection: there is no option left
+    // in the form to lift that lock with.
+    if (
+      next.llmApiKeyId &&
+      !isClaudeCodeRuntime &&
+      !offeredSubscription &&
+      accountLock === "subscription"
+    ) {
+      setAccountLock(null);
+    }
+  };
+  // What the runtime's rule fixes above the agent: the fields show it,
+  // disabled, and the line under them speaks only of what is left.
+  const fixedAboveAgent =
+    runtimeFixes === "connection-and-model" ||
+    !!fixedAccountMissing ||
+    fixedModelsEmpty
+      ? ("both" as const)
+      : runtimeFixes;
+  // With nothing set for the company API key at any level, a run uses the
+  // organization's default model, and one this runtime cannot run counts as
+  // none: each person then has a connection to pick before they can run the
+  // agent. Whoever builds it learns that here, under the empty fields, since
+  // setting a connection spares everyone the pick. The form knows the
+  // organization's default, not what the API resolves for each person, so it
+  // holds no save back for it: a save the API refuses is shown by the write,
+  // and has its reason beside the fields.
+  const defaultModelCannotRun =
+    !!runtime &&
+    runtimeCards &&
+    companyWayOpen &&
+    !connectionLockedByRuntime &&
+    !companyConnectionId &&
+    !usesClaudeSubscription &&
+    !!organizationDefaultModel.model &&
+    !getAgentRuntimeModelCompatibility({
+      inferenceProtocol: runtime.inferenceProtocol,
+      runtimeCommand: runtime.command,
+      provider: organizationDefaultModel.model.provider,
+      modelId: organizationDefaultModel.model.id,
+      supportedEndpoints:
+        organizationDefaultModel.model.capabilities?.supportedEndpoints,
+    }).compatible;
+  // A connection an agent saved before people could choose its account
+  // stores without a model runs as it always did: the organization's default
+  // model runs, on this connection only where it serves that model.
+  const savedConnectionLine =
+    !!agent &&
+    !accountLockNamed &&
+    !runtimeRuleKind &&
+    !connectionLockedByRuntime &&
+    !!companyConnectionId &&
+    !!selectedKeyProvider &&
+    !companyModelId
+      ? organizationDefaultModel.model
+        ? organizationDefaultModel.model.provider !== selectedKeyProvider
+          ? `This connection is not used: every run uses the organization's default model, ${organizationDefaultModel.model.displayName}. Pick a model to run on this connection.`
+          : null
+        : "Every run uses the best available model, on this connection only where it serves that model. Pick a model to run on this connection."
+      : null;
+  // The company key way's connection and model: the fields a runtime's own
+  // settings show, one level down. Both are optional. What is set is fixed
+  // for every run; what is left empty is each person's to pick.
+  const companyConnectionControl = (
     <>
-      <ClaudeProviderConnections
+      <CompanyAccountFields
+        level="agent"
         keys={availableApiKeys}
-        selectedKeyId={llmApiKeyId}
-        canRunClaude={runtimeProviderFilter}
-        onSelect={(keyId) => {
-          cancelPendingCreatedKeySelection();
-          handleLlmApiKeyChange(keyId);
-        }}
+        apiKeyId={companyConnectionId}
+        apiKeyName={shownKeyName}
+        runsOn={companyProviderFilter}
+        claude={isClaudeCodeRuntime}
+        modelId={companyConnectionId ? companyModelId : null}
+        modelName={shownModelName}
+        modelProvider={shownModelProvider}
+        modelFilter={runtimeModelFilter}
+        models={fixedConnectionModels ?? undefined}
         onAddApiKey={onAddApiKey}
-        onUseSubscription={
-          supportsClaudeCodeSubscription
-            ? () => setClaudeAuthentication("subscription")
-            : undefined
+        disabled={
+          readOnly ||
+          accountPairLockedForViewer ||
+          // A Claude Code agent's connection belongs with its runtime, as
+          // before: someone who may not configure that runtime does not
+          // change it. On another entrypoint the key is the agent's own.
+          (claudeAccountCards && canConfigureRuntime !== true)
         }
-        disabled={readOnly}
+        lockedConnection={lockedConnection}
+        modelLocked={modelLockedByRuntime}
+        modelLockedReason={LOCKED_IN.runtime}
+        fixedAbove={fixedAboveAgent}
+        between={runtimeLockNote}
+        line={savedConnectionLine}
+        onChange={changeCompanyAccount}
       />
+      {defaultModelCannotRun && (
+        <output
+          aria-live="polite"
+          className="flex items-start gap-1.5 text-xs text-muted-foreground"
+        >
+          <InfoIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+          <span>
+            The organization&apos;s default model,{" "}
+            {organizationDefaultModel.model?.displayName}, cannot run on this
+            runtime. Each person must pick a connection, unless you set one
+            here.
+          </span>
+        </output>
+      )}
       {createApiKeyDialog}
     </>
   );
-  const defaultModelPlaceholder =
-    supportsClaudeCodeSubscription && !agent
-      ? "Select a Claude model"
-      : (organizationDefaultModel.label ?? undefined);
+  const defaultModelPlaceholder = organizationDefaultModel.label ?? undefined;
   const modelControl = (
     <>
       {!llmApiKeyId ? (
@@ -2992,9 +3699,7 @@ export function AgentForm({
       ) : (
         <ModelSelector
           selectedModel={llmModel || ""}
-          placeholder={
-            isClaudeCodeRuntime ? "Select a Claude model" : "Select a model"
-          }
+          placeholder="Select a model"
           onModelChange={(modelId) => handleLlmModelChange(modelId)}
           onClear={() => {
             setLlmModel(null);
@@ -3017,29 +3722,98 @@ export function AgentForm({
     </>
   );
 
-  const modelAttention = usesClaudeSubscription
-    ? undefined
-    : needsClaudeProviderKey
-      ? "Select a provider and Claude model"
+  // The accounts of a runtime other than Claude Code, as options: its
+  // personal subscription where it has one, and its company accounts.
+  const toggleAccountOption = (way: AccountWay) => {
+    // A tick with nothing selected opens that way alone.
+    if (noAccountWay) {
+      setAccountLock(lockToWay(way));
+      return;
+    }
+    const next = toggleAccountWay(shownAccountLock, way);
+    if (next === "none") setAccountWaysCleared(true);
+    else setAccountLock(next);
+  };
+  const companyAccountOptions: AccountOption[] = [
+    {
+      id: "provider",
+      ...companyApiKeyCard(appName),
+      checked: companyWayOpen,
+      onToggle: () => toggleAccountOption("provider"),
+      children: companyConnectionControl,
+    },
+  ];
+  const subscriptionCard = claudeAccountCards
+    ? CLAUDE_SUBSCRIPTION_CARD
+    : offeredSubscriptionKind
+      ? personalSubscriptionCard(offeredSubscriptionKind)
+      : null;
+  // The cards of the agent's accounts. Under the runtime's rule only the
+  // kind it names has one: the other kind is not this runtime's to offer,
+  // so it is not shown, as on a runtime that has one kind of account. A
+  // lone card is always on and has no box to tick.
+  const runtimeAccountOptions: AccountOption[] =
+    runtimeRuleKind === "subscription"
+      ? subscriptionCard
+        ? [
+            {
+              id: "subscription",
+              ...subscriptionCard,
+              checked: true,
+              onToggle: () => {},
+            },
+          ]
+        : []
+      : [
+          ...(subscriptionCard && !runtimeRuleKind
+            ? [
+                {
+                  id: "subscription",
+                  ...subscriptionCard,
+                  checked: subscriptionWayOpen,
+                  onToggle: () => toggleAccountOption("subscription"),
+                },
+              ]
+            : []),
+          ...companyAccountOptions,
+        ];
+
+  const modelAttention = noAccountWay
+    ? "Choose who pays for its runs"
+    : usesClaudeSubscription
+      ? undefined
       : !requiredSubscriptionSatisfied
         ? "Connect your ChatGPT subscription before creating the agent"
-        : !hasCompleteLlmSelection
-          ? llmApiKeyId
-            ? "Select a model for the selected provider"
-            : "Select a provider for the selected model"
-          : runtimeModelIncompatibility || undefined;
+        : fixedAccountMissing && companyWayOpen
+          ? `The ${fixedAccountMissing} this runtime fixes no longer works`
+          : !hasCompleteLlmSelection
+            ? llmApiKeyId
+              ? "Select a model for the selected provider"
+              : "Select a provider for the selected model"
+            : runtimeModelIncompatibility || undefined;
+  // What the company card's fields amount to, in the row's few words: the
+  // names of what is set, and whose the rest is to pick.
+  const companySummary = !companyConnectionId
+    ? "Each person's connection and model"
+    : `${shownKeyName ?? "No connection"}, ${shownModelName ?? (modelLockedByRuntime ? "no model" : "each person's model")}`;
   const modelSummary = usesClaudeSubscription
     ? "Each person's Claude subscription"
     : requiredSubscription
       ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
-      : needsClaudeProviderKey
-        ? "Select a provider and Claude model"
-        : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
+      : // The subscription the runtime's rule names, whatever the agent
+        // stores.
+        runtimeRuleKind === "subscription" && offeredSubscriptionKind
+        ? personalSubscriptionCard(offeredSubscriptionKind).title
+        : runtimeCards
+          ? companySummary
+          : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
   const modelBlock = (
     <div className="space-y-2">
       {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
         <Label>
-          {isClaudeCodeRuntime ? "Whose Claude account runs it" : "Model"}
+          {isClaudeCodeRuntime || (runtime && agentRuntimeEnabled)
+            ? "Accounts that can run it"
+            : "Model"}
         </Label>
       )}
       {cannotReadLlmConfiguration && !supportsClaudeCodeSubscription ? (
@@ -3092,74 +3866,88 @@ export function AgentForm({
                 ) : null}
               </p>
             ))}
-          {isClaudeCodeRuntime ? (
-            <fieldset
-              disabled={
-                supportsClaudeCodeSubscription && canConfigureRuntime !== true
-              }
-            >
+          {claudeAccountCards && !(runtimeCards && runtimeRuleKind) ? (
+            // No disabled fieldset around the cards: the boxes of someone
+            // who may not change them stay focusable, so their state can be
+            // read. What sets the connection up is disabled on its own.
+            <div>
               <ClaudeCodeInferenceSettings
-                authenticationLocked={!!lockedRuntimeName}
-                agentId={agent?.id ?? ""}
-                disabled={canConfigureRuntime !== true}
-                authentication={
-                  usesClaudeSubscription ? "subscription" : "provider"
-                }
-                onAuthenticationChange={setClaudeAuthentication}
-                runtimeCommand={runtime?.command?.[0] ?? null}
-                model={runtime?.claudeCode?.model}
-                onModelChange={(model) => {
-                  if (!runtime || canConfigureRuntime !== true) return;
-                  setAgentRuntime({
-                    ...runtime,
-                    claudeCode: {
-                      authentication: "subscription",
-                      model,
-                    },
-                    credentials:
-                      runtime.credentials?.filter(
-                        ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                      ) ?? null,
-                  });
-                }}
-                provider={
-                  selectedApiKey?.provider ??
-                  effectiveLlmModelRow?.provider ??
-                  null
-                }
-                vertexEnabled={anthropicVertexAiEnabled}
-                apiKeySelector={claudeConnectionControl}
-                modelSelector={modelControl}
-                showModelSelector={
-                  !!llmApiKeyId ||
-                  availableApiKeys.some(
-                    (key) =>
-                      !isPersonalSubscription(key) &&
-                      runtimeProviderFilter(key.provider),
-                  )
-                }
+                lock={shownAccountLock}
+                noWaySelected={noAccountWay}
+                onLockChange={setAccountLock}
+                onNoWaySelected={() => setAccountWaysCleared(true)}
+                waysReadOnly={!canLockAccount}
+                lockProblem={accountLockProblem}
+                connectionPickers={companyConnectionControl}
               />
-            </fieldset>
+            </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="min-w-0">{providerKeyControl}</div>
-              <div className="min-w-0">{modelControl}</div>
+            <div className="space-y-2">
+              {runtime && agentRuntimeEnabled ? (
+                // A runtime's accounts, as the same cards whatever it runs.
+                <>
+                  <AgentAccountOptions
+                    label="Accounts that can run it"
+                    // Under the runtime's rule there is one kind, and nothing
+                    // to say about a choice between two.
+                    meaning={
+                      runtimeRuleKind
+                        ? undefined
+                        : accountWaysMeaning({
+                            subscription: subscriptionWayOpen,
+                            provider: companyWayOpen,
+                          })
+                    }
+                    options={runtimeAccountOptions}
+                    readOnly={!canLockAccount}
+                    problem={accountLockProblem}
+                  />
+                  {isClaudeCodeRuntime && !supportsClaudeCodeSubscription && (
+                    // Claude Code on another entrypoint runs on the company
+                    // API key only: what would let it run on subscriptions.
+                    <p className="text-xs text-muted-foreground">
+                      {claudeSubscriptionCommandHint(runtime.command?.[0])}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <fieldset
+                  disabled={accountLockedForViewer}
+                  className="flex flex-wrap items-center gap-2"
+                >
+                  <div className="min-w-0">{providerKeyControl}</div>
+                  <div className="min-w-0">{modelControl}</div>
+                </fieldset>
+              )}
             </div>
           )}
-          {runtimeModelIncompatibility &&
-            !needsClaudeProviderKey &&
-            hasCompleteLlmSelection && (
-              <output
-                aria-live="polite"
-                className="flex items-start gap-1.5 text-xs text-muted-foreground"
-              >
-                <InfoIcon
-                  className="mt-0.5 size-3 shrink-0"
-                  aria-hidden="true"
-                />
-                <span>Choose a compatible model or runtime to save.</span>
-              </output>
-            )}
+          {accountLockedForViewer && !runtimeRuleKind && (
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Lock className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+              <span>
+                This agent&apos;s account is locked. Only {accountChangers} can
+                change it.
+              </span>
+            </p>
+          )}
+          {accountWaysReadOnlyForViewer && (
+            // The boxes do not answer a click, so the reason is said.
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Lock className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+              <span>
+                Only {accountChangers} can change which accounts run it.
+              </span>
+            </p>
+          )}
+          {runtimeModelIncompatibility && hasCompleteLlmSelection && (
+            <output
+              aria-live="polite"
+              className="flex items-start gap-1.5 text-xs text-muted-foreground"
+            >
+              <InfoIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+              <span>Choose a compatible model or runtime to save.</span>
+            </output>
+          )}
           {showNoToolsModelNotice && (
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
               <InfoIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
@@ -3334,6 +4122,8 @@ export function AgentForm({
                           }}
                           onChange={setAgentRuntime}
                           lockedBy={lockedRuntimeName}
+                          accountsLeftToAgent={runtimeLeavesAccountToAgent}
+                          runtimeFixes={runtimeFixes}
                           onChangeTemplate={onChangeRuntimeTemplate}
                           modelBlock={showsModelControl ? modelBlock : null}
                           modelSummary={modelSummary}
@@ -3827,7 +4617,11 @@ export function AgentForm({
                   </InlineNotice>
                 )}
                 {canConfigureRuntime && lockedRuntimeName && (
-                  <LockedRuntimeNotice name={lockedRuntimeName} />
+                  <LockedRuntimeNotice
+                    name={lockedRuntimeName}
+                    accountsLeftToAgent={runtimeLeavesAccountToAgent}
+                    fixes={runtimeFixes}
+                  />
                 )}
                 <fieldset disabled={canConfigureRuntime !== true}>
                   <AgentRuntimeFields
@@ -4392,6 +5186,46 @@ type AgentFormFields = {
 // Normalizes set-like id arrays (order-independent) so reselecting the same
 // teams/knowledge bases/connectors in a different order isn't mistaken for an
 // edit when comparing the pristine and current form snapshots.
+/** A runtime's credentials without a declared Claude token: runs supply it. */
+function withoutClaudeTokenCredential(
+  credentials: AgentRuntimeConfig["credentials"],
+): AgentRuntimeConfig["credentials"] {
+  return (
+    credentials?.filter(({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN") ?? null
+  );
+}
+
+/**
+ * `runtime` with the lock, the Claude account and the Claude token
+ * declaration that `saved` held, each as it was stored (absent stays
+ * absent). Everything else `runtime` holds, edited or not, stays.
+ */
+function restoreOwnClaudeAccount(
+  runtime: AgentRuntimeConfig,
+  saved: AgentRuntimeConfig,
+): AgentRuntimeConfig {
+  const restored: AgentRuntimeConfig = { ...runtime };
+  if (saved.accountLock === undefined) delete restored.accountLock;
+  else restored.accountLock = saved.accountLock;
+  const { authentication: _set, ...claudeSettings } = runtime.claudeCode ?? {};
+  if (saved.claudeCode) {
+    restored.claudeCode = {
+      ...claudeSettings,
+      authentication: saved.claudeCode.authentication,
+    };
+  } else {
+    delete restored.claudeCode;
+  }
+  // Only the token declaration was taken out; credentials edited since stay.
+  if (
+    JSON.stringify(runtime.credentials ?? null) ===
+    JSON.stringify(withoutClaudeTokenCredential(saved.credentials))
+  ) {
+    restored.credentials = saved.credentials;
+  }
+  return restored;
+}
+
 function buildAgentFormSnapshot(fields: AgentFormFields) {
   return {
     ...fields,
@@ -4413,3 +5247,11 @@ const KNOWLEDGE_CONNECTOR_CREATE_ACTION = {
   label: "Add a connector",
   href: "/knowledge/connectors",
 };
+
+/** How a Claude Code agent on another entrypoint could run on subscriptions. */
+function claudeSubscriptionCommandHint(
+  command: string | null | undefined,
+): string {
+  const custom = command?.trim();
+  return `To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current ${custom ? `${custom} ` : ""}entrypoint will be lost.`;
+}

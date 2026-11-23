@@ -3,6 +3,7 @@ import {
   DEFAULT_APP_NAME,
   followAgentCatalogImage,
   toPlaceholderTitle,
+  withClaudeAccountItRuns,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
@@ -35,7 +36,7 @@ import type {
   AgentRunRecord,
   ResolvedAgentRuntime,
 } from "@/types";
-import { ApiError } from "@/types";
+import { ApiError, OWN_ACCOUNT_ONLY } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
   prepareAgentRuntimeBackendDriver,
@@ -147,7 +148,7 @@ async function startAgentRunSession(params: {
     task = promptWithContract(task, contract);
   }
 
-  const { spec, virtualApiKeyId, gatewayTokenId } =
+  const { spec, virtualApiKeyId, gatewayTokenId, boundLlm } =
     await buildAgentRunLaunchSpec({
       runtime: params.runtime,
       taskId: params.taskId,
@@ -223,8 +224,12 @@ async function startAgentRunSession(params: {
         prompt: params.task ?? "Run",
         organizationId: params.organizationId,
         userId: params.titleUserId,
-        modelId: params.modelId,
-        llmApiKeyId: params.llmApiKeyId,
+        // On the account the run is bound to: the agent's own pair is not
+        // what a run uses where its runtime, or the person, sets another.
+        // A run on a person's Claude subscription binds no provider key and
+        // keeps the agent's own pair.
+        modelId: boundLlm ? boundLlm.modelId : params.modelId,
+        llmApiKeyId: boundLlm ? boundLlm.llmApiKeyId : params.llmApiKeyId,
       })
         .then((title) =>
           AgentRunModel.updateTitleIfCurrent({
@@ -374,11 +379,20 @@ export function resolveAgentRuntime(
     return null;
   }
   return {
-    ...agent.runtime,
+    // An agent saved before people could choose its account runs on the
+    // Claude account it always ran on.
+    ...withClaudeAccountItRuns({
+      runtime: agent.runtime,
+      savedBeforeChoosing: agent.runtime.accountLock === undefined,
+    }),
     image: followAgentCatalogImage({
       image: agent.runtime.image,
       catalogImages: config.agentRuntime.catalogImages,
     }),
+    accountLock:
+      agent.runtime.accountLock === undefined
+        ? OWN_ACCOUNT_ONLY
+        : agent.runtime.accountLock,
     agentId: agent.id,
     organizationId: agent.organizationId,
     environmentId: agent.environmentId,

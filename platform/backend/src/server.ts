@@ -113,6 +113,7 @@ import guardrailsNoopAnnotatorRoutes from "@/routes/guardrails-policy/guardrails
 import { captureClientRuntimeEvidence } from "@/routes/proxy/utils/client-runtime-evidence";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
+import { ensureAgentRuntimeUserAccountsTable } from "@/services/agent-runtime/user-accounts-table";
 import {
   APP_BASE_CSS_PATH,
   APP_SDK_PATH,
@@ -919,6 +920,10 @@ const startWebServer = async () => {
     await ensureScopedResourcePermissionCutover();
     // SPDX-SnippetEnd
 
+    // Create the table of each person's Agent Runtime account choice before
+    // admitting API traffic. Never throws: without it, nobody has a choice.
+    await ensureAgentRuntimeUserAccountsTable();
+
     // Initialize metrics with keys of custom agent labels
     // Set OpenMetrics content type to enable exemplar support on histograms
     const promClient = await import("prom-client");
@@ -1446,6 +1451,15 @@ const startWorker = async () => {
 
     await initializeDatabase();
 
+    // Scheduled runs read each person's account choice: wait for the web
+    // server's upgrade to create its table, or create it here. The wait can
+    // last minutes while other transactions write to the tables it
+    // references, so the probes are answered meanwhile, as the web server's
+    // are, and the pod is not restarted for it.
+    const startupHealth = createStartupHealthServer();
+    await startupHealth.listen({ port, host });
+    await ensureAgentRuntimeUserAccountsTable();
+
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1578,6 +1592,7 @@ const startWorker = async () => {
       enableDefaultMetrics: true,
     });
 
+    await startupHealth.close();
     await healthServer.listen({ port: port, host });
     logger.info(
       `Worker server started on port ${port} with ${labelKeys.length} agent label keys`,

@@ -1463,6 +1463,55 @@ describe("buildAgentRunLaunchSpec", () => {
     });
   }
 
+  // Only the maintained Claude Code runtime runs on a person's own Claude
+  // subscription: a custom image runs on the agent's provider key, whatever
+  // Claude account its settings store.
+  test("runs a custom image on the agent's provider key, whatever Claude account it stores", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "anthropic",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+
+    for (const claudeCode of [
+      { authentication: "subscription" as const },
+      { authentication: "provider" as const },
+      undefined,
+    ]) {
+      const configuredRuntime = claudeCode
+        ? customClaudeRuntime(setup.agent, claudeCode)
+        : { ...runtime(setup.agent, "anthropic"), command: ["custom-agent"] };
+
+      const { spec } = await buildAgentRunLaunchSpec(
+        launchParams({ setup, runtime: configuredRuntime }),
+      );
+
+      const label = claudeCode?.authentication ?? "none";
+      expect(
+        spec.env.ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH,
+        label,
+      ).toBeUndefined();
+      expect(spec.env.ARCHESTRA_AGENT_RUNTIME_MODEL, label).toBe(
+        "selected-model",
+      );
+      expect(spec.secretEnv.ANTHROPIC_API_KEY, label).toMatch(/^arch_/);
+      expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN, label).toBeUndefined();
+      expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS, label).toBeUndefined();
+    }
+    expect(claudeCodeAccountManager.requireConnection).not.toHaveBeenCalled();
+  });
+
   test("does not inject a Claude subscription token into a custom runtime", async ({
     makeOrganization,
     makeAdmin,
@@ -1592,6 +1641,7 @@ function runtime(
 ): ResolvedAgentRuntime {
   return {
     agentId: agent.id,
+    accountLock: null,
     organizationId: agent.organizationId,
     environmentId: null,
     secretId: null,
@@ -1607,5 +1657,36 @@ function runtime(
     ttlHours: null,
     maxCostUsd: null,
     idleTimeoutMinutes: null,
+  };
+}
+
+function customClaudeRuntime(
+  agent: Agent,
+  claudeCode: NonNullable<ResolvedAgentRuntime["claudeCode"]>,
+): ResolvedAgentRuntime {
+  return {
+    ...runtime(agent, "anthropic"),
+    command: ["custom-agent"],
+    claudeCode,
+  };
+}
+
+/** A one-shot run of the agent acting as the signed-in person. */
+function launchParams(params: {
+  setup: { agent: Agent; user: User };
+  runtime: ResolvedAgentRuntime;
+}): Parameters<typeof buildAgentRunLaunchSpec>[0] {
+  const { agent, user } = params.setup;
+  return {
+    runtime: params.runtime,
+    taskId: crypto.randomUUID(),
+    runId: crypto.randomUUID(),
+    agentId: agent.id,
+    actor: { id: user.id, kind: "user", organizationId: agent.organizationId },
+    organizationId: agent.organizationId,
+    runtimeScope: "agent-tests",
+    effectiveNetworkPolicy: { source: "built_in", policy: null },
+    appName: "Archestra",
+    runMode: "one_shot",
   };
 }

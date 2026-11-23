@@ -549,6 +549,73 @@ class LlmProviderApiKeyModel {
     provider?: SupportedProvider,
     options?: { includeSubscriptionInfo?: boolean },
   ): Promise<LlmProviderApiKeyWithScopeInfo[]> {
+    const { keys: accessibleKeys, credentialKinds } =
+      await LlmProviderApiKeyModel.findUsableKeys({
+        organizationId,
+        userId,
+        provider,
+      });
+    const [labelsByKey, displayScopes] = await Promise.all([
+      LlmProviderApiKeyLabelModel.getLabelsForMany(
+        accessibleKeys.map((key) => key.id),
+      ),
+      LlmProviderApiKeyModel.findDisplayScopes({
+        organizationId,
+        keys: accessibleKeys,
+      }),
+    ]);
+
+    return CreatedByModel.attach(
+      await Promise.all(
+        accessibleKeys.map(async (key) => ({
+          ...toApiKeyWithScopeInfo(
+            // `scope` from the owner column and grants, not the retired one.
+            { ...key, scope: displayScopes.get(key.id) ?? key.scope },
+            options?.includeSubscriptionInfo === true
+              ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
+              : null,
+          ),
+          labels: labelsByKey.get(key.id) ?? [],
+        })),
+      ),
+      (key) => key.createdBy,
+    );
+  }
+
+  /**
+   * The company connections `userId` may use, oldest first: keys nobody
+   * owns that hold an API key. Never a personal subscription, a per-person
+   * credential, a key of the person's own, or a key left without an owner:
+   * none of those is the company's to pay with.
+   */
+  static async findUsableCompanyKeyIds(params: {
+    organizationId: string;
+    userId: string;
+    provider?: SupportedProvider;
+  }): Promise<string[]> {
+    const { keys, credentialKinds } =
+      await LlmProviderApiKeyModel.findUsableKeys(params);
+    const shared = await LlmProviderApiKeyModel.withoutOrphans({
+      organizationId: params.organizationId,
+      keys: keys.filter(
+        (key) =>
+          key.userId === null &&
+          !isPerUserCredential(key.provider, credentialKinds.get(key.id)),
+      ),
+    });
+    return shared.map(({ id }) => id);
+  }
+
+  /**
+   * The keys `userId` may use, as `getAvailableKeysForUser` lists them but
+   * without their labels, display scopes and creators: for key selection.
+   */
+  static async findUsableKeys(params: {
+    organizationId: string;
+    userId: string;
+    provider?: SupportedProvider;
+  }) {
+    const { organizationId, userId, provider } = params;
     // Build conditions
     const conditions = [
       eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
@@ -638,31 +705,7 @@ class LlmProviderApiKeyModel {
         userId,
       }),
     );
-    const [labelsByKey, displayScopes] = await Promise.all([
-      LlmProviderApiKeyLabelModel.getLabelsForMany(
-        accessibleKeys.map((key) => key.id),
-      ),
-      LlmProviderApiKeyModel.findDisplayScopes({
-        organizationId,
-        keys: accessibleKeys,
-      }),
-    ]);
-
-    return CreatedByModel.attach(
-      await Promise.all(
-        accessibleKeys.map(async (key) => ({
-          ...toApiKeyWithScopeInfo(
-            // `scope` from the owner column and grants, not the retired one.
-            { ...key, scope: displayScopes.get(key.id) ?? key.scope },
-            options?.includeSubscriptionInfo === true
-              ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
-              : null,
-          ),
-          labels: labelsByKey.get(key.id) ?? [],
-        })),
-      ),
-      (key) => key.createdBy,
-    );
+    return { keys: accessibleKeys, credentialKinds };
   }
   // SPDX-SnippetEnd
 
@@ -996,6 +1039,21 @@ class LlmProviderApiKeyModel {
   // SPDX-SnippetEnd
 
   /**
+   * Whether only the key's owner may use it: a personal subscription or a
+   * provider whose credential is always personal, but not a shared GitHub App
+   * key. A credential that could not be classified counts as personal.
+   */
+  static async isPersonalCredential(apiKey: {
+    id: string;
+    provider: SupportedProvider;
+  }): Promise<boolean> {
+    return isPerUserCredential(
+      apiKey.provider,
+      await LlmProviderApiKeyModel.findCredentialKind(apiKey.id),
+    );
+  }
+
+  /**
    * Resolution order among keys a caller may use (decision: owner column
    * first, then team-granted, then organization): their own key first, then
    * a key whose grants reach one of the caller's teams (or reach teams only),
@@ -1005,13 +1063,6 @@ class LlmProviderApiKeyModel {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  /**
-   * Drop the keys nobody was given: a personal key whose owner was deleted,
-   * which the upgrade left without an owner and with a policy that grants no
-   * one. An administrator reaches it through their authority over every key,
-   * to manage it, but it is nobody's to pick as a default credential. A shared
-   * key created without grants is not an orphan: it is for administrators.
-   */
   private static async findCredentialKind(
     id: string,
   ): Promise<LlmProviderCredentialKind | null> {
@@ -1034,6 +1085,13 @@ class LlmProviderApiKeyModel {
     return (await resolveCredentialKinds([row])).get(id) ?? null;
   }
 
+  /**
+   * Drop the keys nobody was given: a personal key whose owner was deleted,
+   * which the upgrade left without an owner and with a policy that grants no
+   * one. An administrator reaches it through their authority over every key,
+   * to manage it, but it is nobody's to pick as a default credential. A shared
+   * key created without grants is not an orphan: it is for administrators.
+   */
   private static async withoutOrphans<
     T extends { id: string; userId: string | null },
   >(params: { organizationId: string; keys: T[] }): Promise<T[]> {

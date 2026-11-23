@@ -343,9 +343,12 @@ async function launchDelegatedTask(params: {
         );
       }
       try {
+        // With the agent's id, the caller's own account choice is checked,
+        // as their run will use it.
         await preflightAgentRuntimeModelCompatibility({
           runtime,
           agent,
+          agentId: agent.id,
           organizationId: actor.organizationId,
           userId: actor.id,
         });

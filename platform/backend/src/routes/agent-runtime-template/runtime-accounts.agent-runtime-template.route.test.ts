@@ -1351,6 +1351,24 @@ describe("a runtime's account rule", () => {
           "This agent's model is not available through the connection the Engineering workspace runtime runs its agents on. Someone who can edit the agent must choose another model.",
       });
 
+      const ownId = own.json().id;
+      const latestVersion = async () =>
+        (
+          await AgentVersionModel.listForAgent({
+            agentId: ownId,
+            organizationId: ctx.organizationId,
+            pagination: { limit: 1, offset: 0 },
+          })
+        ).data[0]?.version;
+      const restoreTo = (version: number | undefined) =>
+        ctx.app.inject({
+          method: "POST",
+          url: `/api/agents/${ownId}/versions/${version}/restore`,
+          payload: {},
+        });
+      await AgentVersionModel.forkIfChanged(ownId);
+      const beforeRepair = await latestVersion();
+
       // What that asks for: a model of the runtime's connection, sent alone
       // as the agent form sends it. The agent keeps its own connection,
       // which plays no part while the rule stands.
@@ -1374,6 +1392,27 @@ describe("a runtime's account rule", () => {
       expect(notOfRuntime.json().error.message).toBe(
         "The Engineering workspace runtime runs its agents on one connection, and the model you chose is not one of its models. Choose one of them.",
       );
+
+      // A restored version changes the model the same way: the one from
+      // before the repair is refused while the rule stands, and the repaired
+      // one is restored.
+      const back = await restoreTo(beforeRepair);
+      expect(back.statusCode, back.body).toBe(400);
+      expect(await stored(ownId)).toMatchObject({
+        llmApiKeyId: shared.key.id,
+        modelId: company.model.id,
+      });
+      await AgentVersionModel.forkIfChanged(ownId);
+      const afterRepair = await latestVersion();
+      expect((await update(ownId, { modelId: secondModelId })).statusCode).toBe(
+        200,
+      );
+      const forward = await restoreTo(afterRepair);
+      expect(forward.statusCode, forward.body).toBe(200);
+      expect(await stored(ownId)).toMatchObject({
+        llmApiKeyId: shared.key.id,
+        modelId: company.model.id,
+      });
     });
 
     test("an agent created while a kind is named is free once the rule is removed, as an agent created before it is", async () => {

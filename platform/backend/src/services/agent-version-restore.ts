@@ -21,6 +21,7 @@ import type { AgentActivationSkillPolicyRule } from "@/models/agent-activation-s
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
 import {
+  agentPairToCheck,
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
 } from "@/services/agent-runtime/agent-config-validation";
@@ -521,6 +522,32 @@ async function planScalars(params: {
         runtime: current.runtime,
         runtimeConnection,
       });
+    }
+    // A model restored beside the connection the agent keeps is judged as
+    // one sent alone: on a runtime that fixes its agents' connection, it runs
+    // on that connection, of which it must be a model.
+    if (
+      snapshotModelId !== null &&
+      snapshotKeyId !== null &&
+      snapshotKeyId === (current.llmApiKeyId ?? null)
+    ) {
+      const runtimeConnection = await runtimeConnectionFor({
+        organizationId,
+        runtime: current.runtime,
+      });
+      if (runtimeConnection) {
+        await assertAgentModelSelectionAvailable({
+          agent: agentPairToCheck({
+            sent: { modelId: snapshotModelId },
+            stored: current,
+            runtimeConnection,
+          }),
+          organizationId,
+          userId,
+          runtime: current.runtime,
+          runtimeConnection,
+        });
+      }
     }
     // An API key alone is whole on an Agent Runtime agent: it leaves the
     // model to each person who runs the agent.

@@ -204,6 +204,20 @@ export async function assertAccountLockWrite(params: {
       `This agent's account is locked. Only ${who(previousTarget)} can change its account or runtime.`,
     );
   }
+  // A lock carried onto another runtime is a lock there: it is for whoever
+  // may choose the account on that runtime, unless that runtime sets it.
+  if (
+    runtimeMoved &&
+    previousLock &&
+    nextLock &&
+    !setByRuntime(nextTarget, nextLock) &&
+    !(await mayChooseAccount(nextTarget))
+  ) {
+    throw new ApiError(
+      403,
+      `Only ${who(nextTarget)} can lock the account of this agent.`,
+    );
+  }
 
   if (!nextRuntime || !nextLock) return;
   // The settings that decide the agent's own account kind, whoever may set
@@ -444,7 +458,9 @@ export async function assertRuntimeAccountSettings(params: {
         RUNTIME_CONNECTION_PROBLEMS.personal(target.name),
       );
     }
-    if (!selectable.some(({ id: selectableId }) => selectableId === llmApiKeyId)) {
+    if (
+      !selectable.some(({ id: selectableId }) => selectableId === llmApiKeyId)
+    ) {
       throw new ApiError(
         403,
         `You cannot use the ${words.connection} chosen for the ${target.name} runtime yourself, so you cannot give it to the runtime's agents. Choose ${words.aConnection} that is shared with you.`,

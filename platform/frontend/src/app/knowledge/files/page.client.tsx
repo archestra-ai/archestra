@@ -108,7 +108,7 @@ export default function KnowledgeFilesPage() {
     useScopeFilterParams();
 
   /** null = the top level, which lists directories plus unfiled documents. */
-  const [openDirectoryId, setOpenDirectoryId] = useState<string | null>(null);
+  const openDirectoryId = searchParams.get("directoryId") || null;
   const [search, setSearch] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -193,6 +193,14 @@ export default function KnowledgeFilesPage() {
     owner,
   });
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const [selectionDirectoryId, setSelectionDirectoryId] =
+    useState(openDirectoryId);
+  // Back and Forward change the directory without going through a click handler.
+  if (selectionDirectoryId !== openDirectoryId) {
+    setSelectionDirectoryId(openDirectoryId);
+    setRowSelection({});
+    setEscalatedFor(null);
+  }
   const allMatchingSelected = escalatedFor === viewSignature;
   const { effectiveRowSelection, onRowSelectionChange } =
     useControlledRowSelection({
@@ -332,11 +340,9 @@ export default function KnowledgeFilesPage() {
             return (
               <UnstyledButton
                 type="button"
-                onClick={() => {
-                  setOpenDirectoryId(directory.id);
-                  clearSelection();
-                  updateQueryParams({ page: "1" });
-                }}
+                onClick={() =>
+                  updateQueryParams({ directoryId: directory.id, page: "1" })
+                }
                 className="flex w-full min-w-0 items-center gap-2 text-left font-medium hover:underline"
               >
                 <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -475,7 +481,7 @@ export default function KnowledgeFilesPage() {
         },
       },
     ],
-    [deleteFile, deleteDirectory, updateQueryParams, clearSelection],
+    [deleteFile, deleteDirectory, updateQueryParams],
   );
 
   return (
@@ -526,16 +532,14 @@ export default function KnowledgeFilesPage() {
               />
             }
           >
-            {openDirectory ? (
+            {openDirectoryId ? (
               <Button
                 variant="ghost"
                 size="sm"
                 className="-ml-2"
-                onClick={() => {
-                  setOpenDirectoryId(null);
-                  clearSelection();
-                  updateQueryParams({ page: "1" });
-                }}
+                onClick={() =>
+                  updateQueryParams({ directoryId: null, page: "1" })
+                }
               >
                 <ChevronLeft className="mr-1 h-4 w-4" />
                 <span>All files</span>
@@ -629,7 +633,7 @@ export default function KnowledgeFilesPage() {
             isLoading={isLoading}
             emptyIcon={Files}
             emptyMessage={
-              openDirectory
+              openDirectoryId
                 ? "This directory is empty. Upload a document into it to get started."
                 : "No documents yet. Upload one to make it available to your agents."
             }

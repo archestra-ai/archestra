@@ -37,9 +37,8 @@ name: Build Archestra CLI
 # publish and the lock pull request; both are idempotent. Dispatching on
 # another branch only builds.
 #
-# The two Windows binaries are code-signed as "Archestra Inc" and the two
-# macOS binaries as "Archestra Limited" (and notarized by Apple) before the
-# release is published, so SHA256SUMS and the lock cover the signed files; see
+# The two Windows binaries are code-signed and the two macOS binaries are
+# code-signed and notarized by Apple before the release is published, so SHA256SUMS and the lock cover the signed files; see
 # the `sign-windows` and `sign-macos` jobs. Linux has no code signing; the
 # checksums and the attestation cover those files.
 
@@ -300,15 +299,15 @@ jobs:
               fetch --no-tags --depth=1 origin "refs/tags/${TAG}"
           python3 .github/scripts/archestra-cli-version-check.py check FETCH_HEAD HEAD
 
-  # Signs the two Windows binaries with Azure Artifact Signing (account
-  # `archestra`, certificate profile `archestra-cli`) and replaces their
-  # artifacts, so `publish` downloads the signed files under the same names.
-  # Only a run that will publish signs. This job runs no cargo and no build
-  # output, and it is the only job that can log in to Azure: the app
-  # `archestra-cli-signing` trusts only tokens of the `archestra-cli-release`
-  # environment (main only), and holds the signer role on the `archestra-cli`
-  # profile only. The signing action runs on x86_64 Windows only; it signs the
-  # arm64 file there too.
+  # Signs the two Windows binaries with Azure Artifact Signing and replaces
+  # their artifacts, so `publish` downloads the signed files under the same
+  # names. Only a run that will publish signs. This job runs no cargo and no
+  # build output, and it is the only job that can log in to Azure: the Entra
+  # app trusts only tokens of the `archestra-cli-release` environment (main
+  # only), and holds the signer role on one certificate profile only. The
+  # account, the profile, its endpoint and the publisher the signature must
+  # name are secrets of that environment. The signing action runs on x86_64
+  # Windows only; it signs the arm64 file there too.
   sign-windows:
     name: Sign the Windows binaries
     needs: [build, release-state]
@@ -345,9 +344,9 @@ jobs:
       - name: Sign with Artifact Signing
         uses: azure/artifact-signing-action@v2.0.0
         with:
-          endpoint: https://neu.codesigning.azure.net/
-          signing-account-name: archestra
-          certificate-profile-name: archestra-cli
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_SIGNING_CERTIFICATE_PROFILE }}
           # The verify step below checks that these are exactly the two binaries.
           files-folder: ${{ github.workspace }}\dist
           files-folder-filter: exe
@@ -358,12 +357,19 @@ jobs:
           # OIDC guide (docs/OIDC.md); the other credentials are off by default.
           exclude-environment-credential: true
 
-      # Exactly the two files, each with a valid, timestamped signature of
-      # Archestra Inc. A signature the runner's Windows does not trust fails.
+      # Exactly the two files, each with a valid, timestamped signature whose
+      # certificate names the publisher (O=) in AZURE_SIGNING_PUBLISHER. A
+      # signature the runner's Windows does not trust fails.
       - name: Verify the signatures
         shell: pwsh
+        env:
+          SIGNING_PUBLISHER: ${{ secrets.AZURE_SIGNING_PUBLISHER }}
         run: |
           $ErrorActionPreference = 'Stop'
+          if (-not $env:SIGNING_PUBLISHER) {
+            Write-Output "::error::AZURE_SIGNING_PUBLISHER is not set"
+            exit 1
+          }
           $files = @(Get-ChildItem -Path dist -File)
           $names = ($files.Name | Sort-Object) -join ','
           if ($names -ne 'archestra-windows-arm64.exe,archestra-windows-x86_64.exe') {
@@ -374,8 +380,9 @@ jobs:
             $signature = Get-AuthenticodeSignature -FilePath $file.FullName
             $subject = "$($signature.SignerCertificate.Subject)"
             Write-Output "$($file.Name): $($signature.Status), signer: $subject, timestamped by: $($signature.TimeStamperCertificate.Subject)"
-            if ($signature.Status -ne 'Valid' -or ", $subject," -notlike '*, O=Archestra Inc,*' -or -not $signature.TimeStamperCertificate) {
-              Write-Output "::error::$($file.Name) is not validly signed and timestamped by Archestra Inc: $($signature.StatusMessage)"
+            $names = @($subject -split ',\s*')
+            if ($signature.Status -ne 'Valid' -or $names -notcontains "O=$env:SIGNING_PUBLISHER" -or -not $signature.TimeStamperCertificate) {
+              Write-Output "::error::$($file.Name) is not validly signed and timestamped by the expected publisher: $($signature.StatusMessage)"
               exit 1
             }
           }
@@ -398,8 +405,8 @@ jobs:
           retention-days: "14"
           overwrite: "true"
 
-  # Signs the two macOS binaries with the Developer ID Application certificate
-  # of Archestra Limited, has Apple notarize them, and replaces their
+  # Signs the two macOS binaries with the Developer ID Application certificate,
+  # has Apple notarize them, and replaces their
   # artifacts, so `publish` downloads the signed files under the same names.
   # Only a run that will publish signs. Like `sign-windows`, this job builds
   # nothing and runs no build output, and it is the only job that sees the
@@ -438,6 +445,8 @@ jobs:
         env:
           SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTIFIER: ${{ secrets.APPLE_SIGNING_IDENTIFIER }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         run: bash .github/scripts/archestra-cli-sign-macos.sh dist

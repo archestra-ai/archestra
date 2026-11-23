@@ -241,17 +241,31 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
     let allowed = |binding: &Implementation| {
         matches!(
             binding,
-            Implementation::Builtin(name)
-                if matches!(name.as_str(), "approve" | "hitl" | "redact-email" | "redact-secrets" | "archestra")
+            Implementation::Builtin(builtin_name)
+                if matches!(builtin_name.as_str(), "approve" | "hitl" | "redact-email" | "redact-secrets" | "archestra")
         )
     };
-    if externals
+    let authorities = externals
         .authorities
-        .values()
-        .chain(externals.sanitizers.values())
-        .any(|binding| !allowed(binding))
+        .iter()
+        .map(|(name, binding)| ("authority", name.as_str(), binding));
+    let sanitizers = externals
+        .sanitizers
+        .iter()
+        .map(|(name, binding)| ("sanitizer", name.as_str(), binding));
+    if let Some((role, name, binding)) = authorities
+        .chain(sanitizers)
+        .find(|(_, _, binding)| !allowed(binding))
     {
-        return Err("Replay cannot run a policy with an external authority or sanitizer: replay takes every remedy it is offered, which would act through that party".into());
+        let implementation = match binding {
+            Implementation::Builtin(builtin_name) => {
+                format!("the built-in implementation {builtin_name:?}")
+            }
+            _ => "an external implementation".to_string(),
+        };
+        return Err(format!(
+            "Replay does not support {implementation} for {role} {name:?}."
+        ));
     }
     let unanswered = Arc::new(Unanswered::default());
     // The deployment `appa replay` runs, under the Archestra adapter: no person is asked,
@@ -686,10 +700,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn external_remedy_parties_are_refused_without_dispatch() {
-        for extra in [
-            "\n[externals.authorities.remote]\nurl = 'https://example.test/authority'\n",
-            "\n[externals.authorities.remote]\ncommand = ['touch', '/tmp/forbidden-replay']\n",
+    async fn replay_names_unsupported_remedies_without_dispatch() {
+        for (extra, error) in [
+            (
+                "\n[externals.authorities.remote]\nurl = 'https://example.test/authority'\n",
+                "Replay does not support an external implementation for authority \"remote\".",
+            ),
+            (
+                "\n[externals.authorities.remote]\ncommand = ['touch', '/tmp/forbidden-replay']\n",
+                "The effective policy cannot load: the hosted authorities entry \"remote\" runs a local command, which a hosted document cannot declare",
+            ),
+            (
+                "\n[externals.sanitizers.'mail.scrub']\nbuiltin = 'claude-code'\n",
+                "Replay does not support the built-in implementation \"claude-code\" for sanitizer \"mail.scrub\".",
+            ),
         ] {
             let response = run(request(
                 &format!("{POLICY}{extra}"),
@@ -697,6 +721,7 @@ mod tests {
             ))
             .await;
             assert_eq!(response.files[0].status, Status::CannotRun);
+            assert_eq!(response.files[0].error.as_deref(), Some(error));
             assert!(response.files[0].steps.is_empty());
         }
     }

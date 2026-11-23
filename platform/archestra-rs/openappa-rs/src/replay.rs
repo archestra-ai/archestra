@@ -238,15 +238,18 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
     let config = Config::hosted(&request.content, defaults, |var| credentials.lookup(var))
         .map_err(|error| format!("The effective policy cannot load: {error}"))?;
     let externals = &config.externals;
-    let stock = |binding: &Implementation| matches!(binding, Implementation::Builtin(name) if matches!(name.as_str(), "approve" | "hitl" | "redact-email" | "redact-secrets"));
+    let allowed = |binding: &Implementation| {
+        matches!(
+            binding,
+            Implementation::Builtin(name)
+                if matches!(name.as_str(), "approve" | "hitl" | "redact-email" | "redact-secrets" | "archestra")
+        )
+    };
     if externals
         .authorities
         .values()
-        .any(|binding| !stock(binding))
-        || externals.sanitizers.values().any(|binding| {
-            !stock(binding)
-                && !matches!(binding, Implementation::Builtin(name) if name.as_str() == "archestra")
-        })
+        .chain(externals.sanitizers.values())
+        .any(|binding| !allowed(binding))
     {
         return Err("Replay cannot run a policy with an external authority or sanitizer: replay takes every remedy it is offered, which would act through that party".into());
     }

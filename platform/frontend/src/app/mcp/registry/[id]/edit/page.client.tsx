@@ -1,6 +1,6 @@
 "use client";
 
-import { isSlackMcpServerUrl } from "@archestra/shared/oauth";
+import { isSlackMcpServerUrl } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, Info, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";

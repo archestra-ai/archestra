@@ -6,9 +6,9 @@ import {
   findMcpRuntimeTier,
   getDefaultMcpImagePullPolicy,
   isBuiltInCatalogId,
+  isSlackMcpServerUrl,
   summarizeAgentRuntimeTier,
 } from "@archestra/shared";
-import { isSlackMcpServerUrl } from "@archestra/shared/oauth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,

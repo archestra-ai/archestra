@@ -850,8 +850,8 @@ function PluginsEmptyState() {
     <EmptyState
       variant="firstUse"
       icon={Puzzle}
-      title="Give your whole team the same coding agent"
-      description="Plugins add commands, subagents and hooks to Claude Code, Codex or Cursor. Build one, and everyone gets the same setup."
+      title="Extend the coding tools your team already uses"
+      description="A plugin adds commands, hooks and other files to one tool, such as Claude Code, Codex or Cursor. Share it, and each person installs it with one command."
       canAct={canCreate}
       readerMessage="Your admins haven't shared a plugin yet."
       action={

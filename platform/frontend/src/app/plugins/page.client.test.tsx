@@ -147,7 +147,7 @@ describe("PluginsPage", () => {
     render(<PluginsPage />);
 
     expect(
-      screen.getByText("Give your whole team the same coding agent"),
+      screen.getByText("Extend the coding tools your team already uses"),
     ).toBeVisible();
     expect(
       screen.getByRole("link", { name: /Create a plugin/ }),

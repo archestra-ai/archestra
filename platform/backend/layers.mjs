@@ -458,6 +458,7 @@ const layerTable = [
       "src/routes/proxy/adapters/ollama-native.ts",
       "src/routes/proxy/adapters/ollama.ts",
       "src/routes/proxy/adapters/openai-anthropic-translator.ts",
+      "src/routes/proxy/adapters/openai-bedrock-translator.ts",
       "src/routes/proxy/adapters/openai-codex-client.ts",
       "src/routes/proxy/adapters/openai-codex-responses-client.ts",
       "src/routes/proxy/adapters/openai-codex-session.ts",

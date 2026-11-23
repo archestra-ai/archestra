@@ -153,7 +153,7 @@ async function subscribeToMailingList(email: string): Promise<void> {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       // white-label-ok: wire identifier for the contact's source in Archestra's own Loops account
-    body: new URLSearchParams({ email, source: "Archestra platform" }),
+      body: new URLSearchParams({ email, source: "Archestra platform" }),
       signal: AbortSignal.timeout(LOOPS_TIMEOUT_MS),
     });
   } catch {

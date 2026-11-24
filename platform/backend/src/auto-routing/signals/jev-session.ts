@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes, scrypt } from "node:crypto";
 import { z } from "zod";
 import config from "@/config";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
@@ -102,7 +102,7 @@ export class JevSessionSource
     const normalizedApiKey = apiKey.replace(/^Bearer\s+/i, "");
     let permit: CircuitPermit | null = null;
     if (ctx.useCircuitBreaker) {
-      const breakerKey = hashBreakerKey({
+      const breakerKey = await hashBreakerKey({
         credentialScope: chatApiKeyId
           ? `key:${chatApiKeyId}`
           : `source:${source}`,
@@ -241,10 +241,17 @@ function hashBreakerKey(params: {
   apiKey: string;
   url: string;
   model: string;
-}): string {
+}): Promise<string> {
   const payload = `${params.credentialScope}\u0000${params.apiKey}\u0000${params.url}\u0000${params.model}`;
-  // codeql[js/insufficient-password-hash] Buckets a high-entropy API key for ephemeral process-local circuit-breaker state, not password storage or verification.
-  return createHmac("sha256", BREAKER_KEY_SALT).update(payload).digest("hex");
+  return new Promise((resolve, reject) => {
+    scrypt(payload, BREAKER_KEY_SALT, 16, (error, derived) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(derived.toString("hex"));
+    });
+  });
 }
 
 function isTransientScorerError(error: SignalSourceError): boolean {

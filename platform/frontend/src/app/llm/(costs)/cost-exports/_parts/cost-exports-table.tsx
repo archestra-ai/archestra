@@ -223,7 +223,9 @@ export function CostExportsTable(props: {
           return (
             <AgentNameCell
               name={costExport.name}
-              description={`${costExport.schedule === "hourly" ? "Hourly" : "Daily"} · FOCUS 1.2 CSV`}
+              description={
+                costExport.schedule === "hourly" ? "Hourly" : "Daily"
+              }
               onClick={() => onEdit(costExport)}
             />
           );
@@ -685,17 +687,13 @@ function DestinationCell({ row }: { row: Row }) {
   const root = provider ? blobProviderLocation(provider).uri : "";
   const path = `${root}${costExport.pathPrefix ? `${costExport.pathPrefix}/` : ""}`;
   return (
-    <div className="min-w-0">
-      <div className="flex min-w-0 items-center gap-1.5 text-sm leading-5">
-        {provider && <BlobProviderLogo type={provider.type} size={14} />}
-        <span className="truncate">{costExport.blobProviderName}</span>
-      </div>
-      <div
-        className="mt-0.5 truncate font-mono text-xs text-muted-foreground"
-        title={path}
-      >
-        {path || costExport.pathPrefix || "/"}
-      </div>
+    // The bucket address stays out of the row; hovering the name shows it.
+    <div
+      className="flex min-w-0 items-center gap-1.5 text-sm leading-5"
+      title={path || undefined}
+    >
+      {provider && <BlobProviderLogo type={provider.type} size={14} />}
+      <span className="truncate">{costExport.blobProviderName}</span>
     </div>
   );
 }

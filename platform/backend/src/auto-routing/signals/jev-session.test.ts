@@ -415,7 +415,7 @@ describe("JevSessionSource", () => {
       );
       expect(calls).toBe(3);
 
-      // Unflagged call (e.g., backfill/preview) bypasses the open circuit and succeeds...
+      // Unflagged call (e.g., preview) bypasses the open circuit and succeeds...
       const reading = await source.read(INPUT, ctx());
       expect(reading.pLong).toBe(0.35);
       expect(calls).toBe(4);

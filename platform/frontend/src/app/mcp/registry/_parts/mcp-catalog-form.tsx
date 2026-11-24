@@ -5,6 +5,7 @@ import {
   DocsPage,
   findMcpRuntimeTier,
   getDefaultMcpImagePullPolicy,
+  getRequiredOAuthAppCredentialState,
   isBuiltInCatalogId,
   summarizeAgentRuntimeTier,
 } from "@archestra/shared";
@@ -242,9 +243,41 @@ export function McpCatalogForm({
   const defaultIdentityProviderId =
     oidcIdentityProviders.length === 1 ? oidcIdentityProviders[0]?.id : null;
 
+  const hasSavedClientSecret = Boolean(
+    initialValues?.clientSecretId ||
+      initialValues?.oauthConfig?.client_secret?.trim(),
+  );
+  const schema = useMemo(
+    () =>
+      formSchema.superRefine((values, ctx) => {
+        if (detailsOnly || values.authMethod !== "oauth") return;
+
+        const { missingClientId, missingClientSecret } =
+          getRequiredOAuthAppCredentialState({
+            serverType: values.serverType,
+            oauthConfig: values.oauthConfig,
+            hasSavedSecret: hasSavedClientSecret,
+          });
+        if (missingClientId) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["oauthConfig", "client_id"],
+            message: "Enter the Client ID.",
+          });
+        }
+        if (missingClientSecret) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["oauthConfig", "client_secret"],
+            message: "Enter the Client Secret.",
+          });
+        }
+      }),
+    [detailsOnly, hasSavedClientSecret],
+  );
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
-    resolver: zodResolver(formSchema as any),
+    resolver: zodResolver(schema as any),
     defaultValues: withCreationAccess(
       initialValues
         ? transformCatalogItemToFormValues(initialValues)
@@ -314,6 +347,16 @@ export function McpCatalogForm({
 
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
+  const requiresOAuthClientCredentials =
+    authMethod === "oauth" &&
+    getRequiredOAuthAppCredentialState({
+      serverType: currentServerType,
+      oauthConfig: {
+        requires_client_credentials: form.watch(
+          "oauthConfig.requires_client_credentials",
+        ),
+      },
+    }).required;
   // A desktop MCP server runs on each user's own computer: none of the
   // connection, deployment or authentication sections apply to it.
   const isDesktopMcp = currentServerType === "desktop_mcp";
@@ -1730,14 +1773,29 @@ export function McpCatalogForm({
                                     name="oauthConfig.client_id"
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel>Client ID</FormLabel>
+                                        <FormLabel>
+                                          Client ID
+                                          {requiresOAuthClientCredentials && (
+                                            <span className="text-destructive">
+                                              {" "}
+                                              *
+                                            </span>
+                                          )}
+                                        </FormLabel>
                                         <FormDescription>
-                                          Leave empty if the server supports
-                                          dynamic client registration
+                                          <span>
+                                            {requiresOAuthClientCredentials
+                                              ? "Use the Client ID from the OAuth app you registered."
+                                              : "Leave empty if the server supports dynamic client registration"}
+                                          </span>
                                         </FormDescription>
                                         <FormControl>
                                           <Input
-                                            placeholder="your-client-id (optional for dynamic registration)"
+                                            placeholder={
+                                              requiresOAuthClientCredentials
+                                                ? "your-client-id"
+                                                : "your-client-id (optional for dynamic registration)"
+                                            }
                                             className="font-mono"
                                             {...field}
                                           />
@@ -1752,10 +1810,24 @@ export function McpCatalogForm({
                                       name="oauthConfig.client_secret"
                                       render={({ field }) => (
                                         <FormItem>
-                                          <FormLabel>Client Secret</FormLabel>
+                                          <FormLabel>
+                                            Client Secret
+                                            {requiresOAuthClientCredentials && (
+                                              <span className="text-destructive">
+                                                {" "}
+                                                *
+                                              </span>
+                                            )}
+                                          </FormLabel>
                                           <FormControl>
                                             <SecretInput
-                                              placeholder="your-client-secret (optional)"
+                                              placeholder={
+                                                requiresOAuthClientCredentials
+                                                  ? hasSavedClientSecret
+                                                    ? "Saved; enter a new secret to replace it"
+                                                    : "your-client-secret"
+                                                  : "your-client-secret (optional)"
+                                              }
                                               className="font-mono"
                                               {...field}
                                             />

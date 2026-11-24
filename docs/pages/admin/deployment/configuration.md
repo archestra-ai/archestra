@@ -2,10 +2,11 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-16
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Helm](/docs/admin/deployment/helm) for Kubernetes installation.
 
@@ -801,7 +802,6 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
 
 - **`ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED`** - Lets the MCP bridge on a user's computer update by itself when Archestra serves another version. Set it to `false` to make each user run `archestra update`.
   - Default: `true`
-  - On macOS and Linux the MCP bridge does not update by itself. The user runs `archestra update`.
 
 - **`ARCHESTRA_CLI_DIR`** - Folder that holds the `archestra` programs that the Device tab of Personal Settings offers for download. Users run `archestra bridge start` to start the MCP bridge.
   - Default: `/app/archestra-cli`, where the platform image keeps the programs. If the folder does not exist, the download answers "not found".

@@ -1,3 +1,4 @@
+import { programUpdatesByItself } from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
@@ -17,6 +18,7 @@ import {
   extractAuditResourceName,
   sanitizeAuditSnapshot,
 } from "@/utils/audit-snapshot";
+import { catalogIconUrl, splitListIcon } from "@/utils/servable-icon";
 import { desktopBridgeControlService } from "./desktop-bridge-control";
 import {
   type DesktopDeviceServerConfig,
@@ -27,6 +29,9 @@ import { desktopTunnelService } from "./desktop-tunnel";
 export interface DesktopDeviceServerView {
   catalogId: string;
   name: string;
+  /** An emoji icon; an image icon is served from `iconUrl` instead. */
+  icon: string | null;
+  iconUrl: string | null;
   /**
    * The state of the MCP server. Null when it is not known: the device is
    * offline, or its tunnel client did not report yet.
@@ -54,7 +59,10 @@ export interface DesktopDeviceView {
    * not known.
    */
   programUpdate: { version: string | null } | null;
-  /** Whether the MCP bridge of a device updates by itself (auto-update). */
+  /**
+   * Whether the MCP bridge of the device updates by itself: auto-update is
+   * on for the deployment, and the program the device runs can do it.
+   */
   programAutoUpdate: boolean;
   /** One MCP server for each desktop MCP catalog item the user installed. */
   servers: DesktopDeviceServerView[];
@@ -193,7 +201,12 @@ async function toView(device: DesktopDevice): Promise<DesktopDeviceView> {
     createdAt: device.createdAt,
     programVersion: device.clientVersion,
     programUpdate,
-    programAutoUpdate: config.mcpBridge.autoUpdateEnabled,
+    programAutoUpdate:
+      config.mcpBridge.autoUpdateEnabled &&
+      programUpdatesByItself({
+        platform: device.platform,
+        version: device.clientVersion,
+      }),
     servers: servers.map((server) => toServerView(server, online)),
   };
 }
@@ -223,6 +236,9 @@ function toServerView(
   return {
     catalogId: server.catalogId,
     name: server.name,
+    ...splitListIcon(server.icon, (version) =>
+      catalogIconUrl(server.catalogId, version),
+    ),
     state,
     lastError: state === "failed" ? server.lastError : null,
     command: server.command,

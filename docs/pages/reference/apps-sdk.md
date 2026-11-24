@@ -6,6 +6,7 @@ lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 An [MCP App](/docs/chat/apps) calls MCP tools as the viewer, keeps private and shared state, and runs model completions through `window.archestra`, with no tokens, backend, or login code. This page lists the SDK, the injected styles, and the sandbox limits. Agents write apps with the built-in **Build App** skill, which follows the same rules.
 

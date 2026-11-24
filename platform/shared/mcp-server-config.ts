@@ -12,6 +12,8 @@ export const OAuthConfigSchema = z
     resource_metadata_url: z.string().optional(),
     client_id: z.string(),
     client_secret: z.string().optional(),
+    // This server needs credentials from an existing OAuth app, not registration.
+    requires_client_credentials: z.boolean().optional(),
     audience: z.string().optional(),
     resource: z.string().optional(),
     redirect_uris: z.array(z.string()),

@@ -61,6 +61,33 @@ describe("agentRunBlock", () => {
     ).toBe("Sign in with Grok to run this agent.");
   });
 
+  it("names the company account too when the reader can switch to it", () => {
+    expect(
+      agentRunBlock(
+        blocked({ missing: [credential("CLAUDE_CODE_ACCOUNT", "Claude")] }),
+        { companyAccount: "a company API key" },
+      ),
+    ).toBe("Sign in with Claude or use a company API key to run this agent.");
+    expect(
+      agentRunBlock(
+        blocked({
+          accountError: "Connect your own GitHub Copilot.",
+          missingSubscription: "github-copilot",
+        }),
+        { companyAccount: "the company's enterprise plan" },
+      ),
+    ).toBe(
+      "Sign in with GitHub Copilot or use the company's enterprise plan to run this agent.",
+    );
+    // Locked to personal subscriptions: the sign-in is the only way.
+    expect(
+      agentRunBlock(
+        blocked({ missing: [credential("CLAUDE_CODE_ACCOUNT", "Claude")] }),
+        { companyAccount: null },
+      ),
+    ).toBe("Sign in with Claude to run this agent.");
+  });
+
   it("asks for a model when their subscription does not offer the agent's", () => {
     expect(
       agentRunBlock(

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpBridgeSetupDialog } from "@/components/mcp-bridge-setup";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
@@ -329,40 +330,57 @@ function DeviceDetails({ device }: { device: DesktopDevice }) {
     );
   }
   return (
-    <ul className="divide-y pr-4 pb-1 pl-14">
+    // The cell of the open row has the left padding of a table cell from the
+    // `md` width on, and none below it: the list adds it there, so each
+    // server stays in the columns of the row of the device.
+    <ul className="divide-y pr-4 pb-1 pl-4 md:pl-0">
       {servers.map((server) => (
         <li key={server.catalogId}>
           <Link
             href={desktopMcpServerHref(server.catalogId)}
             className="-mx-2 flex flex-col gap-1 rounded-md px-2 py-2.5 hover:bg-muted/50"
           >
-            <div className="flex flex-wrap items-center gap-2.5">
+            {/* The same three columns as the row of the device: the state
+                dot under its toggle, the icon under its icon, the name
+                under its name. */}
+            <div className="flex items-center gap-1.5">
               <span
                 aria-hidden="true"
-                className={cn(
-                  "size-1.5 rounded-full",
-                  server.failed
-                    ? "bg-destructive"
-                    : server.running
-                      ? "bg-emerald-500"
-                      : "bg-muted-foreground/50",
-                )}
-              />
-              <span className="font-medium">{server.name}</span>
-              {server.state && (
+                className="flex size-7 shrink-0 items-center justify-center"
+              >
                 <span
-                  className={
+                  className={cn(
+                    "size-1.5 rounded-full",
                     server.failed
-                      ? "font-medium text-destructive"
-                      : "text-muted-foreground"
-                  }
-                >
-                  {server.state}
-                </span>
-              )}
+                      ? "bg-destructive"
+                      : server.running
+                        ? "bg-emerald-500"
+                        : "bg-muted-foreground/50",
+                  )}
+                />
+              </span>
+              <McpCatalogIcon
+                icon={server.icon}
+                catalogId={server.catalogId}
+                size={16}
+              />
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2.5">
+                <span className="font-medium">{server.name}</span>
+                {server.state && (
+                  <span
+                    className={
+                      server.failed
+                        ? "font-medium text-destructive"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    {server.state}
+                  </span>
+                )}
+              </span>
             </div>
             {server.error && (
-              <p className="ml-4 text-muted-foreground">{server.error}</p>
+              <p className="ml-14 text-muted-foreground">{server.error}</p>
             )}
           </Link>
         </li>

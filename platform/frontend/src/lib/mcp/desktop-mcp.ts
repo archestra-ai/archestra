@@ -154,7 +154,6 @@ export function desktopArgumentsProgramNotice(params: {
     | Pick<
         DesktopDevice,
         | "name"
-        | "platform"
         | "lastPolledAt"
         | "programVersion"
         | "programUpdate"

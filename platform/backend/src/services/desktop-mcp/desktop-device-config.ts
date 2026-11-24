@@ -12,6 +12,8 @@ import type { DesktopDevice, DesktopMcpServerState } from "@/types";
 export interface DesktopDeviceServerConfig {
   catalogId: string;
   name: string;
+  /** The icon of the catalog item: an emoji, or an image as a `data:` URL. */
+  icon: string | null;
   /** The command of the catalog item. A server has a command or a URL. */
   command: string | null;
   /**
@@ -68,6 +70,7 @@ export async function listDesktopDeviceServerConfigs(
       return {
         catalogId: item.id,
         name: item.name,
+        icon: item.icon ?? null,
         command,
         arguments: command ? (argumentsByCatalogId.get(item.id) ?? []) : [],
         url: item.desktopConfig?.url ?? null,

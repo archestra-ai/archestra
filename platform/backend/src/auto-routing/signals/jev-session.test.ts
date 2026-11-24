@@ -1,5 +1,6 @@
 import { delay, HttpResponse, http } from "msw";
 import config from "@/config";
+import { secretManager } from "@/secrets-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { scoringContext } from "../scoring-context";
@@ -41,12 +42,14 @@ describe("JevSessionSource", () => {
   const server = useMswServer();
   const source = new JevSessionSource();
   let organizationId: string;
+  let secretId: string;
   const ctx = () => ({ organizationId });
 
   beforeEach(
     async ({ makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
       organizationId = (await makeOrganization()).id;
       const secret = await makeSecret({ secret: { apiKey: "sk-typesafe" } });
+      secretId = secret.id;
       await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "jev",
       });
@@ -368,5 +371,271 @@ describe("JevSessionSource", () => {
       "input_too_large",
     );
     expect(calls).toBe(0);
+  });
+
+  describe("circuit breaker", () => {
+    test("opens after 3 consecutive timeouts/5xx, short-circuits flagged calls, and keeps circuit open across unflagged calls", async () => {
+      config.autoRouting.scorerTimeoutMs = 50;
+      let calls = 0;
+      server.use(
+        http.post(TYPESAFE_ENDPOINT, async () => {
+          calls += 1;
+          if (calls === 1) {
+            await delay("infinite");
+            return HttpResponse.json(ANSWERS);
+          }
+          if (calls <= 3) {
+            return HttpResponse.json(
+              { detail: "upstream down" },
+              { status: 503 },
+            );
+          }
+          return HttpResponse.json(ANSWERS);
+        }),
+      );
+
+      await expectSourceError(
+        source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+        "timeout",
+      );
+      await expectSourceError(
+        source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+        "http",
+      );
+      await expectSourceError(
+        source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+        "http",
+      );
+      expect(calls).toBe(3);
+
+      // 4th flagged call fails fast without hitting Jev.
+      await expectSourceError(
+        source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+        "circuit_open",
+      );
+      expect(calls).toBe(3);
+
+      // Unflagged call (e.g., backfill/preview) bypasses the open circuit and succeeds...
+      const reading = await source.read(INPUT, ctx());
+      expect(reading.pLong).toBe(0.35);
+      expect(calls).toBe(4);
+
+      // ...while leaving the live circuit STILL open for the next flagged call.
+      await expectSourceError(
+        source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+        "circuit_open",
+      );
+      expect(calls).toBe(4);
+    });
+
+    test("treats HTTP 429 as transient and opens the breaker, while 400 does not trip", async () => {
+      let calls = 0;
+      server.use(
+        http.post(TYPESAFE_ENDPOINT, () => {
+          calls += 1;
+          return HttpResponse.json({ detail: "bad request" }, { status: 400 });
+        }),
+      );
+
+      for (let i = 0; i < 4; i += 1) {
+        await expectSourceError(
+          source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+          "http",
+        );
+      }
+      expect(calls).toBe(4);
+
+      server.use(
+        http.post(TYPESAFE_ENDPOINT, () => {
+          calls += 1;
+          return HttpResponse.json({ detail: "rate limited" }, { status: 429 });
+        }),
+      );
+
+      for (let i = 0; i < 3; i += 1) {
+        await expectSourceError(
+          source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+          "http",
+        );
+      }
+      expect(calls).toBe(7);
+
+      await expectSourceError(
+        source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+        "circuit_open",
+      );
+      expect(calls).toBe(7);
+    });
+
+    test("honors HTTP 429 Retry-After header for early half-open probe", async () => {
+      let calls = 0;
+      server.use(
+        http.post(TYPESAFE_ENDPOINT, () => {
+          calls += 1;
+          if (calls <= 3) {
+            return HttpResponse.json(
+              { detail: "rate limited" },
+              { status: 429, headers: { "retry-after": "0" } },
+            );
+          }
+          return HttpResponse.json(ANSWERS);
+        }),
+      );
+
+      for (let i = 0; i < 3; i += 1) {
+        const error = await source
+          .read(INPUT, { organizationId, useCircuitBreaker: true })
+          .catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(SignalSourceError);
+        expect(error).toMatchObject({
+          reason: "http",
+          status: 429,
+          retryAfterMs: 0,
+        });
+      }
+      expect(calls).toBe(3);
+
+      // With Retry-After: 0, the breaker allows an immediate half-open probe
+      // instead of waiting the default 30s cooldown, and closes on success.
+      const recovered = await source.read(INPUT, {
+        organizationId,
+        useCircuitBreaker: true,
+      });
+      expect(recovered.pLong).toBe(0.35);
+      expect(calls).toBe(4);
+    });
+
+    test("does not trip on malformed or userinfo endpoint URLs before hitting fetch", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      for (const baseUrl of [
+        "ftp://invalid.example.com/decisions",
+        "https://user:pass@api.typesafe.ai/v1/systemone",
+      ]) {
+        const org = await makeOrganization();
+        const secret = await makeSecret({ secret: { apiKey: "sk-bad-url" } });
+        await makeLlmProviderApiKey(org.id, secret.id, {
+          provider: "jev",
+          baseUrl,
+        });
+
+        for (let i = 0; i < 4; i += 1) {
+          await expectSourceError(
+            source.read(INPUT, {
+              organizationId: org.id,
+              useCircuitBreaker: true,
+            }),
+            "http",
+          );
+        }
+      }
+    });
+
+    test("gives in-place API key rotation a fresh breaker bucket", async () => {
+      let calls = 0;
+      server.use(
+        http.post(TYPESAFE_ENDPOINT, ({ request }) => {
+          calls += 1;
+          if (request.headers.get("authorization") === "Bearer sk-typesafe") {
+            return HttpResponse.json(
+              { detail: "unavailable" },
+              { status: 503 },
+            );
+          }
+          return HttpResponse.json(ANSWERS);
+        }),
+      );
+
+      for (let i = 0; i < 3; i += 1) {
+        await expectSourceError(
+          source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+          "http",
+        );
+      }
+      await expectSourceError(
+        source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+        "circuit_open",
+      );
+      expect(calls).toBe(3);
+
+      // Rotate the secret in place on the same key row: new key gets a fresh bucket.
+      await secretManager().updateSecret(secretId, {
+        apiKey: "sk-typesafe-rotated",
+      });
+
+      const reading = await source.read(INPUT, {
+        organizationId,
+        useCircuitBreaker: true,
+      });
+      expect(reading.pLong).toBe(0.35);
+      expect(calls).toBe(4);
+    });
+
+    test("releases permit on input_too_large when closed, fails fast with circuit_open when open, and skips breaker on no_credentials", async ({
+      makeOrganization,
+    }) => {
+      let calls = 0;
+      let failUpstream = false;
+      server.use(
+        http.post(TYPESAFE_ENDPOINT, () => {
+          calls += 1;
+          if (failUpstream) {
+            return HttpResponse.json({ detail: "down" }, { status: 503 });
+          }
+          return HttpResponse.json(ANSWERS);
+        }),
+      );
+
+      const oversized = {
+        ...INPUT,
+        tools: Array.from({ length: 10_000 }, (_, index) => ({
+          name: `tool_${index}`,
+        })),
+      };
+      for (let i = 0; i < 4; i += 1) {
+        await expectSourceError(
+          source.read(oversized, { organizationId, useCircuitBreaker: true }),
+          "input_too_large",
+        );
+      }
+      expect(calls).toBe(0);
+
+      // Subsequent valid call is not blocked by prior input_too_large errors.
+      const reading = await source.read(INPUT, {
+        organizationId,
+        useCircuitBreaker: true,
+      });
+      expect(reading.pLong).toBe(0.35);
+      expect(calls).toBe(1);
+
+      // Once the circuit is open, oversized input fails fast with circuit_open
+      // before running sessionState().
+      failUpstream = true;
+      for (let i = 0; i < 3; i += 1) {
+        await expectSourceError(
+          source.read(INPUT, { organizationId, useCircuitBreaker: true }),
+          "http",
+        );
+      }
+      await expectSourceError(
+        source.read(oversized, { organizationId, useCircuitBreaker: true }),
+        "circuit_open",
+      );
+      expect(calls).toBe(4);
+
+      // Missing credentials fail before touching the breaker too.
+      const noKeyOrg = await makeOrganization();
+      for (let i = 0; i < 4; i += 1) {
+        await expectSourceError(
+          source.read(INPUT, {
+            organizationId: noKeyOrg.id,
+            useCircuitBreaker: true,
+          }),
+          "no_credentials",
+        );
+      }
+    });
   });
 });

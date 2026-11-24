@@ -170,21 +170,40 @@ describe("CreateVirtualKeyDialog", () => {
     const create = screen.getByRole("button", { name: "Create key" });
     expect(create).toBeDisabled();
     await user.click(
-      screen.getByRole("combobox", { name: "Add a model pool" }),
+      screen.getByRole("combobox", {
+        name: "Add a provider, model pool or auto router",
+      }),
     );
     await user.click(
       await screen.findByRole("option", { name: /subscription-pool/ }),
     );
+    // Picking only adds, so an added pool leaves the picker.
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Add a provider, model pool or auto router",
+      }),
+    );
+    expect(
+      screen.queryByRole("option", { name: /subscription-pool/ }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
     expect(create).toBeEnabled();
     expect(
       screen.queryByText("Add a provider key first."),
     ).not.toBeInTheDocument();
+    // The list switches to the tab of what was just added.
+    expect(screen.getByRole("tab", { name: /Model pools/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await user.click(
       screen.getByRole("button", { name: "Remove subscription-pool" }),
     );
     expect(create).toBeDisabled();
     await user.click(
-      screen.getByRole("combobox", { name: "Add a model pool" }),
+      screen.getByRole("combobox", {
+        name: "Add a provider, model pool or auto router",
+      }),
     );
     await user.click(
       await screen.findByRole("option", { name: /subscription-pool/ }),
@@ -215,12 +234,6 @@ describe("CreateVirtualKeyDialog", () => {
       "href",
       "/llm/model-pools",
     );
-    expect(
-      screen.getByText(
-        /assigned pool's exact name as the model. Do not add a provider prefix/,
-      ),
-    ).toBeVisible();
-    expect(screen.getByText(/open its Connect section/)).toBeVisible();
     expect(screen.queryByText(/\/undefined/)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/No runnable model example/),
@@ -285,7 +298,7 @@ describe("CreateVirtualKeyDialog", () => {
       "Self Admin's virtual key (2)",
     );
     expect(
-      screen.getByRole("region", { name: "Provider keys" }),
+      screen.getByRole("combobox", { name: "OpenAI key" }),
     ).toHaveTextContent("Main OpenAI");
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Expires")).toHaveTextContent("Never");
@@ -429,11 +442,12 @@ describe("CreateVirtualKeyDialog", () => {
       initialProviderApiKeys: null,
     });
 
-    const section = screen.getByRole("region", { name: "Provider keys" });
-    expect(section).toHaveTextContent("Team key");
+    expect(screen.getByRole("tab", { name: /Providers/ })).toHaveTextContent(
+      "2",
+    );
     expect(
-      within(section).queryByRole("button", { name: "Add all" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("combobox", { name: "OpenAI key" }),
+    ).toHaveTextContent("Team key");
     await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -446,7 +460,7 @@ describe("CreateVirtualKeyDialog", () => {
     });
   });
 
-  it("stops using a provider, lists it as not used, and adds it back", async () => {
+  it("stops using a provider and adds it back from the picker", async () => {
     const user = userEvent.setup();
     renderDialog("standard", {
       parentableKeys: SEVERAL_KEYS,
@@ -454,9 +468,6 @@ describe("CreateVirtualKeyDialog", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "Stop using OpenAI" }));
-    expect(
-      screen.getByRole("group", { name: "Providers not used" }),
-    ).toHaveTextContent("OpenAI");
     await user.click(screen.getByRole("button", { name: "Create key" }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
       data: expect.objectContaining({
@@ -466,24 +477,167 @@ describe("CreateVirtualKeyDialog", () => {
       }),
     });
 
-    await user.click(screen.getByRole("button", { name: "Add OpenAI" }));
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Add a provider, model pool or auto router",
+      }),
+    );
+    // The picker adds the provider; it starts on its primary key.
+    await user.click(await screen.findByRole("option", { name: /^OpenAI/ }));
     expect(
-      screen.queryByRole("group", { name: "Providers not used" }),
+      screen.getByRole("combobox", { name: "OpenAI key" }),
+    ).toHaveTextContent("Team key");
+  });
+
+  it("changes a provider's key in its row and offers each provider once", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard", {
+      parentableKeys: SEVERAL_KEYS,
+      initialProviderApiKeys: null,
+    });
+    const picker = screen.getByRole("combobox", {
+      name: "Add a provider, model pool or auto router",
+    });
+
+    // Both providers are listed, so the picker has nothing left to add.
+    await user.click(picker);
+    expect(
+      await screen.findByText("Everything is already added."),
+    ).toBeVisible();
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    // The row's key dropdown switches the key in place.
+    await user.click(screen.getByRole("combobox", { name: "OpenAI key" }));
+    await user.click(
+      await screen.findByRole("option", { name: /^Staging key/ }),
+    );
+    expect(
+      screen.getByRole("combobox", { name: "OpenAI key" }),
+    ).toHaveTextContent("Staging key");
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    expect(mutateAsync).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        providerApiKeys: [
+          { provider: "zhipuai", providerApiKeyId: "zhipu-key" },
+          { provider: "openai", providerApiKeyId: "openai-staging" },
+        ],
+      }),
+    });
+
+    // A removed provider goes back to the picker as one entry.
+    await user.click(screen.getByRole("button", { name: "Stop using OpenAI" }));
+    await user.click(picker);
+    await user.keyboard("openai");
+    expect(
+      await screen.findByRole("option", { name: /^OpenAI/ }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: /Zhipu/ }),
     ).not.toBeInTheDocument();
   });
 
-  it("opens the provider picker and blocks Create when no provider is used", async () => {
+  it("closes the picker after a pick and shows what was added", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    server.use(
+      http.get("http://localhost:9000/api/model-pools", () =>
+        HttpResponse.json([
+          {
+            id: "pool-1",
+            name: "subscription-pool",
+            virtualApiKeyIds: [],
+            members: [
+              {
+                id: "member-1",
+                provider: "github-copilot",
+                modelId: "gpt-4.1",
+                priority: 1,
+                enabled: true,
+              },
+            ],
+          },
+        ]),
+      ),
+    );
+    renderDialog("standard", {
+      parentableKeys: SEVERAL_KEYS,
+      initialProviderApiKeys: [],
+    });
+
+    const picker = screen.getByRole("combobox", {
+      name: "Add a provider, model pool or auto router",
+    });
+    await user.click(picker);
+    // Providers are offered whole, not key by key.
+    await screen.findByRole("option", { name: /subscription-pool/ });
+    expect(
+      screen.queryByRole("option", { name: /^Staging key/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /^OpenAI/ }));
+    expect(picker).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByRole("button", { name: "Stop using OpenAI" }),
+    ).toBeVisible();
+
+    // A pool lands on its own tab, folded until opened.
+    await user.click(picker);
+    await user.click(
+      await screen.findByRole("option", { name: /subscription-pool/ }),
+    );
+    expect(screen.getByRole("tab", { name: /Model pools/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByText("Serves")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Show subscription-pool details" }),
+    );
+    expect(screen.getByText("Serves")).toBeVisible();
+  });
+
+  it("shows a provider's several endpoint keys as one row", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard", {
+      parentableKeys: [
+        { id: "ollama-a", name: "Laptop", provider: "ollama" },
+        { id: "ollama-b", name: "GPU box", provider: "ollama" },
+      ] as never[],
+      initialProviderApiKeys: [
+        { provider: "ollama", providerApiKeyId: "ollama-a" },
+        { provider: "ollama", providerApiKeyId: "ollama-b" },
+      ],
+    });
+
+    const access = screen.getByRole("region", { name: "Access" });
+    expect(access).toHaveTextContent("2 keys");
+    await user.click(screen.getByRole("button", { name: "Remove Laptop" }));
+    expect(access).not.toHaveTextContent("2 keys");
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    expect(mutateAsync).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        providerApiKeys: [{ provider: "ollama", providerApiKeyId: "ollama-b" }],
+      }),
+    });
+  });
+
+  it("blocks Create when no provider is used until one is picked", async () => {
     const user = userEvent.setup();
     renderDialog("standard", {
       parentableKeys: SEVERAL_KEYS,
       initialProviderApiKeys: [],
     });
 
-    expect(
-      screen.getByText("No providers selected — add one below"),
-    ).toBeVisible();
+    expect(screen.getByText("No providers yet — add one above.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Create key" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Add all" }));
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Add a provider, model pool or auto router",
+      }),
+    );
+    await user.click(await screen.findByRole("option", { name: /^Zhipu AI/ }));
     expect(screen.getByRole("button", { name: "Create key" })).toBeEnabled();
   });
 
@@ -719,7 +873,7 @@ function renderDialog(
     parentableKeys?: never[];
     /** null starts from every provider's primary key. */
     initialProviderApiKeys?: Array<{
-      provider: "openai" | "zhipuai";
+      provider: "openai" | "zhipuai" | "ollama";
       providerApiKeyId: string;
     }> | null;
   } = {},

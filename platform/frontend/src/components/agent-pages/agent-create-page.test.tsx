@@ -145,17 +145,10 @@ describe("AgentCreatePage", () => {
     } as unknown as ReturnType<typeof useRouter>);
   });
 
-  it.each([
-    false,
-    true,
-  ])("lists only enabled messaging channels (Jira and email enabled: %s)", (enabled) => {
+  it("names the enabled messengers, and leaves Jira and email out even when they are enabled", () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: makeOrganization({
-        messagingChannelOverrides: {
-          telegram: { hidden: true },
-          jira: { hidden: !enabled },
-          email: { hidden: !enabled },
-        },
+        messagingChannelOverrides: { telegram: { hidden: true } },
       }),
     } as ReturnType<typeof useOrganization>);
     vi.mocked(useK8sCapabilities).mockReturnValue({
@@ -163,13 +156,11 @@ describe("AgentCreatePage", () => {
     } as unknown as ReturnType<typeof useK8sCapabilities>);
     renderAgentCreatePage();
 
+    expect(screen.getByText("Your messenger")).toBeInTheDocument();
     expect(screen.getByText("Slack")).toBeInTheDocument();
     expect(screen.getByText("MS Teams")).toBeInTheDocument();
-    expect(screen.queryByText("Telegram")).not.toBeInTheDocument();
-    for (const label of ["Jira", "Email"]) {
-      if (enabled) expect(screen.getByText(label)).toBeInTheDocument();
-      else expect(screen.queryByText(label)).not.toBeInTheDocument();
-    }
+    for (const label of ["Telegram", "Jira", "Email"])
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
   });
 
   it("greys out Popular agents and explains how to enable them when the cluster lacks the Agent Sandbox controller", async () => {

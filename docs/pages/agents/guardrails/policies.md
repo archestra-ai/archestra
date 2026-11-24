@@ -7,6 +7,7 @@ lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 You manage the policy by chatting with the APPA Keeper: change rules in plain words, add [batteries](#batteries) for your MCP servers, check the policy with [validations](#validating-the-policy), and fix what keeps agents [stuck](#yells).
 

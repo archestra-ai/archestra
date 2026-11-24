@@ -6,6 +6,7 @@ lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Send model requests, tool calls, and backend logs to your OpenTelemetry collector.
 

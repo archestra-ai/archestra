@@ -177,6 +177,17 @@ describe("accountPairToSave", () => {
     ).toEqual({ llmApiKeyId: null, modelId: null });
   });
 
+  it("clears a company connection and its model no run uses any more", () => {
+    expect(
+      accountPairToSave({
+        llmApiKeyId: "key-1",
+        modelId: "m-1",
+        fixed: null,
+        companyPairUnused: true,
+      }),
+    ).toEqual({ llmApiKeyId: null, modelId: null });
+  });
+
   it("sends nothing where the runtime fixes the connection and its model", () => {
     // Whatever the agent itself holds: its own connection stays stored.
     expect(

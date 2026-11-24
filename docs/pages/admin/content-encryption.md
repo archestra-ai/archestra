@@ -7,6 +7,7 @@ lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Encrypt saved conversations, model payloads, and tool results with a deployment-held key, independently of [stored credentials](/docs/admin/credentials#secrets-storage). This is an [Enterprise feature](/pricing), disabled by default.
 

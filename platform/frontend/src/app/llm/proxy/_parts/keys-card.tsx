@@ -1,6 +1,9 @@
 "use client";
 
-import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
+import {
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
+  LLM_PROXY_OAUTH_SCOPE,
+} from "@archestra/shared";
 import Link from "next/link";
 import { useState } from "react";
 import { CreateVirtualKeyDialogWithData } from "@/components/create-virtual-key-dialog";
@@ -35,14 +38,19 @@ const STANDARD_KEYS_HREF = "/llm/proxy/virtual-keys?keyType=standard";
  * each with how many exist.
  */
 export function KeysCard() {
+  // Same access filter as Virtual Keys opens with, so every chip and count
+  // here is a key that page lists (an admin's access to unshared keys is
+  // opt-in there).
   const { data: keys, isPending } = useAllVirtualApiKeys({
     keyType: "standard",
+    access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     limit: VISIBLE_KEYS,
     offset: 0,
     toastOnError: false,
   });
   const { data: passthrough } = useAllVirtualApiKeys({
     keyType: "passthrough",
+    access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     limit: 1,
     offset: 0,
     toastOnError: false,

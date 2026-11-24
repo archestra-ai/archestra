@@ -164,13 +164,14 @@ function ModelsCard({ settings }: { settings: AutoRouter }) {
 
 function UseAutoCard({ settings }: { settings: AutoRouter }) {
   const { agentCount, organizationDefault } = settings.usage;
+  const keyCount = settings.virtualApiKeyIds.length;
   return (
     <StatusCard
       step={3}
       icon={<Sparkles />}
       title="Use it"
       status={
-        agentCount > 0 || organizationDefault ? (
+        agentCount > 0 || organizationDefault || keyCount > 0 ? (
           <Status done>In use</Status>
         ) : (
           <Status>Not used yet</Status>
@@ -204,18 +205,27 @@ function UseAutoCard({ settings }: { settings: AutoRouter }) {
 function usageText({
   name,
   usage,
-}: Pick<AutoRouter, "name" | "usage">): string {
+  virtualApiKeyIds,
+}: Pick<AutoRouter, "name" | "usage" | "virtualApiKeyIds">): string {
   const label = autoRouterLabel(name);
   const agents =
     usage.agentCount === 1 ? "1 agent" : `${usage.agentCount} agents`;
+  const keyCount = virtualApiKeyIds.length;
+  const keysCanCall =
+    keyCount === 0
+      ? ""
+      : ` ${keyCount === 1 ? "1 virtual key has" : `${keyCount} virtual keys have`} it.`;
   if (usage.organizationDefault) {
     const base = `${label} is the organization default: every chat and agent without a model of its own runs on it.`;
     return usage.agentCount > 0
-      ? `${base} ${agents} also ${usage.agentCount === 1 ? "has" : "have"} it set directly.`
-      : base;
+      ? `${base} ${agents} also ${usage.agentCount === 1 ? "has" : "have"} it set directly.${keysCanCall}`
+      : `${base}${keysCanCall}`;
   }
-  return usage.agentCount > 0
-    ? `${agents} ${usage.agentCount === 1 ? "runs" : "run"} on ${label}. It is not the organization default.`
+  if (usage.agentCount > 0) {
+    return `${agents} ${usage.agentCount === 1 ? "runs" : "run"} on ${label}.${keysCanCall} It is not the organization default.`;
+  }
+  return keyCount > 0
+    ? `${keysCanCall.trim()} It is not the organization default.`
     : `Nothing runs on ${label} yet. Pick it for an agent or a chat, or make it the organization default.`;
 }
 

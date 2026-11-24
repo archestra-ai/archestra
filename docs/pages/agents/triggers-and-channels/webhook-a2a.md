@@ -6,6 +6,7 @@ lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Run an agent from your own code. Every agent has an HTTP endpoint. Send it a message, and read the reply. It speaks [A2A](https://a2a-protocol.org/) 1.0, so A2A SDKs and other agent platforms work too.
 

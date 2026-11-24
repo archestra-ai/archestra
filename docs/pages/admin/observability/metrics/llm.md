@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-11-03
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Track LLM request latency, token usage, and billed spend across providers and models. See [Labels](/docs/admin/observability/metrics#labels) for request and agent dimensions.
 
 ## Metrics

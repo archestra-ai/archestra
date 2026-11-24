@@ -6,6 +6,7 @@ lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Archestra supports user provisioning from Microsoft Entra ID over [SCIM 2.0](https://www.rfc-editor.org/rfc/rfc7644). Entra creates a user in Archestra when you assign them to the Archestra app, and deactivates the user when you unassign them. Without provisioning, a user exists only after their first Single Sign-On sign-in. With provisioning, you can add users to teams before they sign in, for example [with Terraform](#example-one-entra-group-teams-in-terraform). This is an [Enterprise feature](/pricing).
 

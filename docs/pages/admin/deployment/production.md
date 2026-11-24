@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-11-20
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Before sending production traffic through Archestra, make sure you can restore its database and keys, reach its public endpoints, and run its workloads safely.
 
 ## Releases and Backups

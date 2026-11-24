@@ -5,6 +5,8 @@ order: 6
 lastUpdated: 2026-10-05
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from your ServiceNow incidents, problems, and other ITSM records, so a new incident finds how the last one was solved.
 
 **Indexed:** incidents, change requests, change tasks, problems, business applications, and published knowledge articles. Incidents are enabled by default; the rest are opt-in.

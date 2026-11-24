@@ -71,7 +71,7 @@ export function PoolsCard() {
   const items = [
     ...routers.map((router) => ({
       key: router.id,
-      kind: "Router",
+      kind: router.enabled ? "Router" : "Router · off",
       name: router.name,
       href: `/llm/auto-routing/${router.id}`,
       tip: routerTip(router),

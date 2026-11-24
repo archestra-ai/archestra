@@ -9,10 +9,10 @@ import { formatRuntimeDuration } from "@/lib/agent-runtime-time";
 
 type RunStatusMarks = {
   glyph: "booting" | "live" | "off";
-  dot: "working" | "attention" | "failed" | null;
+  dot: "working" | "input" | "attention" | "failed" | null;
   label: string;
   suffix: string | null;
-  chip: { tone: "attention" | "failed"; label: string } | null;
+  chip: { tone: "input" | "attention" | "failed"; label: string } | null;
   description: string;
 };
 
@@ -105,11 +105,12 @@ export function runStatusMarks(
       }
       const attention = run.attentionState ?? ATTENTION_TASK_STATE[run.state];
       if (attention) {
+        const tone = attention === "input_required" ? "input" : "attention";
         return marks({
           glyph: "live",
-          dot: "attention",
+          dot: tone,
           label: "Running",
-          chip: { tone: "attention", label: ATTENTION_CHIP_LABEL[attention] },
+          chip: { tone, label: ATTENTION_CHIP_LABEL[attention] },
         });
       }
       if (run.state === "TASK_STATE_SUBMITTED") {
@@ -165,6 +166,7 @@ export const ATTENTION_DOT_CLASS: Record<
   string
 > = {
   working: "bg-emerald-500",
+  input: "bg-blue-500",
   attention: "bg-amber-500",
   failed: "bg-destructive",
 };
@@ -196,7 +198,7 @@ const ATTENTION_CHIP_LABEL: Record<
   NonNullable<RunStatusInput["attentionState"]>,
   string
 > = {
-  input_required: "Needs your input",
+  input_required: "Waiting for input",
   auth_required: "Needs sign-in",
 };
 

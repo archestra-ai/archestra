@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-11-04
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Find the saved record for a model request and see its usage, cost, and routing decision.
 
 ## Read one request

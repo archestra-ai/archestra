@@ -167,11 +167,23 @@ describe("SubagentLoadBalancingSection", () => {
     );
 
     expect(
-      screen.getByText(/subagents assigned to this agent/i),
+      screen.getByText(
+        "Distributes delegated runs across the Agent Runtime subagents assigned to this agent only, with retries, out-of-memory tier upgrades, and failover.",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
         /In "All agents" mode, all accessible runtime subagents receive equal weight/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders single-sentence gateway copy naming Agent Runtime agents", () => {
+    renderSection(null, [AGENT_A_ID], { isGateway: true });
+
+    expect(
+      screen.getByText(
+        "Distributes delegated runs across the Agent Runtime agents assigned to this gateway only, with retries, out-of-memory tier upgrades, and failover.",
       ),
     ).toBeInTheDocument();
   });

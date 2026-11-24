@@ -56,12 +56,12 @@ describe("accountWaysMeaning", () => {
     const both = { subscription: true, provider: true };
     const companyOnly = { subscription: false, provider: true };
     expect(accountWaysMeaning(both)).toBe(
-      "Each person chooses between their own subscription and a company API key.",
+      "Each person who runs this agent chooses their own subscription or a company API key on the agent's page.",
     );
     expect(accountWaysMeaning(companyOnly)).toBe("Locked to a company API key");
     // The Copilot CLI's company account is a plan, not an API key.
     expect(accountWaysMeaning(both, "the company's enterprise plan")).toBe(
-      "Each person chooses between their own subscription and the company's enterprise plan.",
+      "Each person who runs this agent chooses their own subscription or the company's enterprise plan on the agent's page.",
     );
     expect(
       accountWaysMeaning(companyOnly, "the company's enterprise plan"),
@@ -80,7 +80,7 @@ describe("accountWaysMeaning", () => {
       provider,
     });
     expect(accountWaysMeaning(ways(true, true), undefined, "agent")).toBe(
-      "Each agent chooses between personal subscriptions and a company API key.",
+      "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, a company API key, or both.",
     );
     // Only the sentence for both differs from an agent's own settings.
     for (const one of [

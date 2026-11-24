@@ -17331,6 +17331,7 @@ export type GetAgentCatalogResponses = {
                 resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 resolvedLlmProviderKeyName?: string | null;
                 resolvedLlmModelName?: string | null;
+                resolvedLlmPersonalSubscription?: boolean;
                 llmProviderRequiresPerUserCredential?: boolean;
                 sandboxAvailable?: boolean;
                 activationSkillsCount?: number;
@@ -17736,6 +17737,7 @@ export type GetAgentsResponses = {
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
+            resolvedLlmPersonalSubscription?: boolean;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
@@ -18195,6 +18197,7 @@ export type CreateAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -19493,6 +19496,7 @@ export type GetDefaultMcpGatewayResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -19817,6 +19821,7 @@ export type ImportAgentResponses = {
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
+            resolvedLlmPersonalSubscription?: boolean;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
@@ -20150,6 +20155,7 @@ export type GetAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -20497,6 +20503,7 @@ export type UpdateAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -21298,6 +21305,7 @@ export type RestoreAgentVersionResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -21563,6 +21571,7 @@ export type CloneAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -24064,6 +24073,7 @@ export type RestoreAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -25650,6 +25660,365 @@ export type CompleteClaudeCodeSignInResponses = {
 };
 
 export type CompleteClaudeCodeSignInResponse = CompleteClaudeCodeSignInResponses[keyof CompleteClaudeCodeSignInResponses];
+
+export type DisconnectMyClaudeCodeAccountData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account';
+};
+
+export type DisconnectMyClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisconnectMyClaudeCodeAccountError = DisconnectMyClaudeCodeAccountErrors[keyof DisconnectMyClaudeCodeAccountErrors];
+
+export type DisconnectMyClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type DisconnectMyClaudeCodeAccountResponse = DisconnectMyClaudeCodeAccountResponses[keyof DisconnectMyClaudeCodeAccountResponses];
+
+export type GetMyClaudeCodeAccountData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account';
+};
+
+export type GetMyClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyClaudeCodeAccountError = GetMyClaudeCodeAccountErrors[keyof GetMyClaudeCodeAccountErrors];
+
+export type GetMyClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type GetMyClaudeCodeAccountResponse = GetMyClaudeCodeAccountResponses[keyof GetMyClaudeCodeAccountResponses];
+
+export type StartMyClaudeCodeSignInData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account';
+};
+
+export type StartMyClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartMyClaudeCodeSignInError = StartMyClaudeCodeSignInErrors[keyof StartMyClaudeCodeSignInErrors];
+
+export type StartMyClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type StartMyClaudeCodeSignInResponse = StartMyClaudeCodeSignInResponses[keyof StartMyClaudeCodeSignInResponses];
+
+export type CompleteMyClaudeCodeSignInData = {
+    body: {
+        flowId: string;
+        code?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account/complete';
+};
+
+export type CompleteMyClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteMyClaudeCodeSignInError = CompleteMyClaudeCodeSignInErrors[keyof CompleteMyClaudeCodeSignInErrors];
+
+export type CompleteMyClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type CompleteMyClaudeCodeSignInResponse = CompleteMyClaudeCodeSignInResponses[keyof CompleteMyClaudeCodeSignInResponses];
 
 export type GetClaudeCodeModelsData = {
     body?: never;
@@ -46222,6 +46591,7 @@ export type GetNewChatBootstrapResponses = {
                 resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 resolvedLlmProviderKeyName?: string | null;
                 resolvedLlmModelName?: string | null;
+                resolvedLlmPersonalSubscription?: boolean;
                 llmProviderRequiresPerUserCredential?: boolean;
                 sandboxAvailable?: boolean;
                 activationSkillsCount?: number;
@@ -46836,6 +47206,7 @@ export type GetConversationBootstrapResponses = {
                     resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     resolvedLlmProviderKeyName?: string | null;
                     resolvedLlmModelName?: string | null;
+                    resolvedLlmPersonalSubscription?: boolean;
                     llmProviderRequiresPerUserCredential?: boolean;
                     sandboxAvailable?: boolean;
                     activationSkillsCount?: number;
@@ -58494,6 +58865,8 @@ export type GetDesktopDevicesResponses = {
         servers: Array<{
             catalogId: string;
             name: string;
+            icon: string | null;
+            iconUrl: string | null;
             state: 'no_command' | 'starting' | 'running' | 'failed' | 'stopped';
             lastError: string | null;
             command: string | null;
@@ -58693,6 +59066,8 @@ export type UpdateDesktopDeviceServerResponses = {
         servers: Array<{
             catalogId: string;
             name: string;
+            icon: string | null;
+            iconUrl: string | null;
             state: 'no_command' | 'starting' | 'running' | 'failed' | 'stopped';
             lastError: string | null;
             command: string | null;
@@ -93954,6 +94329,7 @@ export type GetInternalMcpCatalogResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -94130,6 +94506,7 @@ export type CreateInternalMcpCatalogItemData = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -94367,6 +94744,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -95464,6 +95842,7 @@ export type GetInternalMcpCatalogItemResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -95628,6 +96007,7 @@ export type UpdateInternalMcpCatalogItemData = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -95846,6 +96226,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -96556,6 +96937,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -96798,6 +97180,7 @@ export type ApproveCatalogItemImageResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;

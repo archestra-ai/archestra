@@ -378,6 +378,7 @@ describe("transformFormToApiData", () => {
       serverUrl: "https://mcp.example.com",
       oauthConfig: {
         client_id: "client-id",
+        requires_client_credentials: true,
         client_secret: "client-secret",
         audience: "",
         redirect_uris: ["https://app.example.com/oauth-callback"],
@@ -405,6 +406,9 @@ describe("transformFormToApiData", () => {
       labels: [],
     } as never);
 
+    expect(
+      transformFormToApiData(values).oauthConfig?.requires_client_credentials,
+    ).toBe(true);
     expect(values.oauthConfig?.authorizationEndpoint).toBe(
       "https://legacy-idp.example.com/oauth/authorize",
     );
@@ -469,7 +473,7 @@ describe("transformFormToApiData", () => {
     });
   });
 
-  it("hydrates explicit OAuth endpoints from external catalog manifests", () => {
+  it("preserves the external catalog credential requirement and OAuth endpoints on save", () => {
     const values = transformExternalCatalogToFormValues({
       name: "direct-oauth-mcp",
       display_name: "Direct OAuth MCP",
@@ -481,6 +485,7 @@ describe("transformFormToApiData", () => {
       },
       oauth_config: {
         client_id: "client-id",
+        requires_client_credentials: true,
         client_secret: "client-secret",
         redirect_uris: ["https://app.example.com/oauth-callback"],
         scopes: ["read"],
@@ -500,6 +505,9 @@ describe("transformFormToApiData", () => {
       },
     } as never);
 
+    expect(
+      transformFormToApiData(values).oauthConfig?.requires_client_credentials,
+    ).toBe(true);
     expect(values.oauthConfig?.authorizationEndpoint).toBe(
       "https://legacy-idp.example.com/oauth/authorize",
     );

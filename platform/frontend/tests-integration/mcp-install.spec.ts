@@ -1,8 +1,114 @@
+import { makeUserPermissions } from "../src/mocks/data/auth";
 import { makeCatalogItem } from "../src/mocks/data/catalog";
 import { makeInstalledServer } from "../src/mocks/data/servers";
 import { expect, test } from "./fixtures";
 
+function makeConfidentialOAuthCatalog() {
+  const serverUrl = "https://mcp.example.com/mcp";
+  return makeCatalogItem({
+    id: "confidential-oauth-credentials-test",
+    name: "Confidential OAuth MCP",
+    serverType: "remote",
+    serverUrl,
+    requiresAuth: true,
+    multitenant: true,
+    oauthConfig: {
+      name: "Confidential OAuth",
+      server_url: serverUrl,
+      client_id: "",
+      requires_client_credentials: true,
+      redirect_uris: ["http://localhost:3000/oauth-callback"],
+      scopes: [],
+      default_scopes: [],
+      supports_resource_metadata: true,
+    },
+  });
+}
+
 test.describe("Add Remote MCP Server", () => {
+  test("A configured client requires both app credentials before Test Connection and accepts a saved secret", async ({
+    page,
+    mswControl,
+  }) => {
+    const catalog = makeConfidentialOAuthCatalog();
+    const url = `/api/internal_mcp_catalog/${catalog.id}`;
+    const editUrl = `/mcp/registry/${catalog.id}/edit`;
+    await mswControl.use({ method: "get", url, body: catalog });
+
+    // This old deep link cannot bypass configuration.
+    await page.goto(`${editUrl}?step=test`);
+    const clientId = page.getByLabel(/Client ID/);
+    const secret = page.getByLabel(/Client Secret/);
+    await expect(clientId).toBeVisible();
+    await page
+      .getByRole("button", { name: "Test Connection", exact: true })
+      .click();
+    await expect(page.getByText("Enter the Client ID.")).toBeVisible();
+    await expect(page.getByText("Enter the Client Secret.")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Install", exact: true }),
+    ).toHaveCount(0);
+
+    const saved = {
+      ...catalog,
+      oauthConfig: { ...catalog.oauthConfig, client_id: "fixture-client-id" },
+      clientSecretId: "fixture-stored-secret-reference",
+    };
+    // PUT is authoritative: a slow GET must not return the wizard to Configuration.
+    await mswControl.registerMany([
+      { method: "put", url, body: saved },
+      { method: "get", url, body: saved, delayMs: 10_000 },
+    ]);
+    await clientId.fill("fixture-client-id");
+    await secret.fill("fixture-client-secret");
+    await page.getByRole("button", { name: "Save & Continue" }).click();
+    await expect(
+      page.getByRole("button", { name: "Install", exact: true }),
+    ).toBeVisible({ timeout: 3_000 });
+
+    await mswControl.use({ method: "get", url, body: saved });
+    await page.goto(`${editUrl}?step=configuration`);
+    await expect(clientId).toHaveValue("fixture-client-id");
+    await expect(secret).toHaveValue("");
+    await page
+      .getByRole("button", { name: "Test Connection", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Install", exact: true }),
+    ).toBeVisible();
+  });
+
+  test("A configured client tells details-only editors who can add the missing credentials", async ({
+    page,
+    mswControl,
+  }) => {
+    const catalog = makeConfidentialOAuthCatalog();
+    await mswControl.registerMany([
+      {
+        method: "get",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        body: catalog,
+      },
+      {
+        method: "get",
+        url: "/api/user/permissions",
+        body: makeUserPermissions({ mcpRegistry: ["read", "update"] }),
+      },
+      { method: "get", url: "/api/resource-permissions", body: [] },
+    ]);
+
+    await page.goto(`/mcp/registry/${catalog.id}/edit?step=test`);
+    await expect(
+      page.getByText(
+        /Ask someone who can change this server’s connection settings/,
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Test Connection", exact: true }),
+    ).toBeDisabled();
+    await expect(page.getByLabel(/Client Secret/)).not.toBeVisible();
+  });
+
   test("no-auth remote: create + install reports a working connection", async ({
     page,
     mcpRegistryPage,

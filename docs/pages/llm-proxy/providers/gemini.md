@@ -6,6 +6,7 @@ lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Use Gemini through Google AI Studio with an API key, or through Vertex AI with no key. On GKE, Archestra signs in to Vertex AI with Workload Identity.
 

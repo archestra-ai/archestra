@@ -63,14 +63,21 @@ The program follows the Archestra that it is connected to. The checksum decides,
 1. It downloads the program to `~/.archestra/bin/archestra-update` and checks its SHA-256 against the one of the sync answer. Nothing is touched before that is right.
 2. The downloaded program installs itself: it runs as `archestra bridge start`, which copies it over the installed program and starts the MCP bridge again.
 
-| System | Who updates |
+The MCP bridge that the OS runs does the same two steps by itself, when Archestra allows it (`auto_update`) and no command is in work. `archestra update` does them at once.
+
+The downloaded program stops the MCP bridge that started it. So each system starts it in a way that it outlives that MCP bridge:
+
+| System | How the MCP bridge starts the downloaded program |
 | --- | --- |
-| Windows | The MCP bridge that the OS runs, by itself, when Archestra allows it (`auto_update`) and no command is in work. `archestra update` does it at once. |
-| macOS | The user, with `archestra update`. The program is not signed: each build is a new application to the privacy settings of macOS, so an update takes away the permissions that the MCP servers got. A silent update would do that with no warning. The Device tab and `archestra bridge status` show that an update waits. |
-| Linux | The user, with `archestra update`. The downloaded program would start inside the systemd unit of the MCP bridge, and systemd would end it together with the MCP bridge that it stops. The Device tab and `archestra bridge status` show that an update waits. |
+| Windows | As a process of its own. |
+| macOS | In a process group of its own: launchd ends the process group of a job that it stops. |
+| Linux, systemd user unit | In a unit of its own, with `systemd-run --user` and the `PATH` of the MCP bridge: systemd ends all processes of a unit that it stops. |
+| Linux, no systemd user session | In a process group of its own. |
 
 - An MCP bridge that runs in a terminal (`--foreground`) never updates itself.
-- The MCP bridge tries one program one time. The SHA-256 of the last try is in `~/.archestra/mcp-bridge/update-tried`; a program that could not install itself is not tried again at each sync. A download that failed or had another SHA-256 is not a try.
+- On macOS and Linux the MCP bridge updates itself from version 0.1.9 on. The user updates an older program with `archestra update`.
+- A release for macOS is signed with one identifier and one team, so each build is the same application to macOS.
+- The MCP bridge tries one program two times at most, and the second time only after a new start of the MCP bridge. One program is one file that Archestra serves, known by its SHA-256. The SHA-256 of the last try and the number of tries are in `~/.archestra/mcp-bridge/update-tried`. A download that failed or had another SHA-256 is not a try.
 
 ### Uninstall
 
@@ -254,8 +261,6 @@ Before step 3 the lock is empty (`"version": null`): images have no program, and
 
 ### Not done yet
 
-- **No code signature** on macOS and Windows. For this reason macOS does not update by itself.
-- **Linux does not update by itself:** systemd stops the new program together with the MCP bridge that it replaces.
 - **The lock pull request is merged by hand.**
 
 ## Develop

@@ -6,6 +6,7 @@ lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Connect Okta to sign users in with Okta credentials and exchange tokens so MCP tools call downstream APIs under each user's identity.
 

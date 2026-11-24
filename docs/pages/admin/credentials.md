@@ -5,6 +5,8 @@ order: 5
 lastUpdated: 2026-11-09
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Save a credential once and reuse it in agents, MCP servers, skills, and Knowledge connectors. Each integration can use your personal account or an organization identity.
 
 ## Add a Credential

@@ -6,6 +6,7 @@ lastUpdated: 2026-11-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Run any MCP server for your whole team, even one built to run on a laptop. Many MCP servers only run as a local process, from npm, PyPI, or a Docker image. Archestra runs them in your Kubernetes cluster and shares them like any remote server.
 

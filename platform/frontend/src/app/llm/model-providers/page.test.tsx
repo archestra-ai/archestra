@@ -19,6 +19,7 @@ const mockUseLlmProviderApiKey = vi.fn();
 const mockLlmProviderApiKeyForm = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockUseOauthClients = vi.fn();
+const mockUseMyClaudeCodeAccount = vi.fn();
 const mockDeleteApiKey = vi.fn();
 const mockUpdateApiKey = vi.fn();
 const mockSavePermissions = vi.fn();
@@ -73,6 +74,21 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     mockUseLlmProviderApiKeys(...args),
   useUpdateLlmProviderApiKey: () => ({
     mutateAsync: mockUpdateApiKey,
+    isPending: false,
+  }),
+}));
+
+vi.mock("@/lib/claude-code-account.query", () => ({
+  useMyClaudeCodeAccount: (...args: unknown[]) =>
+    mockUseMyClaudeCodeAccount(...args),
+  useMyClaudeCodeSignIn: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
+  useDisconnectMyClaudeCodeAccount: () => ({
+    mutate: vi.fn(),
     isPending: false,
   }),
 }));
@@ -389,6 +405,13 @@ describe("ApiKeysPage", () => {
       data: { data: [], pagination: { total: 0 } },
       isPending: false,
     });
+    mockUseMyClaudeCodeAccount.mockReturnValue({
+      data: { state: "disconnected" },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    });
   });
 
   it("opens a subscription sign-in linked from an Agent catalog flow", async () => {
@@ -562,6 +585,10 @@ describe("ApiKeysPage", () => {
   });
 
   it("clears an active label filter with the other table filters", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
     useDataTableQueryParamsMock.mockReturnValue({
       searchParams: new URLSearchParams(
         "search=claude&provider=anthropic&labels=stage%3Aproduction",
@@ -1173,7 +1200,11 @@ describe("ApiKeysPage", () => {
     } as unknown as ReturnType<typeof useHasPermissions>);
     render(<ApiKeysPage />);
 
-    fireEvent.click(screen.getAllByText("Connect")[3]);
+    fireEvent.click(
+      within(
+        screen.getByTestId(`${E2eTestId.SubscriptionProviderCard}-x-premium`),
+      ).getByRole("button", { name: "Connect" }),
+    );
 
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
       "Sign in with Grok",
@@ -1181,6 +1212,115 @@ describe("ApiKeysPage", () => {
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
       "Connect your SuperGrok subscription",
     );
+  });
+
+  it("includes a Claude Code card in Personal subscriptions when Agent Runtime is enabled", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+
+    render(<ApiKeysPage />);
+
+    const cardOrder = Array.from(
+      screen
+        .getByTestId(E2eTestId.SubscriptionProviderCards)
+        .querySelectorAll('[data-testid^="subscription-provider-card-"]'),
+    ).map((el) => el.getAttribute("data-testid"));
+    expect(cardOrder).toEqual([
+      `${E2eTestId.SubscriptionProviderCard}-claude-code`,
+      `${E2eTestId.SubscriptionProviderCard}-chatgpt`,
+      `${E2eTestId.SubscriptionProviderCard}-github-copilot`,
+      `${E2eTestId.SubscriptionProviderCard}-x-premium`,
+      `${E2eTestId.SubscriptionProviderCard}-microsoft-365-copilot`,
+    ]);
+    const claudeCard = within(
+      screen.getByTestId(`${E2eTestId.SubscriptionProviderCard}-claude-code`),
+    );
+    expect(claudeCard.getByText("Claude Code")).toBeInTheDocument();
+    expect(claudeCard.getByRole("button", { name: "Connect" })).toBeVisible();
+    expect(personalCards().getAllByText("Connect")).toHaveLength(5);
+  });
+
+  it("keeps Personal subscriptions visible for Claude Code even when every other subscription provider is hidden", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          openai: { hidden: true },
+          "github-copilot": { hidden: true },
+          "microsoft-365-copilot": { hidden: true },
+          xai: { hidden: true },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(personalCards().getByText("Claude Code")).toBeInTheDocument();
+    expect(personalCards().getAllByText("Connect")).toHaveLength(1);
+  });
+
+  it("hides an unconnected Claude Code card when Anthropic is turned off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { anthropic: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(personalCards().queryByText("Claude Code")).toBeNull();
+    expect(personalCards().getAllByText("Connect")).toHaveLength(4);
+  });
+
+  it("keeps a connected Claude Code subscription disconnectable without provider-key read permission while hiding provider API keys", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { anthropic: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseMyClaudeCodeAccount.mockReturnValue({
+      data: { state: "connected", expiresAt: "2027-06-15T00:00:00.000Z" },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<ApiKeysPage />);
+
+    const claudeCard = within(
+      screen.getByTestId(`${E2eTestId.SubscriptionProviderCard}-claude-code`),
+    );
+    expect(claudeCard.getByText("Connected")).toBeVisible();
+    expect(
+      claudeCard.getByRole("button", { name: "Disconnect" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Enterprise plans")).not.toBeInTheDocument();
+    expect(screen.queryByText("Provider API keys")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(E2eTestId.ChatApiKeysTable),
+    ).not.toBeInTheDocument();
   });
 });
 

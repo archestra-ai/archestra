@@ -7,6 +7,7 @@ lastUpdated: 2026-11-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 These are the credentials Archestra uses to call the MCP servers behind a gateway, such as Jira or GitHub. Each MCP server signs in its own way. Set it once per server, and Archestra signs in on every call, as the right account. Ask for your open Jira tickets, and the call uses your Jira account. A status-page bot posts as the bot. Nobody pastes a key into a client.
 

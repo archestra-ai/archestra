@@ -36,7 +36,10 @@ You can configure an export on the **Costs & Limits → FinOps Export** page.
 
 ### How It Works
 
-<span id="where-files-land"></span>Depending on how it is configured, an export writes one file per day or one per hour. Daily files are named like `cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10.csv`. Hourly files add the hour: `archestra-focus-2026-11-10T14.csv`.
+<span id="where-files-land"></span>Depending on how it is configured, an export writes one file per day or one per hour:
+
+- Daily: `year=2026/month=11/day=10/archestra-focus-2026-11-10.csv`
+- Hourly: `year=2026/month=11/day=10/archestra-focus-2026-11-10T14.csv`
 
 <span id="when-files-are-written"></span>A file arrives about 15 to 20 minutes after its day or hour ends. If a file is written again, it replaces the old one.
 

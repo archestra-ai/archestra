@@ -4,11 +4,9 @@ import { AlertTriangle, Hourglass } from "lucide-react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Card, CardContent } from "@/components/ui/card";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { type AutoRouter, useAutoRouter } from "@/lib/auto-routing.query";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import { BUDGET_PRESET_LABELS } from "../_parts/budget-presets";
-import { PastSessions } from "../_parts/past-sessions";
 import { describeFitError } from "../_parts/plan-document";
 import { RouterFigures } from "../_parts/router-figures";
 import { isAutoRoutingSetUp, SetupCards } from "../_parts/setup-cards";
@@ -16,9 +14,6 @@ import { TIER_LABELS, TIER_NAMES } from "../_parts/tiers";
 
 export default function AutoRoutingOverviewPage() {
   const settingsQuery = useAutoRouter();
-  const { data: canUpdate = false } = useHasPermissions({
-    llmProxy: ["update"],
-  });
   if (settingsQuery.isLoadingError) {
     return (
       <QueryLoadError
@@ -31,20 +26,10 @@ export default function AutoRoutingOverviewPage() {
   const settings = settingsQuery.data;
   if (!settings) return null;
 
-  // The same card in every state, so scoring is always found in one place.
-  const pastSessions = settings.usesPastSessions && (
-    <PastSessions
-      routingEnabled={settings.enabled}
-      canUpdate={canUpdate}
-      scorer={settings.status.scorer}
-    />
-  );
-
   if (!isAutoRoutingSetUp(settings)) {
     return (
       <div className="space-y-6">
         <SetupCards settings={settings} />
-        {pastSessions}
       </div>
     );
   }
@@ -54,7 +39,6 @@ export default function AutoRoutingOverviewPage() {
       <StateNotice settings={settings} />
       <RouterDetails settings={settings} />
       <RouterFigures settings={settings} />
-      {pastSessions}
     </div>
   );
 }

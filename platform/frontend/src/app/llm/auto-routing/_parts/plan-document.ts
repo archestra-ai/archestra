@@ -61,8 +61,6 @@ export function parsePlanSummary(document: unknown): PlanSummary | null {
 const FittedHistorySchema = z.object({
   history: z.object({
     sessions: z.number(),
-    /** Of `sessions`, the ones scored from the interaction log; absent before backfill. */
-    past_sessions: z.number().default(0),
     last_created_at: z.string().nullable(),
   }),
 });

@@ -78,7 +78,6 @@ const autoRouter: AutoRouter = {
     smart: tier(MODELS.smart),
   },
   decisionModel: { apiKeyId: null, model: "jev-1.13.0" },
-  usesPastSessions: true,
   virtualApiKeyIds: [],
   usage: { agentCount: 0, organizationDefault: false },
   generation: 1,

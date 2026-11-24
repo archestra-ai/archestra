@@ -615,7 +615,7 @@ function useBudgetEstimate(
     return {
       split: null,
       stale: false,
-      note: "A new router starts cold: every session runs on the normal model until it has scored enough of its own.",
+      note: "A new router runs every session on the normal model until it has scored enough sessions.",
     };
   }
   if (!tiersSaved || tiersEdited) {

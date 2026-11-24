@@ -21,10 +21,6 @@ const {
   getAutoRoutingUsage,
   getAutoRoutingPlan,
   simulateAutoRouting,
-  getAutoRoutingBackfill,
-  scanAutoRoutingBackfill,
-  scoreAutoRoutingBackfill,
-  cancelAutoRoutingBackfill,
 } = archestraApiSdk;
 
 export type AutoRoutingState =
@@ -45,10 +41,6 @@ type AutoRoutingSimulateBody =
   archestraApiTypes.SimulateAutoRoutingData["body"];
 export type AutoRoutingSimulation =
   archestraApiTypes.SimulateAutoRoutingResponses["200"];
-export type AutoRoutingBackfillState =
-  archestraApiTypes.GetAutoRoutingBackfillResponses["200"];
-type AutoRoutingScoreBackfillBody =
-  archestraApiTypes.ScoreAutoRoutingBackfillData["body"];
 
 const autoRoutingKeys = {
   all: ["auto-routing"] as const,
@@ -67,7 +59,6 @@ const autoRoutingKeys = {
     [...autoRoutingKeys.router(routerId), "simulate"] as const,
   simulation: (routerId: string | null, body: AutoRoutingSimulateBody | null) =>
     [...autoRoutingKeys.simulations(routerId), body] as const,
-  backfill: () => [...autoRoutingKeys.all, "backfill"] as const,
 };
 
 /**
@@ -269,7 +260,6 @@ async function applyFit(
     queryClient.invalidateQueries({
       queryKey: autoRoutingKeys.router(data.id),
     }),
-    queryClient.invalidateQueries({ queryKey: autoRoutingKeys.backfill() }),
     queryClient.invalidateQueries({
       queryKey: organizationKeys.defaultModel(),
     }),
@@ -321,85 +311,3 @@ export function useSimulateAutoRouting(body: AutoRoutingSimulateBody | null) {
 
 const SIMULATION_RETRIES = 10;
 const SIMULATION_RETRY_DELAY_MS = 1000;
-
-const BACKFILL_POLL_MS = 5000;
-
-/**
- * The organization's latest historical backfill, polled while it runs and
- * then until the fit its completion requested has an outcome.
- */
-export function useAutoRoutingBackfill() {
-  const queryClient = useQueryClient();
-  return useQuery({
-    queryKey: autoRoutingKeys.backfill(),
-    queryFn: async () => {
-      const { data, error } = await getAutoRoutingBackfill();
-      throwOnApiError(error, { toastOnError: false });
-      const previous = queryClient.getQueryData<AutoRoutingBackfillState>(
-        autoRoutingKeys.backfill(),
-      );
-      if (
-        previous?.backfill &&
-        (previous.backfill.status !== data?.backfill?.status ||
-          previous.backfill.awaitingFit !== data?.backfill?.awaitingFit)
-      ) {
-        await queryClient.invalidateQueries({
-          predicate: (query) =>
-            query.queryKey[0] === autoRoutingKeys.all[0] &&
-            query.queryKey[1] !== "backfill",
-        });
-      }
-      return data ?? null;
-    },
-    refetchInterval: (query) => {
-      const backfill = query.state.data?.backfill;
-      return backfill?.status === "running" || backfill?.awaitingFit
-        ? BACKFILL_POLL_MS
-        : false;
-    },
-  });
-}
-
-export function useScanAutoRoutingBackfill() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await scanAutoRoutingBackfill();
-      throwOnApiError(error);
-      return data;
-    },
-    onSuccess: (data) =>
-      queryClient.setQueryData(autoRoutingKeys.backfill(), data),
-  });
-}
-
-export function useScoreAutoRoutingBackfill() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: AutoRoutingScoreBackfillBody) => {
-      const { data, error } = await scoreAutoRoutingBackfill({ body });
-      throwOnApiError(error);
-      return data;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(autoRoutingKeys.backfill(), data);
-      toast.success("Scoring past sessions");
-    },
-    // A refused offer is stale: show the current one.
-    onError: () =>
-      queryClient.invalidateQueries({ queryKey: autoRoutingKeys.backfill() }),
-  });
-}
-
-export function useCancelAutoRoutingBackfill() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await cancelAutoRoutingBackfill();
-      throwOnApiError(error);
-      return data;
-    },
-    onSuccess: (data) =>
-      queryClient.setQueryData(autoRoutingKeys.backfill(), data),
-  });
-}

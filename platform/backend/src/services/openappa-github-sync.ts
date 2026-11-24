@@ -1766,9 +1766,9 @@ class AutoMerger {
       : result.judged.governed.length === 0
         ? "it changes no policy file"
         : !result.judged.autoMergeable
-          ? "Archestra did not open it for a change"
+          ? `${archestraMcpBranding.appName} did not open it for a change`
           : !pull.number || !pull.ref || !isChangeBranch(pull.ref)
-            ? "it is not on a branch Archestra opens for a change"
+            ? `it is not on a branch ${archestraMcpBranding.appName} opens for a change`
             : refusal &&
                 Date.now() - refusal.at <
                   // A ruleset that takes the check from another App waits

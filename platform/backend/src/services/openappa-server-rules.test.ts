@@ -1658,6 +1658,18 @@ test("a server's editor attaches a bundled battery to several of their servers i
   expect(preview.after).toMatch(
     /microsoft-learn = \[\s*"guides",\s*"handbook",?\s*\]/,
   );
+  // Pat may not read the organization's policy: the preview keeps only the
+  // lines its diff shows, at their line numbers. An admin sees the file.
+  const full = await previewServerBatteryChange({ ...both, userId: admin.id });
+  expect(full.before).toContain("timeout_ms = 2000");
+  expect(full.diff).toBe(preview.diff);
+  const shown = (text: string) => text.split("\n").filter(Boolean);
+  for (const line of [...shown(preview.before), ...shown(preview.after)])
+    expect(preview.diff).toContain(line);
+  expect(shown(preview.before).length).toBeLessThan(shown(full.before).length);
+  expect(preview.before.split("\n")).toHaveLength(
+    full.before.split("\n").length,
+  );
   // One server alone names no others.
   expect(await previewServerBatteryChange(change)).not.toHaveProperty("others");
 
@@ -1717,7 +1729,7 @@ test("a server's editor attaches a bundled battery to several of their servers i
   );
   expect(pulls[0]?.body).toContain("the tools of guides and handbook");
   expect(trees[0]?.tree.map((file) => file.path)).toEqual(["appa.toml"]);
-  expect(trees[0]?.tree[0]?.content).toBe(preview.after);
+  expect(trees[0]?.tree[0]?.content).toBe(full.after);
   expect(refs[0]?.ref).toMatch(
     /^refs\/heads\/archestra\/openappa-server-guides-/,
   );

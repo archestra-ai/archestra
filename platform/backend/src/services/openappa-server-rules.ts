@@ -443,6 +443,18 @@ async function checkedBatteryChange(params: Caller & ServerBatteryChange) {
     previous: root.content,
   });
   const [first, ...others] = servers;
+  const diff = policyDiff({ before: root.content, after, path: source.path });
+  // A server's editor needs no permission to read the organization's policy:
+  // without it they see only the lines the change touches, with their
+  // context, and the rest of the file stays blank.
+  const shown = (await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "guardrailsPolicy",
+    "read",
+  ))
+    ? { before: root.content, after }
+    : changedLinesOnly({ before: root.content, after, diff: diff.diff });
   return {
     servers: servers as [(typeof servers)[number], ...typeof servers],
     source,
@@ -460,11 +472,40 @@ async function checkedBatteryChange(params: Caller & ServerBatteryChange) {
           }
         : {}),
       path: source.path,
-      before: root.content,
-      after,
-      ...policyDiff({ before: root.content, after, path: source.path }),
+      before: shown.before,
+      after: shown.after,
+      ...diff,
       ...validation,
     },
+  };
+}
+
+/**
+ * Both texts with every line outside the diff's hunks blanked: the change
+ * and its context keep their line numbers, and nothing else is shown.
+ */
+function changedLinesOnly(params: {
+  before: string;
+  after: string;
+  diff: string;
+}): { before: string; after: string } {
+  const kept = { before: new Set<number>(), after: new Set<number>() };
+  for (const [, oldStart, oldCount, newStart, newCount] of params.diff.matchAll(
+    /^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/gm,
+  )) {
+    for (let line = 0; line < Number(oldCount); line++)
+      kept.before.add(Number(oldStart) + line);
+    for (let line = 0; line < Number(newCount); line++)
+      kept.after.add(Number(newStart) + line);
+  }
+  const blank = (text: string, lines: Set<number>) =>
+    text
+      .split("\n")
+      .map((line, index) => (lines.has(index + 1) ? line : ""))
+      .join("\n");
+  return {
+    before: blank(params.before, kept.before),
+    after: blank(params.after, kept.after),
   };
 }
 

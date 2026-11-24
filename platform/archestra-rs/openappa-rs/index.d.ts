@@ -50,6 +50,13 @@ export interface BatteryTargetView {
   setup?: string
 }
 
+/**
+ * Composes each variant line over a document already composed by the host, as a
+ * dispatch would, and says why any of them cannot carry its approvers. Such a line
+ * serves the document alone, and sessions meant for it open on the Enforce line.
+ */
+export declare function checkOpenappaLines(content: string, enforcedMarks: Array<string>): Promise<Array<LineRefusal>>
+
 export interface ChildAddressRecord {
   /** Fully scoped session id of the parent that addressed the child. */
   parentSessionId: string
@@ -257,6 +264,12 @@ export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): 
  * or evaluating any call.
  */
 export declare function inspectOpenappaPolicyTests(input: string): Promise<string>
+
+/** A line that cannot carry its approvers over a composed document. */
+export interface LineRefusal {
+  variant: 'observe' | 'enforce-approved'
+  error: string
+}
 
 /**
  * The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,

@@ -82,6 +82,10 @@ crate-type = ["cdylib"]
 # `describe --check` authoring lint.
 appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3899fca70fed82972a9dbb2a2de53e639a730b1c", features = ["archestra"] }
 appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3899fca70fed82972a9dbb2a2de53e639a730b1c" }
+# The composed policy as the engine reads it, from which the host's approvers are
+# computed (`src/fragments.rs`).
+appa-engine = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3899fca70fed82972a9dbb2a2de53e639a730b1c" }
+appa-policy = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3899fca70fed82972a9dbb2a2de53e639a730b1c" }
 appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3899fca70fed82972a9dbb2a2de53e639a730b1c", features = ["postgres"] }
 appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3899fca70fed82972a9dbb2a2de53e639a730b1c" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }

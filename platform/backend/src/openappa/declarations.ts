@@ -12,6 +12,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import { OpenappaCredentialError } from "@/openappa/failure";
@@ -547,6 +548,26 @@ class OpenAppaDeclarations {
             validate: (text) => native.validateHostedOpenappaPolicy(text),
           }),
         };
+  }
+
+  /**
+   * What a save says about the lines a composed document serves besides
+   * Enforce: a line that cannot carry its approvers serves the document alone,
+   * and sessions meant for it follow Enforce. Composed under the deployment's
+   * enforced marks, as a dispatch composes it.
+   */
+  async lineWarnings(content: string): Promise<string[]> {
+    const native = await loadNative();
+    const { enforcedMarks } = await GuardrailsDeploymentModel.get();
+    const refusals = await native.checkOpenappaLines(
+      content,
+      enforcedMarks ?? [],
+    );
+    return refusals.map(({ variant, error }) =>
+      variant === "observe"
+        ? `Observe can't run with this policy, so new sessions follow Enforce: ${error}`
+        : `Automatic approval for requests a person would answer can't run with this policy, so those requests still ask a person: ${error}`,
+    );
   }
 
   /**

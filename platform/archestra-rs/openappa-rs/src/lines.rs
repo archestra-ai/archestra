@@ -92,7 +92,8 @@ pub(crate) enum Variant {
     EnforceApproved,
 }
 
-const VARIANTS: [Variant; 3] = [Variant::Enforce, Variant::Observe, Variant::EnforceApproved];
+pub(crate) const VARIANTS: [Variant; 3] =
+    [Variant::Enforce, Variant::Observe, Variant::EnforceApproved];
 
 /// Each variant's token as the session pins it. The tokens are constant spellings of the
 /// `LineVariant` grammar, which a test pins.
@@ -103,7 +104,7 @@ static TOKENS: LazyLock<[LineVariant; 3]> = LazyLock::new(|| {
 });
 
 impl Variant {
-    fn token(self) -> &'static str {
+    pub(crate) fn token(self) -> &'static str {
         match self {
             Variant::Enforce => "enforce",
             Variant::Observe => "observe",

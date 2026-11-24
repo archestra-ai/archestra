@@ -289,6 +289,45 @@ describe("guardrails policy authoring", () => {
     );
   });
 
+  test("refuses a policy that declares an approver under a name Archestra reserves", async () => {
+    for (const name of ["archestra-observe", "archestra-person-approval-x"]) {
+      const reserved = `${content}[[policy.authority]]\nname = "${name}"\n[policy.authority.permits]\nattention = ["*"]\n[externals.authorities.${name}]\nbuiltin = "approve"\n`;
+      const validation = await app.inject({
+        method: "POST",
+        url: "/api/guardrails-policy/validate",
+        payload: { content: reserved },
+      });
+      expect(validation.json().valid, name).toBe(false);
+      const save = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-policy",
+        payload: { content: reserved, expectedRevision: 0 },
+      });
+      expect(save.statusCode, name).toBe(400);
+    }
+    expect(await GuardrailsPolicyModel.findLatest(orgId)).toBeNull();
+  });
+
+  test("a policy whose approvers would pass the planner cap saves, and warns that those sessions follow Enforce", async () => {
+    const gated = (cap: number) =>
+      `[policy]\nversion = 2\n[policy.limits]\nplanner_cap = ${cap}\n[[policy.tool]]\nname = "read"\ndelta = {}\nrequires = { attention = ["review"] }\n[[policy.authority]]\nname = "human-approval"\n[policy.authority.permits]\nattention = ["*"]\n[externals.authorities.human-approval]\nbuiltin = "hitl"\n`;
+    const validate = async (text: string) =>
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/guardrails-policy/validate",
+          payload: { content: text },
+        })
+      ).json();
+    expect(await validate(gated(2))).toMatchObject({
+      valid: true,
+      warnings: [],
+    });
+    const capped = await validate(gated(1));
+    expect(capped.valid).toBe(true);
+    expect(capped.warnings).toHaveLength(2);
+  });
+
   test("rejects invalid contracts and container access without replacing a saved policy", async () => {
     await app.inject({
       method: "PUT",

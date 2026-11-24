@@ -21,7 +21,7 @@ use appa_runtime::api::{OpenError, PreparedDeployment, PublishedDeployment, Runt
 use sha2::{Digest, Sha256};
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     sync::{Arc, Mutex, PoisonError},
 };
 
@@ -93,7 +93,13 @@ fn panicked(error: tokio::task::JoinError) -> Fault {
 /// compiled from.
 #[derive(Clone)]
 struct Pinned {
+    /// The saved composition the line's document was composed from.
     content: Arc<str>,
+    /// The marks the line's approvers were composed to leave alone.
+    enforced_marks: Arc<BTreeSet<String>>,
+    /// Why the line serves the saved composition without its approvers. Only roots opening
+    /// later move to Enforce; a family already on the line keeps it, now without approvers.
+    fallback: Option<Arc<str>>,
     /// The composition hash `content` was read under, when the host named one.
     composition: Option<Arc<str>>,
     /// Every variable the compilation looked up, in order.
@@ -112,6 +118,7 @@ impl Pinned {
     /// answer for every variable it looked up.
     fn serves(&self, policy: &HostedPolicy) -> bool {
         *self.content == *policy.content
+            && self.enforced_marks == policy.guardrails.enforced_marks
             && answers_digest(
                 self.variables
                     .iter()
@@ -163,6 +170,23 @@ impl Deployments {
             .pinned(runtime, store, line, policy, agent_yell)
             .await?
             .published)
+    }
+
+    /// Whether `line` serves the saved composition without its approvers, which a new
+    /// session meant for it takes as the reason to open on the Enforce line instead.
+    pub(crate) async fn falls_back(
+        &self,
+        runtime: &Arc<Runtime>,
+        store: &Arc<LogStore>,
+        line: &Line,
+        policy: &HostedPolicy,
+        agent_yell: bool,
+    ) -> Result<bool, DeploymentError> {
+        Ok(self
+            .pinned(runtime, store, line, policy, agent_yell)
+            .await?
+            .fallback
+            .is_some())
     }
 
     /// After a dispatch pinned to `stale` found that its line moved on: the
@@ -309,11 +333,29 @@ fn prepare(
     policy: &HostedPolicy,
     agent_yell: bool,
 ) -> Result<Pinned, DeploymentError> {
+    let served = crate::fragments::compose(
+        &policy.content,
+        line.variant,
+        &policy.guardrails.enforced_marks,
+    );
+    let fallback = served
+        .as_ref()
+        .err()
+        .map(|reason| Arc::<str>::from(reason.as_str()));
+    if let Some(reason) = &fallback {
+        eprintln!(
+            "OpenAPPA: line {} serves the saved policy alone, and new sessions open on the Enforce line: {reason}",
+            line.name()
+        );
+    }
     let CompiledPolicy {
         mut config,
         variables,
         answers,
-    } = compiled(&policy.content, &policy.credentials)?;
+    } = compiled(
+        served.as_deref().unwrap_or(&policy.content),
+        &policy.credentials,
+    )?;
     config.reporting.agent_yell = agent_yell;
     let key = policy_file_key(config.policy_file().bytes());
     let prepared = runtime.prepare_deployment(config).map_err(open_fault)?;
@@ -333,6 +375,8 @@ fn prepare(
         })?;
     let pinned = Pinned {
         content: policy.content.as_str().into(),
+        enforced_marks: policy.guardrails.enforced_marks.clone(),
+        fallback,
         composition: policy.composition.as_deref().map(Into::into),
         answers,
         variables,
@@ -428,10 +472,11 @@ fn answers_digest<'a>(answers: impl Iterator<Item = (&'a str, Option<String>)>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lines::{Family, Variant};
     use appa_eventlog::{Backend, LogStore};
     use appa_runtime::hooks;
     use appa_runtime_api::{
-        Actor, HookDecision, HookEvent, ProposedCall, RefusalClass, TrajectoryId,
+        Actor, HookDecision, HookEvent, ProposedCall, RefusalClass, SessionSettings, TrajectoryId,
     };
 
     const KEY: &str = "APPA_OPENAPPA_RS_TEST_JEV_KEY";
@@ -578,6 +623,178 @@ mod tests {
             .is_ok(),
             "a dispatch naming no composition publishes as before"
         );
+    }
+
+    /// A call that needs a person's attention, which an authority asks a person for.
+    const GATED: &str = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/archestra/review\"\ndelta = {}\nrequires = { attention = [\"review\"] }\n[[policy.authority]]\nname = \"human-approval\"\n[policy.authority.permits]\nattention = [\"*\"]\n[externals.authorities.human-approval]\nbuiltin = \"hitl\"\n";
+
+    fn on_line(
+        deployments: &Deployments,
+        runtime: &TestRuntime,
+        line: &Line,
+    ) -> PublishedDeployment {
+        block_on(deployments.deployment(runtime, &runtime.store, line, &policy(GATED, None), false))
+            .ok()
+            .expect("the line composes and publishes")
+    }
+
+    fn open(runtime: &Runtime, root: &TrajectoryId, settings: SessionSettings) -> HookDecision {
+        block_on(hooks::handle(
+            runtime,
+            HookEvent::SessionStart {
+                root: root.clone(),
+                principal: None,
+                address: None,
+                title: None,
+                start: None,
+                launch: None,
+                settings,
+            },
+        ))
+    }
+
+    fn review(runtime: &Runtime, root: &TrajectoryId) -> HookDecision {
+        block_on(hooks::handle(
+            runtime,
+            HookEvent::ToolCall {
+                call_id: Some(format!("review-{}", root.as_str())),
+                actor: Actor {
+                    root: root.clone(),
+                    child: None,
+                },
+                call: ProposedCall {
+                    tool: "host/archestra/review".into(),
+                    arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
+                    cwd: None,
+                },
+                spawn: None,
+                prompt: None,
+                ruling: None,
+                declares: None,
+            },
+        ))
+    }
+
+    #[test]
+    fn an_observe_family_pins_its_line_and_is_approved_where_enforce_asks_a_person() {
+        let runtime = runtime();
+        let deployments = Deployments::default();
+        let observe = Line {
+            organization_id: "org-a".to_owned(),
+            variant: Variant::Observe,
+        };
+        let observing = runtime.pinned(&on_line(&deployments, &runtime, &observe));
+        let enforcing = runtime.pinned(&on_line(&deployments, &runtime, &enforce("org-a")));
+        let (watched, enforced) = (
+            TrajectoryId("observe-root".into()),
+            TrajectoryId("enforce-root".into()),
+        );
+        assert_eq!(
+            open(
+                &observing,
+                &watched,
+                Family::opening(Variant::Observe).settings
+            ),
+            HookDecision::Ack
+        );
+        assert_eq!(
+            open(
+                &enforcing,
+                &enforced,
+                Family::opening(Variant::Enforce).settings
+            ),
+            HookDecision::Ack
+        );
+
+        let family = Family::of_log("org-a", &runtime.store.log(&watched).unwrap());
+        assert_eq!(family, Some(Family::opening(Variant::Observe)));
+        assert_eq!(
+            family.map(|family| family.settings.auto_apply),
+            Some(appa_runtime_api::AutoApply::RulingsAndAccept)
+        );
+        assert!(
+            matches!(review(&observing, &watched), HookDecision::AllowCall { .. }),
+            "the observe approver clears the attention gap"
+        );
+        assert!(
+            !matches!(
+                review(&enforcing, &enforced),
+                HookDecision::AllowCall { .. }
+            ),
+            "enforce leaves it to the person"
+        );
+        assert!(
+            matches!(review(&enforcing, &watched), HookDecision::Refuse { .. }),
+            "an observe family is never decided on the enforce line"
+        );
+    }
+
+    #[test]
+    fn the_person_approver_line_clears_what_a_person_would_have_been_asked() {
+        let runtime = runtime();
+        let deployments = Deployments::default();
+        let approved = Line {
+            organization_id: "org-a".to_owned(),
+            variant: Variant::EnforceApproved,
+        };
+        let approving = runtime.pinned(&on_line(&deployments, &runtime, &approved));
+        let root = TrajectoryId("unattended-root".into());
+        let settings = Family::opening(Variant::EnforceApproved).settings;
+        assert_eq!(
+            settings.auto_apply,
+            appa_runtime_api::AutoApply::RulingsOnly
+        );
+        assert_eq!(open(&approving, &root, settings), HookDecision::Ack);
+        assert!(matches!(
+            review(&approving, &root),
+            HookDecision::AllowCall { .. }
+        ));
+    }
+
+    #[test]
+    fn an_unpinned_family_follows_the_enforce_line() {
+        let runtime = runtime();
+        let deployments = Deployments::default();
+        let enforcing = runtime.pinned(&on_line(&deployments, &runtime, &enforce("org-a")));
+        let root = TrajectoryId("legacy-root".into());
+        assert_eq!(
+            open(&enforcing, &root, SessionSettings::default()),
+            HookDecision::Ack
+        );
+        assert_eq!(
+            Family::of_log("org-a", &runtime.store.log(&root).unwrap()),
+            Some(Family {
+                variant: Variant::Enforce,
+                settings: SessionSettings::default(),
+            })
+        );
+    }
+
+    #[test]
+    fn a_line_whose_approvers_do_not_fit_falls_back_and_says_so() {
+        let runtime = runtime();
+        let deployments = Deployments::default();
+        let capped = GATED.replace(
+            "[policy]\nversion = 2\n",
+            "[policy]\nversion = 2\n[policy.limits]\nplanner_cap = 1\n",
+        );
+        let observe = Line {
+            organization_id: "org-a".to_owned(),
+            variant: Variant::Observe,
+        };
+        let falls_back = |content: &str| {
+            block_on(deployments.falls_back(
+                &runtime,
+                &runtime.store,
+                &observe,
+                &policy(content, None),
+                false,
+            ))
+            .ok()
+            .expect("the saved policy is served either way")
+        };
+        assert!(!falls_back(GATED));
+        assert!(falls_back(&capped));
     }
 
     #[test]

@@ -245,8 +245,12 @@ export const guardrailsPolicyService = {
           resolution,
         }),
       });
-      if ((composed.content ?? null) === null) errors.push(...composed.errors);
+      const composedContent = composed.content ?? null;
+      if (composedContent === null) errors.push(...composed.errors);
       else {
+        warnings.push(
+          ...(await openappaDeclarations.lineWarnings(composedContent)),
+        );
         const deployed = await deploymentRefusal({
           organizationId,
           content,

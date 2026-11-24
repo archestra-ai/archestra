@@ -2197,8 +2197,10 @@ name = "openappa_rs"
 version = "0.1.0"
 dependencies = [
  "appa",
+ "appa-engine",
  "appa-eventlog",
  "appa-package",
+ "appa-policy",
  "appa-runtime-api",
  "chrono",
  "futures-util",

@@ -17,6 +17,7 @@ module.exports.admitPeerMessage = wrapAsync(binding, "admitPeerMessage");
 module.exports.listPeerMessages = wrapAsync(binding, "listPeerMessages");
 module.exports.readPeerMessage = wrapAsync(binding, "readPeerMessage");
 module.exports.validateHostedOpenappaPolicy = wrapAsync(binding, "validateHostedOpenappaPolicy");
+module.exports.checkOpenappaLines = wrapAsync(binding, "checkOpenappaLines");
 module.exports.replayOpenappaPolicy = wrapAsync(binding, "replayOpenappaPolicy");
 module.exports.inspectOpenappaPolicyTests = wrapAsync(binding, "inspectOpenappaPolicyTests");
 module.exports.getOpenappaReplayEngineVersion = wrapSync(binding, "getOpenappaReplayEngineVersion");

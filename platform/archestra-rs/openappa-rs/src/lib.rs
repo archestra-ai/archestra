@@ -13,6 +13,7 @@ mod declarations;
 pub mod deferred_returns;
 mod deployments;
 mod errors;
+mod fragments;
 mod input;
 mod labels;
 mod lease;
@@ -267,7 +268,12 @@ async fn run(
 ) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
         let state = initialized().await?.encrypted(encryption)?;
-        let (root, family) = state.family(&input, &policy.guardrails)?;
+        let (root, family) = match state.family(&input, &policy.guardrails)? {
+            Routed::Follows { root, family } => (root, family),
+            Routed::Opens { root, variant } => {
+                (root, state.opening(&input, variant, &policy).await?)
+            }
+        };
         let line = lines::Line {
             organization_id: input.organization_id.clone(),
             variant: family.variant,
@@ -296,29 +302,70 @@ async fn initialized() -> napi::Result<State> {
         .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))
 }
 
+/// Where a dispatch decides: in a family that already follows a line, or in a new root
+/// the deployment's settings give a line.
+enum Routed {
+    Follows {
+        root: String,
+        family: lines::Family,
+    },
+    Opens {
+        root: String,
+        variant: lines::Variant,
+    },
+}
+
 impl State {
     /// The root a dispatch for `input` decides in, and the family it belongs to: the one
-    /// that root follows, the one a fork's parent follows, or a new one opening on the
-    /// line the deployment's settings give this session.
-    fn family(
-        &self,
-        input: &Input,
-        guardrails: &lines::Guardrails,
-    ) -> napi::Result<(String, lines::Family)> {
+    /// that root follows, or the one a fork's parent follows. Otherwise a new root opens
+    /// on the line the deployment's settings give this session.
+    fn family(&self, input: &Input, guardrails: &lines::Guardrails) -> napi::Result<Routed> {
         let root = self.dispatch_root(input)?;
         if let Some(family) = self.followed(&input.organization_id, &root)? {
-            return Ok((root, family));
+            return Ok(Routed::Follows { root, family });
         }
         if let Some(fork_of) = &input.fork_of {
             let parent = SessionKey::new(&input.organization_id, fork_of);
             if let Some(parent_root) = recorded_root(&Sql(&self.store), &parent)?
                 && let Some(family) = self.followed(&input.organization_id, &parent_root)?
             {
-                return Ok((root, family));
+                return Ok(Routed::Follows { root, family });
             }
         }
-        let opening = guardrails.opening(input.agent_runtime);
-        Ok((root, lines::Family::opening(opening)))
+        let variant = guardrails.opening(input.agent_runtime);
+        Ok(Routed::Opens { root, variant })
+    }
+
+    /// The family a new root opens: on `variant`'s line, or on the Enforce line when that
+    /// line cannot carry its approvers.
+    async fn opening(
+        &self,
+        input: &Input,
+        variant: lines::Variant,
+        policy: &deployments::HostedPolicy,
+    ) -> napi::Result<lines::Family> {
+        if variant == lines::Variant::Enforce {
+            return Ok(lines::Family::opening(variant));
+        }
+        let line = lines::Line {
+            organization_id: input.organization_id.clone(),
+            variant,
+        };
+        let falls_back = self
+            .deployments
+            .falls_back(
+                &self.runtime,
+                &self.store,
+                &line,
+                policy,
+                self.reporting.is_some(),
+            )
+            .await
+            .map_err(deployment_refusal)?;
+        Ok(lines::Family::opening(match falls_back {
+            true => lines::Variant::Enforce,
+            false => variant,
+        }))
     }
 
     /// The line a started family follows; the Enforce line when `root` names none yet.

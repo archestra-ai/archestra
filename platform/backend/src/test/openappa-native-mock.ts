@@ -46,6 +46,7 @@ export const native = {
     errors: [],
   })),
   validateHostedOpenappaPolicy: vi.fn(async () => []),
+  checkOpenappaLines: vi.fn(async () => []),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
     content: input.root,
     errors: [],

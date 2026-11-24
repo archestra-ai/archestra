@@ -201,6 +201,8 @@ pub(crate) fn validate(content: &str) -> Result<(), String> {
 /// Unlike authored root validation, this admits the host's own token variables.
 /// Keys stay deferred: validation reads no secret and opens no store or connection.
 pub(crate) fn validate_hosted(content: &str) -> Result<(), String> {
+    let document: toml::Table = toml::from_str(content).map_err(|error| error.to_string())?;
+    crate::fragments::refuse_reserved_authorities(&document)?;
     let config =
         Config::hosted_included_deferred(content, defaults(), |_| Err(IncludeResolution::Unknown))
             .map_err(|error| error.to_string())?;
@@ -288,6 +290,8 @@ pub(crate) fn compose_with_rosters(
     let content = String::from_utf8(config.policy_file().bytes().to_vec())
         .map_err(|error| error.to_string())?;
     let content = strip_default_result_cap(&document, content)?;
+    let composed: toml::Table = toml::from_str(&content).map_err(|error| error.to_string())?;
+    crate::fragments::refuse_reserved_authorities(&composed)?;
     let credentials = config.credentials().clone();
     Runtime::check_hosted(config, None, crate::adapter::adapter())
         .map_err(|error| error.to_string())?;

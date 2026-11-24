@@ -220,6 +220,43 @@ pub async fn validate_hosted_openappa_policy(content: String) -> napi::Result<Ve
     .map_err(panicked)?
 }
 
+/// A line that cannot carry its approvers over a composed document.
+#[napi(object)]
+pub struct LineRefusal {
+    #[napi(ts_type = "'observe' | 'enforce-approved'")]
+    pub variant: String,
+    pub error: String,
+}
+
+/// Composes each variant line over a document already composed by the host, as a
+/// dispatch would, and says why any of them cannot carry its approvers. Such a line
+/// serves the document alone, and sessions meant for it open on the Enforce line.
+#[napi(js_name = "checkOpenappaLines")]
+pub async fn check_openappa_lines(
+    content: String,
+    enforced_marks: Vec<String>,
+) -> napi::Result<Vec<LineRefusal>> {
+    let enforced: std::collections::BTreeSet<String> = enforced_marks.into_iter().collect();
+    tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| {
+            crate::lines::VARIANTS
+                .into_iter()
+                .filter_map(|variant| {
+                    crate::fragments::compose(&content, variant, &enforced)
+                        .err()
+                        .map(|error| LineRefusal {
+                            variant: variant.token().to_owned(),
+                            error,
+                        })
+                })
+                .collect()
+        })
+        .map_err(|_| panicked("OpenAPPA line check failed"))
+    })
+    .await
+    .map_err(panicked)?
+}
+
 #[napi(object)]
 pub struct HelperBindingInput {
     /// The endpoint every `command` external of the battery is served under; the

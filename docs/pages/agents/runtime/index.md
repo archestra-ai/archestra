@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-20
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,7 +27,7 @@ You can pick the runtimes an administrator lets you use, in addition to needing 
 
 ![The Configuration step with Claude Code selected in the Runtime picker](/docs/automated_screenshots/agents-runtime_runtime-picker.webp)
 
-Already have an agent? Open it, turn on **Dedicated runtime** on its **Agent Runtime** tab, and click **Save changes**.
+Already have an agent? Open it, turn on **Dedicated runtime** on its **Agent Runtime** tab, and click **Save changes**. Once an agent has a dedicated runtime, it keeps its runtime; create another agent for regular conversations.
 
 From a connected client, ask your agent to create one. [`create_agent`](/docs/reference/archestra-mcp-server#create_agent) takes the same choice as `runtime: { "template": "claude-code" }`, or a custom `image`. [`list_llm_models`](/docs/reference/archestra-mcp-server#list_llm_models) finds a model to pin.
 
@@ -45,10 +45,10 @@ Each change saves as you make it. The Create Agent cards and Configuration runti
 Decide once how a runtime's agents start, such as whether Claude Code bills each person's Claude subscription or a company API key. This uses [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
 1. Go to **Settings → Agents → Runtimes**, open a runtime's **⋯** menu, and click **Edit runtime**.
-2. Under **Runtime settings**, set its defaults. A built-in runtime has **Claude account** (Claude Code only), run limits, and tiers. A custom runtime also has its image, protocol, and follow-up delivery.
+2. Under **Runtime settings**, set its allowed accounts, run limits, and container tiers. A custom runtime also has its container image, launch command, inference API, and follow-up delivery.
 3. Click **Save runtime**.
 
-Saved settings apply to agents created afterwards. To bring existing agents up to date, reopen the runtime: **Existing agents** shows how many still use older settings, and **Update** gives them the saved ones.
+Account rules apply immediately to existing agents on save. Other saved settings apply to agents created afterwards. To bring existing agents up to date, reopen the runtime: **Existing agents** shows how many still use older settings, and **Update** applies the saved limits (idle timeout, maximum duration, LLM budget, and container tiers)—and for custom runtimes, the saved container image, launch command, inference API, and follow-up delivery. Built-in runtime images update automatically with each release.
 
 - Each agent keeps its own environment, credentials, ports, and model.
 - An update is refused, naming the agents, when the new settings would no longer work with an agent's model. Change that agent's model first.
@@ -76,7 +76,7 @@ If you change a custom image or the **Privileged mode** setting, which grants ac
 
 Each run gets a temporary virtual key. Provider keys stay in Archestra.
 
-- **Claude Code:** your Claude Pro or Max subscription, or an API key for Anthropic, Amazon Bedrock, or Anthropic on Vertex AI.
+- **Claude Code:** your Claude Pro or Max subscription, connected under **Model Providers**, or an API key for Anthropic, Amazon Bedrock, or Anthropic on Vertex AI.
 - **Codex:** your ChatGPT subscription, connected under **Model Providers**. An OpenAI API key does not replace it.
 - **Grok Build:** your SuperGrok subscription, connected under **Model Providers**, or an xAI API key. Pick an xAI model, such as `grok-4.7`.
 - **Kimi Code:** a Kimi Code membership key, added as a Kimi Code key under **Model Providers**, for yourself or shared with a team. Pick a Kimi Code model, such as `k3.1-pro`.

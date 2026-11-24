@@ -48,8 +48,11 @@ export function validationPathOf(entry: string | null): string | null {
     : null;
 }
 
-/** The Policy page opened directly to a validation file, or to the Policy root when none is named. */
-export function validationPolicyHref(path?: string | null): string {
-  if (!path) return "/openappa/policy";
-  return `/openappa/policy?${new URLSearchParams({ entry: validationEntry(path) })}`;
+/** The file workspace over the policy: unlisted, beside the Policy page. */
+export const POLICY_WORKSPACE_PATH = "/openappa/policy/workspace";
+
+/** The Validations page opened to a validation file, or to the list when none is named. */
+export function validationHref(path?: string | null): string {
+  if (!path) return "/openappa/validation";
+  return `/openappa/validation/file?${new URLSearchParams({ path })}`;
 }

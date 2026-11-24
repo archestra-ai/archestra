@@ -98,7 +98,7 @@ export function AgentAdoptionUsers({ window }: { window: ConnectionsWindow }) {
             id="adoption-users"
             className="scroll-mt-16 text-sm font-semibold"
           >
-            Who has connected
+            User connections
           </h2>
           <p className="text-xs text-muted-foreground">
             Only agents users connect themselves count, like Claude Code or

@@ -155,9 +155,9 @@ export function ConnectPage() {
   // the switches below.
   const [picks, setPicks] = useState<ConnectPicks>(DEFAULT_PICKS);
   const connected = useConnectedAgents();
-  // Same access as the Adoption page it links to.
+  // Same access as the Agent connections log it links to.
   const { data: canSeeStatistics } = useHasPermissions(
-    requiredPagePermissionsMap["/adoption"] ?? {},
+    requiredPagePermissionsMap["/connections/logs"] ?? {},
   );
   // Links (connect.md, docs) can open the page on an app. Picks are written
   // back.
@@ -243,7 +243,7 @@ export function ConnectPage() {
                 size="sm"
                 className="shadow-xs dark:bg-background"
               >
-                <Link href="/adoption">
+                <Link href="/connections/logs">
                   <ChartColumn />
                   Statistics
                 </Link>

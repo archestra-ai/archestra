@@ -37,11 +37,11 @@ for (const width of [320, 360, 640, 768, 1024, 1280]) {
       });
     }
 
-    test("/adoption Coverage keeps its time range with its filters", async ({
+    test("/llm/logs keeps its time range with its filters", async ({
       page,
     }) => {
-      await page.goto("/adoption?view=coverage");
-      const heading = page.getByRole("heading", { level: 1, name: "Adoption" });
+      await page.goto("/llm/logs");
+      const heading = page.getByRole("heading", { level: 1, name: "Logs" });
       await expect(heading).toBeVisible();
       const header = page.locator("[data-page-header]");
       const actions = header.locator("[data-page-actions]");
@@ -55,15 +55,13 @@ for (const width of [320, 360, 640, 768, 1024, 1280]) {
         await expect(actions).toHaveCount(0);
         await page.getByRole("button", { name: "Filters" }).click();
         await expect(
-          page
-            .getByRole("dialog")
-            .getByRole("button", { name: /Last 30 days/ }),
+          page.getByRole("dialog").getByRole("button", { name: /Any time/ }),
         ).toBeVisible();
         await page.keyboard.press("Escape");
       } else {
         // The time range is the header's only action: no permissions here.
         await expect(
-          actions.getByRole("button", { name: /Last 30 days/ }),
+          actions.getByRole("button", { name: /Any time/ }),
         ).toBeVisible();
         await expect(
           actions.getByRole("button", { name: /Permissions/ }),

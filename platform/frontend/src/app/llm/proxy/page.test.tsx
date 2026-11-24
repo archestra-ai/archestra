@@ -15,7 +15,12 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useProviderBaseUrls } from "@/lib/config/config.query";
+import { copyToClipboard } from "@/lib/clipboard";
+import {
+  useEnterpriseFeature,
+  useFeature,
+  useProviderBaseUrls,
+} from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
   useOrganization,
@@ -25,8 +30,8 @@ import LlmProxyPage from "./page";
 // Keep a missing MSW handler away from the developer's running backend.
 const API_ORIGIN = "http://127.0.0.1:1";
 
-// The credential picker is a Radix Select, which needs pointer capture and
-// scrollIntoView that jsdom lacks.
+// Radix Select and DropdownMenu need pointer capture and scrollIntoView,
+// which jsdom lacks.
 Element.prototype.scrollIntoView = vi.fn();
 Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
 Element.prototype.setPointerCapture = vi.fn();
@@ -35,10 +40,105 @@ Element.prototype.releasePointerCapture = vi.fn();
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
+
+const ANTHROPIC_KEY = {
+  id: "pk-anthropic",
+  name: "Team",
+  provider: "anthropic",
+  scope: "org",
+  requiresReauthentication: false,
+};
+const JEV_KEY = {
+  id: "pk-jev",
+  name: "TypeSafe",
+  provider: "jev",
+  scope: "org",
+  requiresReauthentication: true,
+};
+const JUDGE_KEY = {
+  id: "vk-judge",
+  name: "Judge pipeline",
+  keyType: "standard",
+  tokenStart: "arch_ab",
+  authorId: "user-1",
+  providerApiKeys: [
+    {
+      provider: "jev",
+      providerApiKeyId: "pk-jev",
+      providerApiKeyName: "TypeSafe",
+    },
+  ],
+};
+const POOL = {
+  id: "pool-1",
+  name: "claude-sonnet",
+  virtualApiKeyIds: [],
+  members: [
+    { provider: "anthropic", priority: 0, enabled: true },
+    { provider: "bedrock", priority: 1, enabled: true },
+  ],
+};
+const ROUTER = {
+  id: "router-1",
+  name: "auto",
+  virtualApiKeyIds: [],
+  tiers: {
+    fast: { provider: "gemini", modelId: "flash" },
+    normal: { provider: "anthropic", modelId: "haiku" },
+    smart: { provider: "anthropic", modelId: "sonnet" },
+  },
+};
+
+let providerKeys: unknown[] = [];
+let standardKeys: unknown[] = [];
+let passthroughKeys: unknown[] = [];
+let standardTotal: number | undefined;
 
 const server = setupServer(
   http.get(`${API_ORIGIN}/api/llm-proxy`, () =>
     HttpResponse.json({ id: "proxy-1", identityProviderId: null }),
+  ),
+  http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+    HttpResponse.json(providerKeys),
+  ),
+  http.get(`${API_ORIGIN}/api/llm-models`, () => HttpResponse.json([])),
+  http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
+    HttpResponse.json([
+      {
+        id: "claude-a",
+        dbId: "m-a",
+        displayName: "Claude A",
+        provider: "anthropic",
+        isFree: false,
+      },
+      {
+        id: "claude-b",
+        dbId: "m-b",
+        displayName: "Claude B",
+        provider: "anthropic",
+        isFree: false,
+      },
+    ]),
+  ),
+  http.get(`${API_ORIGIN}/api/llm-virtual-keys`, ({ request }) => {
+    const keyType = new URL(request.url).searchParams.get("keyType");
+    return HttpResponse.json(
+      keyType === "standard"
+        ? page(standardKeys, standardTotal)
+        : page(passthroughKeys),
+    );
+  }),
+  http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
+    HttpResponse.json(page([])),
+  ),
+  http.get(`${API_ORIGIN}/api/model-pools`, () => HttpResponse.json([])),
+  http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
+    HttpResponse.json([]),
+  ),
+  http.get(`${API_ORIGIN}/api/limits`, () => HttpResponse.json([])),
+  http.get(`${API_ORIGIN}/api/guardrails-deployment`, () =>
+    HttpResponse.json({ enabled: false, featureEnabled: true, active: false }),
   ),
 );
 
@@ -48,6 +148,33 @@ beforeAll(() => {
 });
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  providerKeys = [ANTHROPIC_KEY, JEV_KEY];
+  standardKeys = [JUDGE_KEY];
+  passthroughKeys = [];
+  standardTotal = undefined;
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+    isPending: false,
+  } as unknown as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useOrganization).mockReturnValue({
+    data: null,
+  } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as unknown as ReturnType<typeof useSession>);
+  vi.mocked(useProviderBaseUrls).mockReturnValue({
+    data: {},
+  } as unknown as ReturnType<typeof useProviderBaseUrls>);
+  vi.mocked(useFeature).mockReturnValue(true);
+  vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+});
 
 function renderPage() {
   const queryClient = new QueryClient({
@@ -60,688 +187,505 @@ function renderPage() {
   );
 }
 
-describe("LlmProxyPage provider dropdown", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: false,
-      isPending: false,
-    } as unknown as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useOrganization).mockReturnValue({
-      data: null,
-    } as unknown as ReturnType<typeof useOrganization>);
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "user-1" } },
-    } as unknown as ReturnType<typeof useSession>);
-  });
+function linkedModel(modelId: string, provider: string, apiKeyId: string) {
+  return {
+    id: `db-${modelId}`,
+    modelId,
+    provider,
+    apiKeys: [{ id: apiKeyId }],
+    ignored: false,
+    embeddingDimensions: null,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    supportedEndpoints: null,
+  };
+}
 
-  it("defaults to the Unified Model API endpoint", async () => {
+function card(name: string) {
+  return screen.getByRole("region", { name });
+}
+
+describe("LLM Proxy dashboard", () => {
+  it("links each item to its own page, opening it there", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/model-pools`, () =>
+        HttpResponse.json([POOL]),
+      ),
+      http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
+        HttpResponse.json([ROUTER]),
+      ),
+      // The models each key brings, Jev's decision model among them.
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          linkedModel("claude-a", "anthropic", ANTHROPIC_KEY.id),
+          linkedModel("claude-b", "anthropic", ANTHROPIC_KEY.id),
+          { ...linkedModel("jev-1", "jev", JEV_KEY.id), outputModalities: [] },
+        ]),
+      ),
+    );
     renderPage();
 
+    // A provider opens the Models page, filtered to its key.
+    const anthropic = await screen.findByRole("link", { name: /Anthropic/ });
+    expect(anthropic).toHaveAttribute(
+      "href",
+      "/llm/models?apiKey=pk-anthropic",
+    );
     expect(
-      await screen.findByText("http://localhost:3000/v1/unified-model"),
+      await within(anthropic).findByLabelText("2 models"),
     ).toBeInTheDocument();
+    // A key that must be signed in again is marked on its provider.
+    const jev = screen.getByRole("link", { name: /Jev/ });
+    expect(
+      within(jev).getByLabelText("Needs reconnecting"),
+    ).toBeInTheDocument();
+    expect(within(jev).getByLabelText("1 model")).toBeInTheDocument();
+
+    expect(
+      await screen.findByRole("link", { name: /claude-sonnet/ }),
+    ).toHaveAttribute(
+      "href",
+      `/llm/model-pools?search=claude-sonnet&edit=${POOL.id}`,
+    );
+    expect(screen.getByRole("link", { name: /Router\s*auto/ })).toHaveAttribute(
+      "href",
+      "/llm/auto-routing/router-1",
+    );
+    expect(
+      await screen.findByRole("link", { name: /Judge pipeline/ }),
+    ).toHaveAttribute(
+      "href",
+      "/llm/proxy/virtual-keys?keyType=standard&search=Judge%20pipeline&edit=vk-judge",
+    );
+    // Set up: no "Not set up" badges.
+    expect(screen.queryByText("Not set up")).not.toBeInTheDocument();
   });
 
-  it("searches the long-tail providers and switches the endpoint on selection", async () => {
+  it("sends Manage on pools and routers to either page", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    const moreTrigger = await screen.findByRole("combobox", {
-      name: "More providers",
-    });
-    await user.click(moreTrigger);
-
-    // Unfiltered, the long-tail list is reachable — the exact set the old
-    // hand-rolled combobox listed behind the "…" tab.
-    expect(await screen.findByText("Cohere")).toBeInTheDocument();
-    expect(screen.getByText("Mistral AI")).toBeInTheDocument();
-
-    // Each entry renders its provider logo, matching the canonical provider
-    // dropdown used elsewhere (e.g. the Add API Key form) rather than a bare
-    // text list. Radix portals the popover content onto document.body, so
-    // search from there rather than the render container.
-    expect(document.querySelector('img[src*="mistral"]')).toBeInTheDocument();
-    expect(document.querySelector('img[src*="cohere"]')).toBeInTheDocument();
-
-    await user.type(screen.getByPlaceholderText("Search providers..."), "mist");
-
-    await waitFor(() => {
-      expect(screen.queryByText("Cohere")).not.toBeInTheDocument();
-    });
-    const mistralOption = screen.getByText("Mistral AI");
-    expect(mistralOption).toBeInTheDocument();
-
-    await user.click(mistralOption);
-
-    // Selecting from the dropdown repoints the endpoint and shows the choice in
-    // the dropdown itself; the tabs stay as they were.
+    await user.click(
+      within(
+        await screen.findByRole("region", { name: "Pools and routers" }),
+      ).getByRole("button", { name: "Manage" }),
+    );
     expect(
-      await screen.findByText("http://localhost:3000/v1/mistral"),
-    ).toBeInTheDocument();
+      await screen.findByRole("menuitem", { name: "Model Pools" }),
+    ).toHaveAttribute("href", "/llm/model-pools");
     expect(
-      screen.queryByRole("button", { name: "Mistral AI" }),
+      screen.getByRole("menuitem", { name: "Auto Routing" }),
+    ).toHaveAttribute("href", "/llm/auto-routing");
+  });
+
+  it("sends the rest of the keys to the keys page instead of growing the card", async () => {
+    standardTotal = 2003;
+    standardKeys = [
+      JUDGE_KEY,
+      { ...JUDGE_KEY, id: "vk-2", name: "Two" },
+      { ...JUDGE_KEY, id: "vk-3", name: "Three" },
+    ];
+    renderPage();
+
+    expect(
+      await screen.findByRole("link", { name: "+2000 more" }),
+    ).toHaveAttribute("href", "/llm/proxy/virtual-keys?keyType=standard");
+  });
+
+  it("marks a key that has used 80% of its spend limit", async () => {
+    standardKeys = [JUDGE_KEY, { ...JUDGE_KEY, id: "vk-cheap", name: "Cheap" }];
+    server.use(
+      http.get(`${API_ORIGIN}/api/limits`, () =>
+        HttpResponse.json([
+          spendLimit("vk-judge", 500, 452),
+          spendLimit("vk-cheap", 500, 96),
+        ]),
+      ),
+    );
+    renderPage();
+
+    const judge = await screen.findByRole("link", { name: /Judge pipeline/ });
+    await waitFor(() =>
+      expect(within(judge).getByLabelText("Near budget")).toBeInTheDocument(),
+    );
+    expect(judge).toHaveAttribute("title", "$452.00 of $500.00 used");
+    expect(
+      within(screen.getByRole("link", { name: /Cheap/ })).queryByLabelText(
+        "Near budget",
+      ),
     ).not.toBeInTheDocument();
-    expect(moreTrigger).toHaveTextContent("Mistral AI");
+  });
 
-    // Picking a tab resets the dropdown to its placeholder.
-    await user.click(screen.getByRole("button", { name: "OpenAI" }));
-    expect(moreTrigger).toHaveTextContent(/More providers \(\d+\)/);
+  it("shows no Guardrails state while it is unknown", async () => {
+    // With the feature off, the status is never read.
+    vi.mocked(useFeature).mockReturnValue(false);
+    renderPage();
+
+    const guardrails = await screen.findByRole("region", {
+      name: "Guardrails",
+    });
+    expect(guardrails).toHaveTextContent("Deterministic data leak prevention");
+    expect(guardrails).not.toHaveTextContent("Not configured");
+    expect(guardrails).not.toHaveTextContent("Enforced");
+  });
+
+  it("shows Guardrails as enforced when it is turned on", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/guardrails-deployment`, () =>
+        HttpResponse.json({
+          enabled: true,
+          featureEnabled: true,
+          active: true,
+        }),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText("Enforced")).toBeInTheDocument();
+    expect(
+      within(card("Guardrails")).getByRole("link", { name: "Configure" }),
+    ).toHaveAttribute("href", "/openappa");
   });
 });
 
-describe("LlmProxyPage connect steps", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useAppearanceSettings).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-    } as unknown as ReturnType<typeof useAppearanceSettings>);
-    vi.mocked(useProviderBaseUrls).mockReturnValue({
-      data: {},
-    } as unknown as ReturnType<typeof useProviderBaseUrls>);
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: true,
-      isPending: false,
-    } as unknown as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useOrganization).mockReturnValue({
-      data: null,
-    } as unknown as ReturnType<typeof useOrganization>);
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "user-1" } },
-    } as unknown as ReturnType<typeof useSession>);
+describe("LLM Proxy dashboard for a member", () => {
+  it("shows the real Guardrails state and skips reads a member cannot make", async () => {
+    // A member reads none of organization settings, limits or identity providers.
+    const memberLacks = [
+      "organizationSettings",
+      "llmLimit",
+      "identityProvider",
+    ];
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !memberLacks.some((resource) => resource in permissions),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+    const limitsRequested = vi.fn();
+    const identityProvidersRequested = vi.fn();
     server.use(
-      http.get(`${API_ORIGIN}/api/llm-models`, () => HttpResponse.json([])),
-      http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
-        HttpResponse.json([]),
+      http.get(`${API_ORIGIN}/api/guardrails-deployment`, () =>
+        HttpResponse.json({
+          enabled: true,
+          featureEnabled: true,
+          active: true,
+        }),
       ),
-      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, ({ request }) =>
-        HttpResponse.json(
-          page(
-            new URL(request.url).searchParams.get("keyType") === "standard"
-              ? [JUDGE_KEY]
-              : [],
-          ),
-        ),
-      ),
-    );
-  });
-
-  it.each([
-    "standard",
-    "passthrough",
-  ] as const)("selects image examples by capabilities for %s credentials and restores text requests", async (keyType) => {
-    const mapping = {
-      provider: "gemini",
-      providerApiKeyId: "pk-gemini",
-      providerApiKeyName: "Studio",
-    };
-    const models = [
-      {
-        modelId: "gemini-nano-banana-2.1",
-        outputModalities: ["text", "image"],
-        isBest: true,
-      },
-      { modelId: "gemini-2.5-flash-image", outputModalities: ["image"] },
-      { modelId: "gemini-3-pro-image", outputModalities: ["text", "image"] },
-      { modelId: "gemini-3.1-flash-image", outputModalities: ["image"] },
-      { modelId: "gemini-3.8-flash", outputModalities: ["text"] },
-      {
-        modelId: "gemini-other-key",
-        outputModalities: ["image"],
-        unmapped: true,
-      },
-    ].map(({ unmapped, ...model }) => ({
-      ...model,
-      provider: "gemini",
-      ignored: false,
-      embeddingDimensions: null,
-      inputModalities: ["text", "image"],
-      apiKeys: [{ id: unmapped ? "other-key" : mapping.providerApiKeyId }],
-    }));
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([
-          {
-            ...JEV_PROVIDER_KEY,
-            id: mapping.providerApiKeyId,
-            name: "Studio",
-            provider: "gemini",
-          },
-        ]),
-      ),
-      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, ({ request }) =>
-        HttpResponse.json(
-          page(
-            new URL(request.url).searchParams.get("keyType") === "passthrough"
-              ? [PASSTHROUGH_KEY]
-              : [{ ...JUDGE_KEY, providerApiKeys: [mapping] }],
-          ),
-        ),
-      ),
-      http.get(`${API_ORIGIN}/api/llm-models`, () => HttpResponse.json(models)),
-      http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
-        HttpResponse.json(
-          models
-            .filter((model) => model.modelId !== "gemini-other-key")
-            .map((model) => ({
-              id: model.modelId,
-              provider: model.provider,
-              isBest: model.isBest,
-              capabilities: { outputModalities: model.outputModalities },
-            })),
-        ),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await user.click(await screen.findByRole("button", { name: "Gemini" }));
-    if (keyType === "passthrough") {
-      await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
-    }
-    const requestBlock = (
-      await screen.findByText(/gemini-nano-banana-2.1:generateContent/)
-    ).closest("pre");
-    expect(requestBlock).toHaveTextContent('"responseModalities": [');
-    expect(requestBlock).toHaveTextContent('"IMAGE"');
-    expect(requestBlock).not.toHaveTextContent("Hello!");
-    if (keyType === "passthrough") {
-      expect(requestBlock).toHaveTextContent("x-goog-api-key: $GEMINI_API_KEY");
-      expect(requestBlock).toHaveTextContent("X-Archestra-Virtual-Key:");
-    }
-    expect(screen.getByText(/base64 image data/)).toBeVisible();
-    expect(screen.queryByLabelText("Image operation")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("combobox", { name: "Model" }));
-    expect(
-      screen.getByRole("option", { name: "gemini-2.5-flash-image" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("option", { name: "gemini-3-pro-image" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("option", { name: "gemini-3.1-flash-image" }),
-    ).toBeVisible();
-    expect(
-      screen.queryByRole("option", { name: "gemini-other-key" }),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("option", { name: "gemini-3.8-flash" }));
-    const textBlock = (
-      await screen.findByText(/gemini-3.8-flash:generateContent/)
-    ).closest("pre");
-    expect(textBlock).toHaveTextContent("Hello!");
-    expect(textBlock).not.toHaveTextContent("responseModalities");
-    expect(screen.queryByText(/base64 image data/)).not.toBeInTheDocument();
-  });
-
-  it("connects to Jev with the existing virtual key that maps the Jev key", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([
-          JEV_PROVIDER_KEY,
-          { ...JEV_PROVIDER_KEY, id: "pk-jev-2", name: "Via OpenRouter" },
-        ]),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await selectJev(user);
-
-    // Jev has one endpoint, so the tab shows the full decisions URL rather
-    // than a base URL a client appends `/chat/completions` to.
-    expect(
-      await screen.findByText("http://localhost:3000/v1/jev/decisions"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: /Send a request/ }),
-    ).toBeInTheDocument();
-    // With a key in place there is no provider-key step; the virtual key
-    // says which provider key its requests use.
-    expect(await screen.findByText("Jev · TypeSafe")).toBeInTheDocument();
-    // Someone else's key shows masked on its own line, with no way to reveal it.
-    expect(screen.getByText("arch_ab••••••••••••")).toBeInTheDocument();
-    expect(
-      screen.getByText("Only its author can reveal this key."),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Show key" })).toBeNull();
-    expect(screen.queryByText("Provider key")).not.toBeInTheDocument();
-
-    // The request posts a decision with the saved key read from the env.
-    const request = await findRequest();
-    expect(request).toContain(
-      "Authorization: Bearer $ARCHESTRA_LLM_VIRTUAL_KEY",
-    );
-    expect(request).toContain('"model": "jev-1.13.0"');
-  });
-
-  it("puts providers that have a key first in the tab row", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-    );
-    renderPage();
-
-    const jevTab = await screen.findByRole("button", { name: "Jev" });
-    const openAiTab = screen.getByRole("button", { name: "OpenAI" });
-    expect(
-      jevTab.compareDocumentPosition(openAiTab) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("starts a new virtual key with one key per provider, as a key allows", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([
-          JEV_PROVIDER_KEY,
-          { ...JEV_PROVIDER_KEY, id: "pk-jev-2", name: "Via OpenRouter" },
-        ]),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await selectJev(user);
-
-    await chooseCreateVirtualKey(user);
-    const dialog = await screen.findByRole("dialog", {
-      name: "New virtual key for Jev",
-    });
-    // The provider picker is already expanded; both keys are offered, but a
-    // virtual key maps only one per provider.
-    await user.click(
-      await within(dialog).findByRole("combobox", { name: "Jev key" }),
-    );
-    expect(
-      await screen.findByRole("option", { name: /^TypeSafe/ }),
-    ).toHaveAttribute("aria-selected", "true");
-    expect(
-      screen.getByRole("option", { name: /^Via OpenRouter/ }),
-    ).toHaveAttribute("aria-selected", "false");
-  });
-
-  it("fills a key created here into the request", async () => {
-    const created = {
-      ...JUDGE_KEY,
-      id: "vk-new",
-      name: "Fresh key",
-      value: "arch_fresh_secret_value",
-    };
-    let keys = [JUDGE_KEY];
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
-        HttpResponse.json(page(keys)),
-      ),
-      http.post(`${API_ORIGIN}/api/llm-virtual-keys`, () => {
-        keys = [JUDGE_KEY, created];
-        return HttpResponse.json(created);
+      http.get(`${API_ORIGIN}/api/limits`, () => {
+        limitsRequested();
+        return HttpResponse.json([]);
+      }),
+      http.get(`${API_ORIGIN}/api/identity-providers`, () => {
+        identityProvidersRequested();
+        return HttpResponse.json([]);
       }),
     );
-    const user = userEvent.setup();
     renderPage();
-    await selectJev(user);
 
-    await chooseCreateVirtualKey(user);
-    const dialog = await screen.findByRole("dialog", {
-      name: "New virtual key for Jev",
-    });
-    // Defaults are enough: walk Key and Budget, then create from Review.
-    await user.click(
-      within(dialog).getByRole("button", { name: "Create key" }),
-    );
-
-    // No separate reveal dialog: the new key is selected and sits in the
-    // request masked until the reader asks to see it.
+    expect(await screen.findByText("Enforced")).toBeInTheDocument();
     expect(
-      await screen.findByRole("combobox", { name: "Virtual key" }),
-    ).toHaveTextContent("Fresh key");
-    expect(await screen.findByText("Jev · TypeSafe")).toBeInTheDocument();
-    expect(await findRequest()).not.toContain("arch_fresh_secret_value");
-    // The key's own field; revealing it reveals the request too.
-    await user.click(screen.getAllByRole("button", { name: "Show key" })[0]);
-    await waitFor(async () => {
-      expect(await findRequest()).toContain(
-        "Authorization: Bearer arch_fresh_secret_value",
-      );
-    });
+      within(card("Virtual keys")).queryByRole("link", {
+        name: /Identity providers/,
+      }),
+    ).not.toBeInTheDocument();
+    expect(limitsRequested).not.toHaveBeenCalled();
+    expect(identityProvidersRequested).not.toHaveBeenCalled();
+  });
+});
+
+describe("LLM Proxy dashboard, new organization", () => {
+  beforeEach(() => {
+    providerKeys = [];
+    standardKeys = [];
   });
 
-  it("lists and picks the reader's own keys before anyone else's", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
-        HttpResponse.json(
-          page([
-            JUDGE_KEY,
-            {
-              ...JUDGE_KEY,
-              id: "vk-mine",
-              name: "My key",
-              tokenStart: "arch_me",
-              authorId: "user-1",
-            },
-          ]),
-        ),
-      ),
+  it("offers the providers to add a key for, inline", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const providers = await screen.findByRole("region", {
+      name: "Providers and models",
+    });
+    expect(
+      await within(providers).findByText("Not set up"),
+    ).toBeInTheDocument();
+    expect(
+      within(card("Pools and routers")).getByText("Optional"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/No provider key yet/)).toBeInTheDocument();
+    // A key needs a provider key to map, so creating one waits for it.
+    expect(
+      within(card("Virtual keys")).getAllByRole("button", {
+        name: "+ Create key",
+      })[0],
+    ).toBeDisabled();
+
+    // "+N more" opens the rest in the card, without leaving the page.
+    const more = within(providers).getByRole("button", {
+      name: /^\+\d+ more$/,
+    });
+    await user.click(more);
+    expect(more).toHaveTextContent("Show less");
+    expect(
+      within(providers).getByRole("button", { name: "Mistral AI" }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(providers).getByRole("button", { name: "Anthropic" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Add Anthropic API Key" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers GitHub Copilot as a personal or an organization subscription", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "GitHub Copilot" }),
+    );
+    const items = await screen.findAllByRole("menuitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent("Personal subscription");
+  });
+
+  it("offers only a personal Copilot subscription to someone who cannot add org keys", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmProviderApiKey?.includes("create"),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useHasPermissions>,
     );
     const user = userEvent.setup();
     renderPage();
-    await selectJev(user);
 
-    // Picked by default, so it can be revealed.
-    expect(await screen.findByText("arch_me••••••••••••")).toBeInTheDocument();
-    await user.click(screen.getByRole("combobox", { name: "Virtual key" }));
-    const options = screen.getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual(["My key", "Judge pipeline"]);
-    expect(screen.getByText("Your keys")).toBeInTheDocument();
-    expect(screen.getByText("Other keys")).toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("button", { name: "GitHub Copilot" }),
+    );
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
+  });
+});
+
+describe("LLM Proxy dashboard endpoint", () => {
+  it("asks for a pool the key calls before any one model", async () => {
+    standardKeys = [
+      {
+        ...JUDGE_KEY,
+        providerApiKeys: [
+          {
+            provider: "anthropic",
+            providerApiKeyId: ANTHROPIC_KEY.id,
+            providerApiKeyName: ANTHROPIC_KEY.name,
+          },
+        ],
+      },
+    ];
+    server.use(
+      http.get(`${API_ORIGIN}/api/model-pools`, () =>
+        HttpResponse.json([{ ...POOL, virtualApiKeyIds: [JUDGE_KEY.id] }]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          linkedModel("claude-a", "anthropic", ANTHROPIC_KEY.id),
+        ]),
+      ),
+    );
+    renderPage();
+
+    const url = await screen.findByText(
+      /\/v1\/unified-model\/chat\/completions \\/,
+    );
+    await waitFor(() =>
+      expect(url.closest("pre")).toHaveTextContent(
+        `-d '{"model": "claude-sonnet", `,
+      ),
+    );
   });
 
-  it("reveals the reader's own key in the request on demand", async () => {
+  it("builds the request from the format and copies it with the reader's real key", async () => {
     server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
-        HttpResponse.json(page([{ ...JUDGE_KEY, authorId: "user-1" }])),
-      ),
       http.get(`${API_ORIGIN}/api/llm-virtual-keys/vk-judge/value`, () =>
         HttpResponse.json({ value: "arch_judge_secret" }),
       ),
     );
     const user = userEvent.setup();
     renderPage();
-    await selectJev(user);
 
-    // Masked until asked, as on the MCP gateway's examples.
-    expect(await findRequest()).toContain("arch_••••");
-    expect(screen.getByText("arch_ab••••••••••••")).toBeInTheDocument();
-    // The key's own field; revealing it reveals the request too.
-    await user.click(screen.getAllByRole("button", { name: "Show key" })[0]);
-    await waitFor(async () => {
-      expect(await findRequest()).toContain(
-        "Authorization: Bearer arch_judge_secret",
-      );
-    });
-    expect(screen.getByText("arch_judge_secret")).toBeInTheDocument();
-  });
-
-  it("sends the caller's own key plus the passthrough key in its header", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
-        HttpResponse.json(page([PASSTHROUGH_KEY])),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await selectJev(user);
-    await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
-
-    expect(await screen.findByText("Passthrough key")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Send your own Jev key, and this passthrough key/),
-    ).toHaveTextContent("X-Archestra-Virtual-Key header");
-    // The first passthrough key is taken, like a standard key, and shows as the
-    // key card instead of an env var to set.
-    expect(await screen.findByText("Laptop")).toBeInTheDocument();
-    expect(screen.getByText("arch_pt••••••••••••")).toBeInTheDocument();
-    expect(
-      screen.queryByText(/Set ARCHESTRA_LLM_VIRTUAL_KEY/),
-    ).not.toBeInTheDocument();
-    const request = await findRequest();
-    expect(request).toContain("Authorization: Bearer $JEV_API_KEY");
-    expect(request).toContain("X-Archestra-Virtual-Key:");
-  });
-
-  it("does not offer 'No passthrough key' when the organization requires one", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
-        HttpResponse.json(page([PASSTHROUGH_KEY])),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await selectJev(user);
-    await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
-    await user.click(await screen.findByRole("button", { name: "Change" }));
-
-    expect(
-      await screen.findByText("Choose a passthrough key"),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Laptop/ })).toBeInTheDocument();
-    expect(screen.queryByText("No passthrough key")).not.toBeInTheDocument();
-  });
-
-  it("sends only the caller's own key when the org allows requests without a passthrough key", async () => {
-    vi.mocked(useOrganization).mockReturnValue({
-      data: { allowUnauthenticatedLlmProxyRequests: true },
-    } as unknown as ReturnType<typeof useOrganization>);
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await selectJev(user);
-    await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
-
-    expect(
-      await screen.findByText(/requests aren't linked to a user/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Requests without a passthrough key are accepted/),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "LLM settings" })).toHaveAttribute(
-      "href",
-      "/settings/llm",
-    );
-    const request = await findRequest();
-    expect(request).toContain("Authorization: Bearer $JEV_API_KEY");
-    expect(request).not.toContain("X-Archestra-Virtual-Key");
-  });
-
-  it("does not offer a request without a passthrough key when the header is required", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await selectJev(user);
-    await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
-
-    expect(
-      await screen.findByText("No passthrough key yet"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Requests without a passthrough key are rejected/),
-    ).toBeInTheDocument();
-  });
-
-  it("shows how an OAuth client gets the token the request sends", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-      http.get(`${API_ORIGIN}/api/oauth-clients`, ({ request }) => {
-        expect(new URL(request.url).searchParams.get("capability")).toBe(
-          "llm:proxy",
-        );
-        return HttpResponse.json(
-          page([
-            {
-              id: "oc-batch",
-              clientId: "client-batch",
-              name: "Batch jobs",
-              grantType: "client_credentials",
-              authorId: "someone-else",
-              providerApiKeys: JUDGE_KEY.providerApiKeys,
-              includeFutureProviders: false,
-              scopes: ["llm:proxy"],
-              modelPoolIds: [],
-            },
-          ]),
-        );
-      }),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await selectJev(user);
-    await user.click(screen.getByRole("radio", { name: /OAuth client/ }));
-
-    const tokenRequest = await screen.findByText(
-      /grant_type=client_credentials/,
-    );
-    expect(tokenRequest).toHaveTextContent("client_id=client-batch");
-    expect(
-      screen.getByText(/from the token request above/),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(/your token before running/),
-    ).not.toBeInTheDocument();
-    expect(await findRequest()).toContain(
-      "Authorization: Bearer $ARCHESTRA_LLM_ACCESS_TOKEN",
-    );
-  });
-
-  it("keeps passthrough off the Unified Model API, which has no route for it", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([JEV_PROVIDER_KEY]),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-
-    expect(
-      await screen.findByRole("radio", { name: /Passthrough/ }),
-    ).toBeDisabled();
-
-    // Chosen on a provider, it gives way to a standard key on the router
-    // and comes back with the provider.
-    await selectJev(user);
-    await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
-    await user.click(screen.getByRole("button", { name: "Unified Model API" }));
-    expect(screen.getByRole("radio", { name: /Standard/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /Passthrough/ })).toBeDisabled();
-
-    await selectJev(user);
-    expect(screen.getByRole("radio", { name: /Passthrough/ })).toBeChecked();
-  });
-
-  it("asks for the provider key first and holds the request back without one", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
-        HttpResponse.json([]),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await selectJev(user);
-
-    // Adding the key happens here, in a dialog, rather than on another page.
     await user.click(
-      await screen.findByRole("button", { name: "Add Jev key" }),
+      await screen.findByRole("combobox", { name: "API format" }),
+    );
+    await user.type(screen.getByPlaceholderText("Search formats..."), "jev");
+    await user.click(await screen.findByRole("option", { name: "Jev" }));
+
+    const url = await screen.findByText(/\/v1\/jev\/decisions \\/);
+    const block = url.closest("pre");
+    // One request on one line of JSON, as on the prototype.
+    expect(block).toHaveTextContent(`-d '{"model": `);
+    // Masked on the page.
+    expect(block).not.toHaveTextContent("arch_judge_secret");
+    await user.click(screen.getByRole("button", { name: /^Copy$/ }));
+    await waitFor(() =>
+      expect(copyToClipboard).toHaveBeenCalledWith(
+        expect.stringContaining("Authorization: Bearer arch_judge_secret"),
+      ),
+    );
+  });
+
+  it("offers native passthrough without any stored provider or standard key", async () => {
+    providerKeys = [];
+    standardKeys = [];
+    passthroughKeys = [
+      {
+        ...JUDGE_KEY,
+        id: "vk-passthrough",
+        keyType: "passthrough",
+        name: "Bring my own key",
+        providerApiKeys: [],
+      },
+    ];
+    const user = userEvent.setup();
+    renderPage();
+
+    const format = await screen.findByRole("combobox", { name: "API format" });
+    expect(format).toHaveTextContent("Unified Model API");
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Passthrough" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "API format" }),
+      ).not.toHaveTextContent("Unified Model API"),
     );
     expect(
-      await screen.findByRole("dialog", { name: "Add Jev key" }),
+      await within(card("Endpoint")).findByText("Bring my own key"),
     ).toBeInTheDocument();
-    await user.keyboard("{Escape}");
     expect(
-      screen.getByText(
-        "The request appears here once the steps above are done.",
+      screen.queryByText(/No .* key yet\. The proxy needs/),
+    ).not.toBeInTheDocument();
+  });
+  it("shows how to call Bedrock Converse with a passthrough key and no stored provider key", async () => {
+    providerKeys = [];
+    standardKeys = [];
+    passthroughKeys = [
+      {
+        ...JUDGE_KEY,
+        id: "vk-passthrough",
+        keyType: "passthrough",
+        name: "Bring my own key",
+        providerApiKeys: [],
+      },
+    ];
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-virtual-keys/vk-passthrough/value`, () =>
+        HttpResponse.json({ value: "arch_bedrock_test" }),
       ),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/curl "/)).not.toBeInTheDocument();
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Passthrough" }),
+    );
+    await user.click(
+      await screen.findByRole("combobox", { name: "API format" }),
+    );
+    await user.type(
+      screen.getByPlaceholderText("Search formats..."),
+      "bedrock",
+    );
+    await user.click(await screen.findByRole("option", { name: /Bedrock/ }));
+
+    const command = await screen.findByText(/\/v1\/bedrock\/converse/);
+    expect(command.closest("pre")).toHaveTextContent(
+      "AWS_BEARER_TOKEN_BEDROCK",
+    );
+    expect(command.closest("pre")).not.toHaveTextContent("arch_bedrock_test");
+    expect(screen.getByText(/Send your own AWS Bedrock key/)).toHaveTextContent(
+      "Send your own AWS Bedrock key, and this passthrough key in the X-Archestra-Virtual-Key header.",
+    );
+    await user.click(screen.getByRole("combobox", { name: "Passthrough key" }));
+    expect(
+      screen.queryByRole("option", { name: /Create new passthrough key/i }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: /^Copy$/ }));
+    expect(copyToClipboard).toHaveBeenCalledWith(
+      expect.stringContaining("X-Archestra-Virtual-Key: arch_bedrock_test"),
+    );
+  });
+
+  it("shows the configured identity provider instead of setup to a read-only viewer", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmProxy?.includes("update"),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-proxy`, () =>
+        HttpResponse.json({ id: "proxy-1", identityProviderId: "idp-1" }),
+      ),
+      http.get(`${API_ORIGIN}/api/identity-providers`, () =>
+        HttpResponse.json([
+          {
+            id: "idp-1",
+            providerId: "oidc",
+            issuer: "https://idp.example.test",
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Identity provider" }),
+    );
+
+    expect(
+      await screen.findByText("Trusting https://idp.example.test"),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "Set up identity provider" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "API format" }),
+    ).not.toHaveTextContent("Unified Model API");
   });
 });
 
-const JEV_PROVIDER_KEY = {
-  id: "pk-jev",
-  name: "TypeSafe",
-  provider: "jev",
-  scope: "org",
-};
+function spendLimit(entityId: string, limitValue: number, used: number) {
+  return {
+    id: `limit-${entityId}`,
+    entityType: "virtual_key",
+    entityId,
+    limitType: "token_cost",
+    limitValue,
+    modelUsage: [{ model: "m", tokensIn: 0, tokensOut: 0, cost: used }],
+  };
+}
 
-const JUDGE_KEY = {
-  id: "vk-judge",
-  name: "Judge pipeline",
-  keyType: "standard",
-  tokenStart: "arch_ab",
-  authorId: "someone-else",
-  providerApiKeys: [
-    {
-      provider: "jev",
-      providerApiKeyId: "pk-jev",
-      providerApiKeyName: "TypeSafe",
-    },
-  ],
-};
-
-const PASSTHROUGH_KEY = {
-  id: "vk-laptop",
-  name: "Laptop",
-  keyType: "passthrough",
-  tokenStart: "arch_pt",
-  authorId: "someone-else",
-  providerApiKeys: [],
-};
-
-function page<T>(data: T[]) {
+function page<T>(data: T[], total = data.length) {
   return {
     data,
     pagination: {
       currentPage: 1,
       limit: 100,
-      total: data.length,
+      total,
       totalPages: 1,
       hasNext: false,
       hasPrev: false,
     },
   };
-}
-
-/** The whole highlighted curl block, whose tokens render as separate spans. */
-async function findRequest() {
-  const url = await screen.findByText(/\/v1\/jev\/decisions"/);
-  return url.closest("pre")?.textContent ?? "";
-}
-
-async function chooseCreateVirtualKey(
-  user: ReturnType<typeof userEvent.setup>,
-) {
-  // With existing keys, "+ Create new" sits on the step's title line and
-  // opens the create dialog.
-  await screen.findByRole("combobox", { name: "Virtual key" });
-  await user.click(
-    screen.getByRole("button", { name: "Create new virtual key" }),
-  );
-}
-
-async function selectJev(user: ReturnType<typeof userEvent.setup>) {
-  // With a Jev key, Jev leads the tabs; without one it is under "More".
-  await screen.findByRole("combobox", { name: "More providers" });
-  const tab = screen.queryByRole("button", { name: "Jev" });
-  if (tab) {
-    await user.click(tab);
-    return;
-  }
-  await user.click(
-    await screen.findByRole("combobox", { name: "More providers" }),
-  );
-  await user.type(screen.getByPlaceholderText("Search providers..."), "jev");
-  await user.click(await screen.findByText("Jev"));
 }

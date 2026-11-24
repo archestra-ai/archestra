@@ -1,39 +1,32 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { KpiTile } from "@/app/llm/(costs)/costs/cost-overview";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useAgentAdoption,
   useAgentAdoptionUsage,
 } from "@/lib/connected-client.query";
 import { AgentAdoptionUsers } from "./agent-adoption";
+import { ConnectionLogTable } from "./connection-log-table";
 import { ConnectionUsageExplorer } from "./connection-usage";
 import type { Dimension } from "./connection-usage-data";
 import type { ConnectionsWindow } from "./connections-window";
 
 /**
- * The page's two views of one window, picked by the header tabs. Usage is the
- * call explorer (its "by" picks the user, agent or gateway grouping the old
- * per-grouping views preset), and Coverage is who has and hasn't connected.
- * Individual connection events are on the unified Logs page.
+ * Three views of one window. Usage is the call explorer (its "by" picks the
+ * user, agent or gateway grouping the old per-grouping views preset), User
+ * connections is who has and hasn't connected, and Activity is setup and
+ * sign-in events.
  */
-export const ADOPTION_VIEWS = [
+const VIEWS = [
   { id: "usage", label: "Usage" },
-  { id: "coverage", label: "Coverage" },
+  { id: "users", label: "User connections" },
+  { id: "activity", label: "Activity" },
 ] as const;
-type View = (typeof ADOPTION_VIEWS)[number]["id"];
-
-/** Which view a URL means, including links from before the rename. */
-export function resolveAdoptionView(params: URLSearchParams): View {
-  const selected = params.get("view");
-  if (selected === "coverage" || selected === "users") return "coverage";
-  if (selected === "usage" || (selected && LEGACY_USAGE_VIEWS[selected]))
-    return "usage";
-  return params.has("state") || params.has("q") ? "coverage" : "usage";
-}
-
+type View = (typeof VIEWS)[number]["id"];
 /** Earlier links named a grouping as the view; they open Usage grouped so. */
 const LEGACY_USAGE_VIEWS: Record<string, Dimension> = {
   user: "user",
@@ -42,18 +35,40 @@ const LEGACY_USAGE_VIEWS: Record<string, Dimension> = {
 };
 
 export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const params = useSearchParams();
   const selected = params.get("view");
   const legacyGroup = selected ? LEGACY_USAGE_VIEWS[selected] : undefined;
-  const view = resolveAdoptionView(new URLSearchParams(params.toString()));
+  const view: View =
+    VIEWS.find((item) => item.id === selected)?.id ??
+    (legacyGroup
+      ? "usage"
+      : params.has("state") || params.has("q")
+        ? "users"
+        : params.has("action") || params.has("userId")
+          ? "activity"
+          : "usage");
   const query = { startDate: window.startDate, endDate: window.endDate };
   const adoption = useAgentAdoption(query);
   const usage = useAgentAdoptionUsage(query);
 
+  function pickView(next: View) {
+    const updated = new URLSearchParams();
+    // The range carries over; every view keeps its own filters.
+    for (const key of ["startDate", "endDate"]) {
+      const value = params.get(key);
+      if (value) updated.set(key, value);
+    }
+    if (next !== "usage") updated.set("view", next);
+    const search = updated.toString();
+    router.push(search ? `${pathname}?${search}` : pathname, { scroll: false });
+  }
+
   if (adoption.isLoadingError || usage.isLoadingError) {
     return (
       <QueryLoadError
-        title="Couldn't load adoption"
+        title="Couldn't load agent connections"
         onRetry={() => {
           adoption.refetch();
           usage.refetch();
@@ -93,7 +108,7 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
   const llm = usage.data.days.reduce((count, day) => count + day.llmCalls, 0);
   return (
     <div className="min-w-0 space-y-4">
-      {/* Summaries only: the header tabs pick the view, so no tile doubles
+      {/* Summaries only: the tabs below pick the view, so no tile doubles
           as a selector. */}
       <section
         aria-label="Connection summary"
@@ -122,8 +137,27 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
           series={usage.data.days.map((day) => day.gatewayCalls + day.llmCalls)}
         />
       </section>
-      {view === "coverage" ? (
+      <Tabs value={view} onValueChange={(next) => pickView(next as View)}>
+        <TabsList size="sm" aria-label="Connection views">
+          {VIEWS.map((item) => (
+            <TabsTrigger key={item.id} value={item.id}>
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      {view === "users" ? (
         <AgentAdoptionUsers window={window} />
+      ) : view === "activity" ? (
+        <section className="space-y-3" aria-label="Recent connection activity">
+          <div className="space-y-1">
+            <h2 className="text-sm font-medium">Recent activity</h2>
+            <p className="text-xs text-muted-foreground">
+              Setup downloads, agent sign-ins, and disconnects.
+            </p>
+          </div>
+          <ConnectionLogTable window={window} />
+        </section>
       ) : (
         <ConnectionUsageExplorer
           adoption={adoption.data}

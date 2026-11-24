@@ -34,7 +34,7 @@ import {
 } from "./dashboard-card";
 
 /** Chips shown before "+N more". */
-const VISIBLE_PROVIDERS = 6;
+const VISIBLE_PROVIDERS = 10;
 /** The providers a new organization is offered first. */
 const STARTER_PROVIDERS: SupportedProvider[] = [
   "anthropic",

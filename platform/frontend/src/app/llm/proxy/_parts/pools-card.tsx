@@ -1,7 +1,7 @@
 "use client";
 
 import type { SupportedProvider } from "@archestra/shared";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Layers, Shuffle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { ConfigureAutoRoutingDialog } from "@/app/llm/auto-routing/_parts/configure-dialog";
@@ -118,10 +118,16 @@ export function PoolsCard() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link href="/llm/model-pools">Model Pools</Link>
+                <Link href="/llm/model-pools">
+                  <Layers />
+                  Model Pools
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/llm/auto-routing">Auto Routing</Link>
+                <Link href="/llm/auto-routing">
+                  <Shuffle />
+                  Auto Routing
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

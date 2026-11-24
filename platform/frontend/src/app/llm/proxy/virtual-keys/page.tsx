@@ -142,7 +142,6 @@ function VirtualKeysTable() {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canCreate } = useHasPermissions({ llmVirtualKey: ["create"] });
-  const { data: canUpdate } = useHasPermissions({ llmVirtualKey: ["update"] });
   const { data: scopedGrants } = useScopedCapabilities();
 
   const { hasActiveScopeFilters, access, sharedWith, owner } =
@@ -165,8 +164,13 @@ function VirtualKeysTable() {
     null,
   );
   // `?edit=<id>` opens that key's dialog, so a link can land on it; without
-  // edit rights, the link only filters the list.
-  const editId = canUpdate ? searchParams.get("edit") : null;
+  // the right to edit that key, the link only filters the list.
+  const editParam = searchParams.get("edit");
+  const { data: canEditFromUrl } = useHasPermissions(
+    { llmVirtualKey: ["update"] },
+    editParam ?? undefined,
+  );
+  const editId = canEditFromUrl ? editParam : null;
   const {
     entity: editingKey,
     open: openEditDialog,

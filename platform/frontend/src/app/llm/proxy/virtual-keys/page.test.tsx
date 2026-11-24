@@ -197,6 +197,19 @@ describe("VirtualKeysPage provider-key filter", () => {
       },
     ];
 
+    // Editing a key is granted per key, not organization-wide.
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions, scope) =>
+        ({
+          data:
+            !(
+              "llmVirtualKey" in permissions &&
+              permissions.llmVirtualKey?.includes("update")
+            ) || scope === "22222222-3333-4444-8555-666666666666",
+          isPending: false,
+        }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+
     renderPage(
       "keyType=standard&search=Regional%20key&edit=22222222-3333-4444-8555-666666666666",
     );

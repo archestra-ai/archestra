@@ -464,8 +464,8 @@ export const SHOTS: Shot[] = [
     viewport: { width: 1440, height: 920 },
     prepare: async (page) => {
       await page
-        .getByRole("button", { name: "Create new virtual key" })
-        .first()
+        .getByRole("region", { name: "Endpoint", exact: true })
+        .getByRole("combobox", { name: "API format" })
         .waitFor();
     },
   },

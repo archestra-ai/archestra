@@ -4,6 +4,7 @@ import {
   E2eTestId,
   type Permissions,
   SUBSCRIPTION_CREDENTIALS,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { CheckCircle2, TriangleAlert, Unplug } from "lucide-react";
 import type { ReactNode } from "react";
@@ -26,6 +27,7 @@ import type { SubscriptionOffer } from "./subscription-offers";
  */
 export function SubscriptionProviderCards({
   offers,
+  extraCards,
   isLoading,
   currentUserId,
   onConnect,
@@ -34,6 +36,8 @@ export function SubscriptionProviderCards({
   disconnectBlockedReason,
 }: {
   offers: SubscriptionOffer[];
+  /** Additional personal subscription cards rendered alongside registry offers. */
+  extraCards?: ReactNode;
   /** The viewer's keys have not arrived yet, so no status can be stated. */
   isLoading: boolean;
   /** Session user, to recognize the viewer's own credential on a card. */
@@ -46,7 +50,7 @@ export function SubscriptionProviderCards({
     credential: LlmProviderApiKeyResponse,
   ) => string | null;
 }) {
-  if (offers.length === 0) return null;
+  if (offers.length === 0 && !extraCards) return null;
 
   return (
     <SubscriptionCardsSection
@@ -67,6 +71,7 @@ export function SubscriptionProviderCards({
           disconnectBlockedReason={disconnectBlockedReason}
         />
       ))}
+      {extraCards}
     </SubscriptionCardsSection>
   );
 }
@@ -103,7 +108,8 @@ export function SubscriptionCardsSection({
 export type SubscriptionCardStatus =
   | "connected"
   | "reconnect"
-  | "not-connected";
+  | "not-connected"
+  | "error";
 
 /**
  * One subscription card, personal or organization: brand and name, what the
@@ -118,20 +124,23 @@ export function SubscriptionCard({
   isLoading,
   status,
   onConnect,
+  onRetry,
   connectPermissions,
   connectAction,
   manage,
   disconnect,
 }: {
   testId?: string;
-  kind: SubscriptionOffer["kind"];
-  provider: SubscriptionOffer["provider"];
+  kind?: SubscriptionOffer["kind"] | null;
+  provider: SupportedProvider;
   name: string;
   description: string;
   isLoading: boolean;
   status: SubscriptionCardStatus;
   /** Connect when not connected, Reconnect when the credential was refused. */
   onConnect?: () => void;
+  /** Retries checking connection status when `status === "error"`. */
+  onRetry?: () => void;
   /** Gates connecting; omitted, connecting is self-service. */
   connectPermissions?: Permissions;
   /**
@@ -141,7 +150,8 @@ export function SubscriptionCard({
   connectAction?: ReactNode;
   manage?: {
     onClick: () => void;
-    permissionScope: string;
+    permissions?: Permissions;
+    permissionScope?: string;
   };
   disconnect?: {
     onClick: () => void;
@@ -162,6 +172,11 @@ export function SubscriptionCard({
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
         {isLoading ? (
           <Skeleton className="h-4 w-24" />
+        ) : status === "error" ? (
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
+            <span>Could not check connection</span>
+          </span>
         ) : status !== "not-connected" ? (
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             {status === "reconnect" ? (
@@ -178,15 +193,25 @@ export function SubscriptionCard({
         )}
         {isLoading ? (
           <Skeleton className="h-8 w-20" />
+        ) : status === "error" ? (
+          onRetry ? (
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              <span>Retry</span>
+            </Button>
+          ) : null
         ) : status !== "not-connected" ? (
           <div className="flex shrink-0 items-center gap-1">
             {status === "reconnect" || !manage ? (
-              <Button variant="outline" size="sm" onClick={onConnect}>
-                <span>Reconnect</span>
-              </Button>
+              onConnect ? (
+                <Button variant="outline" size="sm" onClick={onConnect}>
+                  <span>Reconnect</span>
+                </Button>
+              ) : null
             ) : (
               <PermissionButton
-                permissions={{ llmProviderApiKey: ["update"] }}
+                permissions={
+                  manage.permissions ?? { llmProviderApiKey: ["update"] }
+                }
                 permissionScope={manage.permissionScope}
                 variant="outline"
                 size="sm"
@@ -215,9 +240,9 @@ export function SubscriptionCard({
           </div>
         ) : connectAction ? (
           <div className="basis-full">{connectAction}</div>
-        ) : (
+        ) : onConnect ? (
           <ConnectButton onClick={onConnect} permissions={connectPermissions} />
-        )}
+        ) : null}
       </div>
     </Card>
   );

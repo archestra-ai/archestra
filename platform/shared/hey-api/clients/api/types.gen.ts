@@ -25661,6 +25661,365 @@ export type CompleteClaudeCodeSignInResponses = {
 
 export type CompleteClaudeCodeSignInResponse = CompleteClaudeCodeSignInResponses[keyof CompleteClaudeCodeSignInResponses];
 
+export type DisconnectMyClaudeCodeAccountData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account';
+};
+
+export type DisconnectMyClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisconnectMyClaudeCodeAccountError = DisconnectMyClaudeCodeAccountErrors[keyof DisconnectMyClaudeCodeAccountErrors];
+
+export type DisconnectMyClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type DisconnectMyClaudeCodeAccountResponse = DisconnectMyClaudeCodeAccountResponses[keyof DisconnectMyClaudeCodeAccountResponses];
+
+export type GetMyClaudeCodeAccountData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account';
+};
+
+export type GetMyClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyClaudeCodeAccountError = GetMyClaudeCodeAccountErrors[keyof GetMyClaudeCodeAccountErrors];
+
+export type GetMyClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type GetMyClaudeCodeAccountResponse = GetMyClaudeCodeAccountResponses[keyof GetMyClaudeCodeAccountResponses];
+
+export type StartMyClaudeCodeSignInData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account';
+};
+
+export type StartMyClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartMyClaudeCodeSignInError = StartMyClaudeCodeSignInErrors[keyof StartMyClaudeCodeSignInErrors];
+
+export type StartMyClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type StartMyClaudeCodeSignInResponse = StartMyClaudeCodeSignInResponses[keyof StartMyClaudeCodeSignInResponses];
+
+export type CompleteMyClaudeCodeSignInData = {
+    body: {
+        flowId: string;
+        code?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account/complete';
+};
+
+export type CompleteMyClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteMyClaudeCodeSignInError = CompleteMyClaudeCodeSignInErrors[keyof CompleteMyClaudeCodeSignInErrors];
+
+export type CompleteMyClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type CompleteMyClaudeCodeSignInResponse = CompleteMyClaudeCodeSignInResponses[keyof CompleteMyClaudeCodeSignInResponses];
+
 export type GetClaudeCodeModelsData = {
     body?: never;
     path: {

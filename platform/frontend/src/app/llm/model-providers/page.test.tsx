@@ -19,6 +19,7 @@ const mockUseLlmProviderApiKey = vi.fn();
 const mockLlmProviderApiKeyForm = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockUseOauthClients = vi.fn();
+const mockUseMyClaudeCodeAccount = vi.fn();
 const mockDeleteApiKey = vi.fn();
 const mockUpdateApiKey = vi.fn();
 const mockSavePermissions = vi.fn();
@@ -73,6 +74,21 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     mockUseLlmProviderApiKeys(...args),
   useUpdateLlmProviderApiKey: () => ({
     mutateAsync: mockUpdateApiKey,
+    isPending: false,
+  }),
+}));
+
+vi.mock("@/lib/claude-code-account.query", () => ({
+  useMyClaudeCodeAccount: (...args: unknown[]) =>
+    mockUseMyClaudeCodeAccount(...args),
+  useMyClaudeCodeSignIn: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
+  useDisconnectMyClaudeCodeAccount: () => ({
+    mutate: vi.fn(),
     isPending: false,
   }),
 }));
@@ -388,6 +404,13 @@ describe("ApiKeysPage", () => {
     mockUseOauthClients.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
       isPending: false,
+    });
+    mockUseMyClaudeCodeAccount.mockReturnValue({
+      data: { state: "disconnected" },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
     });
   });
 
@@ -1181,6 +1204,68 @@ describe("ApiKeysPage", () => {
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
       "Connect your SuperGrok subscription",
     );
+  });
+
+  it("includes a Claude Code card in Personal subscriptions when Agent Runtime is enabled", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+
+    render(<ApiKeysPage />);
+
+    const claudeCard = within(
+      screen.getByTestId(`${E2eTestId.SubscriptionProviderCard}-claude-code`),
+    );
+    expect(claudeCard.getByText("Claude Code")).toBeInTheDocument();
+    expect(claudeCard.getByRole("button", { name: "Connect" })).toBeVisible();
+    expect(personalCards().getAllByText("Connect")).toHaveLength(5);
+  });
+
+  it("keeps Personal subscriptions visible for Claude Code even when every other subscription provider is hidden", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          openai: { hidden: true },
+          "github-copilot": { hidden: true },
+          "microsoft-365-copilot": { hidden: true },
+          xai: { hidden: true },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(personalCards().getByText("Claude Code")).toBeInTheDocument();
+    expect(personalCards().getAllByText("Connect")).toHaveLength(1);
+  });
+
+  it("hides an unconnected Claude Code card when Anthropic is turned off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { anthropic: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(personalCards().queryByText("Claude Code")).toBeNull();
+    expect(personalCards().getAllByText("Connect")).toHaveLength(4);
   });
 });
 

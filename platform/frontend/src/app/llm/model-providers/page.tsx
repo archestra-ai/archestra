@@ -88,6 +88,7 @@ import {
 } from "@/lib/auth/auth.query";
 import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useMyClaudeCodeAccount } from "@/lib/claude-code-account.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
@@ -109,6 +110,7 @@ import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { githubOrganizationLabel } from "@/lib/organization-subscription";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
+import { ClaudeCodeSubscriptionCard } from "./_parts/claude-code-subscription-card";
 import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
 import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
 import {
@@ -204,6 +206,17 @@ export default function ApiKeysPage() {
 
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
+  const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  const canAddAnthropic = providerCatalog.canAddKey("anthropic");
+  const myClaudeCodeAccount = useMyClaudeCodeAccount(
+    agentRuntimeEnabled,
+    false,
+  );
+  const showClaudeCodeCard =
+    agentRuntimeEnabled &&
+    (canAddAnthropic ||
+      myClaudeCodeAccount.data?.state === "connected" ||
+      myClaudeCodeAccount.data?.state === "expired");
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -808,6 +821,11 @@ export default function ApiKeysPage() {
       <div className="space-y-4">
         <SubscriptionProviderCards
           offers={subscriptionOffers}
+          extraCards={
+            showClaudeCodeCard ? (
+              <ClaudeCodeSubscriptionCard canAddAnthropic={canAddAnthropic} />
+            ) : undefined
+          }
           currentUserId={currentUserId}
           // A viewer without key-read permission never gets a list, so their
           // cards state the offer rather than waiting forever on a query that

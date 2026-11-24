@@ -57,7 +57,7 @@ export function ClaudeCodeSubscriptionCard({
     ? "Could not check your Claude Code subscription."
     : expired
       ? "Your sign-in expired or was revoked. Sign in again to use this subscription."
-      : "Connect your Claude account to use your subscription.";
+      : undefined;
 
   const openAccountDialog = () => {
     setDialogOpen(true);
@@ -82,12 +82,14 @@ export function ClaudeCodeSubscriptionCard({
         name="Claude Code"
         description={description}
         notice={
-          <InlineNotice variant="warning" size="sm" plain role="note">
-            <Info className="mt-0.5" aria-hidden="true" />
-            <InlineNoticeText>
-              This subscription works only with Claude Code agent runtimes.
-            </InlineNoticeText>
-          </InlineNotice>
+          account.isError || expired ? undefined : (
+            <InlineNotice variant="warning" size="sm" plain role="note">
+              <Info className="mt-0.5" aria-hidden="true" />
+              <InlineNoticeText>
+                This subscription works only with Claude Code agent runtimes.
+              </InlineNoticeText>
+            </InlineNotice>
+          )
         }
         isLoading={account.isPending}
         status={status}

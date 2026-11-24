@@ -135,8 +135,8 @@ export function SubscriptionCard({
   kind?: SubscriptionOffer["kind"] | null;
   provider: SupportedProvider;
   name: string;
-  description: string;
-  /** Optional inline notice shown directly below the description. */
+  description?: string;
+  /** Optional inline notice shown below the description (or as the card body). */
   notice?: ReactNode;
   isLoading: boolean;
   status: SubscriptionCardStatus;
@@ -171,7 +171,9 @@ export function SubscriptionCard({
           {name}
         </span>
       </div>
-      <p className="text-sm text-muted-foreground">{description}</p>
+      {description && (
+        <p className="text-sm text-muted-foreground">{description}</p>
+      )}
       {notice}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
         {isLoading ? (

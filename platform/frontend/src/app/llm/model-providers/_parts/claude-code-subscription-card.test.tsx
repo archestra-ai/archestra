@@ -131,8 +131,13 @@ describe("ClaudeCodeSubscriptionCard", () => {
     );
     expect(await within(card).findByText("Connected")).toBeVisible();
     expect(
-      within(card).getByText(
+      within(card).queryByText(
         "Connect your Claude account to use your subscription.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(card).getByText(
+        "This subscription works only with Claude Code agent runtimes.",
       ),
     ).toBeVisible();
 

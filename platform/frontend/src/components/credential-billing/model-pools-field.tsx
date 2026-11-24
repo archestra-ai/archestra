@@ -141,14 +141,11 @@ export function PoolSummary({ pool }: { pool: ModelPool }) {
   );
 }
 
-export function PoolRow({
+function PoolRow({
   pool,
-  kind,
   onRemove,
 }: {
   pool: ModelPool;
-  /** What the row is, shown before the remove button in a mixed list. */
-  kind?: string;
   onRemove: () => void;
 }) {
   const catalog = useModelProviderCatalog();
@@ -172,7 +169,6 @@ export function PoolRow({
             <PoolSummary pool={pool} />
           </UnstyledButton>
         </CollapsibleTrigger>
-        {kind && <KindLabel>{kind}</KindLabel>}
         <Button
           type="button"
           variant="ghost"
@@ -201,15 +197,6 @@ export function PoolRow({
         </div>
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-/** What a row in a mixed access list is, e.g. "Model pool". */
-export function KindLabel({ children }: { children: string }) {
-  return (
-    <span className="shrink-0 whitespace-nowrap px-1 text-xs text-muted-foreground">
-      {children}
-    </span>
   );
 }
 

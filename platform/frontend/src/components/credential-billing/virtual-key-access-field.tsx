@@ -10,13 +10,12 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { Fragment, useId, useMemo, useState } from "react";
-import { poolAnswers } from "@/components/credential-billing/model-pool-access";
+import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
 import {
-  KindLabel,
-  PoolRow,
-  PoolSummary,
-} from "@/components/credential-billing/model-pools-field";
+  poolAnswers,
+  poolServes,
+} from "@/components/credential-billing/model-pool-access";
+import { PoolSummary } from "@/components/credential-billing/model-pools-field";
 import {
   isSubscriptionKey,
   keysByProvider,
@@ -206,14 +205,12 @@ export function VirtualKeyAccessField({
   const listedProviders = providers.filter(
     (provider) => chosenKeys(provider).length > 0,
   );
-  const listedKeys = listedProviders.flatMap((provider) =>
-    chosenKeys(provider).map((key) => ({
-      provider,
-      label: catalog.label(provider),
-      several: takesSeveralKeys(provider),
-      option: keyOption(key),
-    })),
-  );
+  const listedProviderRows = listedProviders.map((provider) => ({
+    provider,
+    label: catalog.label(provider),
+    several: takesSeveralKeys(provider),
+    options: chosenKeys(provider).map(keyOption),
+  }));
 
   const summary = [
     includeFutureProviders
@@ -280,36 +277,119 @@ export function VirtualKeyAccessField({
         />
 
         <div className="divide-y rounded-md border">
-          {listedRouters.map((router) => (
-            <RouterRow
-              key={router.id}
-              name={router.name}
-              tiers={tiersByRouter.get(router.id)}
-              onRemove={() =>
-                onAutoRouterIdsChange(
-                  autoRouterIds.filter((routerId) => routerId !== router.id),
-                )
-              }
-            />
-          ))}
-          {listedPools.map((pool) => (
-            <PoolRow
-              key={pool.id}
-              pool={pool}
-              kind="Model pool"
-              onRemove={() =>
-                onModelPoolIdsChange(
-                  modelPoolIds.filter((poolId) => poolId !== pool.id),
-                )
-              }
-            />
-          ))}
+          {listedRouters.map((router) => {
+            const tierModels = tierModelsOf(tiersByRouter.get(router.id));
+            const modelCount = new Set(tierModels.map((model) => model.modelId))
+              .size;
+            return (
+              <AccessRow
+                key={router.id}
+                name={router.name}
+                icons={uniqueProviders(tierModels)}
+                title={<span className="font-mono">{router.name}</span>}
+                meta={
+                  modelCount ? (
+                    <span>{plural(modelCount, "model", "models")}</span>
+                  ) : null
+                }
+                kind="Auto router"
+                onRemove={() =>
+                  onAutoRouterIdsChange(
+                    autoRouterIds.filter((routerId) => routerId !== router.id),
+                  )
+                }
+              >
+                {tierModels.length ? (
+                  <DetailGrid headings={["Tier", "Provider", "Model"]}>
+                    {tierModels.map((model) => (
+                      <Fragment key={model.tier}>
+                        <span>{TIER_LABELS[model.tier]}</span>
+                        <ProviderCell
+                          provider={model.provider}
+                          label={catalog.label(model.provider)}
+                        />
+                        <span className="truncate font-mono">
+                          {model.modelId}
+                        </span>
+                      </Fragment>
+                    ))}
+                  </DetailGrid>
+                ) : (
+                  <span className="text-muted-foreground">
+                    Picks a fast, normal or smart model per session.
+                  </span>
+                )}
+              </AccessRow>
+            );
+          })}
+          {listedPools.map((pool) => {
+            const members = [...pool.members].sort(
+              (a, b) => a.priority - b.priority,
+            );
+            const serves = poolServes(pool);
+            return (
+              <AccessRow
+                key={pool.id}
+                name={pool.name}
+                icons={uniqueProviders(members)}
+                title={<span className="font-mono">{pool.name}</span>}
+                meta={
+                  <>
+                    {serves.first && serves.first !== pool.name && (
+                      <span className="truncate font-mono">{serves.first}</span>
+                    )}
+                    {serves.otherModels > 0 && (
+                      <span>
+                        +{plural(serves.otherModels, "model", "models")}
+                      </span>
+                    )}
+                    {!poolAnswers(pool) && (
+                      <span className="text-amber-700 dark:text-amber-400">
+                        won’t answer
+                      </span>
+                    )}
+                  </>
+                }
+                kind="Model pool"
+                onRemove={() =>
+                  onModelPoolIdsChange(
+                    modelPoolIds.filter((poolId) => poolId !== pool.id),
+                  )
+                }
+              >
+                <DetailGrid headings={["Provider", "Serves"]}>
+                  {members.map((member) => (
+                    <Fragment key={member.id}>
+                      <ProviderCell
+                        provider={member.provider as SupportedProvider}
+                        label={catalog.label(member.provider)}
+                        off={!member.enabled}
+                      />
+                      <span
+                        className={cn(
+                          "truncate font-mono",
+                          !member.enabled &&
+                            "text-muted-foreground line-through",
+                        )}
+                      >
+                        {member.modelId}
+                      </span>
+                    </Fragment>
+                  ))}
+                </DetailGrid>
+              </AccessRow>
+            );
+          })}
           {includeFutureProviders && (
             <div className="flex items-start gap-2 px-2 py-1.5">
-              <KeyRound
-                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                aria-hidden
-              />
+              {/* Lines the icon up with the other rows', past their chevron. */}
+              <span aria-hidden className="size-4 shrink-0" />
+              <span className="flex w-8 shrink-0 justify-center pt-0.5">
+                <KeyRound
+                  className="size-4 text-muted-foreground"
+                  aria-hidden
+                />
+              </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm">All shared providers</span>
                 <span className="block text-xs text-muted-foreground">
@@ -329,25 +409,82 @@ export function VirtualKeyAccessField({
               <span aria-hidden className="size-6 shrink-0" />
             </div>
           )}
-          {listedKeys.map(({ provider, label, several, option }) => (
-            <ListedKeyRow
-              key={option.key.id}
-              provider={provider}
-              label={label}
-              option={option}
-              kind={includeFutureProviders ? "Key override" : "Provider key"}
-              removeLabel={
-                several ? `Remove ${option.name}` : `Stop using ${label}`
-              }
-              onRemove={() =>
-                onChange(
-                  value.filter(
-                    (mapping) => mapping.providerApiKeyId !== option.key.id,
-                  ),
-                )
-              }
-            />
-          ))}
+          {listedProviderRows.map(({ provider, label, several, options }) => {
+            const only = options.length === 1 ? options[0] : undefined;
+            const noModels = options.some((option) => option.models === 0);
+            return (
+              <AccessRow
+                key={provider}
+                name={label}
+                icons={[provider]}
+                title={<span>{label}</span>}
+                meta={
+                  <>
+                    {only?.key.isPrimary && <PrimaryBadge />}
+                    {only ? (
+                      <span className="truncate">{only.owner}</span>
+                    ) : (
+                      <span>{plural(options.length, "key", "keys")}</span>
+                    )}
+                    {noModels && (
+                      <span className="text-amber-700 dark:text-amber-400">
+                        no models
+                      </span>
+                    )}
+                  </>
+                }
+                kind={includeFutureProviders ? "Key override" : "Provider key"}
+                removeLabel={`Stop using ${label}`}
+                onRemove={() =>
+                  onChange(
+                    value.filter((mapping) => mapping.provider !== provider),
+                  )
+                }
+              >
+                <DetailGrid
+                  headings={
+                    several
+                      ? ["Key", "Billing", "Models", ""]
+                      : ["Key", "Billing", "Models"]
+                  }
+                >
+                  {options.map((option) => (
+                    <Fragment key={option.key.id}>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate">{option.name}</span>
+                        {several && option.key.isPrimary && <PrimaryBadge />}
+                      </span>
+                      <span className="truncate">{option.detail}</span>
+                      {option.models === null ? (
+                        <span />
+                      ) : (
+                        <ModelCount count={option.models} />
+                      )}
+                      {several && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          className="-my-1 text-muted-foreground"
+                          aria-label={`Remove ${option.name}`}
+                          onClick={() =>
+                            onChange(
+                              value.filter(
+                                (mapping) =>
+                                  mapping.providerApiKeyId !== option.key.id,
+                              ),
+                            )
+                          }
+                        >
+                          <X />
+                        </Button>
+                      )}
+                    </Fragment>
+                  ))}
+                </DetailGrid>
+              </AccessRow>
+            );
+          })}
           {providers.length === 0 && !includeFutureProviders && (
             <div className="p-2">
               <NoProviderKeys />
@@ -419,26 +556,38 @@ const ACCESS_KINDS: {
   { value: "providers", title: "Providers", icon: KeyRound },
 ];
 
-/** An auto router: its name, opening to the model behind each tier. */
-function RouterRow({
+/**
+ * One row of added access: a chevron, the providers behind it as icons, its
+ * name and a short line, then what kind it is and a remove button. Clicking
+ * the row opens the details.
+ */
+function AccessRow({
   name,
-  tiers,
+  icons,
+  title,
+  meta,
+  kind,
+  removeLabel,
   onRemove,
+  children,
 }: {
   name: string;
-  tiers: RouterTiers | undefined;
+  icons: SupportedProvider[];
+  title: ReactNode;
+  meta: ReactNode;
+  kind: string;
+  removeLabel?: string;
   onRemove: () => void;
+  children: ReactNode;
 }) {
-  const catalog = useModelProviderCatalog();
   const [open, setOpen] = useState(false);
-  const tierModels = tierModelsOf(tiers);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="flex items-center gap-2 px-2 py-1.5">
         <CollapsibleTrigger asChild>
           <UnstyledButton
             type="button"
-            aria-label={`${open ? "Hide" : "Show"} ${name} models`}
+            aria-label={`${open ? "Hide" : "Show"} ${name} details`}
             className="flex min-w-0 flex-1 items-center gap-2 text-left"
           >
             <ChevronRight
@@ -448,48 +597,109 @@ function RouterRow({
               )}
               aria-hidden
             />
-            <RouterSummary name={name} tiers={tiers} />
+            <LeadingIcons providers={icons} />
+            <span className="shrink-0 truncate text-sm">{title}</span>
+            <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              {meta}
+            </span>
           </UnstyledButton>
         </CollapsibleTrigger>
-        <KindLabel>Auto router</KindLabel>
+        <KindLabel>{kind}</KindLabel>
         <Button
           type="button"
           variant="ghost"
           size="icon-xs"
-          aria-label={`Remove ${name}`}
+          className="shrink-0 text-muted-foreground"
+          aria-label={removeLabel ?? `Remove ${name}`}
           onClick={onRemove}
         >
           <X />
         </Button>
       </div>
       <CollapsibleContent>
-        <div className="mx-2 mb-2 rounded-md bg-muted/50 p-2 text-xs">
-          {tierModels.length ? (
-            <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)] gap-x-3 gap-y-1.5">
-              <span className="text-muted-foreground">Tier</span>
-              <span className="text-muted-foreground">Provider</span>
-              <span className="text-muted-foreground">Model</span>
-              {tierModels.map((model) => (
-                <Fragment key={model.tier}>
-                  <span>{TIER_LABELS[model.tier]}</span>
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <ProviderIcon provider={model.provider} size={14} />
-                    <span className="truncate">
-                      {catalog.label(model.provider)}
-                    </span>
-                  </span>
-                  <span className="truncate font-mono">{model.modelId}</span>
-                </Fragment>
-              ))}
-            </div>
-          ) : (
-            <span className="text-muted-foreground">
-              Picks a fast, normal or smart model per session.
-            </span>
-          )}
+        <div className="mb-2 ml-[4.5rem] mr-2 rounded-md bg-muted/50 p-2 text-xs">
+          {children}
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/** One provider's logo, or the first two of several overlapping. */
+function LeadingIcons({ providers }: { providers: SupportedProvider[] }) {
+  return (
+    <span aria-hidden className="flex w-8 shrink-0 justify-center">
+      {providers.length <= 1 ? (
+        providers[0] && <ProviderIcon provider={providers[0]} size={16} />
+      ) : (
+        <span className="flex -space-x-1.5">
+          {providers.slice(0, 2).map((provider) => (
+            <span
+              key={provider}
+              className="flex size-5 items-center justify-center rounded-full bg-muted ring-1 ring-background"
+            >
+              <ProviderIcon provider={provider} size={12} />
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** A small table in a row's details, with a muted heading per column. */
+function DetailGrid({
+  headings,
+  children,
+}: {
+  headings: string[];
+  children: ReactNode;
+}) {
+  const columns = {
+    2: "grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]",
+    3: "grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto]",
+    4: "grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto_auto]",
+  }[headings.length];
+  return (
+    <div className={cn("grid items-center gap-x-3 gap-y-1.5", columns)}>
+      {headings.map((heading) => (
+        <span key={heading || "actions"} className="text-muted-foreground">
+          {heading}
+        </span>
+      ))}
+      {children}
+    </div>
+  );
+}
+
+function ProviderCell({
+  provider,
+  label,
+  off = false,
+}: {
+  provider: SupportedProvider;
+  label: string;
+  off?: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex min-w-0 items-center gap-1.5",
+        off && "text-muted-foreground line-through",
+      )}
+    >
+      <ProviderIcon provider={provider} size={14} />
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
+/** What a row is, e.g. "Model pool". */
+function KindLabel({ children }: { children: string }) {
+  return (
+    <span className="shrink-0 whitespace-nowrap px-1 text-xs text-muted-foreground">
+      {children}
+    </span>
   );
 }
 
@@ -509,51 +719,6 @@ type PickerProvider = {
   /** Keys not in the list yet. `replaces` names the key a pick swaps out. */
   keys: (KeyOption & { replaces?: string })[];
 };
-
-/** A chosen key: the provider's name, then the key, its owner and its models. */
-function ListedKeyRow({
-  provider,
-  label,
-  option,
-  kind,
-  removeLabel,
-  onRemove,
-}: {
-  provider: SupportedProvider;
-  label: string;
-  option: KeyOption;
-  kind: string;
-  removeLabel: string;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 px-2 py-1.5">
-      <span aria-hidden className="shrink-0">
-        <ProviderIcon provider={provider} size={16} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">{label}</span>
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-          <span className="truncate">{option.name}</span>
-          {option.key.isPrimary && <PrimaryBadge />}
-          <span className="truncate">{option.detail}</span>
-          {option.models !== null && <ModelCount count={option.models} />}
-        </span>
-      </span>
-      <KindLabel>{kind}</KindLabel>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        className="shrink-0 text-muted-foreground"
-        aria-label={removeLabel}
-        onClick={onRemove}
-      >
-        <X />
-      </Button>
-    </div>
-  );
-}
 
 /** The key's name, a Primary badge, and how many models it serves. */
 function KeyTitle({ option }: { option: KeyOption }) {
@@ -878,6 +1043,10 @@ function matchesEveryWord(
 /** What automatic access adds at request time: a shared primary key that still works. */
 function isSharedPrimary(key: LlmProviderApiKeyResponse): boolean {
   return key.userId === null && key.isPrimary && !key.requiresReauthentication;
+}
+
+function uniqueProviders(items: { provider: string }[]): SupportedProvider[] {
+  return [...new Set(items.map((item) => item.provider as SupportedProvider))];
 }
 
 function plural(count: number, one: string, many: string): string {

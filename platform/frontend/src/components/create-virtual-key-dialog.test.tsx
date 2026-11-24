@@ -298,6 +298,9 @@ describe("CreateVirtualKeyDialog", () => {
     expect(screen.getByLabelText("Name")).toHaveValue(
       "Self Admin's virtual key (2)",
     );
+    await user.click(
+      screen.getByRole("button", { name: "Show OpenAI details" }),
+    );
     expect(screen.getByRole("region", { name: "Access" })).toHaveTextContent(
       "Main OpenAI",
     );
@@ -444,6 +447,9 @@ describe("CreateVirtualKeyDialog", () => {
     });
 
     const section = screen.getByRole("region", { name: "Access" });
+    await user.click(
+      screen.getByRole("button", { name: "Show OpenAI details" }),
+    );
     expect(section).toHaveTextContent("Team key");
     await user.click(screen.getByRole("button", { name: "Create key" }));
 
@@ -480,6 +486,9 @@ describe("CreateVirtualKeyDialog", () => {
       }),
     );
     await user.click(await screen.findByRole("option", { name: /^Team key/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Show OpenAI details" }),
+    );
     expect(screen.getByRole("region", { name: "Access" })).toHaveTextContent(
       "Team key",
     );
@@ -570,6 +579,32 @@ describe("CreateVirtualKeyDialog", () => {
     expect(
       screen.getByRole("button", { name: "Stop using OpenAI" }),
     ).toBeVisible();
+  });
+
+  it("shows a provider's several endpoint keys as one row", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard", {
+      parentableKeys: [
+        { id: "ollama-a", name: "Laptop", provider: "ollama" },
+        { id: "ollama-b", name: "GPU box", provider: "ollama" },
+      ] as never[],
+      initialProviderApiKeys: [
+        { provider: "ollama", providerApiKeyId: "ollama-a" },
+        { provider: "ollama", providerApiKeyId: "ollama-b" },
+      ],
+    });
+
+    const access = screen.getByRole("region", { name: "Access" });
+    expect(access).toHaveTextContent("2 keys");
+    await user.click(screen.getByRole("button", { name: /^Show .* details$/ }));
+    await user.click(screen.getByRole("button", { name: "Remove Laptop" }));
+    expect(access).not.toHaveTextContent("2 keys");
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    expect(mutateAsync).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        providerApiKeys: [{ provider: "ollama", providerApiKeyId: "ollama-b" }],
+      }),
+    });
   });
 
   it("blocks Create when no provider is used until one is picked", async () => {
@@ -824,7 +859,7 @@ function renderDialog(
     parentableKeys?: never[];
     /** null starts from every provider's primary key. */
     initialProviderApiKeys?: Array<{
-      provider: "openai" | "zhipuai";
+      provider: "openai" | "zhipuai" | "ollama";
       providerApiKeyId: string;
     }> | null;
   } = {},

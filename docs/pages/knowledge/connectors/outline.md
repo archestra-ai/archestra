@@ -5,6 +5,8 @@ order: 13
 lastUpdated: 2026-10-05
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from the published documents in your [Outline](https://www.getoutline.com/) wiki.
 
 **Indexed:** published documents. Both Outline cloud (`https://app.getoutline.com`) and self-hosted instances are supported.

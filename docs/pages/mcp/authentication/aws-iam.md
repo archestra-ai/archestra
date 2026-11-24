@@ -6,6 +6,7 @@ lastUpdated: 2026-11-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Call MCP servers that sit behind AWS, such as a Bedrock AgentCore Gateway, as each agent's own IAM role session. Archestra stores no AWS keys: each agent proves who it is with its [SPIFFE ID](/docs/agents/identity/spiffe), assumes the role for an hour, and signs every request with SigV4. The role's trust policy decides which agents may call the server, and CloudTrail names the agent in each session.
 

@@ -6,6 +6,7 @@ lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 When members connect Claude Code, Cursor, Codex, or another client from the [Connect](/docs/integrations/ai-clients) page, Archestra records each connection and every call those clients make through the [MCP Gateway](/docs/mcp) and [LLM Proxy](/docs/llm-proxy). Use it to see who has connected and who has not, which clients and machines are in use, and whether people keep using them after setup.
 

@@ -6,6 +6,7 @@ lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Send this deployment's model calls through another Archestra deployment's Unified Model API. For example, a team instance can use the models of your central instance. The other deployment decides which models you reach, and applies its own policies to Chat Completions requests.
 

@@ -5,6 +5,8 @@ order: 14
 lastUpdated: 2026-10-21
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from your Salesforce records: "What did we promise Acme at renewal?" finds the account and its notes.
 
 **Indexed:** CRM records from a Salesforce org. By default the connector syncs `Account`, `Contact`, `Opportunity`, and `Case`. You can list other object API names in the **Objects** field, or use **Advanced Object Config JSON** to pick exact fields and associations per object.

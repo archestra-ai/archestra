@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-10-31
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Identify which spend, token, or request limit was exhausted and whether it blocked a request.
 
 ## Metrics

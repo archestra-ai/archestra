@@ -7,6 +7,7 @@ beta: "Auto Routing is in Beta."
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Send easy sessions to a cheap model and hard ones to a frontier model, while keeping daily spend near a target you pick. An auto router sits behind one model name, `auto` or `auto:<name>`, learns from its own traffic, and keeps each session on one model so prompt caches stay warm. Run one router for the whole organization or separate routers per team or customer, each with its own models, budget, and decision model.
 

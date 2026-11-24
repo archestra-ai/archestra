@@ -6,6 +6,7 @@ lastUpdated: 2026-11-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Agents and MCP clients answer from your company's documents, and cite the page each answer came from. Ask "How do we roll back a deploy?" and the answer quotes the runbook in Confluence, even when the page is titled "Release reversal".
 

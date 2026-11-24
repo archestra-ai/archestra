@@ -1,11 +1,12 @@
 ---
-title: Migrate Your Agents
+title: Migrate from OpenClaw
 description: Turn a Claude Code project into a shared Archestra agent, with its skills, MCP servers, and hooks
-order: 4
-lastUpdated: 2026-10-06
+order: 9
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Turn the agent you built in a project folder into a shared Archestra agent. Its instructions, skills, MCP servers, and hooks become Archestra resources your team can use.
 

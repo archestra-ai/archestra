@@ -5,6 +5,8 @@ order: 3
 lastUpdated: 2026-11-14
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Use Microsoft Entra ID authentication: each new connection signs in with an Entra access token for the pod's managed identity, through AKS Workload Identity. Archestra renews the token before it expires.
 
 Before you start, give the server private access (VNet integration) or a private endpoint in the cluster's VNet, set its authentication to include Microsoft Entra, and add yourself as a Microsoft Entra admin. AKS needs the OIDC issuer and Workload Identity on; [On AKS](/docs/llm-proxy/providers/azure#on-aks) has the commands.

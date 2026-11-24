@@ -6,6 +6,7 @@ lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Use Claude with an Anthropic API key, or through your Microsoft Foundry or Google Vertex AI account. With workload identity federation, Archestra stores no Anthropic key at all.
 

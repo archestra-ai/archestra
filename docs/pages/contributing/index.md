@@ -6,6 +6,7 @@ lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Tell us what to build, and we build it. Describe the change in a GitHub issue. If the maintainers agree, they implement it with coding agents.
 

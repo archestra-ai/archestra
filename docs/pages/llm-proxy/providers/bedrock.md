@@ -6,6 +6,7 @@ lastUpdated: 2026-11-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Use every model in your Amazon Bedrock account through Archestra. Connect with a Bedrock API key or AWS access keys. On AWS, Archestra can use its own IAM role, so it stores no key.
 

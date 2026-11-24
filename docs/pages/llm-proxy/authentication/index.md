@@ -7,6 +7,7 @@ lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Every call to the proxy carries an Archestra credential, so each request in the logs names an app or a person. A call with only a provider key is rejected.
 

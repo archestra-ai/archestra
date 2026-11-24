@@ -182,7 +182,7 @@ describe("deviceServerRows", () => {
     ]);
   });
 
-  it("words a known error and keeps what the MCP bridge sent", () => {
+  it("words a known error as one plain sentence", () => {
     const [row] = deviceServerRows([
       server({
         name: "Blender",
@@ -193,17 +193,13 @@ describe("deviceServerRows", () => {
       }),
     ]);
     expect(row.error).toBe('The program "uvx" was not found on this device.');
-    expect(row.errorDetail).toBe(
-      "cannot start the program: No such file or directory (os error 2)",
-    );
   });
 
-  it("shows an unknown error once, as it came", () => {
+  it("shows an unknown error as it came", () => {
     const [row] = deviceServerRows([
       server({ state: "failed", lastError: "something else went wrong" }),
     ]);
     expect(row.error).toBe("something else went wrong");
-    expect(row.errorDetail).toBeNull();
   });
 
   it("gives a running server no error", () => {

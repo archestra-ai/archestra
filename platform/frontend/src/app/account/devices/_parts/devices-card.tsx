@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { ChevronRight, Info, Laptop, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -29,6 +30,7 @@ import {
   useDesktopDevices,
 } from "@/lib/desktop-device.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { desktopMcpServerHref } from "@/lib/mcp/desktop-mcp";
 import {
   BRIDGE_START_COMMAND,
   BRIDGE_STATUS_COMMAND,
@@ -294,7 +296,10 @@ function DeviceServers({ device }: { device: DesktopDevice }) {
   );
 }
 
-/** The open row of a device. */
+/**
+ * The open row of a device. Each MCP server opens its page in the MCP
+ * Registry, at the connections of that server.
+ */
 function DeviceDetails({ device }: { device: DesktopDevice }) {
   if (!device.online) {
     return (
@@ -326,42 +331,40 @@ function DeviceDetails({ device }: { device: DesktopDevice }) {
   return (
     <ul className="divide-y pr-4 pb-1 pl-14">
       {servers.map((server) => (
-        <li key={server.catalogId} className="flex flex-col gap-2 py-2.5">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span
-              aria-hidden="true"
-              className={cn(
-                "size-1.5 rounded-full",
-                server.failed
-                  ? "bg-destructive"
-                  : server.running
-                    ? "bg-emerald-500"
-                    : "bg-muted-foreground/50",
-              )}
-            />
-            <span className="font-medium">{server.name}</span>
-            {server.state && (
+        <li key={server.catalogId}>
+          <Link
+            href={desktopMcpServerHref(server.catalogId)}
+            className="-mx-2 flex flex-col gap-1 rounded-md px-2 py-2.5 hover:bg-muted/50"
+          >
+            <div className="flex flex-wrap items-center gap-2.5">
               <span
-                className={
+                aria-hidden="true"
+                className={cn(
+                  "size-1.5 rounded-full",
                   server.failed
-                    ? "font-medium text-destructive"
-                    : "text-muted-foreground"
-                }
-              >
-                {server.state}
-              </span>
-            )}
-          </div>
-          {server.error && (
-            <div className="ml-4 space-y-1 rounded-md bg-destructive/5 px-3 py-2 text-destructive">
-              <p>{server.error}</p>
-              {server.errorDetail && (
-                <pre className="font-mono text-xs break-words whitespace-pre-wrap">
-                  {server.errorDetail}
-                </pre>
+                    ? "bg-destructive"
+                    : server.running
+                      ? "bg-emerald-500"
+                      : "bg-muted-foreground/50",
+                )}
+              />
+              <span className="font-medium">{server.name}</span>
+              {server.state && (
+                <span
+                  className={
+                    server.failed
+                      ? "font-medium text-destructive"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {server.state}
+                </span>
               )}
             </div>
-          )}
+            {server.error && (
+              <p className="ml-4 text-muted-foreground">{server.error}</p>
+            )}
+          </Link>
         </li>
       ))}
     </ul>

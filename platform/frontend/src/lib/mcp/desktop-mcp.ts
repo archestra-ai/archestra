@@ -42,6 +42,14 @@ export const DESKTOP_MCP_COPY = {
 export const DEVICES_HREF = "/account/devices";
 
 /**
+ * A desktop MCP server's page in the MCP Registry, open at its Devices
+ * section: the connections of that server.
+ */
+export function desktopMcpServerHref(catalogId: string): string {
+  return `/mcp/registry/${catalogId}?tab=credentials`;
+}
+
+/**
  * Which of the two a pair of stored values holds. A pair with neither reads as
  * a command: that is the choice a new entry starts with.
  */

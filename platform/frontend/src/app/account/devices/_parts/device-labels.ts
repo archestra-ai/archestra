@@ -49,8 +49,7 @@ export function deviceServersLabel(
 /**
  * The MCP servers of an online device, as its open row lists them: failed
  * ones first, then the others in the order the device has them. A failed
- * server has its error as one plain sentence, and the error as the MCP
- * bridge sent it when that says more.
+ * server has its error as one plain sentence, as the MCP Registry shows it.
  */
 export function deviceServerRows(servers: DesktopServer[]): DeviceServerRow[] {
   const failed = servers.filter((server) => server.state === "failed");
@@ -65,7 +64,6 @@ export function deviceServerRows(servers: DesktopServer[]): DeviceServerRow[] {
             url: server.url,
           })
         : null;
-    const sent = server.lastError?.trim() ?? null;
     return {
       catalogId: server.catalogId,
       name: server.name,
@@ -73,7 +71,6 @@ export function deviceServerRows(servers: DesktopServer[]): DeviceServerRow[] {
       failed: server.state === "failed",
       running: server.state === "running",
       error,
-      errorDetail: error && sent && sent !== error ? sent : null,
     };
   });
 }
@@ -128,8 +125,6 @@ interface DeviceServerRow {
   running: boolean;
   /** Why it failed, as one plain sentence. */
   error: string | null;
-  /** The error as the MCP bridge sent it, when the sentence rewords it. */
-  errorDetail: string | null;
 }
 
 /** For a value the MCP bridge did not send yet. */

@@ -15,6 +15,7 @@ import type {
   UserLimitUsageQuery,
   UserLimitUsageSummary,
 } from "@/types";
+import { sumMoney } from "@/utils/billable-usage";
 import { limitReadCleanup } from "./limit";
 
 /**
@@ -259,7 +260,7 @@ export async function listUserLimitUsage(params: {
     flaggedCustom: rows.filter(
       (row) => row.source === "custom" && row.status !== "ok",
     ).length,
-    spent: rows.reduce((sum, row) => sum + row.spent, 0),
+    spent: Number(sumMoney(rows.map((row) => row.spent.toFixed(10)))),
     spenders: rows.filter((row) => row.spent > 0).length,
     resetsAt: globalDefault
       ? (calendarWindow(

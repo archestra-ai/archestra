@@ -275,6 +275,21 @@ describe("user limit usage routes", () => {
     expect(body.summary.spent).toBeCloseTo(0.0027001, 10);
   });
 
+  test("sums everyone's spend without float drift", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const first = await member({ makeUser, makeMember }, "Drift One");
+    const second = await member({ makeUser, makeMember }, "Drift Two");
+    await makeInteraction(agentId, { userId: first.id, cost: "0.7" });
+    await makeInteraction(agentId, { userId: second.id, cost: "0.105" });
+
+    const body = await list("?search=drift");
+
+    expect(body.summary.spent).toBe(0.805);
+  });
+
   test("pages through users", async ({ makeUser, makeMember }) => {
     for (const name of ["Ana", "Ben", "Cleo"]) {
       await member({ makeUser, makeMember }, name);

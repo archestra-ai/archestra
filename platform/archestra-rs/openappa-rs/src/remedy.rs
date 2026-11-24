@@ -21,7 +21,7 @@ use appa_eventlog::encryption::StorageCipher;
 use appa_runtime::api::{
     ExecuteRemedyPlanArgs, NoAnswerClass, RemedyOutcome, RemedyPresentation, RemedyRefusal,
 };
-use appa_runtime_api::ProposedCall;
+use appa_runtime_api::{HookDecision, ProposedCall, WireDecision};
 use napi_derive::napi;
 use serde::Serialize;
 use serde_json::{Value, json, value::RawValue};
@@ -386,6 +386,28 @@ pub(crate) fn runtime_refusal(text: String) -> napi::Result<Value> {
         },
     })
     .map_err(invariant)
+}
+
+/// Carries the typed outcome a runtime refusal states onto a host response built from its
+/// text, in the fields and spelling the runtime's wire gives it.
+pub(crate) fn with_refusal_outcomes(
+    mut response: Value,
+    refusal: &HookDecision,
+) -> napi::Result<Value> {
+    let stated = WireDecision::of(refusal);
+    let object = response
+        .as_object_mut()
+        .ok_or_else(|| invariant("decision is not an object"))?;
+    for (field, value) in [
+        ("outcomes", stated.outcomes.map(|held| json!(held))),
+        ("deciding", stated.deciding.map(|deciding| json!(deciding))),
+        ("retry", stated.retry.map(|retry| json!(retry))),
+    ] {
+        if let Some(value) = value {
+            object.insert(field.to_owned(), value);
+        }
+    }
+    Ok(response)
 }
 
 fn with_offer_status(response: Value, status: OfferStatusKind) -> napi::Result<Value> {
@@ -890,13 +912,58 @@ pub(crate) fn unknown_result_response() -> Value {
 mod typed_tests {
     use super::{
         RemedyAct, authoritative_unexecuted_response, presentation_offer_ids, render_released_call,
-        render_remedy_outcome, unknown_result_response,
+        render_remedy_outcome, runtime_refusal, unknown_result_response, with_refusal_outcomes,
     };
     use crate::input::{OfferId, OfferOwner};
     use crate::operations::presentation_from_context;
     use appa_runtime::api::{RemedyOutcome, RemedyPresentation};
     use appa_runtime_api::OfferedRemedy;
     use serde_json::Value;
+
+    #[test]
+    fn a_control_gate_refusal_states_the_runtime_outcome_beside_its_text() {
+        use appa_runtime_api::{HookDecision, Outcomes, Remediable, Remedy, RetryHint};
+
+        let missing = HookDecision::Block {
+            reason: "no answer".into(),
+            outcomes: Some(Outcomes::MissingFact(RetryHint::AfterRepair)),
+        };
+        let response =
+            with_refusal_outcomes(runtime_refusal("no answer".into()).unwrap(), &missing).unwrap();
+        assert_eq!(response["approved_output"], "no answer");
+        assert_eq!(response["outcomes"], serde_json::json!(["missing_fact"]));
+        assert_eq!(response["deciding"], "missing_fact");
+        assert_eq!(response["retry"], "after_repair");
+
+        let remediable = HookDecision::DenyCall {
+            feedback: "needs a ruling".into(),
+            offers: Vec::new(),
+            review: Vec::new(),
+            outcomes: Some(Outcomes::Remediable(Remediable::new(
+                Remedy::Consent,
+                [Remedy::WaivableGap],
+            ))),
+        };
+        let response = with_refusal_outcomes(
+            runtime_refusal("needs a ruling".into()).unwrap(),
+            &remediable,
+        )
+        .unwrap();
+        assert_eq!(
+            response["outcomes"],
+            serde_json::json!(["waivable_gap", "consent"])
+        );
+        assert_eq!(response["deciding"], "consent");
+        assert!(response.get("retry").is_none());
+
+        let unstated = HookDecision::Block {
+            reason: "legacy".into(),
+            outcomes: None,
+        };
+        let response =
+            with_refusal_outcomes(runtime_refusal("legacy".into()).unwrap(), &unstated).unwrap();
+        assert_eq!(response, runtime_refusal("legacy".into()).unwrap());
+    }
 
     #[test]
     fn remedy_operation_preserves_existing_receipt_identifiers() {

@@ -52,7 +52,7 @@ use crate::{
         OutputSource, RemedyAct, authoritative_unexecuted_response, decision_text,
         inherited_result, proposed_recorded_call, recorded_call, remedy_operation, remedy_request,
         render_remedy_outcome, runtime_refusal, stored_approved_output, unknown_result_response,
-        with_approved_output, with_presentation_offers,
+        with_approved_output, with_presentation_offers, with_refusal_outcomes,
     },
     session::{
         SessionKey, check_session_identity, mark_busy_hold, operation_key, presentation_options,
@@ -773,12 +773,12 @@ impl State {
             .await;
             require_decision(&gate)?;
             if !matches!(gate, HookDecision::PassControl) {
-                let text = match gate {
-                    HookDecision::DenyCall { feedback, .. } => feedback,
-                    HookDecision::Block { reason, .. } => reason,
+                let text = match &gate {
+                    HookDecision::DenyCall { feedback, .. } => feedback.clone(),
+                    HookDecision::Block { reason, .. } => reason.clone(),
                     _ => return Err(invariant("unexpected remedy control decision")),
                 };
-                let response = runtime_refusal(text)?;
+                let response = with_refusal_outcomes(runtime_refusal(text)?, &gate)?;
                 return finish_remedy(
                     &self.store,
                     receipts,

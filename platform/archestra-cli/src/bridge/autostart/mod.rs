@@ -103,8 +103,6 @@ pub struct Removal {
 /// The MCP bridge after [`start`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Started {
-    /// Where the user sees it, for the message in the terminal.
-    where_it_runs: &'static str,
     /// It is in the start at login.
     at_login: bool,
 }
@@ -429,20 +427,22 @@ fn remove_if_present(path: &Path) -> io::Result<bool> {
 }
 
 /// What the terminal shows when the MCP bridge runs in the background: a
-/// short line for each fact, in plain words, with no paths and no commands.
+/// short line for each fact, in plain words, with no paths. The commands
+/// are for a new terminal: this one has the old `PATH`, so `archestra` works
+/// only in a new one.
 fn started_message(started: Started) -> String {
     let at_login = if started.at_login {
         ""
     } else {
-        "It does not start again when you log in.\n"
+        "Auto-start is off. To start it at each login, \
+         run in a new terminal: archestra bridge enable-auto-start\n"
     };
     format!(
-        "Setup is done. The MCP bridge runs in the background.\n\
-         {}\n\
+        "Your device is connected and the MCP bridge runs in the background.\n\
          {at_login}\
-         To check it later, open a new terminal and run: archestra bridge status\n\
-         You can go back to Archestra.",
-        started.where_it_runs,
+         The Device tab in Archestra shows its status,\n\
+         or you can check it in a new terminal on your machine with: archestra bridge status\n\
+         You can close this terminal and go back to Archestra."
     )
 }
 
@@ -508,23 +508,20 @@ mod tests {
 
     #[test]
     fn the_message_is_short_names_no_path_and_names_the_status_command() {
-        let message = started_message(Started {
-            where_it_runs: "The Device tab in Archestra shows its status.",
-            at_login: true,
-        });
+        let message = started_message(Started { at_login: true });
         assert_eq!(
             message,
-            "Setup is done. The MCP bridge runs in the background.\n\
-             The Device tab in Archestra shows its status.\n\
-             To check it later, open a new terminal and run: archestra bridge status\n\
-             You can go back to Archestra."
+            "Your device is connected and the MCP bridge runs in the background.\n\
+             The Device tab in Archestra shows its status,\n\
+             or you can check it in a new terminal on your machine with: archestra bridge status\n\
+             You can close this terminal and go back to Archestra."
         );
         assert!(!message.contains(".archestra"));
 
-        let message = started_message(Started {
-            where_it_runs: "The Device tab in Archestra shows its status.",
-            at_login: false,
-        });
-        assert!(message.contains("\nIt does not start again when you log in.\n"));
+        let message = started_message(Started { at_login: false });
+        assert!(message.contains(
+            "\nAuto-start is off. To start it at each login, \
+             run in a new terminal: archestra bridge enable-auto-start\n"
+        ));
     }
 }

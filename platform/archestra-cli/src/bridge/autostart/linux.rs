@@ -65,17 +65,9 @@ pub(super) fn start(
     add_to_login: bool,
 ) -> Result<super::Started, AutostartError> {
     let mut background = super::SystemBackground { home: options.home };
-    let (entry, at_login) =
+    let (_, at_login) =
         install_and_start(options, add_to_login, &mut SystemSystemctl, &mut background)?;
-    Ok(super::Started {
-        where_it_runs: match entry {
-            Entry::SystemdUnit => {
-                "Check its status with: systemctl --user status archestra-mcp-bridge"
-            }
-            Entry::XdgAutostart => "The Device tab in Archestra shows its status.",
-        },
-        at_login,
-    })
+    Ok(super::Started { at_login })
 }
 
 /// `archestra bridge stop` on Linux.

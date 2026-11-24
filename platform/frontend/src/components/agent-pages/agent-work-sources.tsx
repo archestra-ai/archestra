@@ -366,7 +366,8 @@ function AgentChannelsCard({
   );
 }
 
-const CHAT_APPS = [
+/** The messengers a deployment can offer; Jira and email are channels of another kind. */
+export const CHAT_APPS = [
   "slack",
   "ms-teams",
   "telegram",

@@ -13,15 +13,7 @@ import {
   orderedPopularAgentIds,
   withAgentRuntimeDefaults,
 } from "@archestra/shared";
-import {
-  Bot,
-  Code,
-  Laptop,
-  type LucideIcon,
-  MessageSquare,
-  Network,
-  Share2,
-} from "lucide-react";
+import { Bot, Code, Laptop, MessageSquare, Network } from "lucide-react";
 import Image from "next/image";
 import type { ReactNode } from "react";
 import type { AgentFormInitialValues } from "@/components/agent-form";
@@ -45,6 +37,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { useOrganization } from "@/lib/organization.query";
+import { CHAT_APPS } from "./agent-work-sources";
 
 export interface AgentCatalogTemplate {
   id: string;
@@ -297,7 +290,7 @@ export function AgentCatalog({
           title="Choose an agent"
           description={`Start with ${appName} or another agent. Configure it on the next page.`}
         >
-          <GiveItWorkFrom />
+          <GiveItWorkFrom showsRuntimes={showsRuntimes} />
           <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <CatalogSourceCard
               icon={<PlatformAgentIcon appIconLogo={appIconLogo} />}
@@ -491,63 +484,63 @@ function CatalogSection({
   );
 }
 
-/** Where an Agent Runtime's tasks can come from, so the reader knows before picking. */
-function GiveItWorkFrom() {
+/**
+ * Where an agent's tasks can come from, so the reader knows before picking.
+ * Handoff starts a run in an Agent Runtime, so only a reader who may use one
+ * is told about it.
+ */
+function GiveItWorkFrom({ showsRuntimes }: { showsRuntimes: boolean }) {
   const appName = useAppName();
-  const { visibleIds } = useMessagingChannelCatalog();
-  // A2A is represented by "Other agents" below; include every enabled
-  // external messaging channel, including email’s generated icon.
-  const messengers = visibleIds.filter((id) => id !== "a2a");
-  const source = ({
-    Icon,
-    label,
-    compactLabel,
-  }: {
-    Icon: LucideIcon;
-    label: string;
-    compactLabel?: string;
-  }) => (
-    <span
-      key={label}
-      className="flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"
-    >
-      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-      {compactLabel ? (
-        <>
-          <span className="sm:hidden">{compactLabel}</span>
-          <span className="hidden sm:inline">{label}</span>
-        </>
-      ) : (
-        <span>{label}</span>
-      )}
-    </span>
-  );
+  const { isHidden } = useMessagingChannelCatalog();
+  // Jira and email are messaging channels too, but a logo with no name says
+  // little here: the strip names the chat apps and leaves the rest to the
+  // agent's own page.
+  const messengers = CHAT_APPS.filter((id) => !isHidden(id));
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 rounded-lg bg-muted px-4 py-3 text-sm sm:flex sm:flex-wrap sm:gap-x-5">
-      <span className="font-medium">Give it work from</span>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg bg-muted px-4 py-3 text-sm">
+      <span className="font-semibold">Give it work from</span>
+      <WorkSource
+        icon={
+          <MessageSquare className="size-3.5 shrink-0" aria-hidden="true" />
+        }
+        label={`${appName} chat`}
+      />
       {messengers.length > 0 && (
-        <span className="flex items-center gap-2 sm:order-2">
-          {messengers.map((id) => (
-            <span key={id} title={MESSAGING_CHANNEL_LABELS[id]}>
-              <ChannelIcon channel={id} className="size-4" />
-              <span className="sr-only">{MESSAGING_CHANNEL_LABELS[id]}</span>
+        <WorkSource
+          icon={
+            <span className="flex items-center gap-1.5">
+              {messengers.map((id) => (
+                <span key={id} title={MESSAGING_CHANNEL_LABELS[id]}>
+                  <ChannelIcon channel={id} className="size-4" />
+                  <span className="sr-only">
+                    {MESSAGING_CHANNEL_LABELS[id]}
+                  </span>
+                </span>
+              ))}
             </span>
-          ))}
-        </span>
+          }
+          label="Your messenger"
+        />
       )}
-      <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 sm:contents sm:[&>span]:order-3 sm:[&>span:first-child]:order-1">
-        {source({
-          Icon: MessageSquare,
-          label: `${appName} chat`,
-          compactLabel: "Chat",
-        })}
-        {source({
-          Icon: Laptop,
-          label: "Handoff from a local coding agent",
-          compactLabel: "Handoff",
-        })}
-        {source({ Icon: Share2, label: "Other agents" })}
-      </div>
+      {showsRuntimes && (
+        <WorkSource
+          icon={<Laptop className="size-3.5 shrink-0" aria-hidden="true" />}
+          label="Handoff from a coding agent"
+        />
+      )}
+      <WorkSource
+        icon={<Bot className="size-3.5 shrink-0" aria-hidden="true" />}
+        label="Another agent"
+      />
     </div>
+  );
+}
+
+function WorkSource({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
+      {icon}
+      <span>{label}</span>
+    </span>
   );
 }

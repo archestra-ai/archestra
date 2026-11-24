@@ -36,14 +36,14 @@ beforeEach(() => {
     new URLSearchParams("code=code-1&state=state-1") as never,
   );
   setOAuthState("state-1");
-  setOAuthReturnUrl(`${window.location.origin}/mcp/registry?search=hugging`);
+  setOAuthReturnUrl(`${window.location.origin}/mcp/registry?search=example`);
   // The sign-in itself always works in these tests.
   server.use(
     http.post(`${API_ORIGIN}/api/oauth/callback`, () =>
       HttpResponse.json({
         success: true,
         catalogId: "catalog-1",
-        name: "Hugging Face",
+        name: "Example Server",
         accessToken: "token",
         secretId: "secret-1",
       }),
@@ -74,7 +74,7 @@ describe("OAuthCallbackPage", () => {
           {
             error: {
               message:
-                "Failed to connect to MCP server Hugging Face: Upstream MCP server returned HTTP 429 while listing tools. The MCP server is limiting requests. Try again in a minute.",
+                "Failed to connect to MCP server Example Server: Upstream MCP server returned HTTP 429 while listing tools. The MCP server is limiting requests. Try again in a minute.",
               type: "api_validation_error",
             },
           },
@@ -92,7 +92,7 @@ describe("OAuthCallbackPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Your sign-in worked, but Hugging Face was not connected. Upstream MCP server returned HTTP 429 while listing tools. The MCP server is limiting requests. Try again in a minute.",
+        "Your sign-in worked, but Example Server was not connected. Upstream MCP server returned HTTP 429 while listing tools. The MCP server is limiting requests. Try again in a minute.",
       ),
     ).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
@@ -102,14 +102,14 @@ describe("OAuthCallbackPage", () => {
   it("returns to the page the install started from when it succeeds", async () => {
     server.use(
       http.post(`${API_ORIGIN}/api/mcp_server`, () =>
-        HttpResponse.json({ id: "server-1", name: "Hugging Face" }),
+        HttpResponse.json({ id: "server-1", name: "Example Server" }),
       ),
     );
 
     renderPage();
 
     await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith("/mcp/registry?search=hugging"),
+      expect(replace).toHaveBeenCalledWith("/mcp/registry?search=example"),
     );
     expect(
       screen.queryByText("MCP Server Not Connected"),

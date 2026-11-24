@@ -830,27 +830,37 @@ describe("an agent's account lock at run time", () => {
   });
 
   describe("a subscription lock on an agent whose model is another provider's", () => {
-    // The runtime's subscription serves its own provider's models only, so
-    // the agent's company model cannot run on it: the person picks one.
-    for (const { name, command, label, provider, modelId, apiKeyValue } of [
+    // The lock came after the agent's company connection and model were
+    // picked. The runtime's subscription serves its own provider's models
+    // only, so that model is set aside with the connection: the run never
+    // resolves either, and takes a model the person's subscription serves,
+    // or waits for them to pick one.
+    for (const {
+      name,
+      command,
+      provider,
+      modelId,
+      apiKeyValue,
+      waitsForPick,
+    } of [
       {
         name: "Copilot",
         command: "archestra-copilot",
-        label: "GitHub Copilot",
         provider: "github-copilot",
         modelId: "gpt-5.4",
         apiKeyValue: "ghu_example_copilot_token",
+        waitsForPick: false,
       },
       {
         name: "Grok Build",
         command: "archestra-grok",
-        label: "SuperGrok",
         provider: "xai",
         modelId: "grok-4.3",
         apiKeyValue: "xai-subscription:example-subscription",
+        waitsForPick: true,
       },
     ] as const) {
-      test(`on ${name}, the run is refused until the person picks a model of their ${label}`, async ({
+      test(`on ${name}, the run never resolves the agent's company connection or its model`, async ({
         makeAgent,
       }) => {
         const { agent, own } = await agentWith({
@@ -863,7 +873,7 @@ describe("an agent's account lock at run time", () => {
           command: [command],
           accountLock: "subscription",
         };
-        // The person's own subscription is connected: only the model is wrong.
+        // The person's own subscription is connected.
         const personal = await makeKeyWithModel({
           organizationId,
           provider,
@@ -871,34 +881,35 @@ describe("an agent's account lock at run time", () => {
           userId: author.id,
           apiKeyValue,
         });
-        const refusal = {
-          statusCode: 409,
-          message: `This agent's model is not available through your ${label}. Choose a model on the agent's page.`,
-        };
-
-        await expect(launch({ agent, runtime })).rejects.toMatchObject(refusal);
-        await expect(ready({ agent, runtime })).rejects.toMatchObject(refusal);
-        expect(
-          await getResolvedAgentRuntimeModelCompatibility({
-            runtime,
-            agent,
-            agentId: agent.id,
-            organizationId,
-            userId: author.id,
-          }),
-        ).toMatchObject({
-          accountError: refusal.message,
-          // Picking a model fixes it, not choosing the account again.
-          accountErrorFromChoice: false,
-          accountErrorFromModel: true,
-        });
-
-        await AgentRuntimeUserAccountModel.upsert({
+        const resolved = await getResolvedAgentRuntimeModelCompatibility({
+          runtime,
+          agent,
           agentId: agent.id,
+          organizationId,
           userId: author.id,
-          authentication: "subscription",
-          modelId: personal.model.id,
         });
+        expect(resolved.companyConnectionId).toBeNull();
+        if (waitsForPick) {
+          // What resolves now is a model nobody set, which the subscription
+          // does not serve: it counts as none.
+          // Picking a model fixes it, not choosing the account again.
+          expect(resolved).toMatchObject({
+            accountErrorFromChoice: false,
+            accountErrorFromModel: true,
+          });
+          await expect(ready({ agent, runtime })).rejects.toMatchObject({
+            statusCode: 409,
+          });
+          await AgentRuntimeUserAccountModel.upsert({
+            agentId: agent.id,
+            userId: author.id,
+            authentication: "subscription",
+            modelId: personal.model.id,
+          });
+        } else {
+          expect(resolved.accountError).toBeNull();
+          expect(resolved.llm.selectedModel).toBe(modelId);
+        }
 
         await expect(ready({ agent, runtime })).resolves.toBeUndefined();
         const bound = await boundKeyId(
@@ -943,6 +954,21 @@ describe("an agent's account lock at run time", () => {
       const run = await launch({ agent, runtime });
 
       await expect(ready({ agent, runtime })).resolves.toBeUndefined();
+      // The agent's model runs, since SuperGrok serves it, but never on the
+      // company connection the agent still stores.
+      expect(
+        await getResolvedAgentRuntimeModelCompatibility({
+          runtime,
+          agent,
+          agentId: agent.id,
+          organizationId,
+          userId: author.id,
+        }),
+      ).toMatchObject({
+        llm: { chatApiKeyId: null, selectedModel: "grok-4.3" },
+        companyConnectionId: null,
+        accountError: null,
+      });
       const bound = await boundKeyId(run.virtualApiKeyId);
       expect(bound).toEqual([superGrok.key.id]);
       expect(bound).not.toContain(own.key.id);

@@ -2,6 +2,7 @@ import {
   credentialRequiresPerUserScope,
   isChatCompletionsOnlyRouterProvider,
   isModelRouterSupportedProvider,
+  lacksOpenAiChatCompletions,
   perUserCredentialLabel,
   type ResourceVisibilityScope,
   requiresOpenAiResponsesApi,
@@ -276,6 +277,26 @@ export function modelRequiresResponses(
 }
 
 /**
+ * Whether the provider has a chat-completions endpoint for the model at all.
+ * A model it serves there only without function tools (gpt-5.6, gpt-6) still
+ * counts: the provider's own error then names the fix.
+ */
+export function modelServesChatCompletions(
+  resolution: Pick<
+    ModelRouterResolution,
+    "provider" | "modelId" | "supportedEndpoints"
+  >,
+): boolean {
+  return (
+    !requiresResponsesApi(resolution.supportedEndpoints) &&
+    !(
+      resolution.provider === "openai" &&
+      lacksOpenAiChatCompletions(resolution.modelId)
+    )
+  );
+}
+
+/**
  * The provider whose native Responses surface serves `resolution`, or null
  * when the router translates Responses to Chat Completions.
  *
@@ -310,7 +331,7 @@ export function modelRouterServesEndpoint(
   if (!isModelRouterSupportedProvider(resolution.provider)) return false;
   switch (endpoint) {
     case "chat_completions":
-      return !modelRequiresResponses(resolution);
+      return modelServesChatCompletions(resolution);
     case "responses":
       return (
         nativeResponsesProvider(resolution) !== null ||

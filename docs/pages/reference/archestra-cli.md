@@ -3,7 +3,7 @@ title: Archestra CLI
 description: The archestra program on your device, with the commands that start, stop, update, and remove the MCP bridge
 order: 6
 beta: "The MCP bridge is in Beta."
-lastUpdated: 2026-11-18
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -46,10 +46,9 @@ Every command acts on your own device. Add `--help` to any of them for details.
 
 ## Update
 
-The program follows the Archestra it is linked to. When your Archestra offers another version, **Personal Settings → Device** and `archestra bridge status` say so.
+The MCP bridge updates by itself. When your Archestra offers another version, it installs that version when no tool call is running, and starts again.
 
-- **macOS and Linux:** run `archestra update`.
-- **Windows:** the MCP bridge updates by itself when no tool call is running. To update at once, run `archestra update`.
+To update manually, run `archestra update`.
 
 ## Uninstall
 

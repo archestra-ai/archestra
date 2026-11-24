@@ -54,7 +54,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   const openCodex = async () => {
     await page.getByRole("button", { name: "Actions for Codex" }).click();
     await page.getByRole("menuitem", { name: "Edit runtime" }).click();
-    const dialog = page.getByRole("dialog", { name: "Edit Codex" });
+    const dialog = page.getByRole("dialog", { name: "Edit Codex runtime" });
     await dialog.getByRole("button", { name: "Runtime settings" }).click();
     return dialog;
   };
@@ -82,12 +82,14 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   ).toBeChecked();
   await expect(
     dialog.getByText(
-      "Each agent chooses between personal subscriptions and a company API key.",
+      "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, a company API key, or both.",
     ),
   ).toBeVisible();
-  // Its connection and model are optional: left empty, each agent picks.
+  // Its connection and model are optional: left empty, each agent sets its own.
   await expect(
-    dialog.getByText("Each agent picks its connection and model."),
+    dialog.getByText(
+      "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.",
+    ),
   ).toBeVisible();
   await expect(accounts.getByRole("button", { name: /^Model/ })).toBeDisabled();
 
@@ -103,7 +105,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   ).toBeVisible();
   await expect(
     dialog.getByText(
-      "Every agent uses this connection. Each agent picks its model.",
+      "Every agent on this runtime uses this connection. Set the model in each agent's settings, or set it here.",
     ),
   ).toBeVisible();
   const fixed = savedBody();
@@ -136,7 +138,9 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Clear connection" }).click();
   await expect(
-    dialog.getByText("Each agent picks its connection and model."),
+    dialog.getByText(
+      "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.",
+    ),
   ).toBeVisible();
   // An unsaved change: the footer's way out reads Cancel until it is saved.
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
@@ -147,7 +151,9 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   ).not.toHaveProperty("accounts");
   await expectSavedAndOpen(page, dialog);
   await expect(
-    dialog.getByText("Each agent picks its connection and model."),
+    dialog.getByText(
+      "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.",
+    ),
   ).toBeVisible();
 });
 
@@ -182,7 +188,7 @@ test("an administrator sees both account cards on the Claude Code runtime with n
   await page.goto("/settings/agents/runtimes");
   await page.getByRole("button", { name: "Actions for Claude Code" }).click();
   await page.getByRole("menuitem", { name: "Edit runtime" }).click();
-  const dialog = page.getByRole("dialog", { name: "Edit Claude Code" });
+  const dialog = page.getByRole("dialog", { name: "Edit Claude Code runtime" });
   await dialog.getByRole("button", { name: "Runtime settings" }).click();
 
   // Nothing is stored, so the runtime names no kind: both cards.
@@ -199,7 +205,7 @@ test("an administrator sees both account cards on the Claude Code runtime with n
   // The rule reaches every agent on save; the update is for the rest.
   await expect(
     dialog.getByText(
-      "Accounts apply to every agent as soon as you save. Other changes only apply to agents created afterwards.",
+      "Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here. The container image updates with each release, for every agent.",
     ),
   ).toBeVisible();
 

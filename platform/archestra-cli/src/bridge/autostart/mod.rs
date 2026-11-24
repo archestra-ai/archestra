@@ -103,8 +103,6 @@ pub struct Removal {
 /// The MCP bridge after [`start`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Started {
-    /// Where the user sees it, for the message in the terminal.
-    where_it_runs: &'static str,
     /// It is in the start at login.
     at_login: bool,
 }
@@ -303,14 +301,15 @@ impl Background for SystemBackground<'_> {
 
         let mut child = spawn_detached(program, arguments)?;
         let started = wait_until(Self::WAIT, Self::START_CHECK_INTERVAL, || {
-            if is_running(self.home)? {
-                return Ok(Some(()));
-            }
-            match child.try_wait()? {
-                Some(status) => Err(io::Error::other(format!(
-                    "the MCP bridge in the background ended at once ({status}); see its log file"
+            let running = is_running(self.home)?;
+            let ended = child.try_wait()?;
+            match start_check(running, ended.map(|status| status.success())) {
+                StartCheck::Runs => Ok(Some(())),
+                StartCheck::Wait => Ok(None),
+                StartCheck::Failed => Err(io::Error::other(format!(
+                    "the MCP bridge in the background ended at once ({}); see its log file",
+                    ended.map(|status| status.to_string()).unwrap_or_default()
                 ))),
-                None => Ok(None),
             }
         })?;
         started.ok_or_else(|| {
@@ -322,13 +321,36 @@ impl Background for SystemBackground<'_> {
     }
 }
 
+/// What one look at an MCP bridge that this program just started says.
+#[cfg(any(target_os = "linux", windows, test))]
+#[derive(Debug, PartialEq, Eq)]
+enum StartCheck {
+    /// An MCP bridge in the background holds the lock.
+    Runs,
+    /// Not yet: look again.
+    Wait,
+    /// The process ended with a failure: no MCP bridge comes.
+    Failed,
+}
+
+/// `ended`: the process that this program started ended, with success
+/// (`true`) or not. An end with success and no MCP bridge that runs is not a
+/// failure: the MCP bridge found a new program at its start, and the program
+/// that it downloaded stopped it and starts the MCP bridge again. On a fast
+/// network that takes less time than one look.
+#[cfg(any(target_os = "linux", windows, test))]
+fn start_check(running: bool, ended: Option<bool>) -> StartCheck {
+    match (running, ended) {
+        (true, _) => StartCheck::Runs,
+        (false, Some(false)) => StartCheck::Failed,
+        (false, Some(true) | None) => StartCheck::Wait,
+    }
+}
+
 /// Starts a process that outlives this one and the terminal: no console and
 /// no standard streams (it writes its own log file).
 #[cfg(any(target_os = "linux", windows))]
-pub(crate) fn spawn_detached(
-    program: &Path,
-    arguments: &[OsString],
-) -> io::Result<std::process::Child> {
+fn spawn_detached(program: &Path, arguments: &[OsString]) -> io::Result<std::process::Child> {
     use std::process::{Command, Stdio};
 
     let command = || {
@@ -362,6 +384,48 @@ pub(crate) fn spawn_detached(
             .spawn()
             .or_else(|_| command().creation_flags(flags).spawn())
     }
+}
+
+/// Starts a program that an update downloaded. Its first steps stop the MCP
+/// bridge that starts it, so it must outlive that MCP bridge:
+///
+/// | OS | How it starts | Why |
+/// | --- | --- | --- |
+/// | macOS | in a process group of its own | launchd ends the process group of a job that it stops |
+/// | Linux, systemd user unit | in a unit of its own ([`linux`]) | systemd ends all processes of a unit that it stops |
+/// | Linux, no systemd user session | in a process group of its own | the MCP bridge is a process of its own |
+/// | Windows | as a process of its own | the MCP bridge is a process of its own |
+pub(crate) fn start_downloaded_program(program: &Path, arguments: &[OsString]) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::start_downloaded_program(program, arguments)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        spawn_in_own_process_group(program, arguments)
+    }
+    #[cfg(windows)]
+    {
+        spawn_detached(program, arguments).map(drop)
+    }
+}
+
+/// Starts a process in a process group of its own, with no standard input
+/// and output. It keeps the stderr of this process, which is the log file of
+/// an MCP bridge in the background: the log then has what a failed install
+/// said.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn spawn_in_own_process_group(program: &Path, arguments: &[OsString]) -> io::Result<()> {
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    Command::new(program)
+        .args(arguments)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .map(drop)
 }
 
 /// Copies the program to `~/.archestra/bin/`, unless it runs from there
@@ -429,20 +493,22 @@ fn remove_if_present(path: &Path) -> io::Result<bool> {
 }
 
 /// What the terminal shows when the MCP bridge runs in the background: a
-/// short line for each fact, in plain words, with no paths and no commands.
+/// short line for each fact, in plain words, with no paths. The commands
+/// are for a new terminal: this one has the old `PATH`, so `archestra` works
+/// only in a new one.
 fn started_message(started: Started) -> String {
     let at_login = if started.at_login {
         ""
     } else {
-        "It does not start again when you log in.\n"
+        "Auto-start is off. To start it at each login, \
+         run in a new terminal: archestra bridge enable-auto-start\n"
     };
     format!(
-        "Setup is done. The MCP bridge runs in the background.\n\
-         {}\n\
+        "Your device is connected and the MCP bridge runs in the background.\n\
          {at_login}\
-         To check it later, open a new terminal and run: archestra bridge status\n\
-         You can go back to Archestra.",
-        started.where_it_runs,
+         The Device tab in Archestra shows its status,\n\
+         or you can check it in a new terminal on your machine with: archestra bridge status\n\
+         You can close this terminal and go back to Archestra."
     )
 }
 
@@ -463,6 +529,20 @@ mod tests {
             ]
             .map(OsString::from)
         );
+    }
+
+    #[test]
+    fn a_started_bridge_that_an_update_stopped_is_waited_for() {
+        assert_eq!(start_check(true, None), StartCheck::Runs);
+        assert_eq!(start_check(false, None), StartCheck::Wait);
+        // The MCP bridge ended with a failure: nothing starts it again.
+        assert_eq!(start_check(false, Some(false)), StartCheck::Failed);
+        // It ended with success before a look saw it run: the program of an
+        // update stopped it, and starts the MCP bridge again.
+        assert_eq!(start_check(false, Some(true)), StartCheck::Wait);
+        // The process that this program started ended, but an MCP bridge
+        // runs: the one that the update started, or one that ran already.
+        assert_eq!(start_check(true, Some(true)), StartCheck::Runs);
     }
 
     #[test]
@@ -508,23 +588,20 @@ mod tests {
 
     #[test]
     fn the_message_is_short_names_no_path_and_names_the_status_command() {
-        let message = started_message(Started {
-            where_it_runs: "The Device tab in Archestra shows its status.",
-            at_login: true,
-        });
+        let message = started_message(Started { at_login: true });
         assert_eq!(
             message,
-            "Setup is done. The MCP bridge runs in the background.\n\
-             The Device tab in Archestra shows its status.\n\
-             To check it later, open a new terminal and run: archestra bridge status\n\
-             You can go back to Archestra."
+            "Your device is connected and the MCP bridge runs in the background.\n\
+             The Device tab in Archestra shows its status,\n\
+             or you can check it in a new terminal on your machine with: archestra bridge status\n\
+             You can close this terminal and go back to Archestra."
         );
         assert!(!message.contains(".archestra"));
 
-        let message = started_message(Started {
-            where_it_runs: "The Device tab in Archestra shows its status.",
-            at_login: false,
-        });
-        assert!(message.contains("\nIt does not start again when you log in.\n"));
+        let message = started_message(Started { at_login: false });
+        assert!(message.contains(
+            "\nAuto-start is off. To start it at each login, \
+             run in a new terminal: archestra bridge enable-auto-start\n"
+        ));
     }
 }

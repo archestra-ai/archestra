@@ -859,7 +859,12 @@ function Agents() {
         ) : (
           <AgentProviderIndicator
             usesOrganizationDefault={
-              !row.original.value.llmApiKeyId && !row.original.value.modelId
+              !row.original.value.resolvedLlmPersonalSubscription &&
+              !row.original.value.llmApiKeyId &&
+              !row.original.value.modelId
+            }
+            personalSubscription={
+              row.original.value.resolvedLlmPersonalSubscription === true
             }
             provider={row.original.value.resolvedLlmProvider}
             keyName={row.original.value.resolvedLlmProviderKeyName}

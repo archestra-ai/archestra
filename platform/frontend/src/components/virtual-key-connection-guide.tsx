@@ -178,8 +178,8 @@ export function VirtualKeyConnectionGuide({
             <InlineNotice className="flex-nowrap items-start">
               <AlertTriangle className="mt-px" />
               <InlineNoticeText>
-                This is the only time the full key is shown. Store it in a
-                secret manager or your app&apos;s environment.
+                Store it in a secret manager or your app&apos;s environment. Its
+                owner can copy it again from the virtual keys list.
               </InlineNoticeText>
             </InlineNotice>
             <CopyField
@@ -193,9 +193,10 @@ export function VirtualKeyConnectionGuide({
           <InlineNotice className="flex-nowrap items-start" variant="info">
             <Info className="mt-px" />
             <InlineNoticeText>
-              The full key was shown only when it was created. Set your saved
-              key as <InlineCode>ARCHESTRA_LLM_VIRTUAL_KEY</InlineCode> before
-              running the example below.
+              Set your saved key as{" "}
+              <InlineCode>ARCHESTRA_LLM_VIRTUAL_KEY</InlineCode> before running
+              the example below. Its owner can copy it again from the virtual
+              keys list.
             </InlineNoticeText>
           </InlineNotice>
         )}
@@ -247,6 +248,9 @@ export function VirtualKeyConnectionGuide({
       </Step>
 
       <Step number={3} title="Make your first request">
+        {virtualApiKeyId && endpoint === "model-router" && !isPassthrough && (
+          <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
+        )}
         {isPoolOnly ? (
           <p className="text-sm text-muted-foreground">
             Open{" "}
@@ -257,29 +261,23 @@ export function VirtualKeyConnectionGuide({
               Model pools
             </Link>
             , select a pool assigned to this key, then open its Connect section
-            for a request example. Send the pool&apos;s name as the model.
+            for a request example. Send the name of the pool, or of an auto
+            router on this key, as the model.
           </p>
         ) : (
-          <>
-            {virtualApiKeyId &&
-              endpoint === "model-router" &&
-              !isPassthrough && (
-                <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
-              )}
-            <RequestExample
-              // Remount on target change so the model resets to that target's
-              // recommended model instead of keeping one it can't serve.
-              key={endpoint === "model-router" ? endpoint : provider}
-              connectionBaseUrl={connectionBaseUrl}
-              target={target}
-              keyType={keyType}
-              keyValue={keyValue}
-              routerProviders={routerProviders}
-              mappedProviderKeys={mappedProviderKeys}
-              offerAutoModel={!!virtualApiKeyId && !isPassthrough}
-              virtualApiKeyId={virtualApiKeyId}
-            />
-          </>
+          <RequestExample
+            // Remount on target change so the model resets to that target's
+            // recommended model instead of keeping one it can't serve.
+            key={endpoint === "model-router" ? endpoint : provider}
+            connectionBaseUrl={connectionBaseUrl}
+            target={target}
+            keyType={keyType}
+            keyValue={keyValue}
+            routerProviders={routerProviders}
+            mappedProviderKeys={mappedProviderKeys}
+            offerAutoModel={!!virtualApiKeyId && !isPassthrough}
+            virtualApiKeyId={virtualApiKeyId}
+          />
         )}
         {isPassthrough && (
           <p className="text-xs text-muted-foreground">
@@ -400,8 +398,8 @@ function EndpointDetails({
       return (
         <p className="text-xs text-muted-foreground">
           Use an OpenAI-compatible client with your virtual key as the API key
-          and an assigned pool&apos;s exact name as the model. Do not add a
-          provider prefix.
+          and the exact name of an assigned pool or auto router as the model. Do
+          not add a provider prefix.
         </p>
       );
     }

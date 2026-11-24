@@ -4,6 +4,7 @@ import {
 } from "@archestra/shared/access-control";
 import { useMemo } from "react";
 import { usePermissionMap, useScopedCapabilities } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
@@ -27,6 +28,7 @@ export function useNavPermissionMap(): Record<string, boolean> | null {
   );
   const limitsAccess = useTeamLimitAccess();
   const serverRules = useServerRulesAccess();
+  const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   const manageMap = usePermissionMap(SETTINGS_MANAGE_PERMISSIONS);
   const { data: capabilities = NO_CAPABILITIES } = useScopedCapabilities();
   const permissionMap = useMemo(
@@ -52,6 +54,10 @@ export function useNavPermissionMap(): Record<string, boolean> | null {
     ...pageMap,
     "/llm/costs": !!pageMap["/llm/costs"] || limitsAccess.isTeamAdmin,
     "/llm/limits": !!pageMap["/llm/limits"] || !!limitsAccess.canRead,
+    // Personal Claude Code subscription management is self-service when Agent
+    // Runtime is enabled, so Model Providers stays reachable without key-read.
+    "/llm/model-providers":
+      !!pageMap["/llm/model-providers"] || agentRuntimeEnabled,
     // A reader of some MCP server's rules opens the Policy page for them.
     "/openappa/policy":
       !!pageMap["/openappa/policy"] || serverRules.scoped === true,

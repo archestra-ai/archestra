@@ -95,6 +95,9 @@ const VirtualApiKeyBodyObjectSchema = z.object({
   autoRouterIds: z.array(z.string().uuid()).max(500).optional(),
 });
 
+const NO_KEY_ACCESS_MESSAGE =
+  "At least one provider API key, model pool or auto router is required";
+
 /**
  * Contextual validation: which fields are accepted depends on the key type.
  * Standard keys map provider API keys or model pools; passthrough keys never
@@ -132,21 +135,25 @@ function refineVirtualApiKeyBody(
   if (
     value.providerApiKeys.length === 0 &&
     !value.includeFutureProviders &&
-    !value.modelPoolIds?.length
+    !value.modelPoolIds?.length &&
+    !value.autoRouterIds?.length
   ) {
     ctx.addIssue({
       code: "custom",
       path: ["providerApiKeys"],
-      message: "At least one provider API key or model pool is required",
+      message: NO_KEY_ACCESS_MESSAGE,
     });
   }
 }
 
 const UpdateVirtualApiKeyBodySchema = VirtualApiKeyBodyObjectSchema.superRefine(
   (value, ctx) => {
-    // An omitted pool list retains existing grants, checked after loading the
-    // key. Passthrough restrictions always apply.
-    if (value.keyType === "passthrough" || value.modelPoolIds !== undefined) {
+    // An omitted pool or router list retains existing grants, checked after
+    // loading the key. Passthrough restrictions always apply.
+    if (
+      value.keyType === "passthrough" ||
+      (value.modelPoolIds !== undefined && value.autoRouterIds !== undefined)
+    ) {
       refineVirtualApiKeyBody(value, ctx);
     }
   },
@@ -762,12 +769,14 @@ async function updateVirtualApiKey(params: {
         body.modelPoolIds?.length ||
         (body.modelPoolIds === undefined &&
           (await ModelPoolModel.hasVirtualApiKeyGrant(id)))
+      ) &&
+      !(
+        body.autoRouterIds?.length ||
+        (body.autoRouterIds === undefined &&
+          (await AutoRouterModel.hasAnyVirtualApiKeyGrant(id)))
       )
     ) {
-      throw new ApiError(
-        400,
-        "At least one provider API key or model pool is required",
-      );
+      throw new ApiError(400, NO_KEY_ACCESS_MESSAGE);
     }
     // An edit changes the key itself, never who can reach it. Access lives in
     // the key's permission policy, which the permissions editor writes on its

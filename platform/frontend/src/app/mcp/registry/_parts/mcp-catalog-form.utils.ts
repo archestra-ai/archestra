@@ -70,6 +70,11 @@ export function transformFormToApiData(
     name: values.name,
     description: values.description || null,
     icon: values.icon ?? null,
+    // The setup instructions a catalog entry brought along. A form that never
+    // held them sends nothing, so stored instructions stay as they are.
+    ...(values.instructions !== undefined && {
+      instructions: values.instructions || null,
+    }),
   };
 
   // A desktop MCP server runs on each user's own computer, so it has no server
@@ -198,6 +203,9 @@ export function transformFormToApiData(
         values.oauthConfig.resourceMetadataUrl || undefined,
       token_endpoint: values.oauthConfig.tokenEndpoint || undefined,
       client_id: isClientCredentials ? "" : values.oauthConfig.client_id || "",
+      requires_client_credentials: isClientCredentials
+        ? undefined
+        : values.oauthConfig.requires_client_credentials,
       client_secret: isClientCredentials
         ? undefined
         : values.oauthConfig.client_secret || undefined,
@@ -416,6 +424,7 @@ export function transformCatalogItemToFormValues(
     | {
         client_id: string;
         client_secret: string;
+        requires_client_credentials?: boolean;
         audience: string;
         resource: string;
         redirect_uris: string;
@@ -435,6 +444,7 @@ export function transformCatalogItemToFormValues(
     oauthConfig = {
       client_id: item.oauthConfig.client_id || "",
       client_secret: item.oauthConfig.client_secret || "",
+      requires_client_credentials: item.oauthConfig.requires_client_credentials,
       audience:
         typeof item.userConfig?.audience?.default === "string"
           ? item.userConfig.audience.default
@@ -563,6 +573,7 @@ export function transformCatalogItemToFormValues(
   return {
     name: item.name,
     description: item.description || "",
+    instructions: item.instructions ?? undefined,
     icon: item.icon ?? null,
     serverType: item.serverType as McpCatalogFormValues["serverType"],
     multitenant: item.serverType === "local" && Boolean(item.multitenant),
@@ -675,6 +686,12 @@ export function transformExternalCatalogToFormValues(
     oauthConfig = {
       client_id: server.oauth_config.client_id || "",
       client_secret: server.oauth_config.client_secret || "",
+      // The hosted catalog and its generated client can deploy independently.
+      requires_client_credentials:
+        "requires_client_credentials" in server.oauth_config &&
+        typeof server.oauth_config.requires_client_credentials === "boolean"
+          ? server.oauth_config.requires_client_credentials
+          : undefined,
       audience: "",
       resource:
         getOptionalStringProperty(server.oauth_config, "resource") || "",
@@ -830,7 +847,20 @@ export function transformExternalCatalogToFormValues(
     description: server.description || "",
     instructions: server.instructions ?? undefined,
     icon: server.icon ?? null,
-    serverType: server.server.type as "remote" | "local",
+    serverType:
+      server.server.type === "desktop"
+        ? "desktop_mcp"
+        : (server.server.type as "remote" | "local"),
+    desktopConfig:
+      server.server.type === "desktop"
+        ? {
+            kind: "command",
+            value: desktopCommandLine(
+              server.server.command,
+              server.server.args,
+            ),
+          }
+        : undefined,
     multitenant: server.server.type === "local" && authMethod !== "none",
     serverUrl: server.server.type === "remote" ? server.server.url : "",
     authMethod,
@@ -1092,4 +1122,20 @@ export function stripEnvVarQuotes(value: string): string {
   }
 
   return value;
+}
+
+/**
+ * One command line from a catalog entry's command and arguments, in the form
+ * the MCP bridge splits again: an argument with a space or a quote goes in
+ * double quotes, with `"` written as `\"`. Backslashes stay as they are,
+ * since the bridge on Windows keeps them as normal characters.
+ */
+function desktopCommandLine(command: string, args: string[] = []): string {
+  return [command, ...args]
+    .map((part) =>
+      part !== "" && /^[^\s"']+$/.test(part)
+        ? part
+        : `"${part.replaceAll('"', '\\"')}"`,
+    )
+    .join(" ");
 }

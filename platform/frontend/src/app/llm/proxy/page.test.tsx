@@ -82,6 +82,7 @@ const POOL = {
 const ROUTER = {
   id: "router-1",
   name: "auto",
+  enabled: true,
   virtualApiKeyIds: [],
   tiers: {
     fast: { provider: "gemini", modelId: "flash" },
@@ -290,6 +291,32 @@ describe("LLM Proxy dashboard", () => {
     expect(
       await screen.findByRole("link", { name: "+2000 more" }),
     ).toHaveAttribute("href", "/llm/proxy/virtual-keys?keyType=standard");
+  });
+
+  it("lists only keys the Virtual Keys page shows when its link opens it", async () => {
+    // A key an admin reaches only through organization-wide access is hidden
+    // on Virtual Keys until its filter asks for it, so its chip would land on
+    // an empty list.
+    const requested: string[] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        requested.push(
+          `${params.get("keyType")}:${params.getAll("access").join(",")}`,
+        );
+        return HttpResponse.json(page(standardKeys));
+      }),
+    );
+    renderPage();
+
+    await screen.findByRole("link", { name: /Judge pipeline/ });
+    expect(requested).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^standard:.*mine/),
+        expect.stringMatching(/^passthrough:.*mine/),
+      ]),
+    );
+    expect(requested.join(" ")).not.toContain("others");
   });
 
   it("marks a key that has used 80% of its spend limit", async () => {

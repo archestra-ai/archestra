@@ -188,9 +188,6 @@ describe("EditVirtualKeyDialog", () => {
 
     expect(screen.getByText("Use your saved key")).toBeVisible();
     expect(
-      screen.getByText(/full key was shown only when it was created/),
-    ).toBeVisible();
-    expect(
       screen.queryByRole("button", { name: "Copy key" }),
     ).not.toBeInTheDocument();
     expect(

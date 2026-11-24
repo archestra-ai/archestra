@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@archestra/shared";
 import { CheckCircle2, ExternalLink, Loader2, Unplug } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ClaudeCodeSignInSteps } from "@/components/claude-code-sign-in-steps";
@@ -21,6 +22,151 @@ import {
   useDisconnectClaudeCodeAccount,
 } from "@/lib/claude-code-account.query";
 
+type ClaudeCodeAccountQuery = {
+  data: archestraApiTypes.GetClaudeCodeAccountResponses["200"] | undefined;
+  isError: boolean;
+  error: unknown;
+  refetch: () => unknown;
+};
+
+type ClaudeCodeSignInMutation = {
+  mutate: (
+    body: archestraApiTypes.CompleteClaudeCodeSignInData["body"] | undefined,
+    options?: { onSuccess?: () => void },
+  ) => void;
+  reset: () => void;
+  isPending: boolean;
+  isError: boolean;
+};
+
+type ClaudeCodeDisconnectMutation = {
+  mutate: () => void;
+  isPending: boolean;
+};
+
+/**
+ * Shared sign-in and connection-management dialog for a user's personal Claude
+ * Code subscription, used both on agent pages and on Model Providers.
+ */
+export function ClaudeCodeAccountDialog({
+  open,
+  onOpenChange,
+  account,
+  signIn,
+  disconnect,
+  submitted,
+  onSubmittedChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  account: ClaudeCodeAccountQuery;
+  signIn: ClaudeCodeSignInMutation;
+  disconnect: ClaudeCodeDisconnectMutation;
+  submitted: boolean;
+  onSubmittedChange: (value: boolean) => void;
+}) {
+  const [code, setCode] = useState("");
+  const connected = account.data?.state === "connected";
+
+  useEffect(() => {
+    if (submitted && connected) {
+      onOpenChange(false);
+      onSubmittedChange(false);
+      setCode("");
+    }
+  }, [submitted, connected, onOpenChange, onSubmittedChange]);
+
+  const {
+    mutate: finishSignIn,
+    isPending: finishing,
+    isError: signInFailed,
+  } = signIn;
+  const flowId = account.data?.flowId;
+  const state = account.data?.state;
+  useEffect(() => {
+    if (!open || state !== "connecting" || !flowId || finishing || signInFailed)
+      return;
+    const timer = setTimeout(() => {
+      onSubmittedChange(true);
+      finishSignIn({ flowId });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [
+    open,
+    state,
+    flowId,
+    finishing,
+    signInFailed,
+    finishSignIn,
+    onSubmittedChange,
+  ]);
+
+  const completeSignIn = () => {
+    if (!account.data?.flowId) return;
+    onSubmittedChange(true);
+    signIn.mutate(
+      { flowId: account.data.flowId, code: code.trim() },
+      { onSuccess: () => setCode("") },
+    );
+  };
+
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={(value) => {
+        onOpenChange(value);
+        if (!value) setCode("");
+      }}
+      title={connected ? "Claude Code account" : "Connect Claude Code"}
+      description="Connect your Claude account to use your subscription."
+      size="small"
+      className="sm:max-w-xl"
+      footer={
+        <>
+          <DialogCancelButton>Cancel</DialogCancelButton>
+          {account.data?.state === "awaiting_code" && (
+            <Button
+              type="button"
+              disabled={!code.trim() || signIn.isPending}
+              onClick={completeSignIn}
+            >
+              <span>Complete sign-in</span>
+            </Button>
+          )}
+        </>
+      }
+    >
+      <ClaudeCodeAccountFlow
+        account={account}
+        signIn={signIn}
+        disconnect={disconnect}
+        code={code}
+        onCodeChange={setCode}
+        onStartSignIn={() => {
+          onSubmittedChange(true);
+          signIn.mutate(undefined);
+        }}
+        onCompleteSignIn={completeSignIn}
+      />
+    </StandardDialog>
+  );
+}
+
+/** Whether opening the Claude Code dialog should start a fresh OAuth flow. */
+export function shouldStartClaudeCodeSignIn(params: {
+  connected: boolean;
+  signInPending: boolean;
+  state:
+    | archestraApiTypes.GetClaudeCodeAccountResponses["200"]["state"]
+    | undefined;
+}): boolean {
+  if (params.connected || params.signInPending) return false;
+  return !(
+    params.state &&
+    ["starting", "connecting", "awaiting_code"].includes(params.state)
+  );
+}
+
 export function ClaudeCodeAccount({
   agentId,
   variant,
@@ -37,19 +183,23 @@ export function ClaudeCodeAccount({
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
-
   const [submitted, setSubmitted] = useState(false);
   const account = useClaudeCodeAccount(agentId, open);
   const connected = account.data?.state === "connected";
   const signIn = useClaudeCodeSignIn(agentId);
   const disconnect = useDisconnectClaudeCodeAccount(agentId);
+  const state = account.data?.state;
+
+  // Inline variant renders without ClaudeCodeAccountDialog, so keep its own
+  // completion effects scoped to inline.
   useEffect(() => {
+    if (variant !== "inline") return;
     if (submitted && connected) {
       setOpen(false);
       setSubmitted(false);
       setCode("");
     }
-  }, [submitted, connected]);
+  }, [variant, submitted, connected]);
 
   const {
     mutate: finishSignIn,
@@ -57,8 +207,8 @@ export function ClaudeCodeAccount({
     isError: signInFailed,
   } = signIn;
   const flowId = account.data?.flowId;
-  const state = account.data?.state;
   useEffect(() => {
+    if (variant !== "inline") return;
     if (!open || state !== "connecting" || !flowId || finishing || signInFailed)
       return;
     const timer = setTimeout(() => {
@@ -66,16 +216,18 @@ export function ClaudeCodeAccount({
       finishSignIn({ flowId });
     }, 2000);
     return () => clearTimeout(timer);
-  }, [open, state, flowId, finishing, signInFailed, finishSignIn]);
+  }, [variant, open, state, flowId, finishing, signInFailed, finishSignIn]);
 
   // Opening the dialog to sign in is asking to sign in, so the flow starts
   // straight away instead of behind a second "Sign in with Claude" button.
   const openAccount = () => {
     setOpen(true);
     if (
-      connected ||
-      signIn.isPending ||
-      (state && ["starting", "connecting", "awaiting_code"].includes(state))
+      !shouldStartClaudeCodeSignIn({
+        connected,
+        signInPending: signIn.isPending,
+        state,
+      })
     )
       return;
     setSubmitted(true);
@@ -111,112 +263,6 @@ export function ClaudeCodeAccount({
       </p>
     );
 
-  const flow = account.isError ? (
-    <QueryLoadError
-      title="Could not check Claude Code"
-      error={account.error}
-      onRetry={() => void account.refetch()}
-    />
-  ) : connected ? (
-    <div className="space-y-3">
-      <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
-        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-green-500" />
-        <div>
-          <p className="font-medium text-green-600 dark:text-green-400">
-            Connected for you
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            This account is available to all your Claude Code agents. Other
-            users sign in separately.
-          </p>
-        </div>
-      </div>
-      {account.data?.expiresAt && (
-        <p className="text-xs text-muted-foreground">
-          Reconnect by {new Date(account.data.expiresAt).toLocaleDateString()}.
-        </p>
-      )}
-      <p className="text-xs text-muted-foreground">
-        Disconnect prevents new runs across all your Claude Code agents from
-        using this account. Running sessions keep their token. Revoke the token
-        in Claude to end its access.
-      </p>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={disconnect.isPending}
-        onClick={() => disconnect.mutate()}
-      >
-        <span>Disconnect</span>
-      </Button>
-    </div>
-  ) : signIn.isError ? (
-    <div className="space-y-2">
-      <p role="alert" className="text-sm text-destructive">
-        Could not complete sign-in. Please try again.
-      </p>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => {
-          signIn.reset();
-          signIn.mutate(undefined);
-        }}
-      >
-        Try again
-      </Button>
-    </div>
-  ) : account.data?.state === "awaiting_code" ? (
-    <ClaudeCodeSignInSteps
-      authorizationUrl={account.data.authorizationUrl}
-      code={code}
-      onCodeChange={setCode}
-      onSubmit={completeSignIn}
-      submitting={signIn.isPending}
-      submitLabel={variant === "inline" ? "Connect" : undefined}
-    />
-  ) : signIn.isPending ||
-    account.data?.state === "starting" ||
-    account.data?.state === "connecting" ? (
-    <div className="space-y-2">
-      <output className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        <span>
-          {account.data?.state === "connecting"
-            ? "Completing sign-in…"
-            : "Preparing Claude sign-in…"}
-        </span>
-      </output>
-    </div>
-  ) : (
-    <div className="space-y-2">
-      {account.data?.state === "failed" && (
-        <p role="alert" className="text-sm text-destructive">
-          Sign-in did not complete. Please try again.
-        </p>
-      )}
-      {account.data?.state === "expired" && (
-        <p className="text-sm text-muted-foreground">
-          Your connection expired. Sign in again to start new runs.
-        </p>
-      )}
-
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          setSubmitted(true);
-          signIn.mutate(undefined);
-        }}
-      >
-        <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
-        <span>Sign in with Claude</span>
-      </Button>
-    </div>
-  );
-
   if (variant === "inline") {
     return (
       <div className="space-y-3">
@@ -246,7 +292,21 @@ export function ClaudeCodeAccount({
             )
           )}
         </div>
-        {open && !connected && flow}
+        {open && !connected && (
+          <ClaudeCodeAccountFlow
+            account={account}
+            signIn={signIn}
+            disconnect={disconnect}
+            code={code}
+            onCodeChange={setCode}
+            onStartSignIn={() => {
+              setSubmitted(true);
+              signIn.mutate(undefined);
+            }}
+            onCompleteSignIn={completeSignIn}
+            submitLabel="Connect"
+          />
+        )}
       </div>
     );
   }
@@ -339,33 +399,158 @@ export function ClaudeCodeAccount({
           </Button>
         </div>
       )}
-      <StandardDialog
+      <ClaudeCodeAccountDialog
         open={open}
-        onOpenChange={(value) => {
-          setOpen(value);
-          if (!value) setCode("");
-        }}
-        title={connected ? "Claude Code account" : "Connect Claude Code"}
-        description="Use your personal Claude Pro or Max subscription. Connect once to use your account across all your Claude Code agents. Other people connect their own accounts."
-        size="small"
-        className="sm:max-w-xl"
-        footer={
-          <>
-            <DialogCancelButton>Cancel</DialogCancelButton>
-            {account.data?.state === "awaiting_code" && (
-              <Button
-                type="button"
-                disabled={!code.trim() || signIn.isPending}
-                onClick={completeSignIn}
-              >
-                <span>Complete sign-in</span>
-              </Button>
-            )}
-          </>
-        }
-      >
-        {flow}
-      </StandardDialog>
+        onOpenChange={setOpen}
+        account={account}
+        signIn={signIn}
+        disconnect={disconnect}
+        submitted={submitted}
+        onSubmittedChange={setSubmitted}
+      />
+    </div>
+  );
+}
+
+// ===
+
+function ClaudeCodeAccountFlow({
+  account,
+  signIn,
+  disconnect,
+  code,
+  onCodeChange,
+  onStartSignIn,
+  onCompleteSignIn,
+  submitLabel,
+}: {
+  account: ClaudeCodeAccountQuery;
+  signIn: ClaudeCodeSignInMutation;
+  disconnect: ClaudeCodeDisconnectMutation;
+  code: string;
+  onCodeChange: (value: string) => void;
+  onStartSignIn: () => void;
+  onCompleteSignIn: () => void;
+  submitLabel?: string;
+}) {
+  const connected = account.data?.state === "connected";
+
+  if (account.isError) {
+    return (
+      <QueryLoadError
+        title="Could not check Claude Code"
+        error={account.error}
+        onRetry={() => void account.refetch()}
+      />
+    );
+  }
+
+  if (connected) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-green-500" />
+          <div>
+            <p className="font-medium text-green-600 dark:text-green-400">
+              Connected for you
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Available to all your Claude Code agents.
+            </p>
+          </div>
+        </div>
+        {account.data?.expiresAt && (
+          <p className="text-xs text-muted-foreground">
+            Reconnect by {new Date(account.data.expiresAt).toLocaleDateString()}
+            .
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Disconnecting stops new runs from using this account. Active runs keep
+          their token until revoked in Claude.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disconnect.isPending}
+          onClick={() => disconnect.mutate()}
+        >
+          <span>Disconnect</span>
+        </Button>
+      </div>
+    );
+  }
+
+  if (signIn.isError) {
+    return (
+      <div className="space-y-2">
+        <p role="alert" className="text-sm text-destructive">
+          Could not complete sign-in. Please try again.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            signIn.reset();
+            signIn.mutate(undefined);
+          }}
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (account.data?.state === "awaiting_code") {
+    return (
+      <ClaudeCodeSignInSteps
+        authorizationUrl={account.data.authorizationUrl}
+        code={code}
+        onCodeChange={onCodeChange}
+        onSubmit={onCompleteSignIn}
+        submitting={signIn.isPending}
+        submitLabel={submitLabel}
+      />
+    );
+  }
+
+  if (
+    signIn.isPending ||
+    account.data?.state === "starting" ||
+    account.data?.state === "connecting"
+  ) {
+    return (
+      <div className="space-y-2">
+        <output className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          <span>
+            {account.data?.state === "connecting"
+              ? "Completing sign-in…"
+              : "Preparing Claude sign-in…"}
+          </span>
+        </output>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {account.data?.state === "failed" && (
+        <p role="alert" className="text-sm text-destructive">
+          Sign-in did not complete. Please try again.
+        </p>
+      )}
+      {account.data?.state === "expired" && (
+        <p className="text-sm text-muted-foreground">
+          Your connection expired. Sign in again to start new runs.
+        </p>
+      )}
+
+      <Button type="button" variant="outline" size="sm" onClick={onStartSignIn}>
+        <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
+        <span>Sign in with Claude</span>
+      </Button>
     </div>
   );
 }

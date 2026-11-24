@@ -7,7 +7,10 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { environmentKeys } from "@/lib/environment.query";
-import { mcpRegistryQueryKey } from "@/lib/mcp/mcp-registry.query";
+import {
+  catalogItemQueryOptions,
+  mcpRegistryQueryKey,
+} from "@/lib/mcp/mcp-registry.query";
 import { externalMcpSkillsQueryKey } from "@/lib/skills/skill.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -220,7 +223,25 @@ export function useUpdateInternalMcpCatalogItem() {
       if (error) throw catalogMutationError(error.error);
       return updated;
     },
-    onSuccess: () => {
+    onSuccess: (updated, { id, data }) => {
+      if (updated && data.oauthConfig !== undefined) {
+        // The setup wizard may advance before the item refetch completes.
+        // Use the saved OAuth settings, leaving list-only metadata untouched.
+        const { queryKey } = catalogItemQueryOptions(id);
+        queryClient.setQueryData<
+          archestraApiTypes.GetInternalMcpCatalogItemResponses["200"] | null
+        >(
+          queryKey,
+          (item) =>
+            item && {
+              ...item,
+              oauthConfig: updated.oauthConfig,
+              clientSecretId: updated.clientSecretId,
+              awsIamConfig: updated.awsIamConfig,
+              enterpriseManagedConfig: updated.enterpriseManagedConfig,
+            },
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });

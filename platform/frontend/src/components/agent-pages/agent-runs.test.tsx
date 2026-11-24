@@ -604,7 +604,7 @@ describe("AgentRuns", () => {
       },
     ];
     renderRuns("agent-1", false, "section=runs");
-    expect(await screen.findByText("Needs your input")).toBeVisible();
+    expect(await screen.findByText("Waiting for input")).toBeVisible();
     // On a wide table the title's line names who started it, not the status.
     expect(screen.getByText("Started by you")).toBeVisible();
   });

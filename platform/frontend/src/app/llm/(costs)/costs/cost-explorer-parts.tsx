@@ -464,7 +464,8 @@ export function PivotChart({
       <YAxis
         tickLine={false}
         axisLine={false}
-        width={52}
+        // Fits an 8-character sub-cent label at 12px in a monospace theme.
+        width={60}
         tickFormatter={(v: number) => formatCell(metric, v)}
       />
       <ChartTooltip

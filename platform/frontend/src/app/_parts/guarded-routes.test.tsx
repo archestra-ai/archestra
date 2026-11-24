@@ -13,6 +13,7 @@ import NewAgentPageServer from "@/app/agents/new/page";
 import NewMcpCatalogItemPageServer from "@/app/mcp/registry/new/page";
 import { useHasPagePermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
+import { useFeature } from "@/lib/config/config.query";
 import { WithPagePermissions } from "./with-page-permissions";
 
 // These server pages no longer check access themselves; the client page guard
@@ -22,6 +23,7 @@ import { WithPagePermissions } from "./with-page-permissions";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/limits-access");
 vi.mock("@/lib/openappa-github-sync.query", () => ({
   useServerRulesAccess: () => ({ scoped: false, files: [] }),
@@ -83,6 +85,7 @@ const routes: Array<{
 
 describe("routes refused by the client page guard", () => {
   beforeEach(() => {
+    vi.mocked(useFeature).mockReturnValue(false as never);
     vi.mocked(useRouter).mockReturnValue({
       replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);

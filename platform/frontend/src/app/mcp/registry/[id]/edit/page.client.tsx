@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, PackageX } from "lucide-react";
+import { getRequiredOAuthAppCredentialState } from "@archestra/shared";
+import { ArrowLeft, ArrowRight, Info, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -16,6 +17,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WizardFooter } from "@/components/wizard-footer";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
@@ -48,7 +50,17 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
   // An app's backing entry is never listed in the registry; its id opens
   // nothing here, as it did when the page looked the item up in the list.
   const item = itemById && itemById.serverType !== "app" ? itemById : undefined;
-  const navigation = useSetupNavigation();
+  const { missingClientId, missingClientSecret } =
+    getRequiredOAuthAppCredentialState({
+      serverType: item?.serverType,
+      oauthConfig:
+        item?.awsIamConfig || item?.enterpriseManagedConfig
+          ? undefined
+          : item?.oauthConfig,
+      hasSavedSecret: Boolean(item?.clientSecretId),
+    });
+  const needsOAuthClientCredentials = missingClientId || missingClientSecret;
+  const navigation = useSetupNavigation(needsOAuthClientCredentials);
 
   return (
     <PageLayout
@@ -110,7 +122,11 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <SetupWizard item={item} navigation={navigation} />
+        <SetupWizard
+          item={item}
+          navigation={navigation}
+          needsOAuthClientCredentials={needsOAuthClientCredentials}
+        />
       )}
     </PageLayout>
   );
@@ -119,9 +135,11 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
 function SetupWizard({
   item,
   navigation,
+  needsOAuthClientCredentials,
 }: {
   item: CatalogItem;
   navigation: ReturnType<typeof useSetupNavigation>;
+  needsOAuthClientCredentials: boolean;
 }) {
   const router = useRouter();
   const { step, nextStep, prevStep, goToStep } = navigation;
@@ -173,10 +191,33 @@ function SetupWizard({
             // returns to the server's page — once clean it just returns. The
             // step's own "Save & Continue" stays the primary CTA; Discard is
             // the secondary escape hatch.
-            footer={({ isDirty, isSaving, hasBlockingErrors, onReset }) => {
+            footer={({
+              isDirty,
+              isSaving,
+              hasBlockingErrors,
+              detailsOnly,
+              onReset,
+            }) => {
               const savingWith = isSaving ? saveIntentRef.current : null;
+              const cannotSetOAuthClientCredentials =
+                needsOAuthClientCredentials && detailsOnly;
               return (
-                <WizardFooter>
+                <WizardFooter
+                  notice={
+                    cannotSetOAuthClientCredentials ? (
+                      <InlineNotice variant="info">
+                        <Info aria-hidden="true" />
+                        <span className="font-medium">
+                          OAuth credentials needed
+                        </span>
+                        <InlineNoticeText>
+                          Ask someone who can change this server’s connection
+                          settings to add the Client ID and Client Secret.
+                        </InlineNoticeText>
+                      </InlineNotice>
+                    ) : undefined
+                  }
+                >
                   <div>
                     {(isDirty || isSaving) && (
                       <Button
@@ -234,7 +275,11 @@ function SetupWizard({
                       <Button
                         size="sm"
                         type="submit"
-                        disabled={hasBlockingErrors || isSaving}
+                        disabled={
+                          hasBlockingErrors ||
+                          isSaving ||
+                          cannotSetOAuthClientCredentials
+                        }
                         onClick={() => {
                           saveIntentRef.current = "continue";
                         }}
@@ -245,8 +290,20 @@ function SetupWizard({
                     ) : (
                       <Button
                         size="sm"
-                        type="button"
-                        onClick={() => goToStep("test")}
+                        type={
+                          needsOAuthClientCredentials &&
+                          !cannotSetOAuthClientCredentials
+                            ? "submit"
+                            : "button"
+                        }
+                        disabled={cannotSetOAuthClientCredentials}
+                        onClick={() => {
+                          if (needsOAuthClientCredentials) {
+                            saveIntentRef.current = "continue";
+                          } else {
+                            goToStep("test");
+                          }
+                        }}
                       >
                         <span>Test Connection</span>
                         <ArrowRight className="h-4 w-4" />
@@ -305,18 +362,22 @@ function SetupWizard({
   );
 }
 
-function useSetupNavigation() {
+function useSetupNavigation(needsOAuthClientCredentials: boolean) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const stepParam = searchParams.get("step");
-  const step: SetupStepId = SETUP_STEPS.some(
+  const requestedStep: SetupStepId = SETUP_STEPS.some(
     (candidate) => candidate.id === stepParam,
   )
     ? (stepParam as SetupStepId)
     : stepParam === "guardrails"
       ? "tools"
       : "configuration";
+  const step =
+    needsOAuthClientCredentials && requestedStep === "test"
+      ? "configuration"
+      : requestedStep;
   const stepIndex = SETUP_STEPS.findIndex((candidate) => candidate.id === step);
 
   return {

@@ -31,28 +31,30 @@ const DEFAULT_LOAD_BALANCING_CONFIG: SubagentLoadBalancingConfig = {
   fallbackEnabled: true,
 };
 
-function getAlgorithmOptions(targetLabel: string): ReadonlyArray<{
+function getAlgorithmOptions(params: {
+  targetLabel: string;
+  runtimeAgents: string;
+}): ReadonlyArray<{
   value: SubagentLoadBalancingAlgorithm;
   label: string;
   description: string;
 }> {
+  const { targetLabel, runtimeAgents } = params;
   return [
     {
       value: "round_robin",
       label: "Round robin (rotate)",
-      description: `Rotate incoming requests evenly across the subagents assigned to ${targetLabel}.`,
+      description: `Give delegated runs to the ${runtimeAgents} assigned to ${targetLabel} in turn.`,
     },
     {
       value: "weighted",
       label: "Weighted",
-      description:
-        "Distribute incoming requests across assigned subagents in proportion to their configured weights.",
+      description: `Spread delegated runs across the assigned ${runtimeAgents} in proportion to their weights.`,
     },
     {
       value: "random",
       label: "Random",
-      description:
-        "Select an assigned subagent uniformly at random for each incoming request.",
+      description: `Give each delegated run to one of the assigned ${runtimeAgents}, picked at random.`,
     },
   ];
 }
@@ -95,7 +97,12 @@ export function SubagentLoadBalancingSection({
   const fallbackSwitchId = useId();
 
   const targetLabel = isGateway ? "this gateway" : "this agent";
-  const algorithmOptions = getAlgorithmOptions(targetLabel);
+  // Only runs of Agent Runtime agents are balanced, retried and failed over:
+  // a delegation to any other agent always goes to that agent.
+  const runtimeAgents = isGateway
+    ? "Agent Runtime agents"
+    : "Agent Runtime subagents";
+  const algorithmOptions = getAlgorithmOptions({ targetLabel, runtimeAgents });
 
   const isEnabled = value?.enabled === true;
   const currentConfig: SubagentLoadBalancingConfig = value ?? {
@@ -176,10 +183,7 @@ export function SubagentLoadBalancingSection({
             </div>
             <FieldDescription>
               <span>
-                Control how incoming requests are distributed across the
-                subagents assigned to {targetLabel}, and how failed subagent
-                requests are retried, escalated on OOM, or routed to fallback
-                subagents.
+                {`Distributes delegated runs across the ${runtimeAgents} assigned to ${targetLabel} only, with retries, out-of-memory tier upgrades, and failover.`}
               </span>
             </FieldDescription>
           </div>
@@ -229,10 +233,7 @@ export function SubagentLoadBalancingSection({
                   </Label>
                   <FieldDescription>
                     <span>
-                      Assign relative weights (
-                      {SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}–
-                      {SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}) to control each
-                      subagent&apos;s share of incoming requests.
+                      {`Give each ${isGateway ? "Agent Runtime agent" : "Agent Runtime subagent"} a weight from ${SUBAGENT_LOAD_BALANCING_MIN_WEIGHT} to ${SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}. A higher weight gets a larger share of delegated runs.`}
                     </span>
                   </FieldDescription>
                 </div>
@@ -317,8 +318,7 @@ export function SubagentLoadBalancingSection({
                 </Select>
                 <FieldDescription>
                   <span>
-                    How many times to retry a failed request on the same
-                    subagent when the failure is retriable.
+                    {`How many times a failed run is retried on the same ${isGateway ? "Agent Runtime agent" : "Agent Runtime subagent"}, when the failure allows a retry.`}
                   </span>
                 </FieldDescription>
               </div>
@@ -330,9 +330,7 @@ export function SubagentLoadBalancingSection({
                   </Label>
                   <FieldDescription>
                     <span>
-                      When a subagent fails after exhausting its retries,
-                      automatically route the request through all remaining
-                      assigned subagents until one succeeds.
+                      {`When a run still fails after its retries, it goes to the other assigned ${runtimeAgents}, one after another, until one succeeds.`}
                     </span>
                   </FieldDescription>
                 </div>

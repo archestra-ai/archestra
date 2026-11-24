@@ -66,7 +66,8 @@ describe("AutoRoutersField", () => {
   it("marks an added router that cannot route yet", async () => {
     renderField(routers.map((r) => r.id));
 
-    expect(await screen.findByText("Tiers not set")).toBeVisible();
+    const note = await screen.findByText("Tiers not set");
+    expect(note.parentElement).toHaveTextContent("auto:draft");
     expect(
       screen.getAllByText(/Tiers not set|Auto routing is off/),
     ).toHaveLength(1);

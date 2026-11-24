@@ -26,7 +26,11 @@ import { ApiError } from "@/types/api";
 import { openappaActor } from "./actor";
 import { recoverDiagnosticTurn } from "./diagnostic-recovery";
 import { enterOpenappaEncryptedChat } from "./encrypted-chat";
-import { OpenappaRefusal, OpenappaRootOnlyError } from "./failure";
+import {
+  OpenappaRefusal,
+  OpenappaRootOnlyError,
+  unansweredAnnotationNotice,
+} from "./failure";
 import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
 import { refusalGuidance, withheldOutputGuidance } from "./refusal-outcome";
 import {
@@ -1489,6 +1493,26 @@ describe("APPA feature boundary", () => {
     ).toEqual([
       { event: "tool_call", operation_id: "call:ws_1" },
       { event: "tool_result", tool_call_id: "ws_1", output: "search tail" },
+    ]);
+  });
+
+  test("a provider-run call whose annotator failed is held with a notice for a call that already ran", async () => {
+    const failure = new Error(
+      "OpenAPPA processing interrupted: annotator=archestra.tool-call error=timeout",
+    );
+    native.dispatchHook.mockRejectedValue(failure);
+
+    expect(
+      await evaluateHostedToolCalls(
+        session,
+        [{ id: "ws_1", name: "web_search", arguments: {}, output: "tail" }],
+        { canonicalize: (name) => name },
+      ),
+    ).toEqual([
+      {
+        kind: "hold",
+        feedback: unansweredAnnotationNotice(failure, "executed")?.notice,
+      },
     ]);
   });
 

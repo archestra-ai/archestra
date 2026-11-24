@@ -1388,6 +1388,8 @@ export async function evaluateToolCalls(
     spawnCallIds?: ReadonlySet<string>;
     /** Whether this client can carry child-return declarations. */
     supportsDelegation?: boolean;
+    /** The calls already ran: the provider runs these tools itself. */
+    executed?: true;
     /** Signed lineage retained with a child call for later turns. */
     lineage?: { spawnCallId?: string; childNativeId?: string };
     /**
@@ -1546,8 +1548,9 @@ export async function evaluateToolCalls(
       } catch (error) {
         // These unrecorded refusals apply only to this call. Failing the batch
         // would cancel admitted siblings, including spent approvals.
-        const undeclared = undeclaredToolNotice(error);
-        const unanswered = unansweredAnnotationNotice(error);
+        const stage = options.executed ? "executed" : "proposed";
+        const undeclared = undeclaredToolNotice(error, stage);
+        const unanswered = unansweredAnnotationNotice(error, stage);
         const notice: { feedback: string; outcome: RefusalOutcome } | null =
           undeclared !== null
             ? { feedback: undeclared, outcome: INTEGRITY }
@@ -1694,7 +1697,7 @@ export async function evaluateHostedToolCalls(
   const decisions = await evaluateToolCalls(
     session,
     [...calls],
-    options,
+    { ...options, executed: true },
     policy,
   );
   if (decisions.some((decision) => decision.kind === "deny")) {

@@ -825,6 +825,23 @@ describe("unansweredAnnotationNotice", () => {
       unansweredAnnotationNotice(openappaFailure(new Error(message))),
     ).toBe(null);
   });
+
+  // A call the provider already ran must never be asked for again, so its
+  // notice is its own; whether asking again could help stays the same.
+  test.each([
+    "timeout",
+    "unreachable",
+    "unregistered",
+    'non_success status=409 detail="private"',
+  ])("words a notice for a call that already ran apart: %s", (reason) => {
+    const failure = new Error(
+      `OpenAPPA processing interrupted: annotator=archestra.llm-annotator error=${reason}`,
+    );
+    const proposed = unansweredAnnotationNotice(failure);
+    const executed = unansweredAnnotationNotice(failure, "executed");
+    expect(executed?.retry).toBe(proposed?.retry);
+    expect(executed?.notice).not.toBe(proposed?.notice);
+  });
 });
 
 // ===

@@ -61,12 +61,21 @@ export function runtimeFailureCode(error: unknown): RuntimeFailureCode | null {
  * refuses it before recording a call, so retain this notice on the host just
  * like an unanswered annotation. Never turn unrelated failures into denials.
  */
-export function undeclaredToolNotice(error: unknown): string | null {
+export function undeclaredToolNotice(
+  error: unknown,
+  stage: CallStage = "proposed",
+): string | null {
   const cause = error instanceof ApiError ? error.cause : error;
-  return runtimeFailureCode(cause) === "undeclared_tool"
-    ? "[appa] Blocked: the policy does not declare this tool. The tool did not run. No remedy plan is available. Stop and explain the refusal to the user."
-    : null;
+  if (runtimeFailureCode(cause) !== "undeclared_tool") return null;
+  return `[appa] Blocked: the policy does not declare this tool. ${stage === "proposed" ? "The tool did not run." : "The tool already ran, so its result is withheld. Do not make the call again."} No remedy plan is available. Stop and explain the refusal to the user.`;
 }
+
+/**
+ * Whether a refused call is still only proposed, or already ran, as a tool
+ * the provider runs itself does. A call that ran is never to be made again:
+ * it would run again.
+ */
+export type CallStage = "proposed" | "executed";
 
 /**
  * The notice that replaces one tool call whose annotator gave no answer, with
@@ -81,6 +90,7 @@ export function undeclaredToolNotice(error: unknown): string | null {
  */
 export function unansweredAnnotationNotice(
   error: unknown,
+  stage: CallStage = "proposed",
 ): { notice: string; retry: "later" | "after_repair" } | null {
   const message =
     error instanceof ApiError && error.cause instanceof Error
@@ -93,16 +103,26 @@ export function unansweredAnnotationNotice(
   const refusal = unansweredAnnotation(message);
   if (!refusal) return null;
   const name = JSON.stringify(summarize(refusal.annotator, MAX_NAME));
+  const ran =
+    stage === "proposed"
+      ? "The call did not run."
+      : "The call already ran, so its result is withheld.";
+  const noRerun = "Do not make the call again: it would run again.";
   if (
     refusal.annotator === "archestra.llm-annotator" &&
     refusal.reason === "non_success" &&
     refusal.status === "409"
   )
     return {
-      notice: `[appa] Not checked: Guardrails' annotator has no usable model configuration. The call did not run. An administrator must configure an Annotator model and provider credential in Settings > Guardrails, or an organization default model and credential. Signing in to the coding client does not configure this separate model. Retry this call after the configuration is fixed.`,
+      notice: `[appa] Not checked: Guardrails' annotator has no usable model configuration. ${ran} An administrator must configure an Annotator model and provider credential in Settings > Guardrails, or an organization default model and credential. Signing in to the coding client does not configure this separate model. ${stage === "proposed" ? "Retry this call after the configuration is fixed." : noRerun}`,
       retry: "after_repair",
     };
-  const head = `[appa] Not checked: OpenAPPA could not rule on this call because its annotator ${name} ${NO_ANSWER_REASON[refusal.reason] ?? "gave no answer"}. The call did not run.`;
+  const head = `[appa] Not checked: OpenAPPA could not rule on this call because its annotator ${name} ${NO_ANSWER_REASON[refusal.reason] ?? "gave no answer"}. ${ran}`;
+  if (stage === "executed")
+    return {
+      notice: `${head} ${refusal.transient ? "The failure is temporary, on the Guardrails side." : `An administrator can check the annotator on the ${POLICY_PAGE} page.`} ${noRerun} Do not switch to another tool or call yell to get around the check. Tell the user that Guardrails could not check this result; with no user to tell, end the task and report that.`,
+      retry: refusal.transient ? "later" : "after_repair",
+    };
   return refusal.transient
     ? {
         notice: `${head} The failure is temporary, on the Guardrails side. Make the same call again to retry. Do not switch to another tool or call yell to get around the check. If it fails the same way again, stop and tell the user that Guardrails could not check this call; with no user to tell, end the task and report that.`,

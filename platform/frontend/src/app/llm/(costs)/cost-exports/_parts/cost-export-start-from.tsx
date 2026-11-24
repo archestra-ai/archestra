@@ -120,8 +120,8 @@ export function CostExportStartFrom({
         <ModeRow
           id={`${id}-start-date`}
           value="date"
-          label="A date"
-          hint="also write past usage from a day you pick"
+          label="Specific date in the past"
+          hint="also write usage since then"
         >
           {mode === "date" &&
             (days ? (

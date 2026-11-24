@@ -964,6 +964,27 @@ class OpenAppaBatteriesService {
         403,
         `The policy includes ${batteryName} as an uploaded package, not the bundled battery, so changing which servers it governs takes permission to update guardrails.`,
       );
+    // A namespace's binding is the server list of every included battery
+    // that declares it, so moving it moves another battery's servers too. A
+    // battery that cannot be read may declare any of them: the policy check
+    // refuses the change, so it is refused here first.
+    const unreadable = resolution.entries.find(
+      (entry) => entry.name !== batteryName && entry.battery === null,
+    );
+    if (unreadable)
+      throw new ApiError(
+        409,
+        `The policy includes ${unreadable.entry}, which cannot be read, so ${batteryName} can change servers only once it is fixed or removed, or through someone who may update guardrails.`,
+      );
+    const others = otherNamespaces(resolution, batteryName);
+    const shared = battery.namespaces.find((namespace) =>
+      others.has(namespace),
+    );
+    if (shared !== undefined)
+      throw new ApiError(
+        403,
+        `Another battery the policy includes also declares the namespace ${shared}, so changing which servers ${batteryName} governs changes that battery's servers too, which takes permission to update guardrails.`,
+      );
     const { targets, readiness } = await this.attachTargets({
       organizationId,
       catalogId: catalog.id,
@@ -996,7 +1017,7 @@ class OpenAppaBatteriesService {
           resolution,
           namespaces: battery.namespaces,
           targets,
-          keep: otherNamespaces(resolution, batteryName),
+          keep: others,
         }),
       ];
       assertDetaches({ edits, battery: batteryName, catalog: catalog.name });

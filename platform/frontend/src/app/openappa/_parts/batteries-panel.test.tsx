@@ -1396,6 +1396,96 @@ test("with self-service on, a server's editor without the permission to update g
   );
 });
 
+test("a server's editor stages up to 21 server changes, as many as one save asks the agent for, and is told to save to change more", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (query) =>
+      ({
+        data: !(
+          (query as Record<string, string[] | undefined>).guardrailsPolicy ?? []
+        ).includes("update"),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ entry: "batteries/github/appa.toml" })],
+    managedInGithub: true,
+  });
+  const many = Array.from({ length: 21 }, (_, index) => ({
+    id: `a1b2c3d4-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    name: `Server ${String(index + 1).padStart(2, "0")}`,
+    effectiveActions: ["read", "update"],
+  }));
+  const installed = [{ id: catalogId, name: "Code" }, ...many].map(
+    ({ id, name }, index) => ({
+      id: `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      name,
+      catalogId: id,
+    }),
+  );
+  server.use(
+    githubSyncSource(),
+    http.get(`${baseUrl}/api/openappa/github-sync/self-service`, () =>
+      HttpResponse.json({ enabled: true }),
+    ),
+    http.get(`${baseUrl}/api/internal_mcp_catalog`, () =>
+      HttpResponse.json([
+        { id: catalogId, name: "Code", effectiveActions: ["read", "update"] },
+        ...many,
+      ]),
+    ),
+    http.get(`${baseUrl}/api/internal_mcp_catalog/registry/issue-index`, () =>
+      HttpResponse.json({
+        catalogItems: [],
+        servers: installed.map((install) => ({
+          ...install,
+          scope: "org",
+          localInstallationStatus: "success",
+          updatedAt: "2026-09-22T12:00:00Z",
+          canUseCredential: true,
+        })),
+      }),
+    ),
+    http.get(`${baseUrl}/api/mcp_server`, () =>
+      HttpResponse.json(
+        installed.map((install) => ({
+          ...install,
+          createdAt: "2026-09-22T12:00:00Z",
+        })),
+      ),
+    ),
+  );
+  show();
+  const row = await entry("github");
+  const user = userEvent.setup();
+  // Detaching Code and attaching twenty servers fills one save.
+  await user.click(
+    await within(row).findByRole("button", { name: "Detach github from Code" }),
+  );
+  for (const { name } of many.slice(0, 20)) {
+    await user.click(within(row).getByRole("combobox", { name: "MCP server" }));
+    await user.click(screen.getByRole("option", { name }));
+    await waitFor(() =>
+      expect(within(row).getByRole("button", { name: "Attach" })).toBeEnabled(),
+    );
+    await user.click(within(row).getByRole("button", { name: "Attach" }));
+  }
+  expect(
+    within(row).getByText(
+      "One save changes up to 21 servers. Save these changes to change more.",
+    ),
+  ).toBeVisible();
+  await user.click(within(row).getByRole("combobox", { name: "MCP server" }));
+  await user.click(screen.getByRole("option", { name: "Server 21" }));
+  expect(within(row).getByRole("button", { name: "Attach" })).toBeDisabled();
+  // Undoing one makes room again.
+  await user.click(
+    within(row).getByRole("button", { name: "Keep github on Code" }),
+  );
+  expect(within(row).queryByText(/One save changes up to/)).toBeNull();
+  await waitFor(() =>
+    expect(within(row).getByRole("button", { name: "Attach" })).toBeEnabled(),
+  );
+}, 60_000);
+
 test("with self-service on, a server's editor changes no battery the policy includes as an uploaded package", async () => {
   vi.mocked(useHasPermissions).mockImplementation(
     (query) =>

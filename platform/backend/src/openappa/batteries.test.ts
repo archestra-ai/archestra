@@ -1703,4 +1703,89 @@ describe("a server editor's battery change", () => {
         message: expect.stringContaining("as an uploaded package"),
       });
   });
+
+  test("is refused when another battery the policy includes declares the same namespace, whose servers the change would move too", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    config.openappa.enabled = true;
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Docs",
+      serverUrl: "https://learn.microsoft.com/api/mcp",
+    });
+    const bundled = "batteries/microsoft-learn/appa.toml";
+    const uploaded = `batteries/learn-extras@sha256-${"a".repeat(64)}/appa.toml`;
+    // An uploaded package declares the bundled battery's namespace too.
+    vi.spyOn(openappaDeclarations, "resolve").mockResolvedValue({
+      entries: [
+        {
+          entry: bundled,
+          name: "microsoft-learn",
+          battery: { namespaces: ["microsoft-learn"] },
+        },
+        {
+          entry: uploaded,
+          name: "learn-extras",
+          battery: { namespaces: ["microsoft-learn"] },
+        },
+      ],
+      aliases: [{ namespace: "microsoft-learn", servers: ["other_docs"] }],
+    } as never);
+    for (const change of ["attach", "detach"] as const)
+      await expect(
+        openappaBatteriesService.serverChangeContent({
+          organizationId: org.id,
+          content: `include = ["${bundled}", "${uploaded}"]\n\n[policy]\nversion = 2\n`,
+          batteryName: "microsoft-learn",
+          catalogId: catalog.id,
+          change,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 403,
+        message: expect.stringContaining(
+          "also declares the namespace microsoft-learn",
+        ),
+      });
+  });
+
+  test("is refused while another battery the policy includes cannot be read, as the policy check refuses it", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    config.openappa.enabled = true;
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Docs",
+      serverUrl: "https://learn.microsoft.com/api/mcp",
+    });
+    const bundled = "batteries/microsoft-learn/appa.toml";
+    const missing = `batteries/gone@sha256-${"a".repeat(64)}/appa.toml`;
+    // The uploaded package's stored bytes are gone: nothing answers it.
+    vi.spyOn(openappaDeclarations, "resolve").mockResolvedValue({
+      entries: [
+        {
+          entry: bundled,
+          name: "microsoft-learn",
+          battery: { namespaces: ["microsoft-learn"] },
+        },
+        { entry: missing, name: "gone", battery: null },
+      ],
+      aliases: [{ namespace: "microsoft-learn", servers: ["other_docs"] }],
+    } as never);
+    await expect(
+      openappaBatteriesService.serverChangeContent({
+        organizationId: org.id,
+        content: `include = ["${bundled}", "${missing}"]\n\n[policy]\nversion = 2\n`,
+        batteryName: "microsoft-learn",
+        catalogId: catalog.id,
+        change: "attach",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining(`${missing}, which cannot be read`),
+    });
+  });
 });

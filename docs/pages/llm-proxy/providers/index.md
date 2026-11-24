@@ -2,7 +2,7 @@
 title: Model Providers
 description: Connect provider API keys and personal subscriptions for Chat and the LLM Proxy
 order: 2
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,10 +38,11 @@ To hide a provider your company does not use, go to **Settings → LLM → Model
 
 ### With a Subscription
 
-Already pay for ChatGPT, GitHub Copilot, Microsoft 365 Copilot, or SuperGrok? Use it instead of a metered API key. On **Model Providers**, click **Connect** on the provider's card and sign in.
+Already pay for Claude Pro or Max, ChatGPT, GitHub Copilot, SuperGrok, or Microsoft 365 Copilot? Use it instead of a metered API key. On **Model Providers**, click **Connect** on the provider's card and sign in.
 
 These credentials belong to one person and cannot be shared. An agent that uses one always runs on the chatting user's own subscription. A user who has not connected sees a sign-in prompt in chat. If the vendor rejects the sign-in later, click **Connect** again; the credential keeps its model and agent selections.
 
+- **Claude Code**: works only with [Claude Code agent runtimes](/docs/agents/runtime), not Chat or the LLM Proxy. Connect your Claude account once to use your subscription across all your Claude Code agents.
 - **ChatGPT**: first turn on **Enable device code authorization for Codex** in ChatGPT under **Settings → Security**. It is off by default, and ChatGPT blocks the sign-in until you turn it on. If the backend's outbound traffic is restricted, also allow [its hosts](#chatgpt-subscription-egress).
 - **GitHub Copilot** and **Microsoft 365 Copilot** have their own pages: [GitHub Copilot](/docs/llm-proxy/providers/github-copilot), [Microsoft 365 Copilot](/docs/llm-proxy/providers/microsoft-365-copilot).
 

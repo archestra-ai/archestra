@@ -840,22 +840,6 @@ export function RequestExample({
         )}
         <AutoRoutingUnavailableHint offer={autoRouting} />
         {imageNotes}
-        {target.kind === "provider" &&
-          target.provider === "bedrock" &&
-          isPassthrough && (
-            <p className="text-sm text-muted-foreground">
-              Set <InlineCode>{providerKeyEnvVar("bedrock")}</InlineCode> to
-              your Amazon Bedrock API key, then copy and run the request.
-              {keyValue !== "" && (
-                <>
-                  {" "}
-                  If the copied request uses{" "}
-                  <InlineCode>{credentialEnvVar}</InlineCode>, set it to your
-                  Archestra passthrough key.
-                </>
-              )}
-            </p>
-          )}
         <FloatingCodeExample
           code={example}
           secret={secret}

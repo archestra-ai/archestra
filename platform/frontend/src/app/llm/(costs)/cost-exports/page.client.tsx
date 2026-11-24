@@ -177,6 +177,12 @@ export default function CostExportsPageClient() {
         open={providerDialogOpen}
         onOpenChange={setProviderDialogOpen}
         provider={editingProvider}
+        // This page only adds a provider when an export has none to write to.
+        addHeading={{
+          title: "First, add a blob provider",
+          description:
+            "Your cost and usage data is exported to it. A small test object is written and deleted before saving.",
+        }}
         onSaved={(saved) => {
           // A fixed destination: the next tick (or Retry) picks it up.
           if (editingProvider) return;

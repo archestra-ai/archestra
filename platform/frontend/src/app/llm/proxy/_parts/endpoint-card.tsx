@@ -1,6 +1,6 @@
 "use client";
 
-import { LLM_PROXY_OAUTH_SCOPE, VIRTUAL_KEY_HEADER } from "@archestra/shared";
+import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
 import { KeyRound, Plus, ShieldCheck, Waypoints } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useId, useState } from "react";
@@ -8,15 +8,10 @@ import {
   getProxyEndpointProviders,
   type ProxyEndpointProvider,
 } from "@/app/connection/connection-flow.utils";
-import { TerminalBlock } from "@/app/connection/terminal-block";
-import { ConnectStep, OauthTokenRequest } from "@/components/connect-rail";
+import { OauthTokenRequest } from "@/components/connect-rail";
 import { CopyButton } from "@/components/copy-button";
 import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import { LlmConnectionDialogs } from "@/components/llm-connect-steps";
-import {
-  SECRET_PLACEHOLDER_TOKEN,
-  SecretCopyButton,
-} from "@/components/secret-copy-button";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -36,10 +31,7 @@ import {
   useLlmConnection,
 } from "@/components/use-llm-connection";
 import { RequestExample } from "@/components/virtual-key-connection-guide";
-import {
-  getProxyBaseUrl,
-  providerKeyEnvVar,
-} from "@/components/virtual-key-request-example";
+import { getProxyBaseUrl } from "@/components/virtual-key-request-example";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -198,19 +190,12 @@ function EndpointRequest({
     </>
   );
 
-  const showBedrockGuide = selected === "bedrock" && auth === "passthrough";
-
   return (
     <div className="space-y-3">
       {selected !== "bedrock" && (
         <EndpointAddress baseUrl={baseUrl} selected={selected} />
       )}
-      {showBedrockGuide ? (
-        <>
-          <div className="grid gap-3 md:grid-cols-3">{fields}</div>
-          <BedrockPassthroughGuide baseUrl={baseUrl} connection={connection} />
-        </>
-      ) : connection.ready ? (
+      {connection.ready ? (
         <RequestExample
           key={connection.requestKey}
           connectionBaseUrl={baseUrl}
@@ -259,111 +244,6 @@ function EndpointRequest({
         selected={selected}
         targetLabel={targetLabel}
       />
-    </div>
-  );
-}
-
-function BedrockPassthroughGuide({
-  baseUrl,
-  connection,
-}: {
-  baseUrl: string;
-  connection: LlmConnection;
-}) {
-  const url = getProxyBaseUrl(baseUrl, {
-    kind: "provider",
-    provider: "bedrock",
-  });
-  const { allowsUnauthenticated, picked, secret } = connection;
-  const keyHelp = picked
-    ? "Use the selected passthrough key as the header value. This identifies the request to Archestra, not AWS."
-    : allowsUnauthenticated
-      ? "Your organization allows requests without a passthrough key. You can skip this header."
-      : "Select or create a passthrough key above to identify the request to Archestra.";
-
-  return (
-    <div className="grid gap-6 border-t pt-4 lg:grid-cols-2">
-      <ol aria-label="Bedrock passthrough setup" className="min-w-0">
-        <ConnectStep
-          number={1}
-          title="Point your client at Archestra"
-          detail="Use the Bedrock endpoint for InvokeModel, or the OpenAI-compatible endpoint for Chat Completions."
-        />
-        <ConnectStep
-          number={2}
-          title="Keep your AWS Bedrock API key"
-          detail={
-            <>
-              Set <code>{providerKeyEnvVar("bedrock")}</code> in your client’s
-              environment or enter your Bedrock API key in its API key field.
-              This key signs you in to AWS, not Archestra.
-            </>
-          }
-        />
-        <ConnectStep
-          number={3}
-          title={
-            allowsUnauthenticated && !picked
-              ? "Archestra header is optional"
-              : "Add the Archestra header"
-          }
-          detail={
-            <>
-              {(!allowsUnauthenticated || picked) && (
-                <>
-                  Add <code>{VIRTUAL_KEY_HEADER}</code> as a custom header.{" "}
-                </>
-              )}
-              {keyHelp}
-              {!allowsUnauthenticated && (
-                <span className="mt-2 block">
-                  If your client can’t add a custom header, choose Virtual key
-                  instead if your organization has Bedrock configured in
-                  Archestra.
-                </span>
-              )}
-            </>
-          }
-        />
-      </ol>
-      <div className="min-w-0 space-y-3">
-        <section aria-label="Bedrock endpoints" className="space-y-2">
-          <h3 className="text-sm font-medium">Client endpoints</h3>
-          <TerminalBlock
-            rows={[
-              { comment: "Bedrock InvokeModel", code: url },
-              {
-                comment: "OpenAI-compatible Chat Completions",
-                code: `${url}/openai`,
-              },
-            ]}
-          />
-        </section>
-        {picked && (
-          <section
-            aria-label="Selected passthrough key"
-            className="flex items-center justify-between gap-2 rounded-md border p-3"
-          >
-            <div className="min-w-0 space-y-1">
-              <h3 className="text-sm font-medium">Selected passthrough key</h3>
-              <p className="break-words text-xs text-muted-foreground">
-                {picked.name}
-              </p>
-              {!secret && (
-                <p className="text-xs text-muted-foreground">
-                  Use the key value you saved when it was created.
-                </p>
-              )}
-            </div>
-            {secret && (
-              <SecretCopyButton
-                getSecretText={secret.resolve}
-                placeholderText={SECRET_PLACEHOLDER_TOKEN}
-              />
-            )}
-          </section>
-        )}
-      </div>
     </div>
   );
 }
@@ -438,7 +318,7 @@ function CredentialField({
       : "Virtual key";
   const canCreate = isOauth
     ? connection.canCreateOauth
-    : connection.canCreateKey;
+    : auth === "standard" && connection.canCreateKey;
   const allowNone = auth === "passthrough" && connection.allowsUnauthenticated;
   const { options, picked } = connection;
   const groups: Array<{ heading: string; items: typeof options }> = [];
@@ -455,10 +335,8 @@ function CredentialField({
         onValueChange={(value) => {
           if (value === CREATE_VALUE) {
             if (isOauth) connection.setOauthCreateOpen(true);
-            else
-              connection.setCreateKeyType(
-                auth === "passthrough" ? "passthrough" : "standard",
-              );
+            else if (auth === "standard")
+              connection.setCreateKeyType("standard");
             return;
           }
           connection.pickKey(value === NONE_VALUE ? null : value);
@@ -585,6 +463,20 @@ function NotReadyHint({
             Add {providerNoun} key
           </Button>
         )}
+      </p>
+    );
+  }
+  if (auth === "passthrough") {
+    return (
+      <p className="text-[12.5px] text-muted-foreground">
+        Choose a passthrough key, or{" "}
+        <Link
+          href="/llm/proxy/virtual-keys?keyType=passthrough"
+          className="text-primary underline underline-offset-2"
+        >
+          manage passthrough keys
+        </Link>
+        .
       </p>
     );
   }

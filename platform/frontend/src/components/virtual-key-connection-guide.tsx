@@ -840,6 +840,21 @@ export function RequestExample({
         )}
         <AutoRoutingUnavailableHint offer={autoRouting} />
         {imageNotes}
+        {target.kind === "provider" && isPassthrough && (
+          <p className="text-sm text-muted-foreground">
+            Send your own {providerLabel} key
+            {keyValue === "" ? (
+              <span>
+                . Your organization allows requests without a passthrough key.
+              </span>
+            ) : (
+              <>
+                , and this passthrough key in the{" "}
+                <InlineCode>{VIRTUAL_KEY_HEADER}</InlineCode> header.
+              </>
+            )}
+          </p>
+        )}
         <FloatingCodeExample
           code={example}
           secret={secret}

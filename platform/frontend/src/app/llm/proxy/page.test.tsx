@@ -571,7 +571,7 @@ describe("LLM Proxy dashboard endpoint", () => {
       screen.queryByText(/No .* key yet\. The proxy needs/),
     ).not.toBeInTheDocument();
   });
-  it("shows Bedrock passthrough setup and copies only the selected key", async () => {
+  it("shows how to call Bedrock Converse with a passthrough key and no stored provider key", async () => {
     providerKeys = [];
     standardKeys = [];
     passthroughKeys = [
@@ -604,37 +604,23 @@ describe("LLM Proxy dashboard endpoint", () => {
     );
     await user.click(await screen.findByRole("option", { name: /Bedrock/ }));
 
-    const steps = await screen.findByRole("list", {
-      name: "Bedrock passthrough setup",
-    });
-    expect(within(steps).getAllByRole("listitem")).toHaveLength(3);
-    expect(steps).toHaveTextContent("AWS_BEARER_TOKEN_BEDROCK");
-    expect(steps).toHaveTextContent("X-Archestra-Virtual-Key");
-    expect(screen.queryByText(/curl.*bedrock/)).not.toBeInTheDocument();
-
-    const endpoints = screen.getByRole("region", { name: "Bedrock endpoints" });
-    const urls = within(endpoints).getAllByRole("button", {
-      name: "Copy to clipboard",
-    });
-    await user.click(urls[0]);
-    expect(copyToClipboard).toHaveBeenLastCalledWith(
-      expect.stringMatching(/\/v1\/bedrock$/),
+    const command = await screen.findByText(/\/v1\/bedrock\/converse/);
+    expect(command.closest("pre")).toHaveTextContent(
+      "AWS_BEARER_TOKEN_BEDROCK",
     );
-    await user.click(urls[1]);
-    expect(copyToClipboard).toHaveBeenLastCalledWith(
-      expect.stringMatching(/\/v1\/bedrock\/openai$/),
+    expect(command.closest("pre")).not.toHaveTextContent("arch_bedrock_test");
+    expect(screen.getByText(/Send your own AWS Bedrock key/)).toHaveTextContent(
+      "Send your own AWS Bedrock key, and this passthrough key in the X-Archestra-Virtual-Key header.",
     );
-
-    const keyCard = screen.getByRole("region", {
-      name: "Selected passthrough key",
-    });
-    expect(keyCard).toHaveTextContent("Bring my own key");
-    expect(keyCard).not.toHaveTextContent("arch_bedrock_test");
-    await user.click(within(keyCard).getByRole("button", { name: /^Copy$/ }));
-    await user.click(
-      await screen.findByRole("menuitem", { name: "Copy with real token" }),
+    await user.click(screen.getByRole("combobox", { name: "Passthrough key" }));
+    expect(
+      screen.queryByRole("option", { name: /Create new passthrough key/i }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: /^Copy$/ }));
+    expect(copyToClipboard).toHaveBeenCalledWith(
+      expect.stringContaining("X-Archestra-Virtual-Key: arch_bedrock_test"),
     );
-    expect(copyToClipboard).toHaveBeenLastCalledWith("arch_bedrock_test");
   });
 
   it("shows the configured identity provider instead of setup to a read-only viewer", async () => {

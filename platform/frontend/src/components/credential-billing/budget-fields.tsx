@@ -178,12 +178,22 @@ export function BudgetFields({
         value={capDraft ?? (spendCap ? String(spendCap.limitValue) : "")}
         onChange={(event) => {
           setCapDraft(event.target.value);
-          const dollars = wholeDollarsCap(event.target.value);
-          onSpendCapChange(
-            dollars === null
-              ? null
-              : { limitValue: dollars, cleanupInterval: interval },
-          );
+          const cap = parseCap(event.target.value);
+          switch (cap.kind) {
+            case "cleared":
+              // Retyping the amount keeps the period it had.
+              setChosenInterval(interval);
+              onSpendCapChange(null);
+              break;
+            case "dollars":
+              onSpendCapChange({
+                limitValue: cap.dollars,
+                cleanupInterval: interval,
+              });
+              break;
+            case "unusable":
+              break;
+          }
         }}
         onBlur={() => setCapDraft(null)}
       />
@@ -305,12 +315,23 @@ export function BudgetFields({
 
 const MAX_SPEND_CAP_DOLLARS = 2_147_483_647;
 
-/** Whole dollars, rounded up, for a typed cap; null when it sets none. */
-function wholeDollarsCap(text: string): number | null {
-  const amount = Number(text.trim());
-  if (!text.trim() || !Number.isFinite(amount) || amount <= 0) return null;
-  const dollars = Math.ceil(amount);
-  return dollars <= MAX_SPEND_CAP_DOLLARS ? dollars : null;
+/**
+ * A typed cap, rounded up to whole dollars. Text that is not a usable amount
+ * leaves the saved cap as it was; the field shows that cap again on blur.
+ */
+function parseCap(
+  text: string,
+):
+  | { kind: "cleared" }
+  | { kind: "dollars"; dollars: number }
+  | { kind: "unusable" } {
+  const trimmed = text.trim();
+  if (trimmed === "") return { kind: "cleared" };
+  if (!/^\d*\.?\d*$/.test(trimmed)) return { kind: "unusable" };
+  const dollars = Math.ceil(Number(trimmed));
+  return dollars > 0 && dollars <= MAX_SPEND_CAP_DOLLARS
+    ? { kind: "dollars", dollars }
+    : { kind: "unusable" };
 }
 
 /** Info shown in place of the billing team for clients whose users pay. */

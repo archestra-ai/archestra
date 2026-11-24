@@ -248,6 +248,9 @@ export function VirtualKeyConnectionGuide({
       </Step>
 
       <Step number={3} title="Make your first request">
+        {virtualApiKeyId && endpoint === "model-router" && !isPassthrough && (
+          <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
+        )}
         {isPoolOnly ? (
           <p className="text-sm text-muted-foreground">
             Open{" "}
@@ -262,11 +265,6 @@ export function VirtualKeyConnectionGuide({
           </p>
         ) : (
           <>
-            {virtualApiKeyId &&
-              endpoint === "model-router" &&
-              !isPassthrough && (
-                <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
-              )}
             <RequestExample
               // Remount on target change so the model resets to that target's
               // recommended model instead of keeping one it can't serve.

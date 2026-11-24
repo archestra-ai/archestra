@@ -135,15 +135,26 @@ describe("BudgetFields spend cap input", () => {
     expect(input).toHaveValue("1");
   });
 
-  it("sets no cap for an amount that is not positive", async () => {
+  it("keeps the saved cap when the text is not an amount", async () => {
     const user = userEvent.setup();
     render(<SpendCapHarness />);
     const input = screen.getByLabelText("Spend cap in dollars");
 
     await user.type(input, "250");
+    await user.type(input, ",50");
+    await user.tab();
+
     expect(screen.getByLabelText("Saved cap")).toHaveTextContent("250");
+    expect(input).toHaveValue("250");
+  });
+
+  it("removes the cap when the field is cleared", async () => {
+    const user = userEvent.setup();
+    render(<SpendCapHarness />);
+    const input = screen.getByLabelText("Spend cap in dollars");
+
+    await user.type(input, "250");
     await user.clear(input);
-    await user.type(input, "-5");
     await user.tab();
 
     expect(screen.getByLabelText("Saved cap")).toHaveTextContent("none");

@@ -40,6 +40,7 @@ import {
   fingerprintMatches,
   loadTrio,
   type RouterTierSet,
+  type RouterTokenPrices,
   TierThresholdMismatchError,
   type Trio,
   tiersFingerprint,
@@ -238,7 +239,11 @@ export async function readFitWindow(params: {
   inputWatermark: Date;
 }): Promise<FitWindowSummary> {
   const [live, past] = await Promise.all([
-    RoutingUsageModel.findFitVolume({ ...params, routerId: params.router.id }),
+    RoutingUsageModel.findFitVolume({
+      ...params,
+      routerId: params.router.id,
+      minSessions: liveMinSessions(),
+    }),
     readPastSessions({ ...params, longContextThreshold: null }, false),
   ]);
   return summarizeWindow(live, past);
@@ -277,20 +282,27 @@ function publish(
 type FitRun = { inputs: FitInputs; published: RoutingPublishResult };
 
 /**
- * What the fit learns from and sizes the plan for. `sessions` (live plus
- * scored past ones) is what the cold-start minimum counts. Volume is the
- * live window's once it spans a week; before that, the backfill
- * population's, which estimates it from all eligible traffic.
+ * What the fit learns from and sizes the plan for. It learns from the
+ * router's own sessions alone once it has `liveMinSessions()` of them, so the
+ * plan describes the traffic it routes; until then scored past sessions join
+ * them. `sessions` is what the cold-start minimum `minSessions` counts.
+ * Volume is the live window's once it spans a week; before that, the
+ * backfill population's, which estimates it from all eligible traffic.
  */
 type FitWindowSummary = {
   sessions: number;
+  minSessions: number;
   pastSessions: number;
   volume: FitVolume;
   volumeSource: "live" | "history";
 };
 
 /** How many sessions a fit read for a scorer version: the cold-start progress. */
-export type FitSessions = { scorerVersionId: string; sessions: number };
+export type FitSessions = {
+  scorerVersionId: string;
+  sessions: number;
+  minSessions: number;
+};
 
 /**
  * Prepares, fits and publishes; one fit at a time per router in this
@@ -420,7 +432,7 @@ async function simulate(
       return {
         status: "cold_start",
         sessions: inputs.history.sessions,
-        required: config.autoRouting.minSessions,
+        required: inputs.history.minSessions,
       };
     case "failed": {
       const cheapest = cheapestBudget(outcome.error);
@@ -533,19 +545,24 @@ export async function readFitHistory(
 ): Promise<FitHistory> {
   const [live, past] = await Promise.all([
     RoutingUsageModel.findFitHistory(
-      { ...params, routerId: params.router.id },
+      {
+        ...params,
+        routerId: params.router.id,
+        minSessions: liveMinSessions(),
+      },
       maxSessions,
     ),
     readPastSessions(params, true),
   ]);
+  const window = summarizeWindow(live.volume, past);
   // The live sample is capped while its volume counts the whole window.
   const liveWeight =
     live.sample.length === 0 ? 1 : live.volume.sessions / live.sample.length;
   return {
-    ...summarizeWindow(live.volume, past),
+    ...window,
     sample: [
       ...live.sample.map((row) => ({ ...row, weight: liveWeight })),
-      ...past.sample,
+      ...(window.pastSessions === 0 ? [] : past.sample),
     ],
   };
 }
@@ -584,9 +601,12 @@ function summarizeWindow(live: FitVolume, past: PastWindow): FitWindowSummary {
     (live.firstCreatedAt?.getTime() ?? 0);
   const fromHistory =
     span < LIVE_VOLUME_MIN_SPAN_MS && past.population.sessions > 0;
+  const liveMin = liveMinSessions();
+  const pastSessions = live.sessions >= liveMin ? 0 : past.scored;
   return {
-    sessions: live.sessions + past.scored,
-    pastSessions: past.scored,
+    sessions: live.sessions + pastSessions,
+    minSessions: pastSessions === 0 ? liveMin : config.autoRouting.minSessions,
+    pastSessions,
     volume: fromHistory ? past.population : live,
     volumeSource: fromHistory ? "history" : "live",
   };
@@ -637,6 +657,7 @@ function fitSessions(inputs: FitInputs): FitSessions | null {
     ? {
         scorerVersionId: inputs.scorerVersionId,
         sessions: inputs.history.sessions,
+        minSessions: inputs.history.minSessions,
       }
     : null;
 }
@@ -683,6 +704,7 @@ export type FitHistory = FitWindowSummary & { sample: FitHistoryRow[] };
 const EMPTY_HISTORY: FitHistory = {
   sample: [],
   sessions: 0,
+  minSessions: 0,
   pastSessions: 0,
   volume: {
     sessions: 0,
@@ -696,6 +718,13 @@ const EMPTY_HISTORY: FitHistory = {
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Live auto traffic sizes the plan once its window spans this long. */
 const LIVE_VOLUME_MIN_SPAN_MS = 7 * DAY_MS;
+/** A router with this many sessions of its own is fitted on them alone. */
+const LIVE_FIT_MIN_SESSIONS = 200;
+
+/** Never above the configured minimum, which a deployment may lower. */
+function liveMinSessions(): number {
+  return Math.min(LIVE_FIT_MIN_SESSIONS, config.autoRouting.minSessions);
+}
 
 /** Bounds refits when settings keep changing under an inline fit. */
 const INLINE_FIT_ATTEMPTS = 3;
@@ -754,8 +783,7 @@ async function fit(
     };
   }
   const { tiers } = inputs.tiers;
-  const { sessions } = inputs.history;
-  const minSessions = config.autoRouting.minSessions;
+  const { sessions, minSessions } = inputs.history;
   if (sessions < minSessions) {
     return {
       ...versions,
@@ -969,7 +997,7 @@ export function planInput(
       timestamp_ms: row.createdAt.getTime(),
       weight: row.weight,
     })),
-    tiers,
+    tiers: routerTiers(tiers, sample),
     budget: budgetUsdPerDay,
     volume: {
       kind: "flat",
@@ -977,6 +1005,44 @@ export function planInput(
       tokens_per_day: tokensPerDay * volumeMultiplier,
     },
     baseline_source: mostFrequentSource(sample),
+  };
+}
+
+/**
+ * router-core `TierSet`: it prices four token types, so each block's cache
+ * writes cost the 5m and 1h rates blended by the sample's 1h share of them.
+ * That is exact, since router-core prices a block by one token mix. Like
+ * router-core, a block without writes takes the other block's, and a tier
+ * without long prices bills long requests at its short ones.
+ */
+function routerTiers(tiers: RouterTierSet, sample: FitHistoryRow[]) {
+  const share1h = (block: "short" | "long") => {
+    let writes = 0;
+    let writes1h = 0;
+    for (const row of sample) {
+      writes += row.weight * row[block].cacheWrite;
+      writes1h += row.weight * row[block].cacheWrite1h;
+    }
+    return writes > 0 ? Math.min(writes1h / writes, 1) : null;
+  };
+  const short = share1h("short");
+  const long = share1h("long");
+  const blend = (usd: RouterTokenPrices, share: number) => ({
+    input: usd.input,
+    cache_read: usd.cache_read,
+    cache_write: (1 - share) * usd.cache_write + share * usd.cache_write_1h,
+    output: usd.output,
+  });
+  return {
+    tiers: tiers.tiers.map((tier) => ({
+      model_id: tier.model_id,
+      short: blend(tier.short, short ?? long ?? 0),
+      long:
+        tiers.long_context_threshold === null
+          ? null
+          : blend(tier.long ?? tier.short, long ?? short ?? 0),
+    })),
+    long_context_threshold: tiers.long_context_threshold,
   };
 }
 

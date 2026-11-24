@@ -11,12 +11,11 @@ import type { MswControl } from "./helpers/msw-control";
  * section heading. Before that, a section's landing page stood in for its
  * siblings — one "LLM Proxy" row covered Virtual Keys and OAuth Clients — so
  * a page behind a tab had no name anywhere in the sidebar and no way in from
- * it. Cost Controls is the one row still covering two pages (Limits and
- * Exports).
+ * it. Cost Controls and Model Providers each cover two pages.
  *
  * What these pin is the part that is easy to break silently: every page is
  * reachable and named, each row lights only for its own page (a prefix match
- * on `/llm/proxy` would light three rows at once), the one shared row opens
+ * on `/llm/proxy` would light three rows at once), each shared row opens
  * the page its reader may actually see, a group disappears with its heading
  * when the reader may open none of it, and Plugins remains available
  * whatever the `plugins` feature flag says.
@@ -30,12 +29,11 @@ const STUDIO_NAV = [
   "Plugins",
   "MCP Registry",
   "MCP Gateways",
+  "Model Providers",
   "LLM Proxy",
   "Virtual Keys",
   // No OAuth Clients row on either side: every client, LLM and MCP alike,
   // is managed on one page in settings.
-  "Model Providers",
-  "Models",
   "Model Pools",
   "Auto Routing",
   "Cost Controls",
@@ -171,6 +169,40 @@ test.describe("studio sidebar navigation", () => {
     // A reader who may not see Limits lands on Exports.
     const row = page.getByRole("link", { name: /^Cost Controls/ });
     await expect(row).toHaveAttribute("href", "/llm/cost-exports");
+  });
+
+  test("keeps Model Providers selected when switching between its tabs", async ({
+    page,
+  }) => {
+    const active = page.locator(
+      '[data-slot="sidebar-content"] a[data-active="true"]',
+    );
+    await page.goto("/llm/model-providers");
+    await expect(active).toHaveText(/^Model Providers/);
+    await page.getByRole("link", { name: "Models", exact: true }).click();
+    await expect(page).toHaveURL(/\/llm\/models$/);
+    await expect(active).toHaveText(/^Model Providers/);
+    await page
+      .getByRole("link", { name: "Subscriptions & API Keys", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/llm\/model-providers$/);
+    await expect(active).toHaveText(/^Model Providers/);
+  });
+
+  test("opens Models from the shared sidebar row for a Models-only reader", async ({
+    page,
+    mswControl,
+  }) => {
+    await setPermissions({ mswControl }, { llmProviderApiKey: [] });
+    await page.goto("/agents");
+
+    const row = page.getByRole("link", { name: /^Model Providers/ });
+    await expect(row).toHaveAttribute("href", "/llm/models");
+    await row.click();
+    await expect(page).toHaveURL(/\/llm\/models$/);
+    await expect(
+      page.getByRole("link", { name: "Subscriptions & API Keys", exact: true }),
+    ).toHaveCount(0);
   });
 
   test("drops a row the reader may not open, and the group with the last of them", async ({

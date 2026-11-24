@@ -335,9 +335,19 @@ RUN set -eux; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
 # <----- Rust dependency cache ----->
+# Alpine's packaged rustc lags platform/rust-toolchain.toml; take that release from the official musl image.
+FROM rust:1.97.1-alpine3.23@sha256:c4a364ddbf684fe038e6fa6a4f25b30c8dc85247423e0e660676ece0d17be4a2 AS rust-toolchain
+
 FROM base AS rust-builder-base
 WORKDIR /app
-RUN apk add --no-cache build-base cargo rust openssl-dev pkgconf
+RUN apk add --no-cache build-base openssl-dev pkgconf
+COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
+COPY --from=rust-toolchain /usr/local/cargo/bin /usr/local/cargo/bin
+# Cargo's own home stays /root/.cargo, where the registry cache mounts. The
+# unknown-linux-musl targets link statically by default, which drops cdylibs.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    PATH=/usr/local/cargo/bin:$PATH \
+    RUSTFLAGS="-C target-feature=-crt-static"
 # Use the builder's installed OpenSSL for PostgreSQL TLS. Cross-builds outside
 # this image use the vendored musl dependency from openappa-rs instead.
 ENV OPENSSL_NO_VENDOR=1
@@ -366,12 +376,12 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     done && \
     cd archestra-rs && \
     case "${TARGETARCH}" in \
-      amd64) RUST_TARGET=x86_64-alpine-linux-musl ;; \
-      arm64) RUST_TARGET=aarch64-alpine-linux-musl ;; \
+      amd64) RUST_TARGET=x86_64-unknown-linux-musl ;; \
+      arm64) RUST_TARGET=aarch64-unknown-linux-musl ;; \
       *) echo "Unsupported Rust architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
     for package in app_runtime_rs image_rs sandbox_rs openappa_rs router_rs; do \
-      RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --locked \
+      cargo build --release --locked \
         --target "${RUST_TARGET}" -p "${package}"; \
     done
 

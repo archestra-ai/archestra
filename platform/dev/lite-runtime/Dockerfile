@@ -37,8 +37,8 @@ RUN apt-get update -qq \
 # platform/rust-toolchain.toml asks rustup for rustfmt, rust-analyzer and the
 # musl targets. The toolchain home is read-only for the workspace user, so a
 # task's first cargo command would fail trying to download them; add them here.
-RUN rustup component add rustfmt rust-analyzer --toolchain 1.93.0-x86_64-unknown-linux-gnu \
- && rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl --toolchain 1.93.0-x86_64-unknown-linux-gnu \
+RUN rustup component add rustfmt rust-analyzer --toolchain 1.97.1-x86_64-unknown-linux-gnu \
+ && rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl --toolchain 1.97.1-x86_64-unknown-linux-gnu \
  && chmod -R a+rX /usr/local/rustup
 
 # Warm what is checkout-independent, in one layer that ends by deleting the

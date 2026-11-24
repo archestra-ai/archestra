@@ -12,7 +12,7 @@ mod estimate;
 mod linalg;
 mod plan;
 
-pub use allocate::{Decision, Policy};
+pub use allocate::{Decision, FrontierPoint, Policy};
 pub use domain::{
     HistoryRow, ModelId, PerDay, PlanInput, Probability, SessionFeatures, SessionWeight, Source,
     TIER_COUNT, TierNeeded, TierSet, TierSpec, TokenCounts, TokenMix, TokenPrices, TokenTypes,
@@ -23,7 +23,7 @@ pub use plan::{Diagnostics, Holdout, PLAN_FORMAT_VERSION, Plan, Summary, Version
 
 use serde::Serialize;
 
-use crate::allocate::{Draw, Hull, WeightedSession, solve};
+use crate::allocate::{Draw, Hull, Steps, WeightedSession, frontier, solve};
 use crate::estimate::{
     BlockPrices, Estimator, MAX_NEWTON_ITERATIONS, SessionEstimate, fit_long_share, fit_mixes,
     fit_size,
@@ -133,19 +133,24 @@ pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
         .map(|((e, hull), &w)| WeightedSession {
             hull,
             price: e.price,
+            adequacy: e.adequacy,
             tokens_per_day: w,
         })
         .collect();
-    let policy = solve(&weighted, budget.get())?;
-    let summary = summarize(
-        &estimates,
-        &hulls,
-        &session_weights,
-        &weights,
-        &policy,
-        sessions_per_day,
-        tokens_per_day,
-    );
+    let steps = Steps::within(&weighted, budget.get())?;
+    let policy = solve(&steps, budget.get());
+    let summary = Summary {
+        frontier: frontier(&weighted, &steps, budget.get()),
+        ..summarize(
+            &estimates,
+            &hulls,
+            &session_weights,
+            &weights,
+            &policy,
+            sessions_per_day,
+            tokens_per_day,
+        )
+    };
     let diagnostics = plan::Diagnostics {
         holdout: holdout(&history, &baseline_source),
     };
@@ -337,6 +342,16 @@ mod tests {
     }
 
     #[test]
+    fn frontier_passes_through_the_plan_and_ends_at_all_best() {
+        let best = plan(input(1e6)).unwrap().summary.value_size_weighted;
+        let summary = plan(input(4.0)).unwrap().summary;
+        let at_budget = summary.frontier.iter().find(|p| p.spend == 4.0).unwrap();
+        assert!((at_budget.value - summary.value_size_weighted).abs() < 1e-12);
+        let last = summary.frontier.last().unwrap();
+        assert!((last.value - best).abs() < 1e-12, "{last:?} vs {best}");
+    }
+
+    #[test]
     fn caller_policy_overrides_the_plan_anchor() {
         let plan = plan(input(4.0)).unwrap();
         let f = features("main");
@@ -399,7 +414,9 @@ mod tests {
         let [fast, normal, smart] = plan.summary.tier_session_share;
         assert_eq!((fast, normal), (0.0, 0.0));
         assert!((smart - 1.0).abs() < 1e-12);
-        assert_eq!(plan.summary.value_per_usd, 0.0);
+        let last = plan.summary.frontier.last().unwrap();
+        assert!((last.spend - plan.summary.expected_spend).abs() < 1e-9);
+        assert!((last.value - plan.summary.value_size_weighted).abs() < 1e-12);
     }
 
     #[test]

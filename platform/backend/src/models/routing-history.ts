@@ -520,6 +520,7 @@ class RoutingHistoryModel {
       coalesce(sum(u.input) filter (where ${filter}), 0) as ${sql.raw(`${prefix}_input`)},
       coalesce(sum(u.cache_read) filter (where ${filter}), 0) as ${sql.raw(`${prefix}_cache_read`)},
       coalesce(sum(u.cache_write) filter (where ${filter}), 0) as ${sql.raw(`${prefix}_cache_write`)},
+      coalesce(sum(u.cache_write_1h) filter (where ${filter}), 0) as ${sql.raw(`${prefix}_cache_write_1h`)},
       coalesce(sum(u.output) filter (where ${filter}), 0) as ${sql.raw(`${prefix}_output`)}`;
     const windowStart =
       params.windowStart > params.frame.windowStart
@@ -536,10 +537,12 @@ class RoutingHistoryModel {
       s_input: string;
       s_cache_read: string;
       s_cache_write: string;
+      s_cache_write_1h: string;
       s_output: string;
       l_input: string;
       l_cache_read: string;
       l_cache_write: string;
+      l_cache_write_1h: string;
       l_output: string;
     }>(sql`
       with frame as (
@@ -612,12 +615,14 @@ class RoutingHistoryModel {
                   input: Number(row.s_input),
                   cacheRead: Number(row.s_cache_read),
                   cacheWrite: Number(row.s_cache_write),
+                  cacheWrite1h: Number(row.s_cache_write_1h),
                   output: Number(row.s_output),
                 },
                 long: {
                   input: Number(row.l_input),
                   cacheRead: Number(row.l_cache_read),
                   cacheWrite: Number(row.l_cache_write),
+                  cacheWrite1h: Number(row.l_cache_write_1h),
                   output: Number(row.l_output),
                 },
                 weight,
@@ -729,7 +734,9 @@ export type HistoryFitRow = {
 type TokenBlock = {
   input: number;
   cacheRead: number;
+  /** All cache writes; `cacheWrite1h` is the subset written with a 1h TTL. */
   cacheWrite: number;
+  cacheWrite1h: number;
   output: number;
 };
 

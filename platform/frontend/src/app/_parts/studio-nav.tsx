@@ -4,8 +4,6 @@ import {
   AppWindow,
   Bot,
   Boxes,
-  Brain,
-  Cable,
   ChartColumn,
   CircleDollarSign,
   Database,
@@ -28,9 +26,10 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
-import { OpenAppaIcon } from "@/components/openappa-icon";
+import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
+import { ConnectNavIcon } from "./connect-nav-icon";
 
 /**
  * What the product's navigation is, separately from any one thing that draws
@@ -90,6 +89,12 @@ export interface NavItem {
    * this, gating falls back to `url`.
    */
   permissionUrls?: string[];
+  /**
+   * One of the pages of the row above it, drawn indented under it with a
+   * guide line and no icon. The collapsed icon rail and the search palette
+   * still treat it as a row of its own.
+   */
+  nested?: boolean;
 }
 
 export interface NavGroup {
@@ -148,7 +153,7 @@ export const chatsNavItems: NavItem[] = [
   {
     title: "Connect",
     url: "/connection",
-    icon: Cable,
+    icon: ConnectNavIcon,
     customIsActive: (pathname: string) => pathname.startsWith("/connection"),
     dotKey: "nav:connect",
   },
@@ -172,7 +177,8 @@ export const contentNavGroups: NavGroup[] = [
         title: "Guardrails",
         url: "/openappa",
         permissionUrls: ["/openappa", "/openappa/policy"],
-        icon: OpenAppaIcon,
+        icon: OpenAppaSolidIcon,
+        iconClassName: "size-4 shrink-0",
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
         beta: true,
         badgeLabel: "Beta",
@@ -220,8 +226,22 @@ export const contentNavGroups: NavGroup[] = [
     label: "LLM",
     items: [
       {
-        // Exact match: the proxy's sibling tabs are rows of their own now, so
-        // a prefix match would light this row on all three.
+        // Subscriptions & API Keys and Models share a tab bar, so one row
+        // covers both; `getModelProvidersNavigationUrl` opens the first one
+        // the reader may see.
+        title: "Model Providers",
+        url: "/llm/model-providers",
+        icon: Boxes,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/model-providers") ||
+          pathname.startsWith("/llm/models"),
+        permissionUrls: ["/llm/model-providers", "/llm/models"],
+        // The dot covers both tabs (see DOTTED_NAV_ITEMS).
+        dotKey: "nav:model-providers",
+      },
+      {
+        // Exact match: the pages nested below are rows of their own, so a
+        // prefix match would light this row on Virtual Keys too.
         title: "LLM Proxy",
         url: "/llm/proxy",
         icon: Network,
@@ -231,23 +251,7 @@ export const contentNavGroups: NavGroup[] = [
         title: "Virtual Keys",
         url: "/llm/proxy/virtual-keys",
         icon: KeyRound,
-      },
-      {
-        title: "Model Providers",
-        url: "/llm/model-providers",
-        icon: Boxes,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/model-providers"),
-        // The dot covers the pair (see DOTTED_NAV_ITEMS): opening Models
-        // clears it too.
-        dotKey: "nav:model-providers",
-      },
-      {
-        title: "Models",
-        url: "/llm/models",
-        icon: Brain,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/models"),
+        nested: true,
       },
       {
         title: "Model Pools",
@@ -257,6 +261,7 @@ export const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/model-pools"),
         beta: true,
         badgeLabel: "Beta",
+        nested: true,
       },
       {
         title: "Auto Routing",
@@ -266,6 +271,7 @@ export const contentNavGroups: NavGroup[] = [
           pathname.startsWith(AUTO_ROUTING_URL),
         beta: true,
         badgeLabel: "Beta",
+        nested: true,
       },
       {
         // Limits and Exports share a tab bar, so one row covers both;
@@ -278,6 +284,7 @@ export const contentNavGroups: NavGroup[] = [
           pathname === "/llm/limits" ||
           pathname.startsWith("/llm/cost-exports"),
         permissionUrls: ["/llm/limits", "/llm/cost-exports"],
+        nested: true,
       },
     ],
   },

@@ -19,8 +19,9 @@ async function fetchLatestRelease(): Promise<GitHubRelease | null> {
       },
     );
 
+    // Expected, so not reported: GitHub allows 60 unauthenticated requests an
+    // hour per address, and the upgrade hint is simply left out without one.
     if (!response.ok) {
-      console.error("Failed to fetch latest release:", response.statusText);
       return null;
     }
 
@@ -29,8 +30,8 @@ async function fetchLatestRelease(): Promise<GitHubRelease | null> {
       tag_name: data.tag_name,
       html_url: data.html_url,
     };
-  } catch (error) {
-    console.error("Error fetching latest release:", error);
+  } catch {
+    // Offline or blocked from reaching GitHub: also no hint, and no error.
     return null;
   }
 }

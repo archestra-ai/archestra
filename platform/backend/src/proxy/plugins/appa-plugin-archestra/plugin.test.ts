@@ -491,12 +491,17 @@ describe("asking through the client's own question tool", () => {
       assistantTail?: boolean;
       controlTail?: Record<string, unknown>[];
       historyTail?: Record<string, unknown>[];
+      interactionType?: string;
+      messages?: Record<string, unknown>[];
+      passes?: number;
     }) {
       const plugin = new AppaPluginArchestra([]);
       const context = requestContext({
         sessionId: `guidance-${params.thread}-${params.pending}`,
         organizationId: params.organizationId,
       });
+      if (params.interactionType)
+        context.interactionType = params.interactionType;
       const trusted = trustedOf(context);
       trusted.thread = params.thread;
       trusted.request = {
@@ -515,12 +520,13 @@ describe("asking through the client's own question tool", () => {
       const binding = (
         plugin as unknown as { bindings: Map<object, Pending> }
       ).bindings.get(context.resources);
-      if (params.pending && binding) {
+      const arm = () => {
+        if (!params.pending || !binding) return;
         binding.unreadNativeAnswerOfferIds = ["offer-2"];
         binding.pendingHitlReviewOfferIds = ["offer-1"];
         binding.requiresRemedyContinuation = true;
         binding.requiresQuestionContinuation = true;
-      }
+      };
       const system = [
         {
           type: "text",
@@ -528,44 +534,44 @@ describe("asking through the client's own question tool", () => {
           cache_control: { type: "ephemeral" },
         },
       ];
-      const request = {
-        system,
-        messages: [
-          { role: "user", content: "historic user" },
-          {
-            role: "assistant",
-            content: [
-              {
-                type: "thinking",
-                thinking: "signed reasoning",
-                signature: "signature",
-              },
-              { type: "tool_use", id: "toolu_1", name: "tool", input: {} },
-            ],
-          },
-          params.noContent
-            ? { role: "user" }
-            : params.stringContent
-              ? {
-                  role: "user",
-                  content:
-                    typeof params.stringContent === "string"
-                      ? params.stringContent
-                      : "latest user",
-                }
-              : {
-                  role: "user",
-                  content: [
-                    {
-                      type: "tool_result",
-                      tool_use_id: "toolu_1",
-                      content: "done",
-                      cache_control: { type: "ephemeral" },
-                    },
-                  ],
+      const messages: Record<string, unknown>[] = params.messages
+        ? structuredClone(params.messages)
+        : [
+            { role: "user", content: "historic user" },
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "thinking",
+                  thinking: "signed reasoning",
+                  signature: "signature",
                 },
-        ] as Record<string, unknown>[],
-      };
+                { type: "tool_use", id: "toolu_1", name: "tool", input: {} },
+              ],
+            },
+            params.noContent
+              ? { role: "user" }
+              : params.stringContent
+                ? {
+                    role: "user",
+                    content:
+                      typeof params.stringContent === "string"
+                        ? params.stringContent
+                        : "latest user",
+                  }
+                : {
+                    role: "user",
+                    content: [
+                      {
+                        type: "tool_result",
+                        tool_use_id: "toolu_1",
+                        content: "done",
+                        cache_control: { type: "ephemeral" },
+                      },
+                    ],
+                  },
+          ];
+      const request = { system, messages };
       if (params.assistantTail)
         request.messages.push({ role: "assistant", content: "prefill" });
       if (params.controlTail)
@@ -573,7 +579,12 @@ describe("asking through the client's own question tool", () => {
       if (params.historyTail)
         request.messages.push(...structuredClone(params.historyTail));
       const beforeMessages = structuredClone(request.messages);
-      await plugin.onBeforeModel({ ...context, request });
+      // Each pass arms every kind of guidance again, so a repeated pass
+      // applies all of it a second time.
+      for (let pass = 0; pass < (params.passes ?? 1); pass++) {
+        arm();
+        await plugin.onBeforeModel({ ...context, request });
+      }
       await plugin.onCleanup(context);
       return {
         binding,
@@ -691,7 +702,7 @@ describe("asking through the client's own question tool", () => {
     });
 
     for (const assistantTail of [false, true]) {
-      test(`Anthropic guidance preserves native control-frame ordering with assistant tail ${assistantTail}`, async ({
+      test(`Anthropic guidance ends a trailing control frame and keeps message order with assistant tail ${assistantTail}`, async ({
         makeOrganization,
       }) => {
         const { id } = await makeOrganization();
@@ -708,26 +719,386 @@ describe("asking through the client's own question tool", () => {
           assistantTail,
           controlTail,
         });
-        expect(result.messages.slice(-1)).toEqual(controlTail);
-        const userIndex = result.messages.length - 2;
-        expect(result.messages[userIndex].role).toBe("user");
+        expect(result.messages).toHaveLength(result.beforeMessages.length);
+        expect(result.messages.slice(0, -1)).toEqual(
+          result.beforeMessages.slice(0, -1),
+        );
+        const last = result.messages.at(-1);
+        expect(last?.role).toBe("system");
+        const blocks = last?.content as {
+          type: string;
+          text?: string;
+        }[];
+        expect(blocks.slice(0, controlTail[0].content.length)).toEqual(
+          controlTail[0].content,
+        );
+        const appended = blocks.slice(controlTail[0].content.length);
         for (const text of PER_TURN)
-          expect(JSON.stringify(result.messages[userIndex])).toContain(text);
-        const historyLength = assistantTail
-          ? result.beforeMessages.length - 1
-          : result.beforeMessages.length - 2;
-        expect(result.messages.slice(0, historyLength)).toEqual(
-          result.beforeMessages.slice(0, historyLength),
-        );
-        if (!assistantTail)
-          expect((result.messages[userIndex].content as unknown[])[0]).toEqual(
-            (result.beforeMessages[userIndex].content as unknown[])[0],
-          );
-        expect(result.messages.length).toBe(
-          result.beforeMessages.length + (assistantTail ? 1 : 0),
-        );
+          expect(JSON.stringify(appended)).toContain(text);
+        expect(blocks.at(-1)?.text).toContain(PER_TURN[3]);
       });
     }
+
+    const claudeQuestionHistory: Record<string, unknown>[] = [
+      { role: "user", content: "Choose and continue" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_question",
+            name: "AskUserQuestion",
+            input: { question: "Continue?" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_question",
+            content: '{"action":"accept"}',
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      },
+    ];
+
+    test("Anthropic guidance follows the Claude Code 2.1.322 trailing-system breakpoint", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const trailing = {
+        role: "system",
+        content: [
+          {
+            type: "text",
+            text: "<total_tokens>90000 tokens left</total_tokens>",
+            cache_control: { type: "ephemeral" },
+          },
+          { type: "text", text: "per-turn note" },
+        ],
+      };
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        messages: [...claudeQuestionHistory, trailing],
+      });
+
+      expect(result.messages.slice(0, -1)).toEqual(claudeQuestionHistory);
+      const blocks = result.messages.at(-1)?.content as {
+        type: string;
+        text: string;
+        cache_control?: unknown;
+      }[];
+      expect(blocks.slice(0, trailing.content.length)).toEqual(
+        trailing.content,
+      );
+      expect(blocks[0]?.cache_control).toEqual({ type: "ephemeral" });
+      const appended = blocks.slice(trailing.content.length);
+      expect(appended.length).toBeGreaterThan(0);
+      for (const text of PER_TURN)
+        expect(JSON.stringify(appended)).toContain(text);
+    });
+
+    test("Anthropic guidance keeps the Claude Code cache prefix stable across steps", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const originalHistory = structuredClone(claudeQuestionHistory);
+      const breakpoint = {
+        type: "text",
+        text: "<total_tokens>90000 tokens left</total_tokens>",
+        cache_control: { type: "ephemeral" },
+      };
+      const requestN = [
+        ...originalHistory,
+        {
+          role: "system",
+          content: [breakpoint, { type: "text", text: "per-turn note" }],
+        },
+      ];
+      const processedN = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        messages: requestN,
+      });
+      const requestNPlusOne = [
+        ...originalHistory,
+        { role: "system", content: breakpoint.text },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_next",
+              name: "Bash",
+              input: { command: "next" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_next",
+              content: "done",
+            },
+          ],
+        },
+        {
+          role: "system",
+          content: [
+            {
+              type: "text",
+              text: "<total_tokens>80000 tokens left</total_tokens>",
+              cache_control: { type: "ephemeral" },
+            },
+            { type: "text", text: "next per-turn note" },
+          ],
+        },
+      ];
+      const processedNPlusOne = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        messages: requestNPlusOne,
+      });
+
+      const finalN = processedN.messages.at(-1);
+      if (!finalN) throw new Error("expected a trailing system message");
+      const cachedPrefixN = [
+        ...processedN.messages.slice(0, -1),
+        {
+          ...finalN,
+          content: (finalN.content as unknown[]).slice(0, 1),
+        },
+      ];
+      const cachedPrefixNPlusOne = processedNPlusOne.messages.slice(
+        0,
+        requestN.length,
+      );
+      const normalizeAnthropicContent = (message: Record<string, unknown>) => {
+        const content =
+          typeof message.content === "string"
+            ? [{ type: "text", text: message.content }]
+            : message.content;
+        return {
+          ...message,
+          content: Array.isArray(content)
+            ? content.map((block) =>
+                block && typeof block === "object"
+                  ? Object.fromEntries(
+                      Object.entries(block).filter(
+                        ([key]) => key !== "cache_control",
+                      ),
+                    )
+                  : block,
+              )
+            : content,
+        };
+      };
+      expect(cachedPrefixNPlusOne.map(normalizeAnthropicContent)).toEqual(
+        cachedPrefixN.map(normalizeAnthropicContent),
+      );
+      expect(JSON.stringify(processedNPlusOne.messages.at(-1))).toContain(
+        PER_TURN[3],
+      );
+    });
+
+    test("Anthropic guidance follows the Claude Code 2.1.330 environment-update breakpoint", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const trailing = {
+        role: "system",
+        content: [
+          {
+            type: "text",
+            text: "# Environment update\n - Primary working directory: /workspace",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      };
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        messages: [...claudeQuestionHistory, trailing],
+      });
+
+      expect(result.messages.slice(0, -1)).toEqual(claudeQuestionHistory);
+      const blocks = result.messages.at(-1)?.content as {
+        type: string;
+        text: string;
+        cache_control?: unknown;
+      }[];
+      expect(blocks[0]).toEqual(trailing.content[0]);
+      const appended = blocks.slice(trailing.content.length);
+      expect(appended.length).toBeGreaterThan(0);
+      for (const text of PER_TURN)
+        expect(JSON.stringify(appended)).toContain(text);
+    });
+
+    test("Anthropic remedy continuation follows the trailing-system breakpoint", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const trailing = {
+        role: "system",
+        content: [
+          {
+            type: "text",
+            text: "cached control frame",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      };
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        controlTail: [trailing],
+      });
+
+      expect(result.messages.slice(0, -1)).toEqual(
+        result.beforeMessages.slice(0, -1),
+      );
+      const blocks = result.messages.at(-1)?.content as {
+        type: string;
+        text?: string;
+      }[];
+      expect(blocks[0]).toEqual(trailing.content[0]);
+      expect(
+        blocks
+          .slice(1)
+          .some((block) =>
+            block.text?.startsWith(
+              "The ruling above offers a remedy plan for the blocked call.",
+            ),
+          ),
+      ).toBe(true);
+    });
+
+    for (const blank of [[], [{ type: "text", text: " " }], "", " "]) {
+      test(`Anthropic guidance skips a blank trailing system message ${JSON.stringify(blank)}`, async ({
+        makeOrganization,
+      }) => {
+        const { id } = await makeOrganization();
+        const breakpoint = {
+          role: "system",
+          content: [
+            {
+              type: "text",
+              text: "cached control frame",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+        };
+        const placeholder = { role: "system", content: blank };
+
+        const afterFrame = await guided({
+          organizationId: id,
+          thread: "create",
+          pending: true,
+          controlTail: [breakpoint, placeholder],
+        });
+        expect(afterFrame.messages.slice(0, -2)).toEqual(
+          afterFrame.beforeMessages.slice(0, -2),
+        );
+        expect(afterFrame.messages.at(-1)).toEqual(placeholder);
+        const blocks = afterFrame.messages.at(-2)?.content as {
+          type: string;
+          text?: string;
+        }[];
+        expect(blocks[0]).toEqual(breakpoint.content[0]);
+        for (const text of PER_TURN)
+          expect(JSON.stringify(blocks.slice(1))).toContain(text);
+
+        const afterUser = await guided({
+          organizationId: id,
+          thread: "create",
+          pending: true,
+          controlTail: [placeholder],
+        });
+        expect(afterUser.messages).toHaveLength(
+          afterUser.beforeMessages.length,
+        );
+        expect(afterUser.messages.at(-1)).toEqual(placeholder);
+        expect(afterUser.messages.at(-2)?.role).toBe("user");
+        for (const text of PER_TURN)
+          expect(JSON.stringify(afterUser.messages.at(-2))).toContain(text);
+      });
+    }
+
+    test("Kimi guidance appends to a trailing system string after the cached prefix", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const messages = [
+        { role: "system", content: "leading system" },
+        { role: "user", content: "latest user" },
+        { role: "system", content: "native control" },
+      ];
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        interactionType: "kimi-code:chatCompletions",
+        messages,
+      });
+
+      expect(result.messages.slice(1, -1)).toEqual(messages.slice(1, -1));
+      expect(
+        String(result.messages[0]?.content).startsWith("leading system"),
+      ).toBe(true);
+      expect(result.messages.at(-1)?.role).toBe("system");
+      const content = result.messages.at(-1)?.content;
+      expect(typeof content).toBe("string");
+      expect(String(content).startsWith("native control\n\n")).toBe(true);
+      for (const text of PER_TURN) expect(String(content)).toContain(text);
+    });
+
+    test("Anthropic trailing-system guidance is not duplicated on a repeated pass", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const trailing = {
+        role: "system",
+        content: [
+          {
+            type: "text",
+            text: "cached control frame",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      };
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        controlTail: [trailing],
+        passes: 2,
+      });
+
+      expect(result.messages.slice(0, -1)).toEqual(
+        result.beforeMessages.slice(0, -1),
+      );
+      const blocks = result.messages.at(-1)?.content as {
+        type: string;
+        text?: string;
+      }[];
+      expect(blocks[0]).toEqual(trailing.content[0]);
+      for (const text of PER_TURN) {
+        expect(
+          blocks.filter((block) => block.text?.includes(text)),
+        ).toHaveLength(1);
+      }
+    });
 
     test("Anthropic guidance leaves mid-history control frames and signed assistant content unchanged", async ({
       makeOrganization,

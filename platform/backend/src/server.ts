@@ -1013,11 +1013,8 @@ const startWebServer = async () => {
     // SPDX-SnippetEnd
 
     // Start the sandboxed code runtime in the background (non-blocking pre-warm).
-    skillSandboxRuntimeService.init().catch((error) => {
-      logger.error(
-        { err: error },
-        "Failed to initialize skill sandbox runtime",
-      );
+    skillSandboxRuntimeService.init().catch(() => {
+      // The sandbox runtime logs its own failure to initialize.
     });
 
     // Eagerly provision a Dagger engine + egress policy for every environment and
@@ -1569,11 +1566,8 @@ const startWorker = async () => {
     // SPDX-SnippetEnd
 
     // Pre-warm the code runtime so scheduled agents avoid a cold first run.
-    skillSandboxRuntimeService.init().catch((error) => {
-      logger.error(
-        { err: error },
-        "Failed to initialize skill sandbox runtime",
-      );
+    skillSandboxRuntimeService.init().catch(() => {
+      // The sandbox runtime logs its own failure to initialize.
     });
 
     // Eagerly provision per-environment and per-organization Dagger engines +

@@ -152,6 +152,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_ANALYTICS`** - Sends usage analytics and telemetry to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
   - Default: on in production builds, including the released Docker images. Off in development, and off when [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`](/docs/admin/deployment/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED) is `true`.
   - Values: `disabled` turns it off. Any other value turns it on.
+  - On a new installation without a license, the first admin to sign in can also turn telemetry off. That choice keeps it off even when this variable turns it on.
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key for analytics.
   - Default: Archestra's PostHog project
@@ -572,7 +573,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`** - How long the session scorer may take before the router falls back to the normal model.
   - Default: `2000`
 
-- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions needed before auto routing publishes a plan instead of using the normal model. Scored past sessions count toward it.
+- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions needed before auto routing publishes a plan instead of using the normal model. Scored past sessions count toward it. A router with 200 finished sessions of its own gets a plan regardless, so only a lower value changes when that router starts routing.
   - Default: `1000`
 
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL of your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).

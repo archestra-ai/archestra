@@ -589,6 +589,7 @@ fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
         | RemedyRefusal::InvalidOfferId(_)
         | RemedyRefusal::ActorMismatch
         | RemedyRefusal::AlreadyExecuting
+        | RemedyRefusal::ApprovalPending
         | RemedyRefusal::Unanswered { .. }
         | RemedyRefusal::Runtime { .. } => None,
     }

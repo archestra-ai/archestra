@@ -66,7 +66,7 @@ describe("GET /api/auto-routing/routers and /state", () => {
           coldStart: {
             scorerVersionId: (await activeSourceVersion()).id,
             sessions: 0,
-            required: 1000,
+            required: 200,
           },
           lastFitError: null,
           scorer: "no_jev_key",
@@ -196,7 +196,7 @@ describe("GET /api/auto-routing/routers and /state", () => {
           coldStart: {
             scorerVersionId: running.id,
             sessions: 2,
-            required: 1000,
+            required: 200,
           },
           lastFitError: "solver diverged",
           scorer: "no_jev_key",

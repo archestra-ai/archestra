@@ -13,7 +13,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { completeLinkedIdentityProviderIntent } from "@/lib/auth/linked-idp";
+import {
+  completeLinkedIdentityProviderIntent,
+  LinkedIdentityProviderOtherSessionError,
+} from "@/lib/auth/linked-idp";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
 export default function LinkedIdentityProviderCallbackPage() {
@@ -43,9 +46,13 @@ export default function LinkedIdentityProviderCallbackPage() {
         ? getValidatedRedirectPath(result.redirectTo)
         : fallbackRedirectPath;
       window.location.replace(appendUserPrompt(redirectPath, "retry"));
-    } catch {
+    } catch (error) {
       setFailed(true);
-      toast.error("Failed to complete identity provider connection");
+      toast.error(
+        error instanceof LinkedIdentityProviderOtherSessionError
+          ? error.message
+          : "Failed to complete identity provider connection",
+      );
     }
   }, [searchParams]);
 

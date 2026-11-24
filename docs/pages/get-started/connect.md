@@ -114,5 +114,3 @@ This installer does not configure Grok Bot desktop. See [Grok native-tool limits
 - **Setup reference:** the first conversation that presents the installer's reference with a valid session ID is exempt from Guardrails for the rest of the ten-minute setup window. Later requests must carry both the reference and that session ID. Different session IDs and requests without the reference remain governed.
 - **Exemption limits:** the first conversation wins, even if it did not run the installer. Session IDs come from the client, so this does not protect against a client that copies both the reference and the session ID. If the server loses the short-lived ownership record, another conversation can claim the rest of the window.
 - **Setup failed or expired:** run it again. Approval requests expire after ten minutes. Only approve a request you started.
-
-**Next:** [See it work](/docs/get-started/see-it-work).

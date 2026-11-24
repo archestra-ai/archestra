@@ -3,8 +3,8 @@
   "@id": "https://github.com/archestra-ai/archestra/blob/main/vex/openvex.json",
   "author": "Archestra (https://archestra.ai)",
   "role": "Document Creator",
-  "timestamp": "2026-11-21T04:11:49Z",
-  "version": 19,
+  "timestamp": "2026-11-23T08:58:18Z",
+  "version": 29,
   "statements": [
     {
       "vulnerability": {
@@ -350,6 +350,105 @@
       },
       "products": [
         {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The use-after-free needs an application that sets CURLOPT_STREAM_DEPENDS and then calls curl_easy_reset(), which libcurl never calls itself. No libcurl consumer in the image imports curl_easy_reset: not /usr/bin/curl or git's http helpers (nm -D), nor Chromium's chrome_crashpad_handler, which loads libcurl with dlopen and resolves only easy-interface init/setopt/perform/getinfo/cleanup and slist functions."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-10536"
+      },
+      "products": [
+        {
           "@id": "pkg:oci/sandbox-base",
           "subcomponents": [
             {
@@ -371,6 +470,28 @@
     },
     {
       "vulnerability": {
+        "name": "CVE-2026-10536"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/sandbox-base",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.7"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.7&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The use-after-free needs an application that sets CURLOPT_STREAM_DEPENDS and then calls curl_easy_reset(), which libcurl never calls itself. The image's only libcurl consumers, /usr/bin/curl and git's http and imap helpers, do not import curl_easy_reset (nm -D)."
+    },
+    {
+      "vulnerability": {
         "name": "CVE-2026-119586"
       },
       "products": [
@@ -387,6 +508,28 @@
       "timestamp": "2026-11-20T02:54:17Z",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "The injection is in the sqlite3 command-line shell's .recover command. The image installs only Alpine's sqlite-libs (/usr/lib/libsqlite3.so.3.53.4, no shell or recover code) and no sqlite3 executable."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119586"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/mcp-server-base",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs@3.53.4-r0?arch=x86_64&distro=alpine-3.23&upstream=sqlite"
+            },
+            {
+              "@id": "pkg:apk/alpine/sqlite-libs@3.53.4-r0?arch=x86_64&distro=alpine-3.23.8&upstream=sqlite"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The injection is in the sqlite3 command-line shell's .recover command. The image installs only Alpine's sqlite-libs (/usr/lib/libsqlite3.so.3.53.4, no shell or recover code) and no sqlite3 executable; Python's sqlite3 module and its python -m sqlite3 prompt have no .recover command."
     },
     {
       "vulnerability": {
@@ -536,6 +679,105 @@
       },
       "products": [
         {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The use-after-free needs HTTP/2 server push, which libcurl accepts only after the application installs CURLMOPT_PUSHFUNCTION with curl_multi_setopt(); otherwise it refuses every PUSH_PROMISE. No libcurl consumer in the image imports curl_multi_setopt: not /usr/bin/curl or git's http helpers (nm -D), nor Chromium's chrome_crashpad_handler, which loads libcurl with dlopen and resolves no multi-interface function."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-18924"
+      },
+      "products": [
+        {
           "@id": "pkg:oci/sandbox-base",
           "subcomponents": [
             {
@@ -554,6 +796,28 @@
       "timestamp": "2026-11-20T02:54:18Z",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "The use-after-free needs HTTP/2 server push, which libcurl enables only when the application installs CURLMOPT_PUSHFUNCTION (otherwise it sends SETTINGS_ENABLE_PUSH=0 and denies every PUSH_PROMISE). The image's only libcurl consumers, /usr/bin/curl and git's http helpers, never set it: the curl CLI source has no PUSHFUNCTION and git does not import curl_multi_setopt."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-18924"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/sandbox-base",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.7"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.7&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The use-after-free needs HTTP/2 server push, which libcurl accepts only after the application installs CURLMOPT_PUSHFUNCTION with curl_multi_setopt(); otherwise it refuses every PUSH_PROMISE. The image's only libcurl consumers, /usr/bin/curl and git's http and imap helpers, do not import curl_multi_setopt (nm -D)."
     },
     {
       "vulnerability": {
@@ -857,6 +1121,81 @@
     },
     {
       "vulnerability": {
+        "name": "CVE-2026-52490"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3%2Bdhi3?arch=amd64&distro=debian-13.8&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3%2Bdhi3?arch=amd64&distro=debian-13.8&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3%2Bdhi3?arch=amd64&distro=debian-13.8&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3%2Bdhi3?arch=amd64&distro=debian-13.8&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3%2Bdhi3?arch=amd64&distro=debian-13.8&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3%2Bdhi3?arch=amd64&distro=debian-13.8&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3%2Bdhi3?arch=amd64&distro=debian-13.8&upstream=tiff"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3%2Bdhi3?arch=amd64&distro=debian-13.8&upstream=tiff"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The overflow is in the tiffcrop command-line tool's option parsing (process_command_opts() in tools/tiffcrop.c). These images install no libtiff-tools package and no tiffcrop binary; libtiff6 ships only /usr/lib/x86_64-linux-gnu/libtiff.so.6.1.0, which contains no tiffcrop code."
+    },
+    {
+      "vulnerability": {
         "name": "CVE-2026-5450"
       },
       "products": [
@@ -1004,6 +1343,239 @@
       "timestamp": "2026-11-20T02:54:18Z",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "The locales package installs locale source data under /usr/share/i18n and three scripts (locale-gen is a shell script, update-locale and validlocale are Perl), and no compiled code; the vulnerable scanf implementation is in libc6."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-58469"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/mcp-server-base",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/wget@1.25.0-r2?arch=x86_64&distro=alpine-3.23.8"
+            },
+            {
+              "@id": "pkg:apk/alpine/wget@1.25.0-r4?arch=x86_64&distro=alpine-3.23"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The underread is in clean_metalink_string() in src/metalink.c, which wget compiles only with libmetalink. Alpine's /usr/bin/wget in this image is built without it: its built-in feature list reads -metalink (wget --version) and it links no libmetalink (readelf -d)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-92388"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3-gnutls@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4@7.88.1-10%2Bdeb12u15?arch=amd64&distro=debian-12.15&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The crash and use-after-free follow a failed FTP wildcard LIST, which libcurl runs only for an application that sets CURLOPT_WILDCARDMATCH. The image's libcurl consumers never set it: the curl tool's and git's http/imap sources contain no CURLOPT_WILDCARDMATCH, and Chromium's chrome_crashpad_handler (loads libcurl with dlopen) only uploads crash reports over HTTP(S)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-92388"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/agent-claude-code",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-codex",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-copilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-grok",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-hermes",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-kimi",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-openclaw",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/agent-opencode",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.8&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The crash and use-after-free follow a failed FTP wildcard LIST, which libcurl runs only for an application that sets CURLOPT_WILDCARDMATCH. The image's libcurl consumers never set it: the curl tool's and git's http/imap sources contain no CURLOPT_WILDCARDMATCH, and Chromium's chrome_crashpad_handler (loads libcurl with dlopen) only uploads crash reports over HTTP(S)."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-92388"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/sandbox-base",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7&upstream=curl"
+            },
+            {
+              "@id": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.7"
+            },
+            {
+              "@id": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7%2Bdhi1?arch=amd64&distro=debian-13.7&upstream=curl"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-11-23T08:58:18Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The crash and use-after-free follow a failed FTP wildcard LIST, which libcurl runs only for an application that sets CURLOPT_WILDCARDMATCH. The image's only libcurl consumers, /usr/bin/curl and git's http and imap helpers, never set it: neither the curl tool's nor git's sources contain CURLOPT_WILDCARDMATCH."
     }
   ]
 }

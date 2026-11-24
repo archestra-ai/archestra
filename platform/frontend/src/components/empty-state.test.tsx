@@ -48,6 +48,37 @@ describe("EmptyState", () => {
     expect(onClearFilters).toHaveBeenCalledTimes(1);
   });
 
+  it("first use: shows both actions to someone who can act, and the reader line to someone who can't", () => {
+    const props = {
+      variant: "firstUse" as const,
+      title: "Send each session to the right model",
+      action: <button type="button">Create an auto router</button>,
+      secondaryAction: <a href="/docs">How auto routing works</a>,
+      readerMessage: "Your admins haven't created an auto router yet.",
+    };
+    const { rerender } = render(<EmptyState {...props} canAct />);
+    expect(
+      screen.getByRole("button", { name: "Create an auto router" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "How auto routing works" }),
+    ).toBeVisible();
+    expect(screen.queryByText(props.readerMessage)).not.toBeInTheDocument();
+
+    rerender(<EmptyState {...props} canAct={false} />);
+    expect(screen.getByText(props.readerMessage)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Create an auto router" }),
+    ).not.toBeInTheDocument();
+
+    // Permissions still loading: neither, so nothing flickers.
+    rerender(<EmptyState {...props} canAct={undefined} />);
+    expect(screen.queryByText(props.readerMessage)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create an auto router" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders a call to action for a list nothing has been added to yet", () => {
     render(
       <EmptyState

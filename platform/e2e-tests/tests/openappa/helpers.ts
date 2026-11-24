@@ -163,7 +163,7 @@ export function messageStart(id: string): SseEvent {
         id,
         type: "message",
         role: "assistant",
-        model: "claude-3-5-sonnet-20241022",
+        model: "claude-sonnet-5-5",
         content: [],
         stop_reason: null,
         stop_sequence: null,

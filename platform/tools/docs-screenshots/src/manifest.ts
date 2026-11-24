@@ -156,9 +156,9 @@ export const SHOTS: Shot[] = [
           contentType: "application/json",
           body: JSON.stringify([
             {
-              id: "claude-3-5-sonnet-20241022",
+              id: "claude-sonnet-5-5",
               dbId: "m0000000-0000-4000-8000-000000000001",
-              displayName: "Claude 3.5 Sonnet",
+              displayName: "Claude Sonnet 5.5",
               provider: "anthropic",
               isBest: true,
               isFree: false,
@@ -187,7 +187,7 @@ export const SHOTS: Shot[] = [
       );
     },
     prepare: async (page) => {
-      await page.getByText("Claude 3.5 Sonnet").first().waitFor();
+      await page.getByText("Claude Sonnet 5.5").first().waitFor();
     },
   },
   {
@@ -219,9 +219,9 @@ export const SHOTS: Shot[] = [
           contentType: "application/json",
           body: JSON.stringify([
             {
-              id: "claude-3-5-sonnet-20241022",
+              id: "claude-sonnet-5-5",
               dbId: "m0000000-0000-4000-8000-000000000001",
-              displayName: "Claude 3.5 Sonnet",
+              displayName: "Claude Sonnet 5.5",
               provider: "anthropic",
               isBest: true,
               isFree: false,
@@ -262,7 +262,7 @@ export const SHOTS: Shot[] = [
               title: "Incident INC-4091 Command Center",
               selectedModel: "m0000000-0000-4000-8000-000000000001",
               selectedProvider: "anthropic",
-              modelId: "claude-3-5-sonnet-20241022",
+              modelId: "claude-sonnet-5-5",
               thinkingEffort: "medium",
               hasCustomToolSelection: false,
               hooksDebugEnabled: false,
@@ -464,8 +464,8 @@ export const SHOTS: Shot[] = [
     viewport: { width: 1440, height: 920 },
     prepare: async (page) => {
       await page
-        .getByRole("button", { name: "Create new virtual key" })
-        .first()
+        .getByRole("region", { name: "Endpoint", exact: true })
+        .getByRole("combobox", { name: "API format" })
         .waitFor();
     },
   },
@@ -502,6 +502,30 @@ export const SHOTS: Shot[] = [
     route: () => "/llm/limits",
     viewport: { width: 1440, height: 1000 },
     prepare: prepareThroughputLimit,
+  },
+  {
+    asset: "automated_screenshots/llm-proxy-auto-routing_overview",
+    route: (seed) => `/llm/auto-routing/${seed.autoRouters.auto}`,
+    prepare: async (page) => {
+      await expect(page.getByTestId("auto-routing-header-status")).toHaveText(
+        "Active",
+      );
+      await expect(page.getByTestId("auto-routing-plan-caption")).toHaveText(
+        /^Plan updated /,
+      );
+    },
+  },
+  {
+    asset: "automated_screenshots/llm-proxy-auto-routing_configure",
+    route: (seed) => `/llm/auto-routing/${seed.autoRouters.auto}`,
+    viewport: { width: 1440, height: 1100 },
+    prepare: async (page) => {
+      await page.getByRole("button", { name: "Configure" }).click();
+      await page.getByTestId("auto-routing-preset-estimate").waitFor();
+      // The dialog focuses the name field; the shot is about tiers and budget.
+      await page.getByRole("heading", { name: "Configure auto" }).click();
+    },
+    target: (page) => page.getByRole("dialog"),
   },
   {
     asset: "automated_screenshots/platform-agent-plugins_catalog",

@@ -170077,6 +170077,14 @@
                           "type": "string",
                           "format": "date-time"
                         },
+                        "firstRunSetupCompletedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "telemetryEnabled": {
+                          "type": "boolean"
+                        },
                         "theme": {
                           "type": "string",
                           "enum": [
@@ -170815,6 +170823,8 @@
                         "metadata",
                         "onboardingComplete",
                         "onboardingSurveyCompletedAt",
+                        "firstRunSetupCompletedAt",
+                        "telemetryEnabled",
                         "theme",
                         "customFont",
                         "onlineMcpCatalogEnabled",
@@ -381568,7 +381578,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Approve a local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`mcpServerInstallation:update`](/docs/reference/permissions#mcpServerInstallation:update): Modify installed MCP server configuration",
+        "description": "Approve a local catalog item's image so its installs proceed. Requires update on every MCP registry entry.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`mcpServerInstallation:update`](/docs/reference/permissions#mcpServerInstallation:update): Modify installed MCP server configuration",
         "parameters": [
           {
             "schema": {
@@ -478874,13 +478884,13 @@
         }
       }
     },
-    "/api/onboarding/survey-eligibility": {
+    "/api/onboarding/first-run-setup": {
       "get": {
-        "operationId": "getOnboardingSurveyEligibility",
+        "operationId": "getFirstRunSetup",
         "tags": [
           "Onboarding"
         ],
-        "description": "Whether the first-login onboarding survey should be shown: unlicensed instance, no LLM/MCP activity yet, not already submitted for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Whether the first-run setup dialog (mailing-list signup and telemetry choice) should be shown: unlicensed instance, telemetry not turned off for the deployment, not already finished for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -478889,12 +478899,12 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "eligible": {
+                    "show": {
                       "type": "boolean"
                     }
                   },
                   "required": [
-                    "eligible"
+                    "show"
                   ],
                   "additionalProperties": false
                 }
@@ -479140,15 +479150,13 @@
             "organizationSettings:update"
           ]
         }
-      }
-    },
-    "/api/onboarding/survey": {
+      },
       "post": {
-        "operationId": "submitOnboardingSurvey",
+        "operationId": "completeFirstRunSetup",
         "tags": [
           "Onboarding"
         ],
-        "description": "Submit the first-login onboarding survey; forwarded to the website and recorded once per organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Finish the first-run setup dialog: store the telemetry choice. Recorded once per organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -479156,32 +479164,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "role": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "workEnvironment": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "referralSource": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "workEmail": {
-                    "type": "string",
-                    "maxLength": 320,
-                    "format": "email",
-                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  "telemetryEnabled": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
-                  "role",
-                  "workEnvironment",
-                  "referralSource"
+                  "telemetryEnabled"
                 ]
               }
             }
@@ -512072,6 +512060,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -512810,6 +512806,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -513858,6 +513856,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -514596,6 +514602,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -515389,6 +515397,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -516127,6 +516143,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -516528,6 +516546,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -517266,6 +517292,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -517664,6 +517692,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -518402,6 +518438,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -520284,6 +520322,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -521022,6 +521068,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -521555,6 +521603,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -522293,6 +522349,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -522886,6 +522944,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -523624,6 +523690,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -524092,6 +524160,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -524830,6 +524906,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -525242,6 +525320,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -525980,6 +526066,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -526423,6 +526511,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -527161,6 +527257,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -527541,6 +527639,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -528279,6 +528385,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -529863,6 +529971,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -530601,6 +530717,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",

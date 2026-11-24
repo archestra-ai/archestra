@@ -28,21 +28,30 @@ test.describe("Context window visualizer", () => {
     request,
     makeApiRequest,
   }) => {
-    const runtimeModel = await getRuntimeModelForProviderFromApi(
+    const lookup = {
       makeApiRequest,
       request,
-      CONTEXT_WINDOW_TEST_PROVIDER,
-    );
+      provider: CONTEXT_WINDOW_TEST_PROVIDER,
+    };
     test.skip(
-      !runtimeModel,
+      !(await getRuntimeModelForProviderFromApi(lookup)),
       `${CONTEXT_WINDOW_TEST_PROVIDER} is not configured in this test environment`,
     );
-    if (!runtimeModel) return;
 
     await goToChat(page);
     await expectChatReady(page);
 
-    await selectApiKeyForProvider(page, CONTEXT_WINDOW_TEST_PROVIDER);
+    const apiKeyId = await selectApiKeyForProvider(
+      page,
+      CONTEXT_WINDOW_TEST_PROVIDER,
+    );
+    const runtimeModel = await getRuntimeModelForProviderFromApi({
+      ...lookup,
+      apiKeyId,
+    });
+    if (!runtimeModel) {
+      throw new Error("The selected key serves no model");
+    }
 
     // Pick the WireMock model so the model-selector dropdown closes cleanly.
     const modelSelectorTrigger = page
@@ -167,20 +176,29 @@ test.describe("Context window visualizer", () => {
     request,
     makeApiRequest,
   }) => {
-    const runtimeModel = await getRuntimeModelForProviderFromApi(
+    const lookup = {
       makeApiRequest,
       request,
-      CONTEXT_WINDOW_TEST_PROVIDER,
-    );
+      provider: CONTEXT_WINDOW_TEST_PROVIDER,
+    };
     test.skip(
-      !runtimeModel,
+      !(await getRuntimeModelForProviderFromApi(lookup)),
       `${CONTEXT_WINDOW_TEST_PROVIDER} is not configured in this test environment`,
     );
-    if (!runtimeModel) return;
 
     await goToChat(page);
     await expectChatReady(page);
-    await selectApiKeyForProvider(page, CONTEXT_WINDOW_TEST_PROVIDER);
+    const apiKeyId = await selectApiKeyForProvider(
+      page,
+      CONTEXT_WINDOW_TEST_PROVIDER,
+    );
+    const runtimeModel = await getRuntimeModelForProviderFromApi({
+      ...lookup,
+      apiKeyId,
+    });
+    if (!runtimeModel) {
+      throw new Error("The selected key serves no model");
+    }
 
     const modelSelectorTrigger = page
       .getByTestId(E2eTestId.ChatModelSelectorTrigger)

@@ -97,6 +97,44 @@ describe("internal MCP catalog image approval", () => {
     expect(stored?.catalogItemApprovalReviewedBy).toBe(user.id);
   });
 
+  test("approving an image requires update on every registry entry", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    // This caller holds mcpServerInstallation:update but not update on every
+    // registry entry.
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "editor" });
+    const catalog = await makePersonalLocalCatalog();
+    await InternalMcpCatalogModel.markImageApprovalPending(catalog.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/approve`,
+    });
+
+    expect(response.statusCode).toBe(403);
+    const stored = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(stored?.catalogItemApprovalStatus).toBe("pending");
+    expect(stored?.catalogItemApprovalReviewedBy).toBeNull();
+    expect(mockAutoReinstall).not.toHaveBeenCalled();
+  });
+
+  test("listing items awaiting image approval requires update on every registry entry", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "editor" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog/pending-image-approval",
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
   test("approval rolls a single-tenant install onto the now-approved image", async ({
     makeMcpServer,
   }) => {

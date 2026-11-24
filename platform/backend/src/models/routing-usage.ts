@@ -1,6 +1,7 @@
 import {
   and,
   count,
+  desc,
   eq,
   gte,
   isNotNull,
@@ -50,37 +51,42 @@ class RoutingUsageModel {
   }
 
   /** The window a fit started at `inputWatermark` would read: the cold-start progress, and what a refit would change. */
-  static async findFitVolume(params: FitWindow): Promise<FitVolume> {
-    const window = fitWindow(params);
-    const tokens = sql`${usage.input} + ${usage.cacheRead} + ${usage.cacheWrite} + ${usage.output}`;
-    const sessions = db
-      .select({
-        createdAt: decisions.createdAt,
-        tokens: sql<number>`sum(${tokens})`.as("tokens"),
-      })
-      .from(decisions)
-      .innerJoin(usage, eq(usage.decisionId, decisions.id))
-      .where(window.where)
-      .groupBy(decisions.id)
-      .having(window.having)
-      .as("sessions");
-    const [row] = await db
-      .select({
-        sessions: count(),
-        tokens: sql<number>`coalesce(sum(${sessions.tokens}), 0)`.mapWith(
-          Number,
-        ),
-        firstCreatedAt: min(sessions.createdAt),
-        lastCreatedAt: max(sessions.createdAt),
-      })
-      .from(sessions);
-    return (
-      row ?? {
-        sessions: 0,
-        tokens: 0,
-        firstCreatedAt: null,
-        lastCreatedAt: null,
-      }
+  static findFitVolume(params: FitWindow): Promise<FitVolume> {
+    return overFitWindow(
+      params,
+      async (window) => {
+        const tokens = sql`${usage.input} + ${usage.cacheRead} + ${usage.cacheWrite} + ${usage.output}`;
+        const sessions = db
+          .select({
+            createdAt: decisions.createdAt,
+            tokens: sql<number>`sum(${tokens})`.as("tokens"),
+          })
+          .from(decisions)
+          .innerJoin(usage, eq(usage.decisionId, decisions.id))
+          .where(window.where)
+          .groupBy(decisions.id)
+          .having(window.having)
+          .as("sessions");
+        const [row] = await db
+          .select({
+            sessions: count(),
+            tokens: sql<number>`coalesce(sum(${sessions.tokens}), 0)`.mapWith(
+              Number,
+            ),
+            firstCreatedAt: min(sessions.createdAt),
+            lastCreatedAt: max(sessions.createdAt),
+          })
+          .from(sessions);
+        return (
+          row ?? {
+            sessions: 0,
+            tokens: 0,
+            firstCreatedAt: null,
+            lastCreatedAt: null,
+          }
+        );
+      },
+      (volume) => volume.sessions,
     );
   }
 
@@ -144,77 +150,90 @@ class RoutingUsageModel {
    * Per decision of the given scorer version: its features and summed usage,
    * split into requests whose prompt (input + cache read + cache write)
    * exceeds `longContextThreshold` and the rest. Only sessions idle for a day
-   * before `inputWatermark` and created within the history window count.
+   * before `inputWatermark` and created within the fit window count.
    *
    * `sample` is at most `maxSessions` of them, picked by a hash of the
    * decision id: uniform over time and stable across refits. `volume`
    * aggregates every session of the window in the same statement.
    */
-  static async findFitHistory(
+  static findFitHistory(
     params: FitWindow & { longContextThreshold: number | null },
     maxSessions = MAX_FIT_SESSIONS,
   ) {
-    const window = fitWindow(params);
-    const prompt = sql`${usage.input} + ${usage.cacheRead} + ${usage.cacheWrite}`;
-    const long =
-      params.longContextThreshold === null
-        ? sql`false`
-        : sql`${prompt} > ${params.longContextThreshold}`;
-    const short = sql`not (${long})`;
-    const block = (filter: SQL) => ({
-      input: total(usage.input, filter),
-      cacheRead: total(usage.cacheRead, filter),
-      cacheWrite: total(usage.cacheWrite, filter),
-      output: total(usage.output, filter),
-    });
+    return overFitWindow(
+      params,
+      async (window) => {
+        const prompt = sql`${usage.input} + ${usage.cacheRead} + ${usage.cacheWrite}`;
+        const long =
+          params.longContextThreshold === null
+            ? sql`false`
+            : sql`${prompt} > ${params.longContextThreshold}`;
+        const short = sql`not (${long})`;
+        const block = (filter: SQL) => ({
+          input: total(usage.input, filter),
+          cacheRead: total(usage.cacheRead, filter),
+          cacheWrite: total(usage.cacheWrite, filter),
+          cacheWrite1h: total(usage.cacheWrite1h, filter),
+          output: total(usage.output, filter),
+        });
 
-    const tokens = sql`${usage.input} + ${usage.cacheRead} + ${usage.cacheWrite} + ${usage.output}`;
+        const tokens = sql`${usage.input} + ${usage.cacheRead} + ${usage.cacheWrite} + ${usage.output}`;
 
-    const rows = await db
-      .select({
-        id: decisions.id,
-        createdAt: decisions.createdAt,
-        features: decisions.features,
-        short: block(short),
-        long: block(long),
-        windowSessions: sql<number>`count(*) over ()`.mapWith(Number),
-        windowTokens: sql<number>`sum(sum(${tokens})) over ()`.mapWith(Number),
-        windowFirst: sql<Date>`min(${decisions.createdAt}) over ()`.mapWith(
-          decisions.createdAt,
-        ),
-        windowLast: sql<Date>`max(${decisions.createdAt}) over ()`.mapWith(
-          decisions.createdAt,
-        ),
-      })
-      .from(decisions)
-      .innerJoin(usage, eq(usage.decisionId, decisions.id))
-      .where(window.where)
-      .groupBy(decisions.id)
-      .having(window.having)
-      .orderBy(sql`hashtextextended(${decisions.id}::text, 0)`)
-      .limit(maxSessions);
-    const [first] = rows;
-    const volume: FitVolume = first
-      ? {
-          sessions: first.windowSessions,
-          tokens: first.windowTokens,
-          firstCreatedAt: first.windowFirst,
-          lastCreatedAt: first.windowLast,
-        }
-      : { sessions: 0, tokens: 0, firstCreatedAt: null, lastCreatedAt: null };
-    const sample = rows
-      .sort(
-        (a, b) =>
-          a.createdAt.getTime() - b.createdAt.getTime() ||
-          (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-      )
-      .map((row) => ({
-        createdAt: row.createdAt,
-        features: RoutingDecisionFeaturesSchema.parse(row.features),
-        short: row.short,
-        long: row.long,
-      }));
-    return { sample, volume };
+        const rows = await db
+          .select({
+            id: decisions.id,
+            createdAt: decisions.createdAt,
+            features: decisions.features,
+            short: block(short),
+            long: block(long),
+            windowSessions: sql<number>`count(*) over ()`.mapWith(Number),
+            windowTokens: sql<number>`sum(sum(${tokens})) over ()`.mapWith(
+              Number,
+            ),
+            windowFirst: sql<Date>`min(${decisions.createdAt}) over ()`.mapWith(
+              decisions.createdAt,
+            ),
+            windowLast: sql<Date>`max(${decisions.createdAt}) over ()`.mapWith(
+              decisions.createdAt,
+            ),
+          })
+          .from(decisions)
+          .innerJoin(usage, eq(usage.decisionId, decisions.id))
+          .where(window.where)
+          .groupBy(decisions.id)
+          .having(window.having)
+          .orderBy(sql`hashtextextended(${decisions.id}::text, 0)`)
+          .limit(maxSessions);
+        const [first] = rows;
+        const volume: FitVolume = first
+          ? {
+              sessions: first.windowSessions,
+              tokens: first.windowTokens,
+              firstCreatedAt: first.windowFirst,
+              lastCreatedAt: first.windowLast,
+            }
+          : {
+              sessions: 0,
+              tokens: 0,
+              firstCreatedAt: null,
+              lastCreatedAt: null,
+            };
+        const sample = rows
+          .sort(
+            (a, b) =>
+              a.createdAt.getTime() - b.createdAt.getTime() ||
+              (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+          )
+          .map((row) => ({
+            createdAt: row.createdAt,
+            features: RoutingDecisionFeaturesSchema.parse(row.features),
+            short: row.short,
+            long: row.long,
+          }));
+        return { sample, volume };
+      },
+      (history) => history.volume.sessions,
+    );
   }
 }
 
@@ -224,6 +243,8 @@ type FitWindow = {
   routerId: string;
   scorerVersionId: string;
   inputWatermark: Date;
+  /** The window reaches back past the history window for this many sessions. */
+  minSessions: number;
 };
 
 /** Bounds the sessions a fit materializes; volume still counts the whole window. */
@@ -237,8 +258,37 @@ export type FitVolume = {
   lastCreatedAt: Date | null;
 };
 
-/** Scored sessions of the scorer version, created within the history window and idle for a day before the watermark. */
-function fitWindow(params: FitWindow) {
+/**
+ * Reads the history window, or, when it holds fewer than `minSessions`
+ * sessions, the window since the router's `minSessions`-th latest one: a
+ * thin router is fitted on as many sessions as a busy one, from further back.
+ */
+async function overFitWindow<T>(
+  params: FitWindow,
+  read: (window: ReturnType<typeof fitWindow>) => Promise<T>,
+  sessions: (result: T) => number,
+): Promise<T> {
+  const recent = await read(
+    fitWindow(params, new Date(params.inputWatermark.getTime() - HISTORY_MS)),
+  );
+  if (sessions(recent) >= params.minSessions) return recent;
+  const anyTime = fitWindow(params, null);
+  const latest = db
+    .select({ createdAt: decisions.createdAt })
+    .from(decisions)
+    .innerJoin(usage, eq(usage.decisionId, decisions.id))
+    .where(anyTime.where)
+    .groupBy(decisions.id)
+    .having(anyTime.having)
+    .orderBy(desc(decisions.createdAt))
+    .limit(params.minSessions)
+    .as("latest");
+  const start = db.select({ start: min(latest.createdAt) }).from(latest);
+  return read(fitWindow(params, sql`(${start})`));
+}
+
+/** Scored sessions of the scorer version, created since `start` (any time when null) and idle for a day before the watermark. */
+function fitWindow(params: FitWindow, start: Date | SQL | null) {
   const watermark = params.inputWatermark.getTime();
   return {
     where: and(
@@ -246,7 +296,7 @@ function fitWindow(params: FitWindow) {
       eq(decisions.scorerVersionId, params.scorerVersionId),
       isNotNull(decisions.features),
       eq(decisions.featuresSchemaVersion, FEATURES_SCHEMA_VERSION),
-      gte(decisions.createdAt, new Date(watermark - HISTORY_MS)),
+      start ? gte(decisions.createdAt, start) : undefined,
     ),
     having: sql`max(${usage.createdAt}) < ${new Date(watermark - IDLE_MS).toISOString()}::timestamptz`,
   };

@@ -18,6 +18,7 @@ import {
 import { useInvitationCheck } from "@/lib/auth/invitation.query";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
+import { cn } from "@/lib/utils/tailwind";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const router = useRouter();
@@ -99,11 +100,9 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
 
   // The notice (default credentials, SSO setup) only concerns password
   // sign-in. With it disabled, the card already says how to sign in.
+  const isPlainSignIn = path === "sign-in" && !invitationId;
   const showSignInNotice =
-    path === "sign-in" &&
-    !invitationId &&
-    !isLoadingPublicConfig &&
-    !isBasicAuthDisabled;
+    isPlainSignIn && !isLoadingPublicConfig && !isBasicAuthDisabled;
 
   const isSignInOrSignUp = path === "sign-in" || isSignUpPath;
   // Every standalone auth surface mirrors the sign-in layout (logo on top);
@@ -116,25 +115,36 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
 
   return (
     <BackendConnectivityStatus>
-      <main className="h-full flex items-center justify-center p-4">
-        {/*
-          The banner sits under the card and out of the column's flow, and the
-          column keeps its own `space-y-4` in a child so the banner's presence
-          cannot add a gap to it either. The queries it depends on answer after
-          the card has painted, and in a vertically centred column anything
-          that joins the column afterwards moves the card — which is what it
-          did, by 55px, every time someone opened sign-in on a deployment still
-          using the default credentials. Out of flow, it can arrive whenever it
-          arrives and nothing above it moves.
-        */}
-        <div className="relative w-full max-w-md">
-          {showSignInNotice && (
-            <div className="absolute inset-x-0 top-full pt-4">
-              <SignInNotice />
+      <main
+        className={cn(
+          "h-full p-4",
+          isPlainSignIn
+            ? "overflow-y-auto"
+            : "flex items-center justify-center",
+        )}
+      >
+        <div
+          className={cn(
+            "w-full max-w-md",
+            isPlainSignIn
+              ? "mx-auto grid h-full grid-rows-[minmax(15rem,1fr)_auto_minmax(1rem,1fr)] sm:grid-rows-[minmax(13rem,1fr)_auto_minmax(1rem,1fr)]"
+              : "space-y-4",
+          )}
+        >
+          {isPlainSignIn ? (
+            // This row's size is independent of the late notice. Keep both
+            // above the form without delaying or moving the form. Allow
+            // scrolling when the notice wraps at a narrow width or high zoom.
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pb-4 [contain:size]">
+              <div className="mt-auto shrink-0">
+                <AppLogo />
+              </div>
+              {showSignInNotice && <SignInNotice />}
             </div>
+          ) : (
+            showLogo && <AppLogo />
           )}
           <div className="space-y-4">
-            {showLogo && <AppLogo />}
             {showExistingUserMessage && (
               <Card className="mb-4">
                 <CardHeader className="pb-3">
@@ -147,12 +157,12 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
               </Card>
             )}
             {/*
-            callbackURL behavior differs by flow:
-            - Invitation flow: Points back to auth page with invitationId preserved.
-              After OAuth/SSO completes, user returns here to trigger invitation acceptance.
-            - Normal flow: Points to final destination (from redirectTo param or /).
-              After auth completes, user goes directly to their intended page.
-          */}
+              callbackURL behavior differs by flow:
+              - Invitation flow: Points back to auth page with invitationId preserved.
+                After OAuth/SSO completes, user returns here to trigger invitation acceptance.
+              - Normal flow: Points to final destination (from redirectTo param or /).
+                After auth completes, user goes directly to their intended page.
+            */}
             <AuthViewWithErrorHandling
               path={path}
               callbackURL={getAuthCallbackURL({

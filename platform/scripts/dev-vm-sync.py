@@ -159,9 +159,6 @@ def push_git():
     if not head:
         return None
     env = dict(os.environ)
-    # In the pre-commit hook git names the index this commit is made from.
-    if env.get("GIT_INDEX_FILE"):
-        env["GIT_INDEX_FILE"] = os.path.abspath(env["GIT_INDEX_FILE"])
     tree = git_out("write-tree", env=env)  # fails while a merge conflict is open
     env.update(STAGED_COMMIT_ENV)
     staged = tree and git_out("commit-tree", tree, "-p", head, "-m", "dev-vm-sync: staged", env=env)
@@ -650,6 +647,11 @@ def copy_from_vm(paths):
 
 
 if __name__ == "__main__":
+    # In the pre-commit hook git names the index this commit is made from. In
+    # a main checkout the path is relative (.git/index) to the folder the hook
+    # starts in, so make it absolute before anything changes folder.
+    if os.environ.get("GIT_INDEX_FILE"):
+        os.environ["GIT_INDEX_FILE"] = os.path.abspath(os.environ["GIT_INDEX_FILE"])
     args = sys.argv[1:]
     if not args or args[0] not in ("start", "run", "pull", "tilt", "commit-check", "status", "prune"):
         print(__doc__.strip())

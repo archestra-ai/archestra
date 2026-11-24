@@ -6,7 +6,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { Layers, Pencil, Plus, Server, Trash2 } from "lucide-react";
+import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -31,6 +31,7 @@ import {
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -39,6 +40,7 @@ import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-cont
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -80,10 +82,19 @@ export default function ModelPoolsPage() {
   const statusFilter = searchParams.get("status") ?? "all";
 
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<{
-    pool: ModelPool;
-    section: PoolDialogSection;
-  } | null>(null);
+  const [section, setSection] = useState<PoolDialogSection>("pool");
+  // `?edit=<id>` opens that pool's dialog, so a link can land on it.
+  const editId = searchParams.get("edit");
+  const {
+    entity: editing,
+    open: openPoolDialog,
+    close: closePoolDialog,
+  } = useDialogUrlParam<ModelPool>({
+    paramName: "edit",
+    entityFromUrl: editId
+      ? (pools.find((pool) => pool.id === editId) ?? null)
+      : null,
+  });
   const [deleting, setDeleting] = useState<ModelPool | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const deletePool = useDeleteModelPool();
@@ -93,15 +104,16 @@ export default function ModelPoolsPage() {
   const clearSelection = useCallback(() => setRowSelection({}), []);
   const providerCatalog = useModelProviderCatalog();
 
-  const { data: canReadProviders } = useHasPermissions({
+  const readProviderPermission = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
+  const canReadProviders = readProviderPermission.data;
   const providerKeys = useLlmProviderApiKeys({
     enabled: canReadProviders === true,
     toastOnError: false,
   });
   const { data: session } = useSession();
-  const needsFirstProvider =
+  const hasNoUsableProvider =
     canReadProviders === true &&
     providerKeys.isSuccess &&
     // Shared connections and the signed-in user's personal subscriptions.
@@ -109,9 +121,9 @@ export default function ModelPoolsPage() {
       (key) =>
         (key.userId === null || key.userId === session?.user.id) &&
         isModelPoolProvider(key.provider),
-    ) &&
-    query.isSuccess &&
-    pools.length === 0;
+    );
+  const needsFirstProvider =
+    hasNoUsableProvider && query.isSuccess && pools.length === 0;
 
   const visible = pools.filter(
     (pool) =>
@@ -124,6 +136,26 @@ export default function ModelPoolsPage() {
   );
   const hasActiveFilters =
     Boolean(search) || providerFilter !== "all" || statusFilter !== "all";
+  const addProviderPermission = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
+  const createPoolPermission = useHasPermissions({ llmModel: ["update"] });
+  const firstUsePermission = needsFirstProvider
+    ? addProviderPermission
+    : createPoolPermission;
+  const isResolvingProvider =
+    readProviderPermission.isPending ||
+    (canReadProviders === true && providerKeys.isPending);
+  const isResolvingFirstUseAction =
+    firstUsePermission.isPending || isResolvingProvider;
+  const firstUseDescription = isResolvingProvider
+    ? "A pool serves one model from several provider keys."
+    : needsFirstProvider
+      ? "A pool serves one model from several provider keys. Start by connecting your first provider."
+      : "A pool serves one model, such as claude-sonnet-5-5, from several provider keys. If one fails, the next takes over.";
+  // Nothing to list and nothing filtered: the page explains pools instead of
+  // showing an empty table.
+  const isFirstUse = query.isSuccess && pools.length === 0 && !hasActiveFilters;
   const clearFilters = useCallback(
     () => updateQueryParams({ search: null, provider: null, status: null }),
     [updateQueryParams],
@@ -132,10 +164,12 @@ export default function ModelPoolsPage() {
     ...new Set(pools.flatMap((pool) => pool.members.map((m) => m.provider))),
   ].sort();
   const editingPool = editing
-    ? (pools.find((pool) => pool.id === editing.pool.id) ?? editing.pool)
+    ? (pools.find((pool) => pool.id === editing.id) ?? editing)
     : null;
-  const openPool = (pool: ModelPool, section: PoolDialogSection = "pool") =>
-    setEditing({ pool, section });
+  const openPool = (pool: ModelPool, opensOn: PoolDialogSection = "pool") => {
+    setSection(opensOn);
+    openPoolDialog(pool);
+  };
   const rangeSelection = useBulkRangeSelectionController();
   const cardSelection = useBulkCardSelection({
     rows: visible,
@@ -215,16 +249,18 @@ export default function ModelPoolsPage() {
     },
   ];
 
-  const createButton = needsFirstProvider ? null : (
-    <PermissionButton
-      size="sm"
-      permissions={{ llmModel: ["update"] }}
-      onClick={() => setCreating(true)}
-    >
-      <Plus />
-      <span>Create pool</span>
-    </PermissionButton>
-  );
+  const createButton =
+    pools.length === 0 &&
+    (isResolvingProvider || hasNoUsableProvider) ? null : (
+      <PermissionButton
+        size="sm"
+        permissions={{ llmModel: ["update"] }}
+        onClick={() => setCreating(true)}
+      >
+        <Plus />
+        <span>Create pool</span>
+      </PermissionButton>
+    );
 
   return (
     <PageLayout
@@ -238,20 +274,43 @@ export default function ModelPoolsPage() {
           description={query.error?.message}
           onRetry={() => query.refetch()}
         />
-      ) : needsFirstProvider ? (
+      ) : isFirstUse ? (
+        // One headline for both first-use states: the outcome is the same
+        // whether or not a provider exists yet. Only the last sentence and
+        // the button switch to the step that has to come first.
         <EmptyState
-          icon={Server}
-          title="Connect your first model provider"
-          description="A pool serves a model from provider connections, including your subscriptions. Add one, then create a pool."
+          variant="firstUse"
+          icon={Layers}
+          title="Keep your models answering when a provider fails"
+          description={firstUseDescription}
+          canAct={
+            isResolvingFirstUseAction ? undefined : firstUsePermission.data
+          }
+          readerMessage={
+            needsFirstProvider
+              ? "An admin needs to connect a model provider first."
+              : "Your admins haven't created a model pool yet."
+          }
           action={
-            <PermissionButton
-              size="sm"
-              permissions={{ llmProviderApiKey: ["create"] }}
-              onClick={() => setProviderDialogOpen(true)}
+            needsFirstProvider ? (
+              <Button size="sm" onClick={() => setProviderDialogOpen(true)}>
+                <Plus />
+                <span>Add model provider</span>
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <Plus />
+                <span>Create a pool</span>
+              </Button>
+            )
+          }
+          secondaryAction={
+            <ExternalDocsLink
+              href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyModelPools)}
+              className="text-sm"
             >
-              <Plus />
-              <span>Add model provider</span>
-            </PermissionButton>
+              How model pools work
+            </ExternalDocsLink>
           }
         />
       ) : (
@@ -400,13 +459,13 @@ export default function ModelPoolsPage() {
           }}
         />
       ) : null}
-      {editing && editingPool ? (
+      {editingPool ? (
         <PoolDialog
           key={editingPool.id}
           pool={editingPool}
-          initialSection={editing.section}
+          initialSection={section}
           onOpenChange={(open) => {
-            if (!open) setEditing(null);
+            if (!open) closePoolDialog();
           }}
         />
       ) : null}

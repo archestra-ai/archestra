@@ -6,8 +6,8 @@ import {
   accountAlternative,
   companyAccountWordsOf,
 } from "@/components/agent-runtime-account-choice";
-import { useAgentRuntimeAccount } from "@/lib/agent-runtime-account.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
+import { useAgentRuntimeAccount } from "@/lib/agent-runtime-account.query";
 
 type Preflight = archestraApiTypes.GetAgentRuntimePreflightResponses["200"];
 

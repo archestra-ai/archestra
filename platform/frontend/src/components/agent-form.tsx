@@ -127,6 +127,7 @@ import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
+import { noCompanyConnection } from "@/components/claude-connection-pickers.utils";
 import {
   type CompanyAccountChange,
   CompanyAccountFields,
@@ -1327,10 +1328,11 @@ export function AgentForm({
   const knowledgeBases = mergeById(knowledgeBasesData, savedKnowledgeBases);
   const connectors = mergeById(connectorsData, savedConnectors);
   const agentLlmApiKeyId = agent?.llmApiKeyId;
-  const { data: availableApiKeys = [] } = useAvailableLlmProviderApiKeys({
-    includeKeyId: agentLlmApiKeyId ?? undefined,
-    enabled: shouldLoadLlmConfiguration && !!canReadLlmProviderApiKeys,
-  });
+  const { data: availableApiKeys = [], isFetched: availableApiKeysFetched } =
+    useAvailableLlmProviderApiKeys({
+      includeKeyId: agentLlmApiKeyId ?? undefined,
+      enabled: shouldLoadLlmConfiguration && !!canReadLlmProviderApiKeys,
+    });
   const llmModelsQuery = useLlmModelsByProvider({
     enabled: shouldLoadLlmConfiguration && !!canReadLlmModels,
   });
@@ -3734,18 +3736,33 @@ export function AgentForm({
   // card alone. Otherwise a Claude agent starts on the Claude account its
   // runtime comes with, as that card alone: each person's subscription, which
   // is how the maintained runtime comes, or a company API key, which is what
-  // a custom image ran every agent on. Any other runtime with two accounts
-  // starts with neither ticked, and its creator chooses. The company card's
-  // fields start empty in every case: nothing is picked for the creator.
+  // a custom image ran every agent on. Any other runtime with a personal
+  // subscription of its own starts ticked too, so a new agent can be created
+  // at once and the cards say what its runs use: on that subscription, like
+  // Claude Code, unless the subscription alone would hold Create back. Codex
+  // on subscriptions alone takes its model from its creator's own ChatGPT:
+  // a creator without one starts with both ways open, which needs none.
+  // The company card's fields start empty in every case: nothing is picked
+  // for the creator.
   const startingClaude = runtime
     ? startingClaudeAuthentication({ runtime, ruleKind: null })
     : undefined;
-  const runtimeStartKind: AgentAccountLock | null = runtimeRuleKind
+  const creatorSubscriptionKnown =
+    availableApiKeysFetched || canReadLlmProviderApiKeys === false;
+  const runtimeStartKind: AgentAccountLock | "both" | null = runtimeRuleKind
     ? null
     : connectionLockedByRuntime
       ? "key"
       : !isClaudeCodeRuntime
-        ? null
+        ? !offeredSubscription
+          ? null
+          : !requiredSubscriptionKind
+            ? "subscription"
+            : !creatorSubscriptionKnown
+              ? null
+              : requiredSubscriptionKey
+                ? "subscription"
+                : "both"
         : startingClaude === "subscription"
           ? "subscription"
           : startingClaude === "provider"
@@ -3757,7 +3774,11 @@ export function AgentForm({
       : null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: applied once per new agent, when its runtime says so
   useEffect(() => {
-    if (startsOnRuntimeKind) setAccountLock(startsOnRuntimeKind);
+    if (startsOnRuntimeKind) {
+      setAccountLock(
+        startsOnRuntimeKind === "both" ? null : startsOnRuntimeKind,
+      );
+    }
   }, [startsOnRuntimeKind]);
   // What the company card's two fields show. A connection the runtime fixes
   // shows by the name the rule gives: the reader may not be able to read the
@@ -3841,12 +3862,21 @@ export function AgentForm({
   // organization's default, not what the API resolves for each person, so it
   // holds no save back for it: a save the API refuses is shown by the write,
   // and has its reason beside the fields.
+  // Only where it is news: beside each person's own subscription their runs
+  // need no connection, and with no company connection to pick the fields
+  // already say so.
   const defaultModelCannotRun =
     !!runtime &&
     runtimeCards &&
     companyWayOpen &&
+    !subscriptionWayOpen &&
     !connectionLockedByRuntime &&
     !companyConnectionId &&
+    !noCompanyConnection({
+      keys: availableApiKeys,
+      apiKeyId: null,
+      runsOn: companyProviderFilter,
+    }) &&
     !usesClaudeSubscription &&
     !!organizationDefaultModel.model &&
     !getAgentRuntimeModelCompatibility({
@@ -4316,27 +4346,41 @@ export function AgentForm({
             <div className="space-y-2">
               {runtime && agentRuntimeEnabled ? (
                 // A runtime's accounts, as the same cards whatever it runs.
-                <AgentAccountOptions
-                  label="Accounts that can run it"
-                  // Under the runtime's rule there is one kind, and nothing
-                  // to say about a choice between two.
-                  meaning={
-                    runtimeRuleKind
-                      ? undefined
-                      : accountWaysMeaning(
-                          {
-                            subscription: subscriptionWayOpen,
-                            provider: companyWayOpen,
-                          },
-                          companyAccountName(runtime.command?.[0]),
-                        )
-                  }
-                  options={runtimeAccountOptions}
-                  // The plans a rule leaves open are still the agent's to
-                  // tick.
-                  readOnly={!canLockAccount && !runtimeRuleKind}
-                  problem={accountLockProblem}
-                />
+                <>
+                  {/* Three levels decide an account: the runtime's settings
+                      say what agents on it may allow, this form what this
+                      agent allows, and each person picks for their own
+                      runs where both are allowed. */}
+                  {!runtimeRuleKind &&
+                    choosesAmongAccounts &&
+                    canLockAccount && (
+                      <FieldDescription>
+                        Choose which accounts this agent allows, from those its
+                        runtime allows.
+                      </FieldDescription>
+                    )}
+                  <AgentAccountOptions
+                    label="Accounts that can run it"
+                    // Under the runtime's rule there is one kind, and nothing
+                    // to say about a choice between two.
+                    meaning={
+                      runtimeRuleKind
+                        ? undefined
+                        : accountWaysMeaning(
+                            {
+                              subscription: subscriptionWayOpen,
+                              provider: companyWayOpen,
+                            },
+                            companyAccountName(runtime.command?.[0]),
+                          )
+                    }
+                    options={runtimeAccountOptions}
+                    // The plans a rule leaves open are still the agent's to
+                    // tick.
+                    readOnly={!canLockAccount && !runtimeRuleKind}
+                    problem={accountLockProblem}
+                  />
+                </>
               ) : (
                 <fieldset
                   disabled={accountLockedForViewer}

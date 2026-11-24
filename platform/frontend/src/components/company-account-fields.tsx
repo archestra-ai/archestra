@@ -2,6 +2,7 @@
 
 import type { ComponentProps, ReactNode } from "react";
 import { CompanyConnectionPickers } from "@/components/claude-connection-pickers";
+import { noCompanyConnection } from "@/components/claude-connection-pickers.utils";
 
 /**
  * Who decides the company option's connection and model here: a runtime's
@@ -62,6 +63,18 @@ export function CompanyAccountFields({
   // The connection is not this level's to set: a plan's own card, or one a
   // level above fixes. Only the model is spoken of.
   const modelAlone = connectionFixed || fixedAbove === "connection";
+  // With no company connection to pick yet, the fields say so and offer to
+  // add one: what picking would mean waits until there is one.
+  const empty =
+    !pickers.compact &&
+    noCompanyConnection({
+      keys: pickers.keys,
+      apiKeyId: apiKeyId ?? null,
+      runsOn: pickers.runsOn,
+      sharedOnly: pickers.sharedOnly,
+      connectionFixed,
+      lockedConnection: pickers.lockedConnection,
+    });
   return (
     <>
       <CompanyConnectionPickers
@@ -75,7 +88,7 @@ export function CompanyAccountFields({
         onModelClear={() => onChange({ llmApiKeyId: connection })}
       />
       {between}
-      {fixedAbove !== "both" && (
+      {fixedAbove !== "both" && !empty && (
         <p className="text-xs text-muted-foreground">
           {line ??
             (modelAlone
@@ -109,8 +122,9 @@ const AMONG_SEVERAL: Record<CompanyAccountLevel, Sentences> = {
     open: "",
     connection: "",
     both: "",
-    modelOpen: "Each agent picks the model for this plan.",
-    model: "Every agent runs this model on this plan.",
+    modelOpen:
+      "Optional. Leave the model empty to set it in each agent's settings.",
+    model: "Every agent on this runtime uses this model on this plan.",
   },
   agent: {
     open: "",
@@ -123,18 +137,21 @@ const AMONG_SEVERAL: Record<CompanyAccountLevel, Sentences> = {
 
 const SENTENCES: Record<CompanyAccountLevel, Sentences> = {
   runtime: {
-    open: "Each agent picks its connection and model.",
-    connection: "Every agent uses this connection. Each agent picks its model.",
-    both: "Every agent uses this connection and model.",
-    modelOpen: "Each agent picks its model.",
-    model: "Every agent uses this model.",
+    open: "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.",
+    connection:
+      "Every agent on this runtime uses this connection. Set the model in each agent's settings, or set it here.",
+    both: "Every agent on this runtime uses this connection and model.",
+    modelOpen:
+      "Optional. Leave the model empty to set it in each agent's settings.",
+    model: "Every agent on this runtime uses this model.",
   },
   agent: {
-    open: "Each person picks their connection and model.",
+    open: "Optional. Set a connection and model to fix them for every run on the company account. Leave them empty and each person picks their own on the agent's page.",
     connection:
-      "Every run uses this connection. Each person picks their model.",
+      "Every run uses this connection. Each person picks their model on the agent's page, unless you set one here.",
     both: "Every run uses this connection and model.",
-    modelOpen: "Each person picks their model.",
+    modelOpen:
+      "Each person picks their model on the agent's page, unless you set one here.",
     model: "Every run uses this model.",
   },
 };

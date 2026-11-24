@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
 import { CompanyConnectionPickers } from "./claude-connection-pickers";
+import { CompanyAccountFields } from "./company-account-fields";
 
 const { keys, models } = vi.hoisted(() => ({
   keys: [
@@ -243,7 +244,9 @@ describe("CompanyConnectionPickers", () => {
       runsOn: () => false,
     });
 
-    expect(screen.getByText("No connection here can run Claude")).toBeVisible();
+    expect(
+      screen.getByText("No company connection can run Claude yet"),
+    ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /^Which connection pays/ }),
     ).not.toBeInTheDocument();
@@ -251,6 +254,36 @@ describe("CompanyConnectionPickers", () => {
       screen.getByRole("button", { name: "Add an Anthropic key" }),
     );
     expect(props.onAddApiKey).toHaveBeenCalledOnce();
+  });
+
+  it("says only that no company connection runs it, not who picks one, while there is none", () => {
+    const fields = (runsOn: (provider: string) => boolean) => (
+      <CompanyAccountFields
+        level="agent"
+        keys={keys as never}
+        apiKeyId={null}
+        runsOn={runsOn}
+        claude
+        modelId={null}
+        modelName={null}
+        modelProvider={null}
+        onAddApiKey={vi.fn()}
+        onChange={vi.fn()}
+      />
+    );
+    const { rerender } = render(fields(() => false));
+    expect(
+      screen.getByText("No company connection can run Claude yet"),
+    ).toBeVisible();
+    expect(screen.queryByText(/each person picks/i)).toBeNull();
+
+    // Once one can run it, the line says what leaving the fields empty does.
+    rerender(fields((provider) => provider === "anthropic"));
+    expect(
+      screen.getByText(
+        "Optional. Set a connection and model to fix them for every run on the company account. Leave them empty and each person picks their own on the agent's page.",
+      ),
+    ).toBeVisible();
   });
 
   it("speaks of the runtime, not of Claude, for an agent that does not run Claude Code", async () => {
@@ -291,7 +324,7 @@ describe("CompanyConnectionPickers", () => {
       runsOn: () => false,
     });
     expect(
-      screen.getByText("No connection here can run this agent"),
+      screen.getByText("No company connection can run this agent yet"),
     ).toBeVisible();
     expect(screen.queryByText(/Claude/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Add a key" }));
@@ -453,7 +486,7 @@ describe("CompanyConnectionPickers", () => {
     // here: the model waits for whoever decides the connection.
     renderPickers({ ...fixed, apiKeyId: null, runsOn: () => false });
     expect(
-      screen.queryByText("No connection here can run Claude"),
+      screen.queryByText("No company connection can run Claude yet"),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Model Choose a connection first" }),

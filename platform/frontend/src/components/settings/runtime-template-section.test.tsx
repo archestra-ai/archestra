@@ -249,11 +249,13 @@ const subscriptionCard = (dialog: HTMLElement) =>
 const companyCard = (dialog: HTMLElement) =>
   within(dialog).getByRole("checkbox", { name: /A company API key/ });
 const BOTH =
-  "Each agent chooses between personal subscriptions and a company API key.";
-const NOTHING_FIXED = "Each agent picks its connection and model.";
+  "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, a company API key, or both.";
+const NOTHING_FIXED =
+  "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.";
 const CONNECTION_FIXED =
-  "Every agent uses this connection. Each agent picks its model.";
-const BOTH_FIXED = "Every agent uses this connection and model.";
+  "Every agent on this runtime uses this connection. Set the model in each agent's settings, or set it here.";
+const BOTH_FIXED =
+  "Every agent on this runtime uses this connection and model.";
 const accountsGroup = (dialog: HTMLElement) =>
   within(dialog).getByRole("group", { name: "Accounts that can run it" });
 const connectionField = (dialog: HTMLElement) =>
@@ -282,7 +284,9 @@ const openBuiltIn = async (
     await screen.findByRole("button", { name: `Actions for ${name}` }),
   );
   await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-  const dialog = screen.getByRole("dialog", { name: `Edit ${name}` });
+  const dialog = screen.getByRole("dialog", {
+    name: `Edit ${name} runtime`,
+  });
   await user.click(
     within(dialog).getByRole("button", { name: "Runtime settings" }),
   );
@@ -343,13 +347,19 @@ describe("RuntimeTemplateSection", () => {
         await screen.findByRole("button", { name: "Actions for Claude Code" }),
       );
       await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-      const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
+      const dialog = screen.getByRole("dialog", {
+        name: "Edit Claude Code runtime",
+      });
       await user.click(
         within(dialog).getByRole("button", { name: "Runtime settings" }),
       );
       return dialog;
     };
     const dialog = await openClaudeCode();
+    // The section's nav names what it holds, not the image it runs.
+    expect(
+      within(dialog).getByRole("button", { name: /Runtime settings/ }),
+    ).toHaveTextContent(/^Runtime settingsAccounts and limits$/);
     // With nothing stored the maintained runtime names no account: both
     // cards are ticked. Unticking one names the other.
     expect(subscriptionCard(dialog)).toBeChecked();
@@ -361,7 +371,7 @@ describe("RuntimeTemplateSection", () => {
     // Accounts reach every agent on save; the update is for the rest.
     expect(
       within(dialog).getByText(
-        "Accounts apply to every agent as soon as you save. Other changes only apply to agents created afterwards.",
+        "Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here. The container image updates with each release, for every agent.",
       ),
     ).toBeInTheDocument();
     await user.type(
@@ -398,13 +408,15 @@ describe("RuntimeTemplateSection", () => {
         "2 agents on Claude Code still use older settings",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Edit Claude Code" })).toBe(
-      dialog,
-    );
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-    // The update names the other settings, and not the accounts.
     expect(
-      within(dialog).getByText(/^Updating gives them the saved limits\./),
+      screen.getByRole("dialog", { name: "Edit Claude Code runtime" }),
+    ).toBe(dialog);
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    // The update names the limits it brings, and leaves the image alone.
+    expect(
+      within(dialog).getByText(
+        "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier. It does not change the container image.",
+      ),
     ).toBeInTheDocument();
     await user.click(
       within(dialog).getByRole("button", { name: "Update 2 agents" }),
@@ -430,7 +442,9 @@ describe("RuntimeTemplateSection", () => {
       await screen.findByRole("button", { name: "Actions for Claude Code" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
+    const dialog = screen.getByRole("dialog", {
+      name: "Edit Claude Code runtime",
+    });
     await user.click(
       within(dialog).getByRole("button", { name: "Runtime settings" }),
     );
@@ -448,9 +462,9 @@ describe("RuntimeTemplateSection", () => {
 
     // Still the same settings, on the section the save was made from, with
     // what was saved. No agent is on older settings, and the block says so.
-    expect(screen.getByRole("dialog", { name: "Edit Claude Code" })).toBe(
-      dialog,
-    );
+    expect(
+      screen.getByRole("dialog", { name: "Edit Claude Code runtime" }),
+    ).toBe(dialog);
     expect(duration()).toHaveValue(8);
     expect(
       await within(dialog).findByText(
@@ -622,7 +636,7 @@ describe("RuntimeTemplateSection", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
     const editor = screen.getByRole("dialog", {
-      name: "Edit Engineering workspace",
+      name: "Edit Engineering workspace runtime",
     });
     const name = screen.getByRole("textbox", { name: "Name" });
     await user.clear(name);
@@ -630,7 +644,7 @@ describe("RuntimeTemplateSection", () => {
     await saveRuntime(user, editor);
     expect(settings.templates[0].name).toBe("Review workspace");
     // The open settings carry the saved name.
-    expect(editor).toHaveAccessibleName("Edit Review workspace");
+    expect(editor).toHaveAccessibleName("Edit Review workspace runtime");
     await closeRuntime(user, editor);
     await user.click(screen.getByRole("button", { name: "Actions for Codex" }));
     expect(
@@ -825,7 +839,7 @@ describe("the accounts a custom runtime gives its agents", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
     const dialog = screen.getByRole("dialog", {
-      name: "Edit Claude workspace",
+      name: "Edit Claude workspace runtime",
     });
     await user.click(
       within(dialog).getByRole("button", { name: "Runtime settings" }),
@@ -1118,7 +1132,9 @@ describe("the accounts the built-in Claude Code runtime gives its agents", () =>
       await screen.findByRole("button", { name: "Actions for Claude Code" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
+    const dialog = screen.getByRole("dialog", {
+      name: "Edit Claude Code runtime",
+    });
     await user.click(
       within(dialog).getByRole("button", { name: "Runtime settings" }),
     );
@@ -1271,7 +1287,9 @@ describe("a link that names a runtime", () => {
     navigation.search = "edit=codex";
     mount();
     const user = userEvent.setup();
-    const dialog = await screen.findByRole("dialog", { name: "Edit Codex" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Edit Codex runtime",
+    });
     await user.click(closeButton(dialog));
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -1291,7 +1309,7 @@ describe("a link that names a runtime", () => {
     mount();
     const user = userEvent.setup();
     const dialog = await screen.findByRole("dialog", {
-      name: "Edit Team workspace",
+      name: "Edit Team workspace runtime",
     });
     await user.click(closeButton(dialog));
     expect(navigation.replace).toHaveBeenCalledWith(
@@ -1354,7 +1372,9 @@ describe("the company connection and model a runtime fixes for its agents", () =
       await screen.findByRole("button", { name: "Actions for Team workspace" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit Team workspace" });
+    const dialog = screen.getByRole("dialog", {
+      name: "Edit Team workspace runtime",
+    });
     await user.click(
       within(dialog).getByRole("button", { name: "Runtime settings" }),
     );
@@ -1683,7 +1703,7 @@ describe("the kind of account a runtime with a subscription of its own names", (
     expect(plan).toBeChecked();
     expect(
       within(dialog).getByText(
-        "Each agent chooses between personal subscriptions and the company's enterprise plan.",
+        "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, the company's enterprise plan, or both.",
       ),
     ).toBeVisible();
     // The plan is the connection: only its model is picked.
@@ -1691,7 +1711,9 @@ describe("the kind of account a runtime with a subscription of its own names", (
       within(dialog).queryByRole("button", { name: /^Which connection pays/ }),
     ).toBeNull();
     expect(
-      within(dialog).getByText("Each agent picks its model."),
+      within(dialog).getByText(
+        "Optional. Leave the model empty to set it in each agent's settings.",
+      ),
     ).toBeVisible();
 
     await user.click(personal);
@@ -1700,7 +1722,7 @@ describe("the kind of account a runtime with a subscription of its own names", (
     ).toBeVisible();
     await pick(user, modelField(dialog), /Copilot GPT-5/);
     expect(
-      within(dialog).getByText("Every agent uses this model."),
+      within(dialog).getByText("Every agent on this runtime uses this model."),
     ).toBeVisible();
     await saveRuntime(user, dialog);
     expect(builtInAccounts("copilot")).toEqual({
@@ -1732,14 +1754,14 @@ describe("the kind of account a runtime with a subscription of its own names", (
     for (const organization of ["Example Org", "Second Org"]) {
       expect(
         within(planCard(organization)).getByText(
-          "Each agent picks the model for this plan.",
+          "Optional. Leave the model empty to set it in each agent's settings.",
         ),
       ).toBeVisible();
     }
     await pick(user, modelOf("Second Org"), /Copilot GPT-5/);
     expect(
       within(planCard("Second Org")).getByText(
-        "Every agent runs this model on this plan.",
+        "Every agent on this runtime uses this model on this plan.",
       ),
     ).toBeVisible();
     await saveRuntime(user, dialog);

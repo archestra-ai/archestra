@@ -5,7 +5,9 @@ import {
   CHANGE_PHASES,
   getServerRules,
   getServerRulesChangeStatus,
+  previewServerBatteryChange,
   previewServerRulesChange,
+  proposeServerBatteryChange,
   proposeServerRulesChange,
 } from "@/services/openappa-server-rules";
 import { ApiError, UuidIdSchema } from "@/types";
@@ -39,6 +41,51 @@ const ExpectedCommitSchema = z
   .regex(/^[a-f0-9]{40}$/)
   .describe("`expectedCommit` from get_guardrails_server_rules.");
 
+const BatterySchema = z
+  .strictObject({
+    name: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9_-]*$/)
+      .max(100)
+      .describe("The bundled battery's name, such as microsoft-learn."),
+    change: z
+      .enum(["attach", "detach"])
+      .describe("Attach the battery to this server, or detach it."),
+    others: z
+      .array(
+        z.strictObject({
+          mcpServerId: ServerSchema,
+          change: z
+            .enum(["attach", "detach"])
+            .describe("Attach the battery to that server, or detach it."),
+        }),
+      )
+      .min(1)
+      .max(20)
+      .optional()
+      .describe(
+        "Every other MCP server the same battery is attached to or detached from in this request. When the user asks for several servers at once, call this tool once, for one of them, and name the rest here: one call per server opens pull requests that change the same lines and conflict. The user must be able to edit each one.",
+      ),
+  })
+  .describe(
+    "Instead of `content`: attach a bundled battery to this server, or detach it. appa.toml then changes only in which batteries govern the servers' tools; a battery that governs every tool call in the organization is refused.",
+  );
+
+/** The rules file, or a battery change: exactly one. */
+const ServerChangeSchema = z
+  .strictObject({
+    mcpServerId: ServerSchema,
+    content: FileSchema.optional(),
+    battery: BatterySchema.optional(),
+    expectedCommit: ExpectedCommitSchema,
+  })
+  .refine(
+    (args) => (args.content === undefined) !== (args.battery === undefined),
+    {
+      message: "Pass either content or battery",
+    },
+  );
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: "get_guardrails_server_rules",
@@ -60,53 +107,88 @@ const registry = defineArchestraTools([
     title: "Preview an MCP server's Guardrails rules change",
     annotations: { readOnlyHint: true },
     description:
-      "Check a proposed rules file for one MCP server and return its `diff`, plus `rootChange` when appa.toml does not include the self-service folder yet and gains its `<folder>/*.toml` entry, once for every server. The whole organization policy is validated with the file folded in, as Git sync will compose it after the merge. This saves and opens nothing. Pass the complete file and `expectedCommit` from get_guardrails_server_rules. Rules may name only tools that carry the file's tool prefix, or all of them as `<tool prefix>__*` (each tool the file has no rule of its own for), annotators are named `<tool prefix>.<name>`, and the file declares no authority or sanitizer: it reaches the organization's through an attention mark an authority permits, or a tag, and a tool_output sanitizer also needs the tool under [policy.deployment] confined_results. Git sync refuses any other file, whoever merged it. Root rules for the same tool keep priority. The user sees the result as a diff. `autoMerge` says whether the pull request merges by itself once its checks pass. Follow the result's `instruction`.",
-    schema: z.strictObject({
-      mcpServerId: ServerSchema,
-      content: FileSchema,
-      expectedCommit: ExpectedCommitSchema,
-    }),
+      "Check a proposed rules file for one MCP server, or attaching or detaching a bundled battery for it (`battery` instead of `content`), and return its `diff`, plus `rootChange` when appa.toml does not include the self-service folder yet and gains its `<folder>/*.toml` entry, once for every server. A battery change's diff is appa.toml's, limited to which batteries govern the server's tools. The whole organization policy is validated with the file folded in, as Git sync will compose it after the merge. This saves and opens nothing. Pass the complete file and `expectedCommit` from get_guardrails_server_rules. Rules may name only tools that carry the file's tool prefix, or all of them as `<tool prefix>__*` (each tool the file has no rule of its own for), annotators are named `<tool prefix>.<name>`, and the file declares no authority or sanitizer: it reaches the organization's through an attention mark an authority permits, or a tag, and a tool_output sanitizer also needs the tool under [policy.deployment] confined_results. Git sync refuses any other file, whoever merged it. Root rules for the same tool keep priority. The user sees the result as a diff. `autoMerge` says whether the pull request merges by itself once its checks pass. Follow the result's `instruction`.",
+    schema: ServerChangeSchema,
     handler: ({ args, context }) =>
       answered(async () => {
         const caller = callerOf(context);
         return changeResult(
-          await previewServerRulesChange({
-            ...caller,
-            catalogId: args.mcpServerId,
-            content: args.content,
-            expectedCommit: args.expectedCommit,
-          }),
+          args.battery
+            ? await previewServerBatteryChange({
+                ...caller,
+                catalogId: args.mcpServerId,
+                battery: args.battery.name,
+                change: args.battery.change,
+                ...(args.battery.others
+                  ? {
+                      others: args.battery.others.map((other) => ({
+                        catalogId: other.mcpServerId,
+                        change: other.change,
+                      })),
+                    }
+                  : {}),
+                expectedCommit: args.expectedCommit,
+              })
+            : await previewServerRulesChange({
+                ...caller,
+                catalogId: args.mcpServerId,
+                content: args.content ?? "",
+                expectedCommit: args.expectedCommit,
+              }),
         );
       }),
   }),
   defineArchestraTool({
     shortName: "propose_guardrails_server_rules_change",
     title: "Propose an MCP server's Guardrails rules change",
-    description: `Open a pull request on the policy repository that changes one MCP server's rules file, which governs every server whose tools carry its prefix, and adds the self-service folder's \`<folder>/*.toml\` entry to appa.toml's include list when no server file is included yet. Call preview_guardrails_server_rules_change first with the same content and expectedCommit, then this. The built-in chat asks the user to approve this call before it runs, with the preview's diff in front of them, so do not also ask in text; in a client that shows no such approval, get the user's agreement first. Nothing applies until the request is merged and Git sync pulls it. Its ${config.openappa.policyCheckName} check verifies the policy and that the user may edit each shared server that owns the file, so the user's own merge is enough; no one else's approval is needed. Give the user the link from \`url\`.`,
-    schema: z.strictObject({
-      mcpServerId: ServerSchema,
-      content: FileSchema,
-      expectedCommit: ExpectedCommitSchema,
-      summary: z
-        .string()
-        .trim()
-        .min(1)
-        .max(4000)
-        .describe(
-          "What the change does and why, in plain words, for the reviewers.",
-        ),
-    }),
+    description: `Open a pull request on the policy repository that changes one MCP server's rules file, which governs every server whose tools carry its prefix, and adds the self-service folder's \`<folder>/*.toml\` entry to appa.toml's include list when no server file is included yet; or, with \`battery\` instead of \`content\`, that attaches a bundled battery to the server or detaches it. Call preview_guardrails_server_rules_change first with the same content or battery and expectedCommit, then this. The built-in chat asks the user to approve this call before it runs, with the preview's diff in front of them, so do not also ask in text; in a client that shows no such approval, get the user's agreement first. Nothing applies until the request is merged and Git sync pulls it. Its ${config.openappa.policyCheckName} check verifies the policy and that the user may edit each shared server that owns the file, so the user's own merge is enough; no one else's approval is needed. Give the user the link from \`url\`.`,
+    schema: z
+      .strictObject({
+        mcpServerId: ServerSchema,
+        content: FileSchema.optional(),
+        battery: BatterySchema.optional(),
+        expectedCommit: ExpectedCommitSchema,
+        summary: z
+          .string()
+          .trim()
+          .min(1)
+          .max(4000)
+          .describe(
+            "What the change does and why, in plain words, for the reviewers.",
+          ),
+      })
+      .refine(
+        (args) => (args.content === undefined) !== (args.battery === undefined),
+        { message: "Pass either content or battery" },
+      ),
     handler: ({ args, context }) =>
       answered(async () => {
         const caller = callerOf(context);
         return changeResult(
-          await proposeServerRulesChange({
-            ...caller,
-            catalogId: args.mcpServerId,
-            content: args.content,
-            expectedCommit: args.expectedCommit,
-            summary: args.summary,
-          }),
+          args.battery
+            ? await proposeServerBatteryChange({
+                ...caller,
+                catalogId: args.mcpServerId,
+                battery: args.battery.name,
+                change: args.battery.change,
+                ...(args.battery.others
+                  ? {
+                      others: args.battery.others.map((other) => ({
+                        catalogId: other.mcpServerId,
+                        change: other.change,
+                      })),
+                    }
+                  : {}),
+                expectedCommit: args.expectedCommit,
+                summary: args.summary,
+              })
+            : await proposeServerRulesChange({
+                ...caller,
+                catalogId: args.mcpServerId,
+                content: args.content ?? "",
+                expectedCommit: args.expectedCommit,
+                summary: args.summary,
+              }),
         );
       }),
   }),

@@ -207,17 +207,30 @@ export function proposalApprovalText(previewed: PreviewedChange): string {
     : "Approving opens a pull request with the change previewed above on the policy repository. Nothing applies until it is merged.";
 }
 
+/**
+ * What a preview and its proposal both name: the server, the commit read, and
+ * the rules file or the battery change.
+ */
 function fileKey(args: unknown): string | null {
   if (!args || typeof args !== "object") return null;
-  const { mcpServerId, expectedCommit, content } = args as Record<
+  const { mcpServerId, expectedCommit, content, battery } = args as Record<
     string,
     unknown
   >;
-  return typeof mcpServerId === "string" &&
-    typeof expectedCommit === "string" &&
-    typeof content === "string"
-    ? `${mcpServerId}\n${expectedCommit}\n${content}`
-    : null;
+  if (typeof mcpServerId !== "string" || typeof expectedCommit !== "string")
+    return null;
+  if (typeof content === "string")
+    return `${mcpServerId}\n${expectedCommit}\n${content}`;
+  const { name, change, others } = (battery ?? {}) as Record<string, unknown>;
+  if (typeof name !== "string" || typeof change !== "string") return null;
+  // The other servers of the same change, in any order.
+  const more = (Array.isArray(others) ? others : [])
+    .map((other: Record<string, unknown> | null) =>
+      other ? `${other.change} ${other.mcpServerId}` : "",
+    )
+    .sort()
+    .join(",");
+  return `${mcpServerId}\n${expectedCommit}\nbattery ${change} ${name}\n${more}`;
 }
 
 function summaryOf(input: unknown): string | null {

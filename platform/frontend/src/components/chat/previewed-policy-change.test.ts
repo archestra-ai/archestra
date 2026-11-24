@@ -66,6 +66,63 @@ const valid = stored({
 });
 
 describe("collectPreviewedChanges", () => {
+  it("points a battery proposal at the preview of the same battery change for the same server, and no other", () => {
+    const before = "include = []\n";
+    const after = 'include = ["batteries/github/appa.toml"]\n';
+    const output = stored({
+      valid: true,
+      path: "appa.toml",
+      before,
+      after,
+      diff: '--- a/appa.toml\n+++ b/appa.toml\n@@ -1 +1 @@\n-include = []\n+include = ["batteries/github/appa.toml"]\n',
+      mcpServer: { id: "s1", name: "S" },
+    });
+    const change = (
+      id: string,
+      tool: string,
+      battery: unknown,
+      out?: unknown,
+    ) => ({
+      type: `tool-${PREFIX}${tool}`,
+      toolCallId: id,
+      state: out === undefined ? "approval-requested" : "output-available",
+      input: { mcpServerId: "s1", expectedCommit: "c1", battery },
+      ...(out === undefined ? {} : { output: out }),
+    });
+    const attach = { name: "github", change: "attach" };
+    const messages = [
+      {
+        id: "m1",
+        role: "assistant",
+        parts: [
+          change(
+            "preview-1",
+            "preview_guardrails_server_rules_change",
+            attach,
+            output,
+          ),
+          change("propose-1", "propose_guardrails_server_rules_change", attach),
+          change("propose-2", "propose_guardrails_server_rules_change", {
+            name: "github",
+            change: "detach",
+          }),
+          // The same battery change with another server added is another change.
+          change("propose-3", "propose_guardrails_server_rules_change", {
+            ...attach,
+            others: [{ mcpServerId: "s2", change: "detach" }],
+          }),
+        ],
+      } as unknown as UIMessage,
+    ];
+    const previewed = collectPreviewedChanges(messages, shortName);
+    expect(previewed.get("propose-1")).toMatchObject({
+      previewToolCallId: "preview-1",
+      pendingApproval: true,
+    });
+    expect(previewed.has("propose-2")).toBe(false);
+    expect(previewed.has("propose-3")).toBe(false);
+  });
+
   it("points a proposal at the preview of the same file, called directly or through run_tool under either name", () => {
     expect(
       collectPreviewedChanges(conversation({ output: valid }), shortName).get(

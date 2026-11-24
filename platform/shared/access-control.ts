@@ -1749,6 +1749,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.GetOpenappaBatteries]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaBatterySource]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaEffectivePolicy]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryMatches]: { guardrailsPolicy: ["read"] },
   [RouteId.CreateOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },

@@ -335,6 +335,27 @@ export function isServerRulesBranch(
 }
 
 /**
+ * The branch of a pull request this deployment opens for a policy or
+ * validation change from the APPA Keeper or Settings: a fixed prefix and a
+ * random UUID, so no other branch Archestra opens matches it.
+ */
+export function policyChangeBranch(id: string): string {
+  return `${POLICY_CHANGE_BRANCH}${id}`;
+}
+
+/** Whether a branch is one this deployment opened for a policy or validation change. */
+export function isPolicyChangeBranch(branch: string): boolean {
+  return (
+    branch.startsWith(POLICY_CHANGE_BRANCH) &&
+    UUID.test(branch.slice(POLICY_CHANGE_BRANCH.length))
+  );
+}
+
+/** Pull request branches this deployment opens for a policy or validation change. */
+const POLICY_CHANGE_BRANCH = "archestra/openappa-";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
  * The root with `entry` added to its `include` list, through OpenAPPA's own
  * editor so the rest of the text keeps its shape; throws what it refuses.
  */

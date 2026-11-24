@@ -112,6 +112,7 @@ import {
   listExternalConsults,
 } from "@/services/openappa-external-consults";
 import {
+  autoMergeActive,
   connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubSync,
@@ -127,6 +128,10 @@ import {
   replaySavedValidations,
   runOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
+import {
+  CHANGE_PHASES,
+  followPolicyChangeStatus,
+} from "@/services/openappa-server-rules";
 import {
   previewOpenAppaValidationChange,
   publishOpenAppaValidationChange,
@@ -944,6 +949,11 @@ const registry = defineArchestraTools([
           stage: "preview",
           validations,
           delivery,
+          // Whether the pull request publishing opens merges by itself once
+          // its checks pass; the approval says so.
+          ...(delivery === "pull_request"
+            ? { autoMerge: autoMergeActive(sync.source) }
+            : {}),
           // Whether publishing this turns enforcement on: only the first saved
           // policy does, and only for an administrator (see turnOnForFirstPolicy).
           turnsOnEnforcement:
@@ -977,7 +987,7 @@ const registry = defineArchestraTools([
     shortName: "update_guardrails_policy",
     title: "Publish OpenAPPA policy change",
     description:
-      "Publish a change to organization.appa.toml. Call preview_guardrails_policy_change first, explain what the change does and its warnings, then send the same `edits` or `content` and the same expectedRevision that were previewed. Use `edits` to change an existing policy and `content` only for a first policy or a full rewrite. The result carries the published `diff` and `changed` line counts. When Git sync is configured, this opens a pull request (a merge request on GitLab) through the configured credential; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision applies to open and new conversations at their next call. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
+      "Publish a change to organization.appa.toml. Call preview_guardrails_policy_change first, explain what the change does and its warnings, then send the same `edits` or `content` and the same expectedRevision that were previewed. Use `edits` to change an existing policy and `content` only for a first policy or a full rewrite. The result carries the published `diff` and `changed` line counts. When Git sync is configured, this opens a pull request (a merge request on GitLab) through the configured credential; the policy takes effect after merge and sync. With `autoMerge: true` the pull request merges by itself once its checks pass: follow its result's `instruction`. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision applies to open and new conversations at their next call. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
     schema: ProposedGuardrailsPolicySchema.extend({
       title: z
         .string()
@@ -1138,19 +1148,42 @@ const registry = defineArchestraTools([
     title: "Check OpenAPPA policy pull request",
     annotations: { readOnlyHint: true },
     description:
-      "Check the review state of an OpenAPPA policy pull request, and once it merges whether Git sync applied it (`applied`), with an `instruction` for what to tell the user. A merged pull request not yet applied queues a sync. Use the pull request number returned by update_guardrails_policy or update_guardrails_validation.",
-    schema: z.strictObject({ number: z.number().int().positive() }),
+      "Check the review state of an OpenAPPA policy pull request, and once it merges whether Git sync applied it (`applied`), with an `instruction` for what to tell the user. A merged pull request not yet applied queues a sync. Use the pull request number returned by update_guardrails_policy or update_guardrails_validation. Through a GitHub App the answer also has `phase` (check_pending, check_failed, check_passed, merge_pending, merge_refused, merged, applied or closed), `done` once nothing moves on by itself, the policy check's outcome (`check`) and why GitHub refused an automatic merge (`mergeRefused`); with wait=true the call returns as soon as the phase moves on from `since` (or from the phase first seen), or settles, or after some forty seconds. While auto-merge is on, follow a pull request by calling this again with wait=true and the last phase as since until `done`, and tell the user each change.",
+    schema: z.strictObject({
+      number: z.number().int().positive(),
+      wait: z
+        .boolean()
+        .optional()
+        .describe(
+          "Return only once the phase moves on from `since`, settles, or some forty seconds pass. GitHub App sources only.",
+        ),
+      since: z
+        .enum(CHANGE_PHASES)
+        .optional()
+        .describe("The `phase` the last call returned, to wait past."),
+    }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(
         context,
         AUTHENTICATED_CONTEXT_REQUIRED,
       );
+      // Through a GitHub App the pull request carries the policy check and
+      // may merge by itself: it is followed phase by phase, as a server's
+      // rules are. Otherwise its review state alone.
+      const followed = await followPolicyChangeStatus({
+        organizationId,
+        userId,
+        number: args.number,
+        ...(args.wait !== undefined ? { wait: args.wait } : {}),
+        ...(args.since !== undefined ? { since: args.since } : {}),
+      });
       return result(
-        await getOpenAppaPolicyChangeStatus({
-          organizationId,
-          userId,
-          number: args.number,
-        }),
+        followed ??
+          (await getOpenAppaPolicyChangeStatus({
+            organizationId,
+            userId,
+            number: args.number,
+          })),
       );
     },
   }),

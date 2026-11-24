@@ -1164,7 +1164,7 @@ test("shows the deployment's self-service settings read-only, naming the variabl
   ).toBeNull();
   // Auto-merge too, off here: people merge the pull requests.
   expect(
-    screen.getByText("Self-service pull requests have to be merged manually."),
+    screen.getByText("Guardrails pull requests have to be merged manually."),
   ).toBeVisible();
   expect(
     code("ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE=disabled"),
@@ -1178,25 +1178,18 @@ test("shows the deployment's self-service settings read-only, naming the variabl
   expect(screen.getByRole("button", { name: "Finish setup" })).toBeEnabled();
 });
 
-test("with auto-merge on, the card says admitted self-service pull requests merge automatically, and names the variable", async () => {
+test("with auto-merge on, the card says admitted Guardrails pull requests merge automatically, with self-service off too, and names the variable", async () => {
+  // Auto-merge covers every policy pull request Archestra opens, so it
+  // shows for a GitHub App source whether self-service is on or off.
   state = {
     ...state,
     source: { ...source, githubAppConfigId: "app-1" },
-    selfService: selfServiceSetting(true, "mcp", true),
+    selfService: selfServiceSetting(false, "mcp", true),
   };
-  server.use(
-    http.get(`${url}/protection`, () =>
-      HttpResponse.json({
-        checkName: "Guardrails Policy Admission",
-        include: { folder: "mcp", state: "included" },
-        branchRules: { state: "active" },
-      }),
-    ),
-  );
   show();
   expect(
     await screen.findByText(
-      "Admitted self-service pull requests merge automatically.",
+      "Admitted Guardrails pull requests merge automatically.",
     ),
   ).toBeVisible();
   expect(
@@ -1241,6 +1234,10 @@ test("self-service needs a GitHub App: a source without one gets no check or rul
     expect.stringContaining("git-sync#mcp-guardrails-self-service"),
   );
   expect(screen.queryByText(/Self-service branch protection/)).toBeNull();
+  // Nothing merges for a source without a GitHub App: no auto-merge row.
+  expect(
+    screen.queryByText("Guardrails pull requests have to be merged manually."),
+  ).toBeNull();
 });
 
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {

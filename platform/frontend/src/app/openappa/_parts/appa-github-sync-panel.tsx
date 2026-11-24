@@ -472,14 +472,16 @@ function SelfServiceRow({
             },
           ]}
         />
-        {selfService.enabled ? (
+        {/* Auto-merge covers every policy pull request Archestra opens, with
+            self-service on or off: a GitHub App source merges them. */}
+        {eligible ? (
           <DeploymentSettingRow
             compact
             title="Auto-merge pull requests"
             description={
               selfService.autoMerge.enabled
-                ? "Admitted self-service pull requests merge automatically."
-                : "Self-service pull requests have to be merged manually."
+                ? "Admitted Guardrails pull requests merge automatically."
+                : "Guardrails pull requests have to be merged manually."
             }
             value={selfService.autoMerge.enabled ? "enabled" : "disabled"}
             disabled

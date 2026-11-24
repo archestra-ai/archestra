@@ -15,7 +15,7 @@ import {
   updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { bindOrganizationCredential } from "@/test/openappa-credentials";
 import {
   createGithubApp,
@@ -1720,3 +1720,40 @@ async function declare(params: {
   }
   await openappaBatteriesService.recompile(organizationId);
 }
+
+describe("a server editor's battery change", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("is refused for a battery the policy includes as an uploaded package, which the policy check passes only as its bundled entry", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    config.openappa.enabled = true;
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Docs",
+      serverUrl: "https://learn.microsoft.com/api/mcp",
+    });
+    const uploaded = `batteries/microsoft-learn@sha256-${"a".repeat(64)}/appa.toml`;
+    // The policy includes the uploaded package under the bundled name.
+    vi.spyOn(openappaDeclarations, "resolve").mockResolvedValue({
+      entries: [{ entry: uploaded, name: "microsoft-learn" }],
+    } as never);
+    for (const change of ["attach", "detach"] as const)
+      await expect(
+        openappaBatteriesService.serverChangeContent({
+          organizationId: org.id,
+          content: `include = ["${uploaded}"]\n\n[policy]\nversion = 2\n`,
+          batteryName: "microsoft-learn",
+          catalogId: catalog.id,
+          change,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 403,
+        message: expect.stringContaining("as an uploaded package"),
+      });
+  });
+});

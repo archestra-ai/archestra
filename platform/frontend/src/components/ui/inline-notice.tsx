@@ -35,9 +35,13 @@ const inlineNoticeVariants = cva(
   // column the message needs, and the variant's colour already says what kind
   // of notice it is. The grid drops the icon column with it, so the text,
   // toggle, details and action each move one column left.
-  "flex flex-wrap items-center gap-x-2 max-sm:flex-wrap gap-y-1 text-xs [&>svg]:size-3.5 [&>svg]:shrink-0 has-[>[data-slot=inline-notice-details-toggle]]:grid has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[minmax(0,1fr)_auto] sm:has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[auto_minmax(0,1fr)_auto] has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-2 sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-3 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-2 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-1",
+  "flex flex-wrap items-center gap-x-2 max-sm:flex-wrap gap-y-1 [&>svg]:shrink-0 has-[>[data-slot=inline-notice-details-toggle]]:grid has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[minmax(0,1fr)_auto] sm:has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[auto_minmax(0,1fr)_auto] has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-2 sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-3 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-2 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-1",
   {
     variants: {
+      size: {
+        xs: "text-xs [&>svg]:size-3.5",
+        sm: "text-sm [&>svg]:size-4",
+      },
       variant: {
         warning: "",
         error:
@@ -104,6 +108,7 @@ const inlineNoticeVariants = cva(
       { variant: "neutral", floating: true, class: "bg-muted/80" },
     ],
     defaultVariants: {
+      size: "xs",
       variant: "warning",
       plain: false,
       floating: false,
@@ -113,6 +118,7 @@ const inlineNoticeVariants = cva(
 
 export function InlineNotice({
   className,
+  size,
   variant,
   plain,
   mobileLayout,
@@ -123,7 +129,7 @@ export function InlineNotice({
       role="alert"
       data-slot="inline-notice"
       className={cn(
-        inlineNoticeVariants({ variant, plain, mobileLayout }),
+        inlineNoticeVariants({ size, variant, plain, mobileLayout }),
         className,
       )}
       {...props}

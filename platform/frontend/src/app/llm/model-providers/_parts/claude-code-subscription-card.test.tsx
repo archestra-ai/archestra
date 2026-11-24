@@ -103,6 +103,7 @@ describe("ClaudeCodeSubscriptionCard", () => {
     expect(runtimeNote).toBeVisible();
     const notice = runtimeNote.closest('[data-slot="inline-notice"]');
     expect(notice).toHaveClass(
+      "text-sm",
       "[&>svg]:text-[#A25E07]",
       "dark:[&>svg]:text-amber-400",
       "text-muted-foreground",

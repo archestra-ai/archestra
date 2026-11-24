@@ -82,7 +82,7 @@ export function ClaudeCodeSubscriptionCard({
         name="Claude Code"
         description={description}
         notice={
-          <InlineNotice variant="warning" role="note" className="items-start">
+          <InlineNotice variant="warning" plain role="note">
             <Info className="mt-0.5" aria-hidden="true" />
             <InlineNoticeText>
               This subscription works only with Claude Code agent runtimes.

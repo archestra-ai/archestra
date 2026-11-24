@@ -101,10 +101,13 @@ describe("ClaudeCodeSubscriptionCard", () => {
       "This subscription works only with Claude Code agent runtimes.",
     );
     expect(runtimeNote).toBeVisible();
-    expect(runtimeNote.closest('[data-slot="inline-notice"]')).toHaveClass(
-      "border-[#EBCB8B]",
-      "dark:border-amber-500/30",
+    const notice = runtimeNote.closest('[data-slot="inline-notice"]');
+    expect(notice).toHaveClass(
+      "[&>svg]:text-[#A25E07]",
+      "dark:[&>svg]:text-amber-400",
+      "text-muted-foreground",
     );
+    expect(notice).not.toHaveClass("border");
     expect(await within(card).findByText("Not connected")).toBeVisible();
 
     await user.click(within(card).getByRole("button", { name: "Connect" }));

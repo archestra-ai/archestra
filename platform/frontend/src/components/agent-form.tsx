@@ -3964,12 +3964,7 @@ export function AgentForm({
         onChange={changeCompanyAccount}
       />
       {defaultModelCannotRun && (
-        <InlineNotice
-          role="status"
-          aria-live="polite"
-          variant="warning"
-          className="items-start"
-        >
+        <InlineNotice role="status" aria-live="polite" variant="warning" plain>
           <InfoIcon className="mt-0.5" aria-hidden="true" />
           <InlineNoticeText>
             The organization&apos;s default model,{" "}

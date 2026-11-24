@@ -7971,9 +7971,11 @@ describe("AgentForm save payload and failure handling", () => {
           const notice = noticeText.closest('[data-slot="inline-notice"]');
           expect(notice).toHaveAttribute("role", "status");
           expect(notice).toHaveClass(
-            "border-[#EBCB8B]",
-            "dark:border-amber-500/30",
+            "[&>svg]:text-[#A25E07]",
+            "dark:[&>svg]:text-amber-400",
+            "text-muted-foreground",
           );
+          expect(notice).not.toHaveClass("border");
           // What the API resolves for each person is the API's to say: the
           // form holds no save back for it.
           await user.type(screen.getByLabelText(/Name/), "Their agent");

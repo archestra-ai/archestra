@@ -32,7 +32,7 @@ Script the same numbers when a scheduled file does not fit, such as a nightly jo
 
 Archestra exports LLM cost and usage data in FOCUS, the open format for billing data. AWS, Azure, and Google Cloud export their bills in it too, so you can track LLM spend together with the rest of your costs. Files go to a [blob provider](/docs/admin/blob-providers): an Amazon S3 or Google Cloud Storage bucket, or an Azure Blob Storage container.
 
-To set one up, open **Costs & Limits → FinOps Export** and click **Configure**.
+You can configure an export on the **Costs & Limits → FinOps Export** page.
 
 ### How It Works
 

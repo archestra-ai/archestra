@@ -1196,7 +1196,11 @@ describe("ApiKeysPage", () => {
     } as unknown as ReturnType<typeof useHasPermissions>);
     render(<ApiKeysPage />);
 
-    fireEvent.click(screen.getAllByText("Connect")[3]);
+    fireEvent.click(
+      within(
+        screen.getByTestId(`${E2eTestId.SubscriptionProviderCard}-x-premium`),
+      ).getByRole("button", { name: "Connect" }),
+    );
 
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
       "Sign in with Grok",
@@ -1217,17 +1221,21 @@ describe("ApiKeysPage", () => {
 
     render(<ApiKeysPage />);
 
-    const claudeCardEl = screen.getByTestId(
+    const cardOrder = Array.from(
+      screen
+        .getByTestId(E2eTestId.SubscriptionProviderCards)
+        .querySelectorAll('[data-testid^="subscription-provider-card-"]'),
+    ).map((el) => el.getAttribute("data-testid"));
+    expect(cardOrder).toEqual([
       `${E2eTestId.SubscriptionProviderCard}-claude-code`,
-    );
-    const chatgptCardEl = screen.getByTestId(
       `${E2eTestId.SubscriptionProviderCard}-chatgpt`,
+      `${E2eTestId.SubscriptionProviderCard}-github-copilot`,
+      `${E2eTestId.SubscriptionProviderCard}-x-premium`,
+      `${E2eTestId.SubscriptionProviderCard}-microsoft-365-copilot`,
+    ]);
+    const claudeCard = within(
+      screen.getByTestId(`${E2eTestId.SubscriptionProviderCard}-claude-code`),
     );
-    expect(
-      claudeCardEl.compareDocumentPosition(chatgptCardEl) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    const claudeCard = within(claudeCardEl);
     expect(claudeCard.getByText("Claude Code")).toBeInTheDocument();
     expect(claudeCard.getByRole("button", { name: "Connect" })).toBeVisible();
     expect(personalCards().getAllByText("Connect")).toHaveLength(5);

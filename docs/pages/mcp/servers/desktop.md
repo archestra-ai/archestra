@@ -13,10 +13,9 @@ Let Archestra use MCP servers running on your device.
 Archestra runs MCP servers as pods in the Kubernetes cluster where it's deployed. Some MCP servers can't run this way. For example, software such as MATLAB can run only on your machine, or licensing restrictions might require software to run on a specific laptop.
 
 In this case, add them as desktop MCP servers, and Archestra uses them on your machine.
-
 A desktop MCP server runs on each person's device, and agents reach it through the [MCP bridge](/docs/reference/archestra-cli).
 
-In the docs below, we will go through connecting your machine to Archestra and configuring it to use MATLAB on your machine.
+In the docs below, we will go through connecting your machine to Archestra and configuring it to use MATLAB.
 
 ## Link Your Device
 

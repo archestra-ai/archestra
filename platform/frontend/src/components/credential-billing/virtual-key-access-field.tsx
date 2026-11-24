@@ -242,7 +242,7 @@ export function VirtualKeyAccessField({
             value="future"
             disabled={!canIncludeFutureProviders}
             title="Current and future providers"
-            description="Every shared provider’s primary key, including providers added later."
+            description="Every shared provider’s primary key, including providers added later. Model pools and auto routers are only the ones you add."
           />
         </RadioGroup>
       </div>
@@ -291,24 +291,29 @@ export function VirtualKeyAccessField({
                 }
               >
                 {tierModels.length ? (
-                  <DetailGrid headings={["Tier", "Provider", "Model"]}>
-                    {tierModels.map((model) => (
-                      <Fragment key={model.tier}>
-                        <span>{TIER_LABELS[model.tier]}</span>
-                        <ProviderCell
-                          provider={model.provider}
-                          label={catalog.label(model.provider)}
-                        />
-                        <span className="truncate font-mono">
-                          {model.modelId}
-                        </span>
-                      </Fragment>
-                    ))}
-                  </DetailGrid>
+                  <div className="space-y-2">
+                    <DetailGrid headings={["Tier", "Provider", "Model"]}>
+                      {tierModels.map((model) => (
+                        <Fragment key={model.tier}>
+                          <span>{TIER_LABELS[model.tier]}</span>
+                          <ProviderCell
+                            provider={model.provider}
+                            label={catalog.label(model.provider)}
+                          />
+                          <span className="truncate font-mono">
+                            {model.modelId}
+                          </span>
+                        </Fragment>
+                      ))}
+                    </DetailGrid>
+                    <p className="text-muted-foreground">
+                      {ROUTER_ENDPOINT_NOTE}
+                    </p>
+                  </div>
                 ) : (
-                  <span className="text-muted-foreground">
-                    Picks a fast, normal or smart model per session.
-                  </span>
+                  <p className="text-muted-foreground">
+                    {ROUTER_HINT} {ROUTER_ENDPOINT_NOTE}
+                  </p>
                 )}
               </AccessRow>
             );
@@ -535,6 +540,11 @@ function ModeCard({
     </Label>
   );
 }
+
+const ROUTER_HINT =
+  "Apps send its name as the model, and it picks a fast, normal or smart model for each session.";
+// Native provider routes reject router names; only the Unified Model API takes them.
+const ROUTER_ENDPOINT_NOTE = "Works only on the OpenAI-compatible endpoint.";
 
 type AccessKind = "routers" | "pools" | "providers";
 
@@ -839,7 +849,7 @@ function AccessPicker({
                 heading={
                   <GroupHeading
                     title="Auto routers"
-                    hint="Picks a fast, normal or smart model per session"
+                    hint={`${ROUTER_HINT} ${ROUTER_ENDPOINT_NOTE}`}
                   />
                 }
               >
@@ -867,7 +877,7 @@ function AccessPicker({
                 heading={
                   <GroupHeading
                     title="Model pools"
-                    hint="One model name that fails over across every member"
+                    hint="One model name backed by several provider keys. If one fails, the next answers."
                   />
                 }
               >

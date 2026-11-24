@@ -527,7 +527,9 @@ export function DataTable<TData, TValue>({
                       row.getIsExpanded() &&
                       renderExpandedRows({ row })}
                     {renderSubComponent && row.getIsExpanded() && (
-                      <TableRow>
+                      // The open area is not one row to hover: what it
+                      // holds sets its own hover.
+                      <TableRow className="hover:bg-transparent">
                         <TableCell
                           colSpan={row.getVisibleCells().length}
                           className="p-0"

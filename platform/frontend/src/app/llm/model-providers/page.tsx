@@ -821,7 +821,7 @@ export default function ApiKeysPage() {
       <div className="space-y-4">
         <SubscriptionProviderCards
           offers={subscriptionOffers}
-          extraCards={
+          leadingCards={
             showClaudeCodeCard ? (
               <ClaudeCodeSubscriptionCard canAddAnthropic={canAddAnthropic} />
             ) : undefined

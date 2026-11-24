@@ -1217,9 +1217,17 @@ describe("ApiKeysPage", () => {
 
     render(<ApiKeysPage />);
 
-    const claudeCard = within(
-      screen.getByTestId(`${E2eTestId.SubscriptionProviderCard}-claude-code`),
+    const claudeCardEl = screen.getByTestId(
+      `${E2eTestId.SubscriptionProviderCard}-claude-code`,
     );
+    const chatgptCardEl = screen.getByTestId(
+      `${E2eTestId.SubscriptionProviderCard}-chatgpt`,
+    );
+    expect(
+      claudeCardEl.compareDocumentPosition(chatgptCardEl) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const claudeCard = within(claudeCardEl);
     expect(claudeCard.getByText("Claude Code")).toBeInTheDocument();
     expect(claudeCard.getByRole("button", { name: "Connect" })).toBeVisible();
     expect(personalCards().getAllByText("Connect")).toHaveLength(5);

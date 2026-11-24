@@ -27,7 +27,7 @@ import type { SubscriptionOffer } from "./subscription-offers";
  */
 export function SubscriptionProviderCards({
   offers,
-  extraCards,
+  leadingCards,
   isLoading,
   currentUserId,
   onConnect,
@@ -36,8 +36,8 @@ export function SubscriptionProviderCards({
   disconnectBlockedReason,
 }: {
   offers: SubscriptionOffer[];
-  /** Additional personal subscription cards rendered alongside registry offers. */
-  extraCards?: ReactNode;
+  /** Additional personal subscription cards rendered before registry offers. */
+  leadingCards?: ReactNode;
   /** The viewer's keys have not arrived yet, so no status can be stated. */
   isLoading: boolean;
   /** Session user, to recognize the viewer's own credential on a card. */
@@ -50,7 +50,7 @@ export function SubscriptionProviderCards({
     credential: LlmProviderApiKeyResponse,
   ) => string | null;
 }) {
-  if (offers.length === 0 && !extraCards) return null;
+  if (offers.length === 0 && !leadingCards) return null;
 
   return (
     <SubscriptionCardsSection
@@ -59,6 +59,7 @@ export function SubscriptionProviderCards({
       description="Sign in with a vendor account to use a subscription you already pay for — no API key needed. Each person connects their own account."
       testId={E2eTestId.SubscriptionProviderCards}
     >
+      {leadingCards}
       {offers.map((offer) => (
         <PersonalSubscriptionCard
           key={offer.kind}
@@ -71,7 +72,6 @@ export function SubscriptionProviderCards({
           disconnectBlockedReason={disconnectBlockedReason}
         />
       ))}
-      {extraCards}
     </SubscriptionCardsSection>
   );
 }

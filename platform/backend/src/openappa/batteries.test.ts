@@ -1802,4 +1802,43 @@ describe("a server editor's battery change", () => {
         ),
       });
   });
+
+  test("is refused while another battery the policy includes cannot be read, as the policy check refuses it", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    config.openappa.enabled = true;
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Docs",
+      serverUrl: "https://learn.microsoft.com/api/mcp",
+    });
+    const bundled = "batteries/microsoft-learn/appa.toml";
+    const missing = `batteries/gone@sha256-${"a".repeat(64)}/appa.toml`;
+    // The uploaded package's stored bytes are gone: nothing answers it.
+    vi.spyOn(openappaDeclarations, "resolve").mockResolvedValue({
+      entries: [
+        {
+          entry: bundled,
+          name: "microsoft-learn",
+          battery: { namespaces: ["microsoft-learn"] },
+        },
+        { entry: missing, name: "gone", battery: null },
+      ],
+      aliases: [{ namespace: "microsoft-learn", servers: ["other_docs"] }],
+    } as never);
+    await expect(
+      openappaBatteriesService.serverChangeContent({
+        organizationId: org.id,
+        content: `include = ["${bundled}", "${missing}"]\n\n[policy]\nversion = 2\n`,
+        batteryName: "microsoft-learn",
+        catalogId: catalog.id,
+        change: "attach",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining(`${missing}, which cannot be read`),
+    });
+  });
 });

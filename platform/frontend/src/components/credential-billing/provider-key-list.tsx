@@ -335,7 +335,7 @@ export function ProviderKeyList({
 // Parts
 // =========================================================================
 
-function ProviderLine({
+export function ProviderLine({
   provider,
   label,
   keys,
@@ -513,7 +513,7 @@ function PrimaryNote({ notPrimaryCount }: { notPrimaryCount: number }) {
 }
 
 /** No provider key the caller can use yet: where to get one. */
-function NoProviderKeys() {
+export function NoProviderKeys() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">

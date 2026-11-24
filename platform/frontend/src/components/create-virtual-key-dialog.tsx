@@ -6,25 +6,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AdvancedSection } from "@/components/advanced-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import {
-  AutoRoutersField,
-  useCanSetAutoRouters,
-} from "@/components/credential-billing/auto-routers-field";
+import { useCanSetAutoRouters } from "@/components/credential-billing/auto-routers-field";
 import {
   BudgetFields,
   type SpendCapValue,
 } from "@/components/credential-billing/budget-fields";
 import { ExpirySelect } from "@/components/credential-billing/expiry-select";
-import {
-  ModelPoolsField,
-  useCanSetModelPools,
-} from "@/components/credential-billing/model-pools-field";
+import { useCanSetModelPools } from "@/components/credential-billing/model-pools-field";
 import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
-import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
+import { VirtualKeyAccessField } from "@/components/credential-billing/virtual-key-access-field";
 import { FormDialog } from "@/components/form-dialog";
 import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import { ProviderAccessField } from "@/components/provider-access-field";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { RemoteUserSelect } from "@/components/remote-user-select";
 import { ResourceAccessSection } from "@/components/resource-access-section";
@@ -425,7 +418,7 @@ export function CreateVirtualKeyDialog({
           ? undefined
           : isPassthrough
             ? "It links requests that carry your own provider key to you."
-            : "Requests with this key use the provider keys or model pools selected below."
+            : "Requests with this key use the provider keys, model pools and auto routers selected below."
       }
       size={createdKeyValue ? "large" : "small"}
       className={createdKeyValue ? "max-w-4xl" : "sm:max-w-[720px]"}
@@ -482,39 +475,22 @@ export function CreateVirtualKeyDialog({
                 </div>
               </div>
               {!isPassthrough && (
-                <ProviderAccessField
-                  surface="create"
-                  canIncludeFutureProviders={canIncludeFutureProviders}
+                <VirtualKeyAccessField
+                  providerApiKeys={parentableKeys}
+                  value={providerApiKeyIds}
+                  onChange={setProviderApiKeyIds}
                   includeFutureProviders={includeFutureProviders}
                   onIncludeFutureProvidersChange={(value) => {
                     setIncludeFutureProviders(value);
                     if (value) setProviderApiKeyIds([]);
                   }}
-                  current={
-                    <ProviderKeyList
-                      alwaysOpen
-                      emptyLabel={
-                        includeFutureProviders
-                          ? "Uses primary API keys — add a provider to choose a different key"
-                          : "No providers selected — add one below"
-                      }
-                      value={providerApiKeyIds}
-                      onChange={setProviderApiKeyIds}
-                      providerApiKeys={parentableKeys}
-                    />
-                  }
-                />
-              )}
-              {!isPassthrough && canSetModelPools && (
-                <ModelPoolsField
-                  value={modelPoolIds}
-                  onChange={setModelPoolIds}
-                />
-              )}
-              {!isPassthrough && canSetAutoRouters && (
-                <AutoRoutersField
-                  value={autoRouterIds}
-                  onChange={setAutoRouterIds}
+                  canIncludeFutureProviders={canIncludeFutureProviders}
+                  modelPoolIds={modelPoolIds}
+                  onModelPoolIdsChange={setModelPoolIds}
+                  canSetModelPools={canSetModelPools}
+                  autoRouterIds={autoRouterIds}
+                  onAutoRouterIdsChange={setAutoRouterIds}
+                  canSetAutoRouters={canSetAutoRouters}
                 />
               )}
               {canChooseOwner && (

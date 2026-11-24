@@ -45,7 +45,7 @@ You can configure an export on the **Costs & Limits → FinOps Export** page.
 
 ### File Format
 
-<span id="what-each-row-holds"></span>Each file is a FOCUS 1.2 CSV, which tools such as Athena, BigQuery, and DuckDB read as a table. A row is one hour of usage by one person, through one agent, on one model. The model provider bills that usage, not Archestra, so the provider is the row's vendor and your organization is the billing account.
+<span id="what-each-row-holds"></span>Each file is a FOCUS 1.2 CSV, which tools such as Athena, BigQuery, and DuckDB read as a table. A row is one hour of usage by one person, through one agent, on one model.
 
 | FOCUS column | Holds |
 | --- | --- |

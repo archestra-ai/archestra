@@ -387,7 +387,10 @@ function CredentialField({
  */
 function IdentityProviderField({ id }: { id: string }) {
   const { data: proxy } = useLlmProxy();
-  const { data: identityProviders = [] } = useIdentityProviders();
+  const { data: canRead } = useHasPermissions({ identityProvider: ["read"] });
+  const { data: identityProviders = [] } = useIdentityProviders({
+    enabled: canRead === true,
+  });
   const { data: canUpdate } = useHasPermissions({ llmProxy: ["update"] });
   const updateProxy = useUpdateLlmProxy();
   return (

@@ -52,9 +52,16 @@ export function KeysCard() {
     capability: LLM_PROXY_OAUTH_SCOPE,
     toastOnError: false,
   });
-  const { data: identityProviders = [] } = useIdentityProviders();
+  const { data: canReadIdentityProviders } = useHasPermissions({
+    identityProvider: ["read"],
+  });
+  const { data: identityProviders = [] } = useIdentityProviders({
+    enabled: canReadIdentityProviders === true,
+  });
   const { data: providerKeys = [] } = useLlmProviderApiKeys();
+  const { data: canReadLimits } = useHasPermissions({ llmLimit: ["read"] });
   const { data: spendLimits = [] } = useLimits({
+    enabled: canReadLimits === true,
     filters: { entityType: "virtual_key", limitType: "token_cost" },
   });
   const { data: canCreate } = useHasPermissions({ llmVirtualKey: ["create"] });
@@ -86,12 +93,17 @@ export function KeysCard() {
       href: "/settings/oauth-clients?type=llm",
       tip: "Apps get a token, as themselves or for a signed-in user",
     },
-    {
-      label: "Identity providers",
-      count: identityProviders.length,
-      href: "/settings/identity-providers",
-      tip: "Apps forward the user's JWT from your identity provider",
-    },
+    // Only those who can read identity providers can count or open them.
+    ...(canReadIdentityProviders
+      ? [
+          {
+            label: "Identity providers",
+            count: identityProviders.length,
+            href: "/settings/identity-providers",
+            tip: "Apps forward the user's JWT from your identity provider",
+          },
+        ]
+      : []),
   ];
 
   return (

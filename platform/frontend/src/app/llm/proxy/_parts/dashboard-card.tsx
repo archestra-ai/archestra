@@ -52,7 +52,7 @@ export function DashboardCard({
       )}
       {children}
       {footer && (
-        <div className="mt-auto flex items-center gap-3.5 border-t pt-3 text-[13px] whitespace-nowrap">
+        <div className="mt-auto flex items-center gap-3.5 border-t border-border/60 pt-3 text-[13px] whitespace-nowrap">
           {footer}
         </div>
       )}

@@ -206,6 +206,43 @@ describe("VirtualKeysPage provider-key filter", () => {
     ).toBeInTheDocument();
   });
 
+  it("only filters to the key a link names without the right to edit it", async () => {
+    virtualKeys = [
+      {
+        id: "22222222-3333-4444-8555-666666666666",
+        name: "Regional key",
+        keyType: "standard",
+        tokenStart: "arch_abc",
+        authorId: "user-1",
+        authorName: "Current User",
+        scope: "personal",
+        teams: [],
+        providerApiKeys: [],
+        expiresAt: null,
+        lastUsedAt: null,
+        labels: [],
+      },
+    ];
+
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !(
+            "llmVirtualKey" in permissions &&
+            permissions.llmVirtualKey?.includes("update")
+          ),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+
+    renderPage(
+      "keyType=standard&search=Regional%20key&edit=22222222-3333-4444-8555-666666666666",
+    );
+
+    expect(await screen.findByText("Regional key")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("keeps identity, access, and activity scannable without separate metadata columns", async () => {
     window.localStorage.setItem("archestra-llm-virtual-keys-view", "table");
     virtualKeys = [

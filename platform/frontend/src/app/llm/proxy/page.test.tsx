@@ -310,6 +310,54 @@ describe("LLM Proxy dashboard", () => {
   });
 });
 
+describe("LLM Proxy dashboard for a member", () => {
+  it("shows the real Guardrails state and skips reads a member cannot make", async () => {
+    // A member reads none of organization settings, limits or identity providers.
+    const memberLacks = [
+      "organizationSettings",
+      "llmLimit",
+      "identityProvider",
+    ];
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !memberLacks.some((resource) => resource in permissions),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+    const limitsRequested = vi.fn();
+    const identityProvidersRequested = vi.fn();
+    server.use(
+      http.get(`${API_ORIGIN}/api/guardrails-deployment`, () =>
+        HttpResponse.json({
+          enabled: true,
+          featureEnabled: true,
+          active: true,
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/limits`, () => {
+        limitsRequested();
+        return HttpResponse.json([]);
+      }),
+      http.get(`${API_ORIGIN}/api/identity-providers`, () => {
+        identityProvidersRequested();
+        return HttpResponse.json([]);
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText("Enforced")).toBeInTheDocument();
+    expect(
+      within(card("Virtual keys")).queryByRole("link", {
+        name: /Identity providers/,
+      }),
+    ).not.toBeInTheDocument();
+    expect(limitsRequested).not.toHaveBeenCalled();
+    expect(identityProvidersRequested).not.toHaveBeenCalled();
+  });
+});
+
 describe("LLM Proxy dashboard, new organization", () => {
   beforeEach(() => {
     providerKeys = [];
@@ -371,6 +419,51 @@ describe("LLM Proxy dashboard, new organization", () => {
 });
 
 describe("LLM Proxy dashboard endpoint", () => {
+  it("asks for a pool the key calls before any one model", async () => {
+    standardKeys = [
+      {
+        ...JUDGE_KEY,
+        providerApiKeys: [
+          {
+            provider: "anthropic",
+            providerApiKeyId: ANTHROPIC_KEY.id,
+            providerApiKeyName: ANTHROPIC_KEY.name,
+          },
+        ],
+      },
+    ];
+    server.use(
+      http.get(`${API_ORIGIN}/api/model-pools`, () =>
+        HttpResponse.json([{ ...POOL, virtualApiKeyIds: [JUDGE_KEY.id] }]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          {
+            modelId: "claude-a",
+            provider: "anthropic",
+            apiKeys: [{ id: ANTHROPIC_KEY.id }],
+            ignored: false,
+            embeddingDimensions: null,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            isBest: true,
+            supportedEndpoints: null,
+          },
+        ]),
+      ),
+    );
+    renderPage();
+
+    const url = await screen.findByText(
+      /\/v1\/unified-model\/chat\/completions \\/,
+    );
+    await waitFor(() =>
+      expect(url.closest("pre")).toHaveTextContent(
+        `-d '{"model": "claude-sonnet", `,
+      ),
+    );
+  });
+
   it("builds the request from the format and copies it with the reader's real key", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/llm-virtual-keys/vk-judge/value`, () =>

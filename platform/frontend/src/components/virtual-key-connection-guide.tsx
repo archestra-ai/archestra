@@ -673,10 +673,15 @@ export function RequestExample({
     (option) => option.value === initialModel,
   )?.value;
   const [pickedModel, setPickedModel] = useState<string | null>(null);
+  // The LLM Proxy page leads with the names the organization set up, an auto
+  // router and then a pool, over a single provider's model.
+  const defaultOption =
+    (fields ? (routerOptions[0] ?? poolOptions[0]) : undefined) ??
+    modelOptions[0];
   const model =
     pickedModel && allOptions.some((option) => option.value === pickedModel)
       ? pickedModel
-      : (initialOption ?? modelOptions[0]?.value ?? allOptions[0]?.value);
+      : (initialOption ?? defaultOption?.value ?? allOptions[0]?.value);
   const selectedModel:
     | ((typeof modelOptions)[number] & { pool?: string })
     | undefined = allOptions.find((option) => option.value === model);

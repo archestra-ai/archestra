@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils/tailwind";
 
 /** Guardrails and budgets: one line each, with the page that configures it. */
 export function SummaryTiles() {
-  const { data: guardrails } = useGuardrailsDeployment();
+  // Any member may read the switch, as the Connect page does.
+  const { data: guardrails } = useGuardrailsDeployment({ anyMember: true });
   // The deployment's own switch, as the Guardrails page shows it; not per key.
   const enforced = guardrails?.active === true;
   return (

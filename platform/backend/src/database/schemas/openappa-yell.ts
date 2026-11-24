@@ -30,10 +30,11 @@ export const openappaYellsTable = pgTable(
     archive: bytea("archive"),
     message: text("message").notNull(),
     withTrajectory: boolean("with_trajectory").notNull(),
-    // Sent through superyell, which also turned guardrails off for the session.
+    // Sent through superyell, which in earlier releases also turned guardrails
+    // off for the session. No longer written.
     superyell: boolean("superyell").notNull().default(false),
-    // Who raised it: the agent's own `yell` call, or the platform when it let
-    // a blocked call through under the Break the glass settings.
+    // Who raised it: the agent's own `yell` call, or (earlier releases) the
+    // platform when it let a blocked call through under Break the glass.
     kind: text("kind").$type<OpenAppaYellKind>().notNull().default("agent"),
     // How many calls a platform yell stands for: repeats of the same tool and
     // kind in a session add to one yell.

@@ -68,6 +68,7 @@ async function admission(params: {
   };
 }
 
+/** The soft-block setting that used to waive client refusals. */
 function waiveClientRefusals() {
   config.openappa.breakTheGlassOverrides = { unapprovableBlockMode: "allow" };
 }
@@ -84,26 +85,35 @@ function sessionOf(
   };
 }
 
-test("a client-side refusal proceeds ungoverned only when blocked calls are allowed", async ({
+test("an unrecognized client is blocked whatever the soft-block setting says, and bypassed without a session when allowed", async ({
   makeAgent,
   makeUser,
 }) => {
   const agent = await makeAgent();
   const user = await makeUser();
-  const unrecognizedClient = () =>
-    admission({ agent, principal: { authenticatedUserId: user.id } });
-  config.openappa.breakTheGlassOverrides = { unapprovableBlockMode: "refuse" };
-  await expect(
-    admitOpenappaRequest(await unrecognizedClient()),
-  ).rejects.toMatchObject({ statusCode: 400 });
+  const unrecognizedClient = (
+    unsupportedClientAction: AdmissionParams["deployment"]["unsupportedClientAction"],
+  ) =>
+    admission({
+      agent,
+      principal: { authenticatedUserId: user.id },
+      overrides: {
+        deployment: { active: true, observing: false, unsupportedClientAction },
+      },
+    });
+  const session = sessionOf(agent, `user:${user.id}`);
+  for (const mode of ["refuse", "allow"] as const) {
+    config.openappa.breakTheGlassOverrides = { unapprovableBlockMode: mode };
+    await expect(
+      admitOpenappaRequest(await unrecognizedClient("block")),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(await isUnenforcedSession(session), mode).toBe(false);
+  }
 
-  waiveClientRefusals();
-  expect(await admitOpenappaRequest(await unrecognizedClient())).toEqual({
-    kind: "ungoverned",
-  });
-  expect(await isUnenforcedSession(sessionOf(agent, `user:${user.id}`))).toBe(
-    true,
-  );
+  expect(
+    await admitOpenappaRequest(await unrecognizedClient("bypass")),
+  ).toEqual({ kind: "ungoverned" });
+  expect(await isUnenforcedSession(session)).toBe(false);
 });
 
 test("a server or storage failure during admission propagates and the session stays enforced", async ({

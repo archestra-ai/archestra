@@ -12,11 +12,7 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
-import {
-  breakTheGlassActiveIn,
-  getGuardrailsDeployment,
-  isGuardrailsV2Active,
-} from "@/services/guardrails-deployment";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-deployment.routes";
@@ -135,11 +131,6 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       active: true,
       breakTheGlassEnabled: false,
     });
-    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
-    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
-    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(true);
-    await set(false);
-    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
   });
 
   test("administrators can let approvals through with a yell, and the change is audited", async () => {

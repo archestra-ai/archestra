@@ -71,18 +71,6 @@ export async function getGuardrailsDeploymentFromSnapshot(
 }
 
 /**
- * Whether a yell also turns OpenAPPA off for the session that sends it:
- * enforcement is on and an administrator left break the glass on in
- * Guardrails settings.
- */
-export function breakTheGlassActiveIn(deployment: {
-  active: boolean;
-  breakTheGlassEnabled: boolean;
-}): boolean {
-  return deployment.active && deployment.breakTheGlassEnabled;
-}
-
-/**
  * Turn the deployment-wide switch on or off.
  *
  * Once it is on, every proxied request of every organization opens that

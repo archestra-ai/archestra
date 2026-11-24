@@ -79,8 +79,6 @@ export const CacheKey = {
   LlmToolCallSession: "llm-tool-call-session",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
-  /** Sessions the proxy admitted as unattended, for the gateway's Break the glass review waiver */
-  OpenAppaUnattendedSession: "openappa-unattended-session",
   OpenAppaYellResult: "openappa-yell-result",
   /** The chat a Cursor subagent's subagents belong to, for the hook steps Cursor sends for them */
   CursorSubagentRoot: "cursor-subagent-root",

@@ -29,7 +29,6 @@ import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
-import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import {
   observeOpenappaDispatch,
@@ -81,13 +80,12 @@ import { ApiError, type CommonToolResult } from "@/types";
 import type { OpenAppaSession } from "@/types/openappa-session";
 import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
-import { policyView } from "./result-view";
 import {
-  isHardBlock,
-  softBlockReason,
-  softBlocksAllowed,
-  waiveSoftBlock,
-} from "./soft-block";
+  type RefusalOutcome,
+  RefusalOutcomeFields,
+  statedRefusalOutcome,
+} from "./refusal-outcome";
+import { policyView } from "./result-view";
 import { toolCallArgumentsText } from "./tool-call-arguments";
 import { isUnenforcedSession } from "./unenforced";
 import type { DeclaredToolSpelling } from "./wire";
@@ -143,6 +141,7 @@ const NativeDecisionSchema = z
     z.object({
       decision: z.literal("deny_call"),
       feedback: z.string(),
+      ...RefusalOutcomeFields,
       offers: z.array(NativeOfferSchema).optional(),
       review: z
         .array(
@@ -157,6 +156,7 @@ const NativeDecisionSchema = z
     z.object({
       decision: z.literal("block"),
       feedback: z.string().optional(),
+      ...RefusalOutcomeFields,
       // Set by the binding on a child return held only because the child
       // has a call open: retryable, not a ruling.
       busy: z.literal(true).optional(),
@@ -164,6 +164,7 @@ const NativeDecisionSchema = z
     }),
     z.object({
       decision: z.literal("replace_output"),
+      ...RefusalOutcomeFields,
       ...ResultDecisionFields,
     }),
     z.object({
@@ -180,9 +181,14 @@ const NativeDecisionSchema = z
       decision: z.literal("context"),
       text: z.string().optional(),
     }),
-    z.object({ decision: z.literal("refuse"), detail: z.string() }),
+    z.object({
+      decision: z.literal("refuse"),
+      detail: z.string(),
+      ...RefusalOutcomeFields,
+    }),
     z.object({
       decision: z.literal("mcp_result"),
+      ...RefusalOutcomeFields,
       result: CallToolResultSchema.optional(),
       offer: z
         .object({ status: z.enum(["known", "unknown"]) })
@@ -192,6 +198,12 @@ const NativeDecisionSchema = z
     }),
   ])
   .superRefine((decision, context) => {
+    const stated = statedOutcomeOf(decision);
+    if ("problem" in stated)
+      context.addIssue({
+        code: "custom",
+        message: `Native ${decision.decision} with ${stated.problem}`,
+      });
     if (!isOutputDecision(decision)) return;
     const hasOutput =
       decision.approved_output !== undefined ||
@@ -232,7 +244,6 @@ type NativeOutputDecision = Extract<
 >;
 type ProcessedToolResult = {
   content: string;
-  diagnostic?: string;
   outputSource: OutputSource;
   reason?: RuntimeReason;
   code?: string;
@@ -241,14 +252,17 @@ type ProcessedToolResult = {
   review?: Array<{ offer_id: string; text: string }>;
 } & (
   | {
-      /** The call never ran; retain its ruling as history, never waive its result. */
+      /** The call never ran; its ruling is history. */
       denied: true;
       refused?: never;
+      /** Why the call was refused, as the runtime stated it. */
+      outcome?: RefusalOutcome;
     }
   | {
       denied?: never;
       /** A result admission refused actual output, not a prior call's ruling. */
       refused?: true;
+      outcome?: never;
     }
 );
 /**
@@ -423,8 +437,6 @@ export async function executeYell(params: {
   session: OpenAppaSession;
   toolCallId: string;
   args: { message: string; with_trajectory: boolean };
-  /** Break the glass is on, so this yell also turns OpenAPPA off for the session. */
-  brokeTheGlass?: boolean;
   /** The authenticated host saw this call without a proxy reporting receipt. */
   needsAdmission?: boolean;
 }): Promise<CallToolResult> {
@@ -452,7 +464,6 @@ export async function executeYell(params: {
         )
       : params.args.message,
     withTrajectory: params.args.with_trajectory,
-    superyell: params.brokeTheGlass ?? false,
   });
   try {
     // Opening a native session just to report would enroll a session that
@@ -924,10 +935,6 @@ async function startSession(params: {
       typeof text === "string" &&
       text.trim().length > 0
     ) {
-      // Apply the operator's waiver before these instructions can make the
-      // child suppress its answer (for example, a void return contract).
-      if (await waiveSoftBlock(params.session, "child_return_contract", text))
-        return undefined;
       validateReturnContract(text);
       params.deliverReturnContract?.(text);
       return text;
@@ -959,14 +966,6 @@ export async function startRuntimeChild(params: {
   });
   if (decision.decision === "ack") return {};
   if (decision.decision === "context" && decision.text?.trim()) {
-    if (
-      await waiveSoftBlock(
-        params.session,
-        "child_return_contract",
-        decision.text,
-      )
-    )
-      return {};
     validateReturnContract(decision.text);
     return { contract: decision.text };
   }
@@ -992,16 +991,8 @@ export async function addressRuntimeChild(
     },
     policy,
   );
-  if (
-    decision.decision !== "ack" &&
-    !(await waiveSoftBlock(
-      params.session,
-      "child_address",
-      decisionMessage(decision),
-    ))
-  ) {
+  if (decision.decision !== "ack")
     throw new ApiError(409, decisionMessage(decision));
-  }
 }
 
 function extractApprovedOutput(
@@ -1071,22 +1062,23 @@ async function approveToolResult(params: {
   const reason =
     "reason" in decision && decision.reason ? decision.reason : undefined;
   const code = "code" in decision && decision.code ? decision.code : undefined;
+  const outcome = refusalOutcomeOf(decision);
   if (decision.decision === "deny_call") {
     // ToolResult replays a denied/cancelled call's authoritative receipt.
-    // There are no executed bytes to release. A new attempt is evaluated by
-    // ToolCall, where the operator's current waiver setting applies.
+    // There are no executed bytes to release.
     return {
       content,
       outputSource,
       ...(reason ? { reason } : {}),
       ...(code ? { code } : {}),
       denied: true,
+      ...(outcome ? { outcome } : {}),
       offers: decision.offers?.map((offer) => offer.offer_id),
       review: decision.review,
     };
   }
-  // Old native receipts for fabricated/unknown offers remain authoritative
-  // errors, not evidence of a soft policy refusal that can disable a session.
+  // Old native receipts for fabricated/unknown offers are errors about the
+  // control call, not output the runtime withheld.
   const unknownControl =
     reason === "unknown_control_call" &&
     (decision.decision === "mcp_result" ||
@@ -1094,7 +1086,7 @@ async function approveToolResult(params: {
   return {
     content,
     outputSource,
-    ...((!unknownControl || isHardBlock(content)) &&
+    ...((!unknownControl || outcome?.kind === "hard_block") &&
     (decision.decision === "block" ||
       decision.decision === "refuse" ||
       decision.decision === "replace_output" ||
@@ -1172,10 +1164,39 @@ function truncated(text: string, limit: number): string {
   return `${text.slice(0, end)}…`;
 }
 
+const INTEGRITY: RefusalOutcome = { kind: "integrity" };
+
 /** The runtime's code for a result that matches no released call. */
 /** The runtime holds no released call that a reported result could answer. */
 export const UNRELEASED_CALL_CODE = "unreleased_call";
 const MAX_UNEXECUTED_RESULT_CHARS = 4000;
+
+function statedOutcomeOf(
+  decision: NativeDecision,
+): ReturnType<typeof statedRefusalOutcome> {
+  switch (decision.decision) {
+    case "deny_call":
+      return statedRefusalOutcome(
+        decision,
+        Boolean(decision.offers?.length || decision.review?.length),
+      );
+    case "block":
+    case "replace_output":
+    case "refuse":
+    case "mcp_result":
+      return statedRefusalOutcome(decision, false);
+    default:
+      return { outcome: undefined };
+  }
+}
+
+/** The outcome a parsed decision states; the schema refuses a malformed one. */
+function refusalOutcomeOf(
+  decision: NativeDecision,
+): RefusalOutcome | undefined {
+  const stated = statedOutcomeOf(decision);
+  return "outcome" in stated ? stated.outcome : undefined;
+}
 
 function isOutputDecision(
   decision: NativeDecision,
@@ -1243,126 +1264,70 @@ export async function processProxyResults(params: {
     lineage: params.lineage,
   });
   const updates: Record<string, ProcessedToolResult> = {};
-  if (
-    (await softBlocksAllowed()) &&
-    (await isUnenforcedSession(params.session))
-  ) {
-    return { toolResultUpdates: updates };
-  }
   for (const result of params.results) {
-    try {
-      const reportingName = archestraMcpBranding.getToolShortName(
-        params.canonicalize(result.name, result.namespace),
-      );
-      if (
-        (await softBlocksAllowed()) &&
-        reportingName === "read_peer_message"
-      ) {
-        // A missing/invalid message must not become a waiver on the next turn
-        // when native result admission reports that no read was recorded.
-        // Never trust the client's claimed result as evidence of a held read.
-        let retained: Awaited<
-          ReturnType<typeof OpenAppaSessionModel.retainedPeerReadReceipt>
-        >;
-        try {
-          retained = await OpenAppaSessionModel.retainedPeerReadReceipt({
-            organizationId: params.session.organization_id,
-            sessionId: params.session.session_id,
-            callerId: params.session.caller_id,
-            toolCallId: result.id,
-          });
-        } catch (err) {
-          logger.warn(
-            {
-              err,
-              sessionId: params.session.session_id,
-              toolCallId: result.id,
-            },
-            "OpenAPPA could not read the retained peer message receipt",
-          );
-          retained = null;
-        }
-        if (!retained) {
-          updates[result.id] = {
-            content:
-              "[appa] Peer message unavailable: no authenticated retained read was found.",
-            outputSource: "runtime",
-          };
-          continue;
-        }
-      }
-      const reportingResult = ["yell", "run_tool"].some(
-        (name) => name === reportingName,
-      )
-        ? await readYellResult(params.session, result.id)
-        : undefined;
-      if (reportingResult !== undefined) {
-        updates[result.id] = {
-          content: reportingResult,
-          outputSource: "runtime",
-        };
-        continue;
-      }
-      if (params.trustedChat && isSeededAppRenderToolResult(result.content))
-        continue;
-      // The runtime released no question call, so it would withhold the answer.
-      if (params.isUserQuestion?.(result) === true) continue;
-      const spawn = params.classifySpawnResult?.(result);
-      if (spawn === "pending") continue;
-      const error =
-        extractMcpToolError(result) ?? extractMcpToolError(result.content);
-      const outcome: ExecutionOutcome =
-        error?.type === "cancelled" || spawn === "detached"
-          ? "unknown"
-          : spawn === "failed" || result.isError
-            ? "failure"
-            : "success";
-      const approved = await approveToolResult({
-        session: params.session,
-        toolCallId: result.id,
-        output: resultOutput(result),
-        outcome,
-        controlToolName: params.controlToolName,
-        policy,
-        principal,
-      });
-      // A client can read a crossed child return with a call it made itself:
-      // Copilot CLI reads a finished background agent with read_agent when it
-      // announces the agent is idle. The runtime released no such call, but
-      // the return was verified against the crossing the runtime retained, so
-      // that verified text goes through.
-      if (
-        approved.code === UNRELEASED_CALL_CODE &&
-        params.isVerifiedChildReturn?.(result) === true
-      ) {
-        updates[result.id] = {
-          content: resultOutput(result),
-          outputSource: "runtime",
-        };
-        continue;
-      }
-      const pendingReview =
-        approved.code === UNRELEASED_CALL_CODE
-          ? await params.pendingReviewResult?.(result)
-          : undefined;
-      updates[result.id] = pendingReview
-        ? { content: pendingReview, outputSource: "runtime" }
-        : approved.code === UNRELEASED_CALL_CODE &&
-            params.isControlResult?.(result) === true
-          ? unexecutedControlResult(result.content)
-          : approved;
-    } catch (error) {
-      // Preserve every sibling decision, including hard refusals and retained
-      // native results. The proxy decides whether this entire batch can waive.
-      if (!(await softBlocksAllowed()) || !canRetainBatchFailure(error))
-        throw error;
+    const reportingName = archestraMcpBranding.getToolShortName(
+      params.canonicalize(result.name, result.namespace),
+    );
+    const reportingResult = ["yell", "run_tool"].some(
+      (name) => name === reportingName,
+    )
+      ? await readYellResult(params.session, result.id)
+      : undefined;
+    if (reportingResult !== undefined) {
       updates[result.id] = {
-        content: error.message,
-        diagnostic: softBlockReason(error),
+        content: reportingResult,
         outputSource: "runtime",
-        refused: true,
       };
+      continue;
     }
+    if (params.trustedChat && isSeededAppRenderToolResult(result.content))
+      continue;
+    // The runtime released no question call, so it would withhold the answer.
+    if (params.isUserQuestion?.(result) === true) continue;
+    const spawn = params.classifySpawnResult?.(result);
+    if (spawn === "pending") continue;
+    const error =
+      extractMcpToolError(result) ?? extractMcpToolError(result.content);
+    const outcome: ExecutionOutcome =
+      error?.type === "cancelled" || spawn === "detached"
+        ? "unknown"
+        : spawn === "failed" || result.isError
+          ? "failure"
+          : "success";
+    const approved = await approveToolResult({
+      session: params.session,
+      toolCallId: result.id,
+      output: resultOutput(result),
+      outcome,
+      controlToolName: params.controlToolName,
+      policy,
+      principal,
+    });
+    // A client can read a crossed child return with a call it made itself:
+    // Copilot CLI reads a finished background agent with read_agent when it
+    // announces the agent is idle. The runtime released no such call, but
+    // the return was verified against the crossing the runtime retained, so
+    // that verified text goes through.
+    if (
+      approved.code === UNRELEASED_CALL_CODE &&
+      params.isVerifiedChildReturn?.(result) === true
+    ) {
+      updates[result.id] = {
+        content: resultOutput(result),
+        outputSource: "runtime",
+      };
+      continue;
+    }
+    const pendingReview =
+      approved.code === UNRELEASED_CALL_CODE
+        ? await params.pendingReviewResult?.(result)
+        : undefined;
+    updates[result.id] = pendingReview
+      ? { content: pendingReview, outputSource: "runtime" }
+      : approved.code === UNRELEASED_CALL_CODE &&
+          params.isControlResult?.(result) === true
+        ? unexecutedControlResult(result.content)
+        : approved;
   }
   return {
     toolResultUpdates: updates,
@@ -1371,14 +1336,6 @@ export async function processProxyResults(params: {
 }
 // SPDX-SnippetEnd
 
-/** Authentication failures remain fatal; only policy/helper failures can waive. */
-function canRetainBatchFailure(error: unknown): error is Error {
-  return (
-    error instanceof Error &&
-    !(error instanceof ApiError && error.statusCode === 401)
-  );
-}
-
 /** Decision for a proposed tool call. */
 type AppaCallDecision =
   | { kind: "allow" }
@@ -1386,20 +1343,21 @@ type AppaCallDecision =
   | {
       kind: "deny";
       feedback: string;
-      diagnostic?: string;
       offers?: string[];
       review?: Array<{ offer_id: string; text: string }>;
+      /** Why the call was refused; absent on a receipt that states none. */
+      outcome?: RefusalOutcome;
       /**
        * The runtime recorded this denial under the call's id, so it answers
        * that id's result with the ruling.
        */
       recorded?: true;
       /**
-       * The runtime has no record of the call: its annotator gave no answer,
-       * or the call was denied before the runtime saw it. Its result is
-       * answered by the proxy, not the runtime.
+       * The runtime has no record of the call, which was refused before it
+       * was judged. Its result is answered with this notice by the proxy,
+       * not the runtime.
        */
-      unanswered?: true;
+      proxyNotice?: true;
     };
 
 // SPDX-SnippetBegin
@@ -1476,7 +1434,8 @@ export async function evaluateToolCalls(
           kind: "deny" as const,
           feedback:
             "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.",
-          unanswered: true as const,
+          outcome: INTEGRITY,
+          proxyNotice: true as const,
         };
       }
       // Direct remedy control calls bypass evaluation and execute via gateway.
@@ -1504,7 +1463,11 @@ export async function evaluateToolCalls(
       }
       const target = await previewAppToolTarget(normalized[index]);
       if ("refusal" in target)
-        return { kind: "deny" as const, feedback: target.refusal };
+        return {
+          kind: "deny" as const,
+          feedback: target.refusal,
+          outcome: INTEGRITY,
+        };
       const shortName = archestraMcpBranding.getToolShortName(
         target.toolCallName,
       );
@@ -1519,13 +1482,13 @@ export async function evaluateToolCalls(
         target.toolCallName,
         JSON.parse(target.toolCallArgs),
       );
-      // Like an unanswered annotator, a refusal no remedy can lift: the
-      // notice says how to correct the call.
+      // A refusal no remedy can lift: the notice says how to correct the call.
       if (conflict)
         return {
           kind: "deny" as const,
           feedback: conflict,
-          unanswered: true as const,
+          outcome: INTEGRITY,
+          proxyNotice: true as const,
         };
       // The target is already canonical, so it is read, not re-canonicalized.
       const canonicalTool = shortName === "yell" ? "yell" : target.toolCallName;
@@ -1584,8 +1547,17 @@ export async function evaluateToolCalls(
       } catch (error) {
         // These unrecorded refusals apply only to this call. Failing the batch
         // would cancel admitted siblings, including spent approvals.
-        const notice =
-          undeclaredToolNotice(error) ?? unansweredAnnotationNotice(error);
+        const undeclared = undeclaredToolNotice(error);
+        const unanswered = unansweredAnnotationNotice(error);
+        const notice: { feedback: string; outcome: RefusalOutcome } | null =
+          undeclared !== null
+            ? { feedback: undeclared, outcome: INTEGRITY }
+            : unanswered !== null
+              ? {
+                  feedback: unanswered.notice,
+                  outcome: { kind: "missing_fact", retry: unanswered.retry },
+                }
+              : null;
         if (notice === null) throw error;
         logger.warn(
           {
@@ -1598,8 +1570,8 @@ export async function evaluateToolCalls(
         );
         return {
           kind: "deny" as const,
-          feedback: notice,
-          unanswered: true as const,
+          ...notice,
+          proxyNotice: true as const,
         };
       }
       if (
@@ -1613,6 +1585,7 @@ export async function evaluateToolCalls(
           kind: "deny" as const,
           feedback:
             "OpenAPPA did not prepare a child fork. Enable policy.deployment.context_control and approve a child return contract before spawning a subagent.",
+          outcome: INTEGRITY,
         };
       }
       if (
@@ -1623,8 +1596,10 @@ export async function evaluateToolCalls(
         return { kind: "allow" as const };
       }
       // Denied calls return as notices; other calls in the batch stand.
+      const outcome = refusalOutcomeOf(decision);
       return {
         kind: "deny" as const,
+        ...(outcome ? { outcome } : {}),
         feedback: unofferedAttestation(decision, declaration)
           ? `No plan for this call returns through \`${ATTEST_SCHEMA_SANITIZER}\`, so \`return_schema\` is not enforced: a return declared by a plan below crosses unchecked against it. Call the subagent again without \`return_schema\`.\n\n${decisionMessage(decision)}`
           : decisionMessage(decision),
@@ -1650,27 +1625,6 @@ export async function evaluateToolCalls(
   const firstFailure = results.find(
     (result): result is PromiseRejectedResult => result.status === "rejected",
   );
-  if (
-    firstFailure &&
-    (await softBlocksAllowed()) &&
-    results.every(
-      (result) =>
-        result.status === "fulfilled" || canRetainBatchFailure(result.reason),
-    )
-  ) {
-    // Do not discard a sibling hard denial when one native helper fails. Keep
-    // successful admissions open; the proxy handles the complete batch.
-    return results.map((result) =>
-      result.status === "fulfilled"
-        ? result.value
-        : {
-            kind: "deny",
-            feedback: (result.reason as Error).message,
-            diagnostic: softBlockReason(result.reason as Error),
-            unanswered: true,
-          },
-    );
-  }
   if (firstFailure) {
     if (admitted.length > 0) {
       // Cancel admitted calls from this batch if evaluation failed mid-batch.
@@ -1714,7 +1668,7 @@ function isJson(text: string): boolean {
 
 type AppaHostedCallDecision =
   | { kind: "release" }
-  | { kind: "hold"; feedback: string; diagnostic?: string };
+  | { kind: "hold"; feedback: string };
 
 /**
  * Rules on calls the provider ran inside the inference call. Nothing can stop
@@ -1754,41 +1708,27 @@ export async function evaluateHostedToolCalls(
     );
     return decisions.map((decision) =>
       decision.kind === "deny"
-        ? {
-            kind: "hold",
-            feedback: decision.feedback,
-            ...(decision.diagnostic ? { diagnostic: decision.diagnostic } : {}),
-          }
+        ? { kind: "hold", feedback: decision.feedback }
         : { kind: "release" },
     );
   }
   const principal = await sessionPrincipal(session);
   const verdicts: AppaHostedCallDecision[] = [];
   for (const call of calls) {
-    try {
-      const approved = await approveToolResult({
-        session,
-        toolCallId: call.id,
-        output: call.output,
-        outcome: "success",
-        controlToolName: options.control?.name,
-        policy: await policy(),
-        principal,
-      });
-      verdicts.push(
-        approved.outputSource === "tool" && approved.content === call.output
-          ? { kind: "release" }
-          : { kind: "hold", feedback: approved.content },
-      );
-    } catch (error) {
-      if (!(await softBlocksAllowed()) || !canRetainBatchFailure(error))
-        throw error;
-      verdicts.push({
-        kind: "hold",
-        feedback: error.message,
-        diagnostic: softBlockReason(error),
-      });
-    }
+    const approved = await approveToolResult({
+      session,
+      toolCallId: call.id,
+      output: call.output,
+      outcome: "success",
+      controlToolName: options.control?.name,
+      policy: await policy(),
+      principal,
+    });
+    verdicts.push(
+      approved.outputSource === "tool" && approved.content === call.output
+        ? { kind: "release" }
+        : { kind: "hold", feedback: approved.content },
+    );
   }
   return verdicts;
 }
@@ -2333,14 +2273,6 @@ export async function loadChildReturns(params: {
 }
 
 /**
- * A decision on a deferred return, as the runtime's notice quotes it for the
- * control call's `offer_id`. No offer id is spelled this way.
- */
-export function isDeferredReturnReference(offerId: string): boolean {
-  return /^ret-[0-9a-f]{16}$/.test(offerId);
-}
-
-/**
  * What a session reads as the result of a spawn whose subagent's answer was
  * deferred: the runtime's notice, with the two references the session's
  * control call quotes to take the answer or drop it. `null` for a spawn with
@@ -2589,47 +2521,6 @@ export async function readPeerMessage(params: {
   toolCallId: string;
   args: { message_id: string };
 }): Promise<CallToolResult> {
-  let result: CallToolResult;
-  let reason: string;
-  try {
-    result = await governedReadPeerMessage(params);
-    if (!result.isError) return result;
-    reason = result.content
-      .filter((item) => item.type === "text")
-      .map((item) => item.text)
-      .join("\n");
-  } catch (error) {
-    if (!(await softBlocksAllowed())) throw error;
-    reason = error instanceof Error ? error.message : String(error);
-    result = {
-      isError: true,
-      content: [{ type: "text", text: "Peer message unavailable" }],
-    };
-  }
-  if (!(await softBlocksAllowed()) || !params.session.caller_id) return result;
-  // Establish recipient ownership and expiry before a refusal can disable the
-  // session. Invalid/nonexistent IDs are not evidence of a held peer crossing.
-  const body = await OpenAppaSessionModel.waivedPeerBody({
-    organizationId: params.session.organization_id,
-    callerId: params.session.caller_id,
-    sessionId: params.session.session_id,
-    parentId: params.session.parent_id,
-    messageId: params.args.message_id,
-  });
-  if (
-    body !== null &&
-    (await waiveSoftBlock(params.session, "peer_read", reason))
-  ) {
-    return { content: [{ type: "text", text: body }] };
-  }
-  return result;
-}
-
-async function governedReadPeerMessage(params: {
-  session: OpenAppaSession;
-  toolCallId: string;
-  args: { message_id: string };
-}): Promise<CallToolResult> {
   const decision = await withRuntime(
     params.session.organization_id,
     (module, policy) =>
@@ -2669,37 +2560,6 @@ async function governedReadPeerMessage(params: {
     isError: true,
     content: [{ type: "text", text: decisionMessage(decision) }],
   };
-}
-
-/**
- * Opens an authenticated session's retained offer refusal, including encrypted
- * and plaintext-escaped receipts, without executing or consuming the offer.
- */
-export async function loadRetainedOfferRefusal(
-  params: Parameters<typeof OpenAppaSessionModel.recordedOfferDecisions>[0],
-): Promise<string | null> {
-  const records = await OpenAppaSessionModel.recordedOfferDecisions(params);
-  if (records.length === 0) return null;
-  // This pure decoder needs no runtime initialization or database connection:
-  // the model has already verified the receipt's authenticated session scope.
-  const module = await import("@archestra/openappa-rs");
-  return withOpenappaContentEncryption(
-    params.organizationId,
-    params.sessionId,
-    async (encryption) =>
-      module.retainedOfferRefusal(
-        JSON.stringify({
-          organization_id: params.organizationId,
-          session_id: params.sessionId,
-          offer_id: params.offerId,
-          records: records.map((row) => ({
-            operation_id: row.operationId,
-            decision: row.decision,
-          })),
-        }),
-        encryption,
-      ),
-  );
 }
 
 /**
@@ -2775,27 +2635,9 @@ function validateReturnContract(text: string): void {
 async function crossChildValue(
   params: Parameters<typeof governedCrossChildValue>[0],
 ): Promise<ChildEndOutcome | HeldStop | DeferredStop> {
-  try {
-    if (await isUnenforcedSession(params.session))
-      return { decision: "release", crossed: true };
-    const result = await governedCrossChildValue(params);
-    // Neither a held end nor a deferred return is a ruling, so neither is waived.
-    if (result.decision === "held" || result.decision === "deferred")
-      return result;
-    if (
-      !result.crossed &&
-      (await waiveSoftBlock(params.session, params.event, result.content))
-    )
-      return { decision: "release", crossed: true };
-    return result;
-  } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !(await waiveSoftBlock(params.session, params.event, error.message))
-    )
-      throw error;
+  if (await isUnenforcedSession(params.session))
     return { decision: "release", crossed: true };
-  }
+  return governedCrossChildValue(params);
 }
 
 async function governedCrossChildValue(params: {

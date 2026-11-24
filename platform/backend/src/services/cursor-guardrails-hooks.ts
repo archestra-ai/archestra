@@ -11,9 +11,8 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ConnectionSetupModel } from "@/models";
-import { recordWaivedCalls, waiverFor } from "@/openappa/break-the-glass";
 import { currentTrajectory } from "@/openappa/current-trajectory";
-import { NO_REMEDY_PLAN_HINT } from "@/openappa/no-remedy-plan-hint";
+import { refusalAction, refusalGuidance } from "@/openappa/refusal-outcome";
 import {
   endTurn,
   evaluateToolCalls,
@@ -48,10 +47,7 @@ import {
   subagentReplyNote,
 } from "@/services/cursor-guardrails-marks";
 import { CURSOR_WEB_SETUP_POLICY_TOOL } from "@/services/cursor-web-setup-tool-name";
-import {
-  breakTheGlassActiveIn,
-  getGuardrailsDeployment,
-} from "@/services/guardrails-deployment";
+import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
 import { disconnectReferenceInText } from "./connection-disconnect-reference";
 import { verifyConnectionHooksToken } from "./connection-hooks-token";
@@ -212,8 +208,8 @@ export async function handleCursorHook(params: {
 
   const answer = await withCapturedGuardrailsActivation("active", () =>
     webCall
-      ? answerWebChildStep({ step, event, session, deployment })
-      : answerStep({ step, event, session, deployment }),
+      ? answerWebChildStep({ step, event, session })
+      : answerStep({ step, event, session }),
   );
   return { answer };
 }
@@ -298,7 +294,6 @@ async function answerWebChildStep(params: {
   step: CursorHookRequest["step"];
   event: Record<string, unknown>;
   session: OpenAppaSession;
-  deployment: GuardrailsDeployment;
 }): Promise<CursorHookAnswer> {
   const { step, event, session } = params;
   // The CLI keeps a copy of each web result in its own data folder and
@@ -308,7 +303,7 @@ async function answerWebChildStep(params: {
   if (isWebResultCopy(event)) return {};
   switch (step) {
     case "preToolUse":
-      return ruleOnCall({ session, event, deployment: params.deployment });
+      return ruleOnCall({ session, event });
     case "postToolUse":
     case "postToolUseFailure":
       return reportResult(session, event, step === "postToolUseFailure");
@@ -339,7 +334,6 @@ async function answerStep(params: {
   step: CursorHookRequest["step"];
   event: Record<string, unknown>;
   session: OpenAppaSession;
-  deployment: GuardrailsDeployment;
 }): Promise<CursorHookAnswer> {
   const { step, event, session } = params;
   const generationId = stringField(event.generation_id);
@@ -362,7 +356,7 @@ async function answerStep(params: {
         await notePrompt(session, `prompt:${generationId}`);
       return {};
     case "preToolUse":
-      return ruleOnCall({ session, event, deployment: params.deployment });
+      return ruleOnCall({ session, event });
     case "postToolUse":
     case "postToolUseFailure":
       return withMarks(
@@ -475,9 +469,8 @@ async function openCalls(
 async function ruleOnCall(params: {
   session: OpenAppaSession;
   event: Record<string, unknown>;
-  deployment: GuardrailsDeployment;
 }): Promise<CursorHookAnswer> {
-  const { session, event, deployment } = params;
+  const { session, event } = params;
   const id = cursorCallId(event);
   const rawName = stringField(event.tool_name);
   if (!id || !rawName) {
@@ -596,27 +589,6 @@ async function ruleOnCall(params: {
         }
       : {};
   }
-  // Break the glass: the settings can let a denied call run anyway, with a
-  // yell on record. A person sits at a Cursor chat, so it is never unattended.
-  const waiver = waiverFor({
-    decision,
-    settings: deployment,
-    unattended: false,
-  });
-  if (waiver) {
-    const recorded = await recordWaivedCalls({
-      session,
-      calls: [{ toolCallId: id, tool: tool.name, kind: waiver }],
-      superyell: breakTheGlassActiveIn(deployment),
-    });
-    // The record marks the call as one the runtime does not see, so its
-    // result reaches the model as it is.
-    if (recorded) return {};
-    return deny(
-      guardrails() +
-        " could not record that it let this call through, so the call did not run. Retry the call.",
-    );
-  }
   if (decision.recorded) {
     // The call never runs, so its result is the ruling the runtime recorded.
     await processProxyResults({
@@ -625,14 +597,22 @@ async function ruleOnCall(params: {
       canonicalize: (name) => name,
     });
   }
-  const noPlan =
-    decision.recorded === true &&
-    decision.offers?.length === 0 &&
-    !decision.review?.length;
+  // The runtime's ruling states why it refused; a refusal before any ruling
+  // carries its own guidance.
+  const guidance = decision.recorded
+    ? refusalGuidance(
+        refusalAction({
+          outcome: decision.outcome,
+          remedies:
+            decision.offers === undefined ||
+            decision.offers.length > 0 ||
+            Boolean(decision.review?.length),
+        }),
+      )
+    : "";
   // An MCP tool's result can be replaced before the model reads it, so every
   // plan of the ruling holds for a gateway tool and for a web tool.
-  if (tool.gateway)
-    return deny(decision.feedback + (noPlan ? NO_REMEDY_PLAN_HINT : ""));
+  if (tool.gateway) return deny(decision.feedback + guidance);
   // The ruling names the call as policy does; the model knows the tool by
   // the name Cursor lists it under.
   if (tool.web)
@@ -640,7 +620,7 @@ async function ruleOnCall(params: {
       decision.feedback.replaceAll(
         new RegExp(`\\b${tool.name}\\b`, "g"),
         rawName.replace(/^mcp:/i, ""),
-      ) + (noPlan ? NO_REMEDY_PLAN_HINT : ""),
+      ) + guidance,
     );
   // The offers of one of Cursor's own tools are remembered, so a sanitizer
   // plan among them is recognised when the model runs it.
@@ -653,10 +633,7 @@ async function ruleOnCall(params: {
       ),
     ),
   );
-  return deny(
-    withoutOutputSanitizerPlans(decision.feedback) +
-      (noPlan ? NO_REMEDY_PLAN_HINT : ""),
-  );
+  return deny(withoutOutputSanitizerPlans(decision.feedback) + guidance);
 }
 
 async function reportResult(
@@ -775,8 +752,6 @@ async function reportResult(
     additional_context: `${guardrails()} did not admit the result of tool call ${id}: ${update.content}`,
   };
 }
-
-type GuardrailsDeployment = Awaited<ReturnType<typeof getGuardrailsDeployment>>;
 
 /** Gateway tools reach a hook under the names the gateway gave them. */
 const GATEWAY_TOOL_NAMES = {

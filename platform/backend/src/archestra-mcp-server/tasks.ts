@@ -3109,7 +3109,6 @@ async function protectedFileAccess(params: {
     return { kind: "error", result: errorResult(relation.reason) };
   }
   if (relation.kind === "producer") return { kind: "producer" };
-  if (relation.kind === "waived") return { kind: "open" };
   return {
     kind: "parent",
     child: relation.child,
@@ -3178,7 +3177,7 @@ async function governedRunOutput(params: {
     taskId: params.task.id,
   });
   if (crossed.kind === "producer") return withheld();
-  if (crossed.kind === "waived") return undefined;
+  if (crossed.kind === "ungoverned") return undefined;
   if (crossed.kind === "refused") {
     return crossed.cause === "unparented"
       ? withheld(crossed.reason)

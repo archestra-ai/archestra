@@ -1064,40 +1064,23 @@ describe("Cursor hooks report chats to Guardrails", () => {
     );
   });
 
-  test("Break the glass lets a call that waits for approval run, on the record", async () => {
-    await GuardrailsDeploymentModel.set({ humanApprovalMode: "everywhere" });
-    const call = {
-      tool_use_id: "call-34",
-      tool_name: "Shell",
-      tool_input: { command: "echo needs-review" },
-    };
-    expect((await report("preToolUse", call)).json()).toEqual({});
-    // The runtime never released the call, so its result is not reported.
-    const reported = events.length;
-    expect(
-      (
-        await report("postToolUse", { ...call, tool_output: "needs-review" })
-      ).json(),
-    ).toEqual({});
-    expect(events.filter((event) => event.event === "tool_result")).toEqual([]);
-    expect(events.length).toBe(reported);
-    const yells = await OpenAppaYellModel.list({
-      organizationId: ctx.organizationId,
-      status: "all",
-      limit: 10,
-    });
-    expect(yells.data.map((yell) => [yell.kind, yell.sessionId])).toEqual([
-      ["approval_waived", `user:${ctx.user.id}|cursor-chat-1`],
-    ]);
-  });
-
-  test("without that setting the same call waits for a person", async () => {
+  test.for([
+    "block",
+    "everywhere",
+  ] as const)("with Human approval %s, a call that waits for approval still waits for a person", async (humanApprovalMode) => {
+    await GuardrailsDeploymentModel.set({ humanApprovalMode });
     const denied = await report("preToolUse", {
       tool_use_id: "call-35",
       tool_name: "Shell",
       tool_input: { command: "echo needs-review" },
     });
     expect(denied.json().user_message).toBe(REVIEW_RULING);
+    const yells = await OpenAppaYellModel.list({
+      organizationId: ctx.organizationId,
+      status: "all",
+      limit: 10,
+    });
+    expect(yells.data).toEqual([]);
   });
 
   test("a yell names this chat to the gateway, and its result is the gateway's own", async () => {

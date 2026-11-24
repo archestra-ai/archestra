@@ -2898,8 +2898,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       const deployment = await getGuardrailsDeployment();
       if (!deployment.active) return reply.send(null);
-      // A superyelled conversation is out of OpenAPPA: its label no longer
-      // applies.
+      // A conversation that started while enforcement was off is out of
+      // OpenAPPA: it has no label.
       if (
         await startedUnenforced(
           chatOpenAppaSession(organizationId, user.id, id),

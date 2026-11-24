@@ -119,10 +119,6 @@ import {
 import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
 import { sanitizeProviderBoundRequest } from "@/openappa/request";
 import { isAppaChatSource } from "@/openappa/service";
-import {
-  captureSoftBlockMode,
-  withSoftBlockRequest,
-} from "@/openappa/soft-block";
 import type { GovernedThread } from "@/openappa/thread-state";
 import { restoreTrajectoryStampText } from "@/openappa/trajectory-stamp";
 import { startedUnenforced } from "@/openappa/unenforced";
@@ -566,16 +562,14 @@ export async function handleLLMProxy<
     stream: asRecord(body)?.stream === true,
   });
   try {
-    return await withSoftBlockRequest(() =>
-      handleObservedLLMProxy({
-        body,
-        request,
-        reply,
-        provider,
-        telemetry,
-        converseTranslation: options?.converseTranslation,
-      }),
-    );
+    return await handleObservedLLMProxy({
+      body,
+      request,
+      reply,
+      provider,
+      telemetry,
+      converseTranslation: options?.converseTranslation,
+    });
   } catch (error) {
     telemetry.fail(classifyProxyFailure(error));
     throw error;
@@ -1542,11 +1536,9 @@ async function handleObservedLLMProxy<
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
     unsupportedClientAction,
-    unapprovableBlockMode,
   } = await getGuardrailsDeploymentFromSnapshot({
     row: requestContext.guardrails,
   });
-  captureSoftBlockMode(unapprovableBlockMode);
   // Enforcement is off, but OpenAPPA records what it must know when enforcement
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
@@ -2012,10 +2004,7 @@ async function handleObservedLLMProxy<
       };
       if (appaActive && grokDeferred)
         pluginContext.resources.set(GROK_DEFERRED_TOOLS, grokDeferred);
-      if (
-        (admission.kind === "ungoverned" || admission.kind === "waived") &&
-        admission.withdrawnChildReturn
-      )
+      if (admission.kind === "ungoverned" && admission.withdrawnChildReturn)
         pluginContext.resources.set(APPA_WITHDRAWN_CHILD_RETURN, true);
       if (admission.kind !== "ungoverned") {
         const prepared = await prepareOpenappaRequest({

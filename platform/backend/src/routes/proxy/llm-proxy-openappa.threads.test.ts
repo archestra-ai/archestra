@@ -1340,43 +1340,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const chatOneSessionId = String(startsAfterChatOne[1]?.session_id);
     expect(chatOneSessionId).toBe(`user:${h.userId}|desktop-chat-1`);
 
-    // Superyelling the first Chat conversation exempts its own follow-up turn
-    // without disabling enforcement for a second headerless Chat conversation
-    // that shares the exact same system prompt and opening message.
-    await OpenAppaUnenforcedModel.recordSession({
-      organizationId: h.agent.organizationId,
-      sessionId: chatOneSessionId,
-      parentId: undefined,
-      reason: "superyell",
-    });
-
-    const chatOneFollowUp = await h.app.inject({
-      method: "POST",
-      url: h.url(),
-      remoteAddress: "127.0.0.1",
-      headers: {
-        ...h.externalClientHeaders(),
-        "user-agent": "ClaudeDesktop/1.0.0",
-      },
-      payload: {
-        ...(h.payload(false, [
-          ...sharedOpeningMessages,
-          { role: "assistant", content: "I could not run that tool." },
-          { role: "user", content: "Try again after disabling guardrails" },
-        ]) as Record<string, unknown>),
-        system: "You are Claude.",
-        metadata: { conversation_id: "desktop-chat-1" },
-      },
-    });
-    expect(chatOneFollowUp.statusCode, chatOneFollowUp.body).toBe(200);
-    expect(
-      (
-        chatOneFollowUp.json().content as Array<{ type: string; name?: string }>
-      ).some(
-        (block) => block.type === "tool_use" && block.name === "get_weather",
-      ),
-    ).toBe(true);
-
     const chatTwoDenied = await h.app.inject({
       method: "POST",
       url: h.url(),

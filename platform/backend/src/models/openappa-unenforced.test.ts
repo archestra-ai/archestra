@@ -15,7 +15,7 @@ describe("OpenAppaUnenforcedModel.deleteOlderThan", () => {
       { organizationId: org.id, sessionId: "old-2", createdAt: old },
       { organizationId: org.id, sessionId: "old-3", createdAt: old },
       { organizationId: org.id, sessionId: "new" },
-      // A superyelled session stays out of OpenAPPA for good.
+      // A superyell record from an earlier release expires like any other.
       {
         organizationId: org.id,
         sessionId: "superyelled",
@@ -45,18 +45,15 @@ describe("OpenAppaUnenforcedModel.deleteOlderThan", () => {
       2,
     );
 
-    expect(deleted).toEqual({ sessions: 3, calls: 1 });
+    expect(deleted).toEqual({ sessions: 4, calls: 1 });
     expect(
       await OpenAppaUnenforcedModel.findSessions({
         organizationId: org.id,
         sessionIds: ["old-1", "old-2", "old-3", "new", "superyelled"],
       }),
-    ).toEqual(
-      expect.arrayContaining([
-        { sessionId: "new", parentId: null, reason: "enforcement_off" },
-        { sessionId: "superyelled", parentId: null, reason: "superyell" },
-      ]),
-    );
+    ).toEqual([
+      { sessionId: "new", parentId: null, reason: "enforcement_off" },
+    ]);
     expect(
       await OpenAppaUnenforcedModel.findCalls({
         organizationId: org.id,

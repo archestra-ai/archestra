@@ -69,8 +69,8 @@ export function undeclaredToolNotice(error: unknown): string | null {
 }
 
 /**
- * The notice that replaces one tool call whose annotator gave no answer, or
- * null for any other failure.
+ * The notice that replaces one tool call whose annotator gave no answer, with
+ * whether asking again can help, or null for any other failure.
  *
  * The runtime cannot rule on that call, so it does not run and nothing is
  * recorded for it. The failure belongs to that call alone: the other calls of
@@ -79,7 +79,9 @@ export function undeclaredToolNotice(error: unknown): string | null {
  * approval was spent. The notice names the annotator and a plain reason, never
  * the runtime's detail, which can quote the helper's own error.
  */
-export function unansweredAnnotationNotice(error: unknown): string | null {
+export function unansweredAnnotationNotice(
+  error: unknown,
+): { notice: string; retry: "later" | "after_repair" } | null {
   const message =
     error instanceof ApiError && error.cause instanceof Error
       ? error.cause.message
@@ -96,11 +98,20 @@ export function unansweredAnnotationNotice(error: unknown): string | null {
     refusal.reason === "non_success" &&
     refusal.status === "409"
   )
-    return `[appa] Not checked: Guardrails' annotator has no usable model configuration. The call did not run. An administrator must configure an Annotator model and provider credential in Settings > Guardrails, or an organization default model and credential. Signing in to the coding client does not configure this separate model. Retry this call after the configuration is fixed.`;
+    return {
+      notice: `[appa] Not checked: Guardrails' annotator has no usable model configuration. The call did not run. An administrator must configure an Annotator model and provider credential in Settings > Guardrails, or an organization default model and credential. Signing in to the coding client does not configure this separate model. Retry this call after the configuration is fixed.`,
+      retry: "after_repair",
+    };
   const head = `[appa] Not checked: OpenAPPA could not rule on this call because its annotator ${name} ${NO_ANSWER_REASON[refusal.reason] ?? "gave no answer"}. The call did not run.`;
   return refusal.transient
-    ? `${head} The failure is temporary, on the Guardrails side. Make the same call again to retry. Do not switch to another tool or call yell to get around the check. If it fails the same way again, stop and tell the user that Guardrails could not check this call; with no user to tell, end the task and report that.`
-    : `${head} Retrying it will not help. Tell the user that Guardrails could not check this call. An administrator can check the annotator on the ${POLICY_PAGE} page.`;
+    ? {
+        notice: `${head} The failure is temporary, on the Guardrails side. Make the same call again to retry. Do not switch to another tool or call yell to get around the check. If it fails the same way again, stop and tell the user that Guardrails could not check this call; with no user to tell, end the task and report that.`,
+        retry: "later",
+      }
+    : {
+        notice: `${head} Retrying it will not help. Tell the user that Guardrails could not check this call. An administrator can check the annotator on the ${POLICY_PAGE} page.`,
+        retry: "after_repair",
+      };
 }
 
 /**
@@ -116,8 +127,8 @@ export class OpenappaRootOnlyError extends Error {
 
 /**
  * The runtime ruled against an operation (a block or a denial) in text it
- * wrote for the model. The message keeps the ruling whole, because the
- * soft-block waiver reads it on the cause chain; the client sees it bounded.
+ * wrote for the model. The message keeps the ruling whole for the logs; the
+ * client sees it bounded.
  */
 export class OpenappaRefusal extends Error {
   constructor(ruling: string) {

@@ -1,5 +1,5 @@
-import { and, eq, inArray, lt, ne, or, type SQL, sql } from "drizzle-orm";
-import db, { schema, type Transaction } from "@/database";
+import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
+import db, { schema } from "@/database";
 import type {
   UnenforcedCallReason,
   UnenforcedSessionReason,
@@ -14,29 +14,20 @@ const calls = schema.openappaUnenforcedCallsTable;
  * it turns on. A record never changes, so a second write of it does nothing.
  */
 class OpenAppaUnenforcedModel {
-  static async recordSession(
-    params: {
-      organizationId: string;
-      sessionId: string;
-      parentId: string | undefined;
-      reason?: UnenforcedSessionReason;
-    },
-    executor: typeof db | Transaction = db,
-  ): Promise<void> {
-    const insert = executor.insert(sessions).values({
-      organizationId: params.organizationId,
-      sessionId: params.sessionId,
-      parentId: params.parentId ?? null,
-      reason: params.reason ?? "enforcement_off",
-    });
-    // A superyell outranks a record that the session started while
-    // enforcement was off: only a superyell record outlives the retention.
-    if (params.reason === "superyell")
-      await insert.onConflictDoUpdate({
-        target: [sessions.organizationId, sessions.sessionId],
-        set: { reason: "superyell" },
-      });
-    else await insert.onConflictDoNothing();
+  static async recordSession(params: {
+    organizationId: string;
+    sessionId: string;
+    parentId: string | undefined;
+  }): Promise<void> {
+    await db
+      .insert(sessions)
+      .values({
+        organizationId: params.organizationId,
+        sessionId: params.sessionId,
+        parentId: params.parentId ?? null,
+        reason: "enforcement_off",
+      })
+      .onConflictDoNothing();
   }
 
   /**
@@ -100,18 +91,15 @@ class OpenAppaUnenforcedModel {
   }
 
   /** Returns the ids it recorded now; an id recorded before is left as it is. */
-  static async recordCalls(
-    params: {
-      organizationId: string;
-      sessionId: string;
-      toolCallIds: readonly string[];
-      reason: UnenforcedCallReason;
-      childNativeId?: string;
-    },
-    executor: typeof db | Transaction = db,
-  ): Promise<string[]> {
+  static async recordCalls(params: {
+    organizationId: string;
+    sessionId: string;
+    toolCallIds: readonly string[];
+    reason: UnenforcedCallReason;
+    childNativeId?: string;
+  }): Promise<string[]> {
     if (params.toolCallIds.length === 0) return [];
-    const inserted = await executor
+    const inserted = await db
       .insert(calls)
       .values(
         [...new Set(params.toolCallIds)].map((toolCallId) => ({
@@ -140,12 +128,7 @@ class OpenAppaUnenforcedModel {
   ): Promise<{ sessions: number; calls: number }> {
     const limits = { before, batchSize, maxBatches };
     return {
-      // A superyelled session stays out of OpenAPPA for good.
-      sessions: await deleteInBatches(
-        sessions,
-        limits,
-        ne(sessions.reason, "superyell"),
-      ),
+      sessions: await deleteInBatches(sessions, limits),
       calls: await deleteInBatches(calls, limits),
     };
   }
@@ -203,7 +186,6 @@ class OpenAppaUnenforcedModel {
 async function deleteInBatches(
   table: typeof sessions | typeof calls,
   params: { before: Date; batchSize: number; maxBatches: number },
-  keep?: SQL,
 ): Promise<number> {
   const { before, batchSize, maxBatches } = params;
   let total = 0;
@@ -211,7 +193,7 @@ async function deleteInBatches(
     const expired = db
       .select({ ctid: sql`ctid` })
       .from(table)
-      .where(and(lt(table.createdAt, before), keep))
+      .where(lt(table.createdAt, before))
       .limit(batchSize);
     const removed = await db
       .delete(table)

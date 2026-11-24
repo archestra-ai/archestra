@@ -331,12 +331,12 @@ export const openappaDispatchLeasesTable = pgTable(
 
 // The proxy writes the two tables below while Guardrails enforcement is off,
 // and reads them while it is on. OpenAPPA ignores what they name: the part of
-// a session that it did not see, or a session a person superyelled.
+// a session that it did not see.
 
-// Sessions OpenAPPA leaves alone. Most started while enforcement was off: the
-// proxy saw a request of the session, and the runtime had no record of it. A
-// person can also take a governed session out with an approved `superyell`.
-// Such a session and the children it starts stay out of OpenAPPA.
+// Sessions OpenAPPA leaves alone, because they started while enforcement was
+// off: the proxy saw a request of the session, and the runtime had no record
+// of it. Such a session and the children it starts stay out of OpenAPPA.
+// Rows with reason `superyell` come from an earlier release and are ignored.
 export const openappaUnenforcedSessionsTable = pgTable(
   "openappa_unenforced_sessions",
   {

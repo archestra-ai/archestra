@@ -275,10 +275,9 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       },
     });
     expect(response.statusCode, response.body).toBe(200);
+    // The Yell tool setting no longer turns Guardrails off.
     expect(JSON.stringify(response.json())).toContain(
-      breakTheGlass
-        ? "Guardrails are now off for this session"
-        : "Guardrails are unchanged for this session",
+      "Guardrails are unchanged for this session",
     );
     expect(JSON.stringify(response.json())).toContain(
       "No diagnostic archive was captured",
@@ -292,7 +291,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       expect.objectContaining({
         callerId: session.caller_id,
         sessionId: session.session_id,
-        superyell: breakTheGlass,
+        superyell: false,
         withTrajectory: true,
         reportFailed: false,
         reportedAt: null,

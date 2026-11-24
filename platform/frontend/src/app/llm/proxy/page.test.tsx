@@ -312,6 +312,19 @@ describe("LLM Proxy dashboard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows no Guardrails state while it is unknown", async () => {
+    // With the feature off, the status is never read.
+    vi.mocked(useFeature).mockReturnValue(false);
+    renderPage();
+
+    const guardrails = await screen.findByRole("region", {
+      name: "Guardrails",
+    });
+    expect(guardrails).toHaveTextContent("Deterministic data leak prevention");
+    expect(guardrails).not.toHaveTextContent("Not configured");
+    expect(guardrails).not.toHaveTextContent("Enforced");
+  });
+
   it("shows Guardrails as enforced when it is turned on", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/guardrails-deployment`, () =>
@@ -436,6 +449,24 @@ describe("LLM Proxy dashboard, new organization", () => {
     const items = await screen.findAllByRole("menuitem");
     expect(items).toHaveLength(2);
     expect(items[0]).toHaveTextContent("Personal subscription");
+  });
+
+  it("offers only a personal Copilot subscription to someone who cannot add org keys", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmProviderApiKey?.includes("create"),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "GitHub Copilot" }),
+    );
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
   });
 });
 

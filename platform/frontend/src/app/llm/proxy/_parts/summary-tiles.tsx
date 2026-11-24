@@ -11,7 +11,9 @@ export function SummaryTiles() {
   // Any member may read the switch, as the Connect page does.
   const { data: guardrails } = useGuardrailsDeployment({ anyMember: true });
   // The deployment's own switch, as the Guardrails page shows it; not per key.
-  const enforced = guardrails?.active === true;
+  // Unknown (loading, or the feature is off) shows no state rather than a
+  // wrong one.
+  const enforced = guardrails ? guardrails.active === true : undefined;
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Tile
@@ -19,30 +21,32 @@ export function SummaryTiles() {
         icon={<ShieldCheck />}
         title="Guardrails"
         badge={
-          <span
-            className={cn(
-              "inline-flex h-5 items-center gap-1.5 rounded-full px-2 text-[11.5px] font-medium whitespace-nowrap",
-              enforced
-                ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                : "bg-muted text-muted-foreground",
-            )}
-          >
+          enforced !== undefined && (
             <span
-              aria-hidden
               className={cn(
-                "size-1.5 rounded-full",
+                "inline-flex h-5 items-center gap-1.5 rounded-full px-2 text-[11.5px] font-medium whitespace-nowrap",
                 enforced
-                  ? "bg-emerald-500"
-                  : "border-[1.5px] border-muted-foreground/60",
+                  ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                  : "bg-muted text-muted-foreground",
               )}
-            />
-            {enforced ? "Enforced" : "Not configured"}
-          </span>
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "size-1.5 rounded-full",
+                  enforced
+                    ? "bg-emerald-500"
+                    : "border-[1.5px] border-muted-foreground/60",
+                )}
+              />
+              {enforced ? "Enforced" : "Not configured"}
+            </span>
+          )
         }
         text={
-          enforced
-            ? "Deterministic data leak prevention"
-            : "Add a policy to deterministically check every request"
+          enforced === false
+            ? "Add a policy to deterministically check every request"
+            : "Deterministic data leak prevention"
         }
         href="/openappa"
         linkLabel="Configure"

@@ -17,6 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -106,7 +107,14 @@ export function ProvidersCard() {
   const copilotPersonal = providerCatalog.canAddKey("github-copilot")
     ? offers.find((offer) => offer.kind === "github-copilot")
     : undefined;
-  const copilotOrg = !providerCatalog.isCopilotPlanHidden("enterprise");
+  // Connecting the organization's Copilot plan adds an org key, as on Model
+  // Providers; a personal subscription is the reader's own.
+  const { data: canCreateProviderKey } = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
+  const copilotOrg =
+    canCreateProviderKey === true &&
+    !providerCatalog.isCopilotPlanHidden("enterprise");
 
   return (
     <DashboardCard

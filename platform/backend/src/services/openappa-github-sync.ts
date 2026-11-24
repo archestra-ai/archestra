@@ -2775,6 +2775,32 @@ async function batteryChangeRefusal(params: {
   }
   if (before === null || after === null)
     return refuse("it adds or removes the policy file");
+  // What every battery either version includes declares, uploaded packages
+  // too: a binding another battery declares is that battery's server list.
+  let included: Map<string, readonly string[] | null>;
+  try {
+    const resolutions = await Promise.all(
+      [before, after].map((content) =>
+        openappaDeclarations.resolve({
+          organizationId: source.organizationId,
+          content,
+        }),
+      ),
+    );
+    included = new Map(
+      resolutions.flatMap(({ entries }) =>
+        entries.map(
+          ({ entry, battery }) => [entry, battery?.namespaces ?? null] as const,
+        ),
+      ),
+    );
+  } catch (err) {
+    logger.warn(
+      { organizationId: source.organizationId, repo: source.repo, err },
+      "OpenAPPA could not read the batteries a pull request's policy file includes to check a battery change; it tries again next minute",
+    );
+    return null;
+  }
   const change = await batteryRootChange({
     before,
     after,
@@ -2786,6 +2812,11 @@ async function batteryChangeRefusal(params: {
           packageHash: null,
         })
       )?.namespaces ?? null,
+    // A repository file folds in rules, not a battery.
+    includedNamespacesOf: async (entry) =>
+      openappaRepositoryIncludes.isRepositoryFile(entry)
+        ? []
+        : (included.get(entry) ?? null),
   });
   if ("refused" in change) return refuse(change.refused);
   for (const prefix of change.prefixes) {

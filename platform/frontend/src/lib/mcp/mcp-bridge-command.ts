@@ -1,27 +1,21 @@
 /**
- * The command that sets up the MCP bridge on a device. It downloads the
- * `archestra` program for this system and CPU, then runs `archestra bridge
- * start`, which copies the program to the home folder and, at the first
- * start on a device, turns on auto-start.
+ * The command that sets up the MCP bridge on a device. It runs a script of
+ * the deployment (`/api/archestra-cli/install.sh` or `install.ps1`), which
+ * downloads the `archestra` program for this system to a new folder of its
+ * own and runs `archestra bridge start`. That copies the program to the home
+ * folder and, at the first start on a device, turns on auto-start. Nothing in
+ * the current folder can be in the way.
  *
  * `baseUrl` is the connection base URL, the one the MCP gateway and the LLM
  * proxy use. The MCP bridge takes the deployment address: that URL without
  * its `/v1`.
  *
- * - macOS and Linux share one command: `uname` runs on the user's computer.
- *   The download URL is in double quotes on purpose: zsh (with the URL paste
- *   helper that oh-my-zsh turns on) puts a backslash before `(` in a pasted
- *   URL that is not quoted, which breaks `$(uname ...)`.
- * - The download is `archestra-cli` (`archestra-cli.exe`), not `archestra`:
- *   the current folder can have a folder named `archestra`, and curl or
- *   PowerShell cannot write a file over it.
- * - Windows gets a PowerShell command. `PROCESSOR_ARCHITECTURE` (`AMD64`,
- *   `ARM64`) names the CPU. It works in Windows PowerShell 5.1, which has no
- *   `&&`: `if ($?)` runs the program only after a good download. The download
- *   goes to the current folder, not to `%USERPROFILE%\.archestra\bin`: Windows
- *   cannot overwrite the program of a running MCP bridge, and `bridge start`
- *   stops it before it copies itself there. No progress bar: it makes the
- *   download of PowerShell 5.1 many times slower.
+ * - macOS and Linux share one command: `sh -s --` passes the rest of the
+ *   line to the script, which passes it on to `archestra bridge start`.
+ * - Windows gets a PowerShell command that works in Windows PowerShell 5.1.
+ *   `iex` takes no arguments, so the address and the setup code go in
+ *   environment variables. The setup code is always set, also to nothing, so
+ *   a code of an earlier run in the same window does not stay.
  * - Each line is short, so the command reads well where it wraps in a dialog.
  * - `setupCode`, from the setup dialog that shows the command: the program
  *   sends it with its sign-in, and the dialog approves that sign-in in place,
@@ -34,22 +28,17 @@ export function bridgeCommand(
   setupCode?: string,
 ): string {
   const origin = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
-  const download = `${origin}/api/archestra-cli`;
-  const start = `bridge start --url ${origin}`;
+  const scripts = `${origin}/api/archestra-cli`;
   if (windows) {
     return (
-      `$ProgressPreference = 'SilentlyContinue'; \`\n` +
-      `  $arch = $env:PROCESSOR_ARCHITECTURE; \`\n` +
-      `  irm "${download}/windows-$arch" \`\n` +
-      `    -OutFile archestra-cli.exe; \`\n` +
-      `  if ($?) { .\\archestra-cli.exe ${start}${setupCode ? ` \`\n    --setup-code ${setupCode}` : ""} }`
+      `$env:ARCHESTRA_URL = '${origin}'; \`\n` +
+      `  $env:ARCHESTRA_SETUP_CODE = '${setupCode ?? ""}'; \`\n` +
+      `  irm ${scripts}/install.ps1 | iex`
     );
   }
   return (
-    `curl -fsSL -o archestra-cli \\\n` +
-    `  "${download}/$(uname -s)-$(uname -m)" \\\n` +
-    `  && chmod +x archestra-cli \\\n` +
-    `  && ./archestra-cli ${start}${setupCode ? ` \\\n    --setup-code ${setupCode}` : ""}`
+    `curl -fsSL ${scripts}/install.sh \\\n` +
+    `  | sh -s -- --url ${origin}${setupCode ? ` \\\n    --setup-code ${setupCode}` : ""}`
   );
 }
 

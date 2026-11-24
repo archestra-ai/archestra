@@ -126754,6 +126754,44 @@
         }
       }
     },
+    "/api/archestra-cli/install.sh": {
+      "get": {
+        "operationId": "getArchestraCliInstallScript",
+        "tags": [
+          "Archestra CLI"
+        ],
+        "description": "The shell script that sets up the MCP bridge on macOS and Linux: it downloads the archestra program and runs archestra bridge start with its arguments.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/archestra-cli/install.ps1": {
+      "get": {
+        "operationId": "getArchestraCliPowershellInstallScript",
+        "tags": [
+          "Archestra CLI"
+        ],
+        "description": "The PowerShell script that sets up the MCP bridge on Windows: it downloads the archestra program and runs archestra bridge start with ARCHESTRA_URL and ARCHESTRA_SETUP_CODE.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/archestra-cli/{target}": {
       "get": {
         "operationId": "downloadArchestraCli",

@@ -120,10 +120,7 @@ export function BlobProviderDialog({
           ? "Edit blob provider"
           : (addHeading?.title ?? "Add blob provider")
       }
-      description={
-        (!provider && addHeading?.description) ||
-        "A small test object is written and deleted before saving."
-      }
+      description={provider ? undefined : addHeading?.description}
       size="medium"
     >
       <DialogForm

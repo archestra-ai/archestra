@@ -494,32 +494,38 @@ describe("CreateVirtualKeyDialog", () => {
     );
   });
 
-  it("lists a provider's keys under its name and swaps in the one picked", async () => {
+  it("offers a provider's keys only until one of them is in the list", async () => {
     const user = userEvent.setup();
     renderDialog("standard", {
       parentableKeys: SEVERAL_KEYS,
       initialProviderApiKeys: null,
     });
+    const picker = screen.getByRole("combobox", {
+      name: "Add a provider, model pool or auto router",
+    });
 
-    await user.click(
-      screen.getByRole("combobox", {
-        name: "Add a provider, model pool or auto router",
-      }),
-    );
+    // OpenAI already has its Team key, so none of its keys are offered.
+    await user.click(picker);
+    expect(
+      await screen.findByText("Everything is already added."),
+    ).toBeVisible();
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    // Switching keys is remove, then add the other one.
+    await user.click(screen.getByRole("button", { name: "Stop using OpenAI" }));
+    await user.click(picker);
     await user.keyboard("openai");
     const openai = await screen.findByRole("group", { name: "OpenAI" });
-    // Team key is already in the list, so only the other key is offered.
     expect(
-      within(openai).queryByRole("option", { name: /^Team key/ }),
-    ).not.toBeInTheDocument();
-    const staging = within(openai).getByRole("option", {
-      name: /^Staging key/,
-    });
-    expect(staging).toHaveTextContent("replaces Team key");
+      within(openai).getByRole("option", { name: /^Team key/ }),
+    ).toBeVisible();
     expect(
       screen.queryByRole("option", { name: /^Zhipu key/ }),
     ).not.toBeInTheDocument();
-    await user.click(staging);
+    await user.click(
+      within(openai).getByRole("option", { name: /^Staging key/ }),
+    );
     await user.click(screen.getByRole("button", { name: "Create key" }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
       data: expect.objectContaining({

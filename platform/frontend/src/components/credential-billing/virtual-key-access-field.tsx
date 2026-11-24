@@ -19,7 +19,6 @@ import { PoolSummary } from "@/components/credential-billing/model-pools-field";
 import {
   isSubscriptionKey,
   keysByProvider,
-  takesSeveralKeys,
   useKeyOwnerLabel,
   useModelIdsByKey,
 } from "@/components/credential-billing/provider-key-data";
@@ -167,36 +166,27 @@ export function VirtualKeyAccessField({
         : [],
     );
   };
-  const chosenIds = new Set(value.map((mapping) => mapping.providerApiKeyId));
 
-  // Every key the picker can still add, grouped by provider. Keys already in
-  // the list are left out, and so is a shared primary key that automatic
-  // access already uses. A provider takes one key unless it is endpoint-local,
-  // so adding another key there replaces the one in use.
+  // Every key the picker can still add, grouped by provider. A provider with a
+  // key in the list is left out: one key per provider, and switching means
+  // removing it and adding the other. With automatic access, a shared
+  // provider's other keys can override its primary key, which is left out.
   const pickerProviders: PickerProvider[] = providers.flatMap((provider) => {
+    if (chosenKeys(provider).length > 0) return [];
     const keys = grouped.get(provider) ?? [];
-    const chosen = chosenKeys(provider);
-    const automatic =
-      includeFutureProviders && chosen.length === 0
-        ? keys.find(isSharedPrimary)
-        : undefined;
-    const inUse = chosen[0] ?? automatic;
-    const replaces =
-      !takesSeveralKeys(provider) && inUse ? keyName(inUse) : undefined;
+    const automatic = includeFutureProviders
+      ? keys.find(isSharedPrimary)
+      : undefined;
+    const replaces = automatic ? keyName(automatic) : undefined;
     const options = keys
-      .filter((key) => !chosenIds.has(key.id) && key.id !== automatic?.id)
+      .filter((key) => key.id !== automatic?.id)
       .map((key) => ({ ...keyOption(key), replaces }));
     return options.length
       ? [{ provider, label: catalog.label(provider), keys: options }]
       : [];
   });
   const addKey = (provider: SupportedProvider, providerApiKeyId: string) =>
-    onChange([
-      ...(takesSeveralKeys(provider)
-        ? value
-        : value.filter((mapping) => mapping.provider !== provider)),
-      { provider, providerApiKeyId },
-    ]);
+    onChange([...value, { provider, providerApiKeyId }]);
 
   const listedRouters = routers.filter((router) =>
     autoRouterIds.includes(router.id),
@@ -208,7 +198,8 @@ export function VirtualKeyAccessField({
   const listedProviderRows = listedProviders.map((provider) => ({
     provider,
     label: catalog.label(provider),
-    several: takesSeveralKeys(provider),
+    // Only a starting value can hold several keys for one provider; the
+    // picker adds one per provider.
     options: chosenKeys(provider).map(keyOption),
   }));
 
@@ -409,7 +400,8 @@ export function VirtualKeyAccessField({
               <span aria-hidden className="size-6 shrink-0" />
             </div>
           )}
-          {listedProviderRows.map(({ provider, label, several, options }) => {
+          {listedProviderRows.map(({ provider, label, options }) => {
+            const several = options.length > 1;
             const only = options.length === 1 ? options[0] : undefined;
             const noModels = options.some((option) => option.models === 0);
             return (

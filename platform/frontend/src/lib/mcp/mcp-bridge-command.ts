@@ -52,6 +52,13 @@ export function bridgeCommand(
 export const UNINSTALL_COMMAND = "archestra uninstall";
 
 /**
+ * Says whether the MCP bridge runs on the device, which Archestra it is
+ * linked to and where its log is. Then the command that starts it.
+ */
+export const BRIDGE_STATUS_COMMAND = "archestra bridge status";
+export const BRIDGE_START_COMMAND = "archestra bridge start";
+
+/**
  * Gets the `archestra` program that the deployment serves now, and starts
  * the MCP bridge again with it.
  */

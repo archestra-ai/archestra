@@ -295,7 +295,7 @@ export function ownDesktopMcpServers(params: {
 /**
  * The state the MCP bridge reports for a server; null when it reported none.
  */
-function deviceServerStateLabel(
+export function deviceServerStateLabel(
   state: string | null | undefined,
 ): string | null {
   return state && state in DEVICE_SERVER_STATE_LABEL

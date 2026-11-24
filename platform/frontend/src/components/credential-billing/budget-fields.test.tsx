@@ -137,15 +137,34 @@ describe("BudgetFields spend cap input", () => {
 
   it("keeps the saved cap when the text is not an amount", async () => {
     const user = userEvent.setup();
-    render(<SpendCapHarness />);
+    render(
+      <SpendCapHarness
+        saved={{ limitValue: 250, cleanupInterval: "calendar_month" }}
+      />,
+    );
     const input = screen.getByLabelText("Spend cap in dollars");
 
-    await user.type(input, "250");
     await user.type(input, ",50");
     await user.tab();
 
     expect(screen.getByLabelText("Saved cap")).toHaveTextContent("250");
     expect(input).toHaveValue("250");
+  });
+
+  it("keeps the saved cap when a typed replacement ends out of range", async () => {
+    const user = userEvent.setup();
+    render(
+      <SpendCapHarness
+        saved={{ limitValue: 500, cleanupInterval: "calendar_month" }}
+      />,
+    );
+    const input = screen.getByLabelText("Spend cap in dollars");
+
+    await user.clear(input);
+    await user.type(input, "2147483648");
+    await user.tab();
+
+    expect(screen.getByLabelText("Saved cap")).toHaveTextContent("500");
   });
 
   it("removes the cap when the field is cleared", async () => {
@@ -180,8 +199,8 @@ function renderBudget(spendCap: SpendCapValue) {
   );
 }
 
-function SpendCapHarness() {
-  const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
+function SpendCapHarness({ saved = null }: { saved?: SpendCapValue }) {
+  const [spendCap, setSpendCap] = useState<SpendCapValue>(saved);
   return (
     <>
       <BudgetFields

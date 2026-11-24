@@ -115,6 +115,8 @@ export function BudgetFields({
   // The text as typed, while the field has focus. Limits are whole dollars:
   // the cap rounds up, and the field shows the saved amount once it blurs.
   const [capDraft, setCapDraft] = useState<string | null>(null);
+  // Typing commits each prefix; text that ends unusable restores this.
+  const [capOnFocus, setCapOnFocus] = useState<SpendCapValue>(null);
 
   const payerLabel =
     layout === "inline" ? "Who pays" : `Who pays for this ${subject}?`;
@@ -192,9 +194,11 @@ export function BudgetFields({
               });
               break;
             case "unusable":
+              onSpendCapChange(capOnFocus);
               break;
           }
         }}
+        onFocus={() => setCapOnFocus(spendCap)}
         onBlur={() => setCapDraft(null)}
       />
     </InputGroup>
@@ -317,7 +321,7 @@ const MAX_SPEND_CAP_DOLLARS = 2_147_483_647;
 
 /**
  * A typed cap, rounded up to whole dollars. Text that is not a usable amount
- * leaves the saved cap as it was; the field shows that cap again on blur.
+ * keeps the cap the field had when it was focused, shown again on blur.
  */
 function parseCap(
   text: string,

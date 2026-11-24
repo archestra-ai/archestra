@@ -59,6 +59,7 @@ import {
   type RequestCredential,
   type RequestTarget,
 } from "@/components/virtual-key-request-example";
+import { useAutoRouters } from "@/lib/auto-routing.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -105,6 +106,14 @@ export function VirtualKeyConnectionGuide({
   const isPassthrough = keyType === "passthrough";
   const isPoolOnly =
     !isPassthrough && !includeFutureProviders && explicitKeys.length === 0;
+  const { data: autoRouters = [] } = useAutoRouters({
+    enabled: isPoolOnly && !!virtualApiKeyId,
+  });
+  // A key without provider keys may reach only auto routers.
+  const keyRouter = autoRouters.find(
+    (router) =>
+      !!virtualApiKeyId && router.virtualApiKeyIds.includes(virtualApiKeyId),
+  );
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   // As the proxy resolves it: a provider the key doesn't map falls back to
   // that provider's shared primary key, if that key is usable.
@@ -251,7 +260,17 @@ export function VirtualKeyConnectionGuide({
         {virtualApiKeyId && endpoint === "model-router" && !isPassthrough && (
           <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
         )}
-        {isPoolOnly ? (
+        {isPoolOnly && keyRouter ? (
+          <RequestExample
+            connectionBaseUrl={connectionBaseUrl}
+            target={target}
+            keyType={keyType}
+            keyValue={keyValue}
+            routerProviders={routerProviders}
+            mappedProviderKeys={[]}
+            fixedModel={keyRouter.name}
+          />
+        ) : isPoolOnly ? (
           <p className="text-sm text-muted-foreground">
             Open{" "}
             <Link
@@ -264,21 +283,19 @@ export function VirtualKeyConnectionGuide({
             for a request example. Send the pool&apos;s name as the model.
           </p>
         ) : (
-          <>
-            <RequestExample
-              // Remount on target change so the model resets to that target's
-              // recommended model instead of keeping one it can't serve.
-              key={endpoint === "model-router" ? endpoint : provider}
-              connectionBaseUrl={connectionBaseUrl}
-              target={target}
-              keyType={keyType}
-              keyValue={keyValue}
-              routerProviders={routerProviders}
-              mappedProviderKeys={mappedProviderKeys}
-              offerAutoModel={!!virtualApiKeyId && !isPassthrough}
-              virtualApiKeyId={virtualApiKeyId}
-            />
-          </>
+          <RequestExample
+            // Remount on target change so the model resets to that target's
+            // recommended model instead of keeping one it can't serve.
+            key={endpoint === "model-router" ? endpoint : provider}
+            connectionBaseUrl={connectionBaseUrl}
+            target={target}
+            keyType={keyType}
+            keyValue={keyValue}
+            routerProviders={routerProviders}
+            mappedProviderKeys={mappedProviderKeys}
+            offerAutoModel={!!virtualApiKeyId && !isPassthrough}
+            virtualApiKeyId={virtualApiKeyId}
+          />
         )}
         {isPassthrough && (
           <p className="text-xs text-muted-foreground">
@@ -399,8 +416,8 @@ function EndpointDetails({
       return (
         <p className="text-xs text-muted-foreground">
           Use an OpenAI-compatible client with your virtual key as the API key
-          and an assigned pool&apos;s exact name as the model. Do not add a
-          provider prefix.
+          and the exact name of an assigned pool or auto router as the model. Do
+          not add a provider prefix.
         </p>
       );
     }

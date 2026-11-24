@@ -124,9 +124,13 @@ class OpenAppaArchestraAnnotator {
     // whole result, so it skips the fast tier.
     const { annotatorModelId, annotatorLlmApiKeyId } =
       await GuardrailsDeploymentModel.get();
+    // Resolved for the person the session runs for: a per-user credential (a
+    // personal subscription set as the organization default) is released only
+    // to its owner, so a lookup with no user finds no key at all.
     const resolved = await resolveAgentLlmOrDefault({
       agent: { modelId: annotatorModelId, llmApiKeyId: annotatorLlmApiKeyId },
       organizationId: organization.id,
+      userId: ownerIdentity(owner).userId,
     });
     const selection =
       annotatorModelId || sanitizer ? resolved : await withFastModel(resolved);

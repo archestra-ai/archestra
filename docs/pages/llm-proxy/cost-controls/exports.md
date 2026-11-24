@@ -30,44 +30,26 @@ Script the same numbers when a scheduled file does not fit, such as a nightly jo
 
 ## Schedule Exports to Object Storage
 
-Archestra writes one CSV per hour or per day into your own Amazon S3 or Google Cloud Storage bucket, or Azure Blob Storage container. Each file is in FOCUS 1.2, the FinOps Foundation's open format for cost and usage data, which tools such as Athena, BigQuery, and DuckDB read as a table.
+Archestra exports LLM cost and usage data in FOCUS, the open format for billing data. AWS, Azure, and Google Cloud export their bills in it too, so you can track LLM spend together with the rest of your costs.
 
-An export writes to a [blob provider](/docs/admin/blob-providers): the bucket or container that holds the files. Managing exports takes the [`costExport`](/docs/reference/permissions#costExport:read) permissions. Scheduling, changing, or running one also requires [`llmCost:read`](/docs/reference/permissions#llmCost:read), so the permission never exports spend its holder could not see.
+To set one up, open **Costs & Limits → FinOps Export** and click **Configure**. Files go to a [blob provider](/docs/admin/blob-providers): an Amazon S3 or Google Cloud Storage bucket, or an Azure Blob Storage container.
 
-1. Open **Costs & Limits → FinOps Export** and click **Configure**. Once an export exists, the button is **Schedule export**.
-2. With no blob provider yet, the page asks for one first. Fill it in as in [Add a Blob Provider](/docs/admin/blob-providers#add-a-blob-provider), which requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), and click **Add**.
-3. Name the export and pick the blob provider under **Destination**.
-4. Under **How often**, pick **Daily** for one file per UTC day or **Hourly** for one file per hour.
-5. Under **Include past usage**, keep **No, start now**, or pick **Specific date in the past** or **All recorded usage** to also write past usage.
-6. Optionally change the **Folder**, `cost-exports` by default.
-7. Click **Schedule**, then **Run now** to write a file right away. The row shows **Writing now…**, then **Healthy** once the file is in the bucket.
-
-Each row shows whether the export is **Healthy**, **Waiting for first file**, **Failing**, or **Paused**. A failing row shows why the bucket refused the file: click **Fix destination** to edit the blob provider, then **Retry**. For each error and its fix, see [Fix a Failed Connection Test](/docs/admin/blob-providers#fix-a-failed-connection-test).
-
-### Where Files Land
-
-Each period is one file, under the blob provider's key prefix, then the export's **Folder**:
+<span id="where-files-land"></span>Each hour or day is one file, under the blob provider's key prefix, then the export's **Folder**:
 
 ```text
 <provider prefix>/cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10.csv
 <provider prefix>/cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10T14.csv
 ```
 
-The first line is a daily file and the second an hourly file for 14:00 to 15:00 UTC. The `year=`, `month=`, and `day=` folders are Hive-style partitions, so a query that filters by date reads only the matching files.
+The first line is a daily file and the second an hourly file for 14:00 to 15:00 UTC.
 
-### When Files Are Written
+<span id="when-files-are-written"></span>A file is written about 15 to 20 minutes after its hour or day ends, so requests still running at the end are counted. **Run now** writes the latest completed period without waiting. A rerun overwrites the same file, so a period is never in two files.
 
-Archestra writes a period once it has been over for 15 minutes, so requests still running at its end are counted. Expect each file about 15 to 20 minutes after its hour or day ends.
+A failing export shows on its row why the bucket refused the file. Click **Fix destination** to edit the blob provider, then **Retry**. For each error and its fix, see [Fix a Failed Connection Test](/docs/admin/blob-providers#fix-a-failed-connection-test).
 
-- With **Include past usage** set to **No, start now**, the first file is the period in progress when you create the export. A past start is a backfill: every period since then is written, oldest first.
-- **Run now** writes every period that is due. When none is due, it rewrites the latest completed period.
-- A period always goes to the same key. A rerun or retry overwrites its file, so a period is never in two files.
-- After an outage or a failed write, the export writes every period since its last file.
-- A failing export retries on its own, less often the longer it fails: 5 minutes after the first failure, up to once an hour.
+### File Format
 
-### What Each Row Holds
-
-Each row is one hour of usage for one combination of provider, model, billing mode, team, agent, app or Knowledge connector, and person. Archestra does not bill model usage: the provider does, so the provider is the row's vendor and your organization is the billing account.
+<span id="what-each-row-holds"></span>Each file is a FOCUS 1.2 CSV, which tools such as Athena, BigQuery, and DuckDB read as a table. A row is one hour of usage by one person, through one agent, on one model. The model provider bills that usage, not Archestra, so the provider is the row's vendor and your organization is the billing account.
 
 | FOCUS column | Holds |
 | --- | --- |
@@ -83,9 +65,3 @@ Each row is one hour of usage for one combination of provider, model, billing mo
 | `Tags` | JSON with `archestra:billing-mode`, `archestra:provider-api`, and, when known, `archestra:team`, `archestra:user`, and `archestra:resource`. |
 
 Archestra-specific columns start with `x_`, as FOCUS reserves for custom columns: `x_BillingMode`, `x_InputTokens`, `x_OutputTokens`, `x_CacheReadTokens`, `x_CacheWriteTokens`, `x_Requests`, `x_ProviderApi`, `x_UserId`, and `x_UserEmail`.
-
-What to know:
-
-- Files name each person by email. Limit who can read the bucket or container accordingly.
-- To sum spend, add `BilledCost`. Adding `ListCost` counts subscription traffic at list price.
-- Changing the schedule never writes an hour twice. After a switch from hourly to daily, the rest of the current day is written as hourly files, and daily files start at the next midnight UTC.

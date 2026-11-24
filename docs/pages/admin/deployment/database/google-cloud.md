@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-11-14
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Run Google's auth proxy beside Archestra: the Cloud SQL Auth Proxy for Cloud SQL, or the AlloyDB Auth Proxy for AlloyDB. The chart adds it to the web, worker, and migration pods. It reaches the instance over private IP, encrypts the connection, and signs in as a Google service account through Workload Identity.
 
 Before you start, give the instance a private IP in the cluster's VPC, turn on its IAM authentication flag (`cloudsql.iam_authentication` on Cloud SQL, `alloydb.iam_authentication` on AlloyDB), and turn on Workload Identity in the GKE cluster. The AlloyDB Auth Proxy image runs on amd64 nodes only.

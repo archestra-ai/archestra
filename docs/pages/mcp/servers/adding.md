@@ -6,6 +6,7 @@ lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Add any MCP server: paste its URL, or give Archestra a package or image to run. For a well-known server, pick it from the **Online Catalog**, and Archestra fills in its settings.
 

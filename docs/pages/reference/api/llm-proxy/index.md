@@ -5,6 +5,8 @@ order: 5
 lastUpdated: 2026-11-04
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Route model requests through Archestra and manage provider access, model choices, and limits.
 
 To inspect saved requests, see [LLM Proxy Logs](/docs/reference/api/llm-proxy/logs). [Auto Routing](/docs/reference/api/llm-proxy/auto-routing) has its own endpoint reference.

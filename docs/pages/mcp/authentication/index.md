@@ -7,6 +7,7 @@ lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Sign in to Archestra once, and every tool call runs as you, in every app. Ask Claude Code to file a Jira ticket and comment on a GitHub pull request. With your own accounts installed, Jira and GitHub both show your name. You never pasted a token into Claude Code.
 

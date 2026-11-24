@@ -5,6 +5,8 @@ order: 5
 lastUpdated: 2026-10-12
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Message a Telegram bot, and an Archestra agent answers. It works in direct messages and in groups. It needs only a bot token: no public URL, webhook, or tunnel.
 
 <span id="setup"></span>

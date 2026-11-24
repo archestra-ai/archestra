@@ -6,6 +6,7 @@ lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Let a CI job sign in as a service account with the OIDC token its platform already issues, so no Archestra API key sits in your CI secrets. A GitHub Actions job that deploys from `main` gets a one-hour token; the same workflow run from a pull request gets nothing.
 

@@ -6,6 +6,7 @@ lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 The MCP Registry is your organization's own list of approved MCP servers. Add a server once, and set it up the right way: its URL or image, how it signs in, and who can see it.
 

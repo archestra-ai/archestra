@@ -7,6 +7,7 @@ lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Start a task on your laptop, and let Archestra finish it. Your coding agent hands the task to a Remote Agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your coding agent brings the result back as a patch.
 

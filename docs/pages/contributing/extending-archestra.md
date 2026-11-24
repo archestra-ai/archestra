@@ -6,6 +6,7 @@ lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Each extension point is a typed registry. Add a provider or connector to one enum, and `pnpm type-check` lists most of the files that need an entry. This page covers that loop and the steps the compiler misses. Paths are relative to `platform/`.
 

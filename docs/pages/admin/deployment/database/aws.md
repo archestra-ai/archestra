@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-11-14
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 On Amazon RDS or Aurora PostgreSQL, each new connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job signs a fresh 15-minute token with the pod's IAM role, so Archestra stores no database password.
 
 - **Network:** set **Public access** to **No**, put the instance in private subnets, and allow port 5432 in its security group only from the cluster.

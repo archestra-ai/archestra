@@ -7,6 +7,7 @@ lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 `archestra` is the program that links your device to Archestra. It runs the MCP bridge, which starts [desktop MCP servers](/docs/mcp/servers/desktop) on your device for your agents. The setup gives you a command for macOS and Linux, and one for Windows.
 

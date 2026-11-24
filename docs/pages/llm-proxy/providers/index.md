@@ -6,6 +6,7 @@ lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Add each AI provider once. Chat, agents, and every app behind the [LLM Proxy](/docs/llm-proxy) can use it, and none of them sees the key. Paste an OpenAI key, sign in with your ChatGPT subscription, or point at your own vLLM server.
 

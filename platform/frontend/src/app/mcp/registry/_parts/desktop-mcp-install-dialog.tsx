@@ -30,6 +30,7 @@ import {
   desktopServerErrorSentence,
 } from "@/lib/mcp/desktop-mcp";
 import { cn } from "@/lib/utils/tailwind";
+import { CatalogInstructions } from "./catalog-instructions";
 import {
   DesktopMcpArgumentsFields,
   DesktopMcpArgumentsNotice,
@@ -234,6 +235,11 @@ function DesktopMcpAddFlow({
   // Read from the live devices: a device that is linked in this dialog, by
   // the MCP bridge setup, is known here once it reported its version.
   const argumentsNotice = desktopArgumentsProgramNotice({ device, appName });
+  // What the user installs or turns on first (an app, an add-on), from the
+  // catalog item: shown until the server is connected.
+  const instructions = catalogItem.instructions ? (
+    <CatalogInstructions markdown={catalogItem.instructions} />
+  ) : null;
   const argumentsFields =
     command === null ? null : (
       <DesktopMcpArgumentsFields
@@ -274,11 +280,15 @@ function DesktopMcpAddFlow({
             <NotSetUpNotice />
           ) : startAtOnce && argumentsFields ? (
             // The button that opened the dialog was the intro.
-            argumentsFields
+            <div className="space-y-5">
+              {instructions}
+              {argumentsFields}
+            </div>
           ) : (
             <ProgressSteps
               name={name}
               description={description}
+              instructions={instructions}
               fields={argumentsFields}
               progress={null}
               hint={null}
@@ -317,6 +327,7 @@ function DesktopMcpAddFlow({
             <ProgressSteps
               name={name}
               description={description}
+              instructions={progress.done ? null : instructions}
               // The arguments the user added do not apply on this device.
               notice={
                 added?.withArguments && argumentsNotice ? (
@@ -438,6 +449,7 @@ function connectDescription(params: {
 function ProgressSteps({
   name,
   description,
+  instructions,
   fields,
   notice,
   progress,
@@ -445,6 +457,7 @@ function ProgressSteps({
 }: {
   name: string;
   description: string | null;
+  instructions?: ReactNode;
   fields?: ReactNode;
   notice?: ReactNode;
   progress: DesktopMcpProgress | null;
@@ -457,49 +470,55 @@ function ProgressSteps({
       ) : (
         <Skeleton className="h-5 w-2/3" aria-busy />
       )}
+      {instructions}
       {fields}
-      <ol className="space-y-[18px]" aria-live="polite">
-        {DESKTOP_MCP_PROGRESS_STEPS.map((step, index) => {
-          const status = progress
-            ? desktopMcpStepStatus(step, progress)
-            : index === 0
-              ? "next"
-              : "upcoming";
-          return (
-            <SetupStep
-              key={step}
-              number={index + 1}
-              state={
-                status === "current"
-                  ? "working"
-                  : status === "next"
-                    ? "current"
-                    : status
-              }
-              multiline
-            >
-              <div
-                className="flex min-w-0 flex-1 flex-col gap-2.5"
-                aria-current={status === "current" ? "step" : undefined}
+      {/* Before the user connects, the arguments take the room: the steps
+          appear once the connection starts, so the dialog fits without a
+          scroll. A server with no arguments field shows them at once. */}
+      {progress || !fields ? (
+        <ol className="space-y-[18px]" aria-live="polite">
+          {DESKTOP_MCP_PROGRESS_STEPS.map((step, index) => {
+            const status = progress
+              ? desktopMcpStepStatus(step, progress)
+              : index === 0
+                ? "next"
+                : "upcoming";
+            return (
+              <SetupStep
+                key={step}
+                number={index + 1}
+                state={
+                  status === "current"
+                    ? "working"
+                    : status === "next"
+                      ? "current"
+                      : status
+                }
+                multiline
               >
-                <p
-                  className={cn(
-                    "pt-[3px]",
-                    status === "current" || status === "next"
-                      ? "font-medium"
-                      : status === "done"
-                        ? "text-foreground/80"
-                        : "text-muted-foreground",
-                  )}
+                <div
+                  className="flex min-w-0 flex-1 flex-col gap-2.5"
+                  aria-current={status === "current" ? "step" : undefined}
                 >
-                  {desktopMcpStepLabel(step, name)}
-                </p>
-                {status === "current" ? hint : null}
-              </div>
-            </SetupStep>
-          );
-        })}
-      </ol>
+                  <p
+                    className={cn(
+                      "pt-[3px]",
+                      status === "current" || status === "next"
+                        ? "font-medium"
+                        : status === "done"
+                          ? "text-foreground/80"
+                          : "text-muted-foreground",
+                    )}
+                  >
+                    {desktopMcpStepLabel(step, name)}
+                  </p>
+                  {status === "current" ? hint : null}
+                </div>
+              </SetupStep>
+            );
+          })}
+        </ol>
+      ) : null}
       {notice}
     </div>
   );

@@ -1,0 +1,73 @@
+{
+  "name": "matlab__matlab-mcp-server",
+  "display_name": "MATLAB",
+  "description": "Work with MATLAB on your device.",
+  "author": {
+    "name": "MathWorks",
+    "url": "https://www.mathworks.com/"
+  },
+  "homepage": "https://github.com/matlab/matlab-mcp-server",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMTI4IDEyOCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJTVkdqTTMwUGVjVyIgeDE9IjE2LjgwMyIgeDI9IjE1LjAxMyIgeTE9IjE2LjYzMSIgeTI9IjIyLjQxMSIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCg0IDAgMCAtNCAwIDEyOCkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM1MTIiLz48c3RvcCBvZmZzZXQ9Ii4yMyIgc3RvcC1jb2xvcj0iIzUyMyIvPjxzdG9wIG9mZnNldD0iLjM2IiBzdG9wLWNvbG9yPSIjNTM0Ii8+PHN0b3Agb2Zmc2V0PSIuNTEiIHN0b3AtY29sb3I9IiM2NDUiLz48c3RvcCBvZmZzZXQ9Ii42NiIgc3RvcC1jb2xvcj0iIzU2OCIvPjxzdG9wIG9mZnNldD0iLjg0IiBzdG9wLWNvbG9yPSIjMjlkIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9IlNWR0FONHVpYlVNIiB4MT0iMjkuNzEiIHgyPSIxMS43MSIgeTE9IjE4Ljk4MyIgeTI9IjE0LjU2MyIgZ3JhZGllbnRUcmFuc2Zvcm09InNjYWxlKDQpIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agb2Zmc2V0PSIuMDgxIiBzdG9wLWNvbG9yPSIjYzMzIi8+PHN0b3Agb2Zmc2V0PSIuMTg5IiBzdG9wLWNvbG9yPSIjZGU1MjM5Ii8+PHN0b3Agb2Zmc2V0PSIuMzEzIiBzdG9wLWNvbG9yPSIjZjA2ZTNlIi8+PHN0b3Agb2Zmc2V0PSIuNDIxIiBzdG9wLWNvbG9yPSIjZmE4MDQyIi8+PHN0b3Agb2Zmc2V0PSIuNSIgc3RvcC1jb2xvcj0iI2ZlODY0MyIvPjxzdG9wIG9mZnNldD0iLjU4IiBzdG9wLWNvbG9yPSIjZmE3ZjQyIi8+PHN0b3Agb2Zmc2V0PSIuNjk2IiBzdG9wLWNvbG9yPSIjZWY2YzNlIi8+PHN0b3Agb2Zmc2V0PSIuODMzIiBzdG9wLWNvbG9yPSIjZGM0YzM3Ii8+PHN0b3Agb2Zmc2V0PSIuOTE2IiBzdG9wLWNvbG9yPSIjY2YzNjMzIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHBhdGggZmlsbD0iIzQ5ZCIgZD0ibTggNzAuMmwzMS44NzktMTIuODhhODIuNiA4Mi42IDAgMCAxIDEwLjg4My0xMS44YzIuNjM2LTEuMzk5IDcuNTk3LS42NDEgMTYuNjgtMTEuOTE4YzguNzk2LTExIDExLjU5Ny0yMC40MDMgMTUuNzE4LTIwLjQwM2M2LjUyIDAgMTEuMzIgMTQuMDgyIDE4LjYwMiAzNS40MDNBNDYyIDQ2MiAwIDAgMCAxMjAgOTYuNDhjLTcuNjAyLTcuMDgyLTE0LjA3OC0xNC43MTgtMjEuNDgtMTQuNTJjLTYuODguMTYxLTE0LjUyIDguMzIxLTIyLjg4IDE4LjgwMkM2OSAxMDkuMTYgNjAuMiAxMTQuOTIyIDU2Ljc2MyAxMTQuOGMwIDAtOC44ODMtMjUuMTIxLTE2LjMyLTI5LjJhMTAuNTYgMTAuNTYgMCAwIDAtOS41NjMuNzk3TDggNzAuMTZ6bTAgMCIvPjxwYXRoIGZpbGw9InVybCgjU1ZHak0zMFBlY1cpIiBkPSJNNzkuMiAxNi4wNzhjLTIuNjggMy42MDItNS45MiAxMC4yMDMtMTEuNzYgMTcuNTI0Yy05LjA4MiAxMS4yNzctMTQgMTAuNTItMTYuNjggMTEuOTE4YTc4LjcgNzguNyAwIDAgMC0xMC44ODIgMTEuOGwxMy4yIDkuNjRDNjQuMjggNTEuNjggNzAuMjggMzUuMTIyIDc0Ljk2IDI0LjM5OWE1NC43IDU0LjcgMCAwIDEgNC4yMzgtOC4zMnptMCAwIi8+PHBhdGggZmlsbD0idXJsKCNTVkdBTjR1aWJVTSkiIGQ9Ik04My4yIDEzLjJjLTguNzIgMC0xNC42OCA0NS45MjEtNDYuODggNzEuNTYyYzkuMDQtMS40OCAxNi44OCAyMC45NTcgMjAuNDggMzAuMDM5YzE2LTIuNzIzIDI4LjgwMi0zMy4zMiA0MS43Mi0zMi44NGM3LjQwMi4yNzcgMTMuODc4IDcuNDM3IDIxLjQ4IDE0LjUyQzEwMi42NCA2MCA5NC41MiAxMy4xOTggODMuMiAxMy4xOTh6bTAgMCIvPjwvc3ZnPg==",
+  "instructions": "This MCP server runs on your device. You need [MATLAB](https://www.mathworks.com/products/matlab.html) R2021a or newer and the [MATLAB MCP Server](https://github.com/matlab/matlab-mcp-server) installed locally.\n\nAdd `--initial-working-folder=` with your project folder to start MATLAB in it, for example `--initial-working-folder=$HOME/Projects/my-model`.\n\nIf MATLAB is not on your PATH, add `--matlab-root=` with your MATLAB folder, for example `--matlab-root=/Applications/MATLAB_R2026b.app`.",
+  "tools": [
+    {
+      "name": "check_matlab_code",
+      "description": "Perform static code analysis on a MATLAB script (`script_path`) using MATLAB's built-in Code Analyzer function in an existing MATLAB session. Returns warnings about coding style, potential errors, deprecated functions, performance issues, and best practice violations. It also includes information ab"
+    },
+    {
+      "name": "detect_matlab_toolboxes",
+      "description": "Returns information about installed MATLAB and toolboxes, including version numbers."
+    },
+    {
+      "name": "evaluate_matlab_code",
+      "description": "Evaluate a string of MATLAB code (`code`) in an existing MATLAB session. Optionally specify a project folder (`project_path`) to set as the current working folder before execution. Returns the command window output from code execution. WARNING: Do not use `restoredefaultpath` as it will remove the M"
+    },
+    {
+      "name": "run_matlab_file",
+      "description": "Execute a MATLAB script file (`script_path`) in an existing MATLAB session and capture its command window output. The script runs with the working folder automatically set to the script's location. The script must exist and be a valid MATLAB source file (.m) or P-code file (.p). If a MATLAB source f"
+    },
+    {
+      "name": "run_matlab_test_file",
+      "description": "Execute a MATLAB test script (`script_path`) using MATLAB's built-in runtests function and return comprehensive test results. Designed specifically for MATLAB unit test files that follow MATLAB's testing framework conventions."
+    }
+  ],
+  "prompts": [],
+  "keywords": ["matlab", "mathworks", "numerical", "simulation", "engineering", "desktop"],
+  "user_config": {},
+  "readme": null,
+  "category": "Data Science",
+  "archestra_config": {
+    "client_config_permutations": {
+      "matlab": {
+        "command": "matlab-mcp-server",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "server": {
+    "type": "desktop",
+    "command": "matlab-mcp-server",
+    "args": [],
+    "docs_url": "https://github.com/matlab/matlab-mcp-server#readme"
+  },
+  "github_info": {
+    "owner": "matlab",
+    "repo": "matlab-mcp-server",
+    "url": "https://github.com/matlab/matlab-mcp-server",
+    "name": "matlab__matlab-mcp-server",
+    "path": null,
+    "stars": 1863,
+    "contributors": 14,
+    "issues": 24,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "2a3ed9144cedeb0a488b08469e8321e9200a432e"
+  },
+  "programming_language": "Go"
+}

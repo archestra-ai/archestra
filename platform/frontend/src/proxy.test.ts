@@ -375,6 +375,23 @@ describe("proxy", () => {
   });
 
   describe("API request logging", () => {
+    beforeEach(() => {
+      vi.stubEnv("ARCHESTRA_LOGGING_LEVEL", "debug");
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("should not log at the default level", () => {
+      vi.stubEnv("ARCHESTRA_LOGGING_LEVEL", "info");
+      const consoleSpy = vi.spyOn(console, "log");
+
+      proxy(createMockRequest({ method: "GET", url: "/api/profiles" }));
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+    });
+
     it("should log /api requests", () => {
       const consoleSpy = vi.spyOn(console, "log");
       const request = createMockRequest({

@@ -72,7 +72,7 @@ async function runSlackChatOpsCompletion(params: {
         "X-Archestra-Session-Id": sessionId,
       },
       data: {
-        model: "gpt-4o",
+        model: "gpt-5.5",
         stream: true,
         messages: [{ role: "user", content: prompt }],
       },

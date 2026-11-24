@@ -4,9 +4,12 @@ import {
   canReauthenticateConnection,
   computeMcpServerIssues,
   createMcpServerAlertFingerprint,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   isPermissionActionGranted,
   MAX_BULK_IDS,
   type McpDeploymentStatusEntry,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_SERVER_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
@@ -102,6 +105,68 @@ describe("MCP registry list routes", () => {
   // (frontend/src/mocks/registry.ts); a spec that uses it there otherwise
   // passes without any filtering.
   describe("POST /api/internal_mcp_catalog/registry/search", () => {
+    test("lists built-in Playwright as organization-shared without changing registry grants or installs", async ({
+      makeInternalMcpCatalog,
+      makeUser,
+      makeMember,
+    }) => {
+      const member = await makeUser();
+      await makeMember(member.id, ctx.organizationId, { role: "member" });
+      await makeInternalMcpCatalog({
+        id: PLAYWRIGHT_MCP_CATALOG_ID,
+        name: PLAYWRIGHT_MCP_SERVER_NAME,
+        organizationId: null,
+        serverType: "local",
+      });
+      await makeItem(makeInternalMcpCatalog, "shared-docs", { access: "org" });
+      await makeItem(makeInternalMcpCatalog, "member-personal", {
+        access: "personal",
+        authorId: member.id,
+      });
+      await makeItem(makeInternalMcpCatalog, "admin-personal", {
+        access: "personal",
+      });
+      await makeInternalMcpCatalog({
+        name: "other-global",
+        organizationId: null,
+        serverType: "local",
+      });
+
+      const expectedOrgRows = [PLAYWRIGHT_MCP_SERVER_NAME, "shared-docs"];
+      const adminDefault = await search({
+        access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+      });
+      expect(names(adminDefault)).toEqual([
+        "admin-personal",
+        ...expectedOrgRows,
+      ]);
+      expect(
+        adminDefault.data.find(({ id }) => id === PLAYWRIGHT_MCP_CATALOG_ID)
+          ?.install,
+      ).toEqual({
+        visibleCount: 0,
+        installedForViewer: false,
+        primaryServerId: null,
+      });
+      expect(names(await search({ access: ["others"] }))).toEqual([
+        "member-personal",
+        "other-global",
+      ]);
+      expect(
+        names(await search({ access: ["org"], owner: [ctx.user.id] })),
+      ).toEqual(["shared-docs"]);
+
+      ctx.user = member;
+      expect(
+        names(await search({ access: DEFAULT_RESOURCE_ACCESS_RELATIONS })),
+      ).toEqual(["member-personal", ...expectedOrgRows]);
+      expect(names(await search({ access: ["org"] }))).toEqual(expectedOrgRows);
+      expect(names(await search())).toEqual([
+        "member-personal",
+        ...expectedOrgRows,
+      ]);
+    });
+
     test("resolves the caller's membership, teams and grants once per request", async ({
       makeInternalMcpCatalog,
       makeMcpServer,

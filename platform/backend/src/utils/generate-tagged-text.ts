@@ -41,6 +41,8 @@ export async function generateTaggedText(params: {
   maxOutputCeiling?: number;
   temperature?: number;
   abortSignal?: AbortSignal;
+  /** The AI SDK's retries of each call; its default is 2. */
+  maxRetries?: number;
   providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
   /** Normalize the extracted text. Defaults to trimming. */
   sanitize?: (text: string) => string;
@@ -52,6 +54,7 @@ export async function generateTaggedText(params: {
     maxOutputTokens: params.maxOutputTokens,
     temperature: params.temperature,
     abortSignal: params.abortSignal,
+    maxRetries: params.maxRetries,
     providerOptions: params.providerOptions,
   };
 

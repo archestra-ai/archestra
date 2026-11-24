@@ -81,18 +81,23 @@ export async function sendChatMessage(
 
 /**
  * First catalogued model for a provider, or the first one `matchModel` accepts.
- * Pass the predicate when the provider serves more than one upstream API and
- * the test only stubs one of them: the catalogue is ordered by model id, so
- * which transport an unfiltered pick lands on changes whenever the provider
- * gains a model that sorts earlier.
+ * Pass `apiKeyId` to look only at the models that key serves, so the model is
+ * one the chat offers after `selectApiKeyForProvider` picks that key. Pass the
+ * predicate when the provider serves more than one upstream API and the test
+ * only stubs one of them: the catalogue is ordered by model id, so which
+ * transport an unfiltered pick lands on changes whenever the provider gains a
+ * model that sorts earlier.
  */
-export async function getRuntimeModelForProviderFromApi(
-  makeApiRequest: MakeApiRequest,
-  request: APIRequestContext,
-  providerName: string,
-  matchModel?: (model: RuntimeChatModel) => boolean,
-): Promise<RuntimeChatModel | null> {
-  const query = new URLSearchParams({ provider: providerName });
+export async function getRuntimeModelForProviderFromApi(params: {
+  makeApiRequest: MakeApiRequest;
+  request: APIRequestContext;
+  provider: string;
+  apiKeyId?: string;
+  matchModel?: (model: RuntimeChatModel) => boolean;
+}): Promise<RuntimeChatModel | null> {
+  const { makeApiRequest, request, provider, apiKeyId, matchModel } = params;
+  const query = new URLSearchParams({ provider });
+  if (apiKeyId) query.set("apiKeyId", apiKeyId);
   const response = await makeApiRequest({
     request,
     method: "get",
@@ -102,8 +107,7 @@ export async function getRuntimeModelForProviderFromApi(
   const models = (await response.json()) as RuntimeChatModel[];
   return (
     models.find(
-      (entry) =>
-        entry.provider === providerName && (matchModel?.(entry) ?? true),
+      (entry) => entry.provider === provider && (matchModel?.(entry) ?? true),
     ) ?? null
   );
 }
@@ -135,10 +139,11 @@ export async function ensureWireMockAnthropicChatProvider(params: {
   return { apiKeyId, runtimeModel };
 }
 
+/** Picks the provider's first key in the composer and returns its id. */
 export async function selectApiKeyForProvider(
   page: Page,
   provider: string,
-): Promise<void> {
+): Promise<string> {
   const menu = await openSetupMenuTab(page, /^Key:/);
   const providerGroup = menu.getByTestId(
     getChatApiKeySelectorProviderGroupTestId(provider),
@@ -146,8 +151,12 @@ export async function selectApiKeyForProvider(
   await expect(providerGroup).toBeVisible({ timeout: 10_000 });
   const keyOption = providerGroup.getByRole("option").first();
   await expect(keyOption).toBeVisible({ timeout: 10_000 });
+  const testId = (await keyOption.getAttribute("data-testid")) ?? "";
+  const apiKeyId = testId.slice(getChatApiKeySelectorOptionTestId("").length);
+  expect(apiKeyId).not.toBe("");
   await keyOption.click();
   await closeSetupMenu(page);
+  return apiKeyId;
 }
 
 export async function selectApiKeyById(
@@ -285,11 +294,11 @@ async function waitForRuntimeModel({
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
-      const runtimeModel = await getRuntimeModelForProviderFromApi(
+      const runtimeModel = await getRuntimeModelForProviderFromApi({
         makeApiRequest,
         request,
         provider,
-      );
+      });
       if (runtimeModel) {
         return runtimeModel;
       }

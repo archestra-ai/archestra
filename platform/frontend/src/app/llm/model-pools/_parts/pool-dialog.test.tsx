@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -96,6 +96,13 @@ describe("PoolDialog", () => {
     render(<PoolDialog pool={saved} onOpenChange={() => {}} />);
     await user.click(screen.getByRole("button", { name: /Failover/ }));
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    const providerRows = screen
+      .getAllByRole("listitem")
+      .filter((row) => within(row).queryByText("Z.ai", { exact: true }));
+    expect(providerRows).toHaveLength(2);
+    for (const row of providerRows) {
+      expect(within(row).getByRole("img", { name: "Zhipu AI" })).toBeVisible();
+    }
     const retries = screen.getByLabelText("Retries", {
       selector: "#pool-retry-numRetries",
     });
@@ -203,6 +210,14 @@ describe("PoolDialog", () => {
     expect(
       screen.getByRole("textbox", { name: "Provider key" }),
     ).toHaveAttribute("readonly");
+
+    await user.click(screen.getByRole("button", { name: /Failover/ }));
+    const row = screen.getByText("Owner's Copilot").closest("li");
+    if (!row) throw new Error("Provider label is outside its member row");
+    expect(
+      within(row).getByRole("img", { name: "GitHub Copilot" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Pool/ }));
     await user.type(screen.getByLabelText("Stream timeout"), "60");
     expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
     await user.click(

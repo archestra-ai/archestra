@@ -24,7 +24,7 @@ export class GeminiEmbeddingError extends Error {
 }
 
 /**
- * A Vertex `:predict` fan-out where some inputs embedded and others failed;
+ * A Vertex per-input fan-out where some inputs embedded and others failed;
  * every failure reason is normalized to a `GeminiEmbeddingError`.
  */
 export class GeminiPartialEmbeddingError extends PartialEmbeddingError {
@@ -87,6 +87,42 @@ export async function callGeminiEmbedding(params: {
     if (typeof input === "string") return input;
     return { inlineData: { mimeType: input.mimeType, data: input.data } };
   });
+
+  if (
+    isVertexAiEnabled() &&
+    modelId.split("/").at(-1) === "gemini-embedding-2" &&
+    contents.length > 0
+  ) {
+    // Vertex embedContent treats an array of parts as one content and returns
+    // one vector. KB indexing needs one independently addressable vector per
+    // chunk; use the same bounded fan-out as the older Vertex predict path.
+    const settled = await mapWithConcurrency(
+      contents,
+      VERTEX_EMBEDDING_MAX_PARALLEL,
+      async (content) => {
+        const response = await client.models.embedContent({
+          model: modelId,
+          contents: content,
+          config: dimensions ? { outputDimensionality: dimensions } : undefined,
+        });
+        const embeddings = response.embeddings;
+        const embedding = embeddings?.[0]?.values;
+        if (
+          embeddings?.length !== 1 ||
+          !embedding?.length ||
+          !embedding.every(Number.isFinite) ||
+          (dimensions !== undefined && embedding.length !== dimensions)
+        ) {
+          throw new GeminiEmbeddingError(
+            500,
+            "Gemini embedding response did not include one valid vector for the input",
+          );
+        }
+        return embedding;
+      },
+    );
+    return vertexFanOutResponse(settled, model);
+  }
 
   try {
     // The installed @google/genai SDK accepts multiple contents here. In API
@@ -233,21 +269,24 @@ async function embedViaVertexPredict(params: {
     },
   );
 
+  return vertexFanOutResponse(settled, model);
+}
+
+function vertexFanOutResponse(
+  settled: PromiseSettledResult<number[]>[],
+  model: string,
+): EmbeddingApiResponse {
   const { successes, failures } = collectPartialEmbeddingResults(settled);
   if (failures.length > 0) {
     // Nothing succeeded: surface the first failure itself — a "partial" error
     // is reserved for fan-outs with vectors worth banking.
     if (successes.length === 0) {
-      throw toGeminiEmbeddingError(
-        failures.sort((a, b) => a.index - b.index)[0].reason,
-      );
+      throw toGeminiEmbeddingError(failures[0].reason);
     }
     throw new GeminiPartialEmbeddingError(successes, failures);
   }
 
-  const embeddings = successes
-    .sort((a, b) => a.index - b.index)
-    .map((success) => success.embedding);
+  const embeddings = successes.map((success) => success.embedding);
   return toEmbeddingApiResponse({ embeddings, tokens: 0, model });
 }
 
@@ -420,7 +459,7 @@ function getGeminiEmbeddingModelId(model: string): string {
 // ===== Internal constants =====
 
 /**
- * Bound the per-input predict fan-out: `multimodalembedding@001` is quotaed
+ * Bound the per-input Vertex fan-out: `multimodalembedding@001` is quotaed
  * at 120-600 requests per minute per project (region-dependent), far below
  * the Gemini embedding family's limits.
  */

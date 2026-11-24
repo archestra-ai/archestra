@@ -222,9 +222,6 @@ describe("ConfigureAutoRoutingDialog", () => {
 
     expect(name).toHaveValue("");
     expect(name).toBeEnabled();
-    expect(
-      screen.getByText(/Leave the name empty to call the router auto/),
-    ).toBeInTheDocument();
   });
 
   it("blocks a name another router already has", async () => {

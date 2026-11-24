@@ -1,5 +1,5 @@
 [toolchain]
-channel = "1.93.0"
+channel = "1.97.1"
 # rustfmt is used by CI (`cargo fmt --check`). rust-analyzer is IDE-only, but it
 # has to be declared here: the VS Code extension resolves its server by running
 # `rustup which rust-analyzer` in the workspace folder, and falls back to its own

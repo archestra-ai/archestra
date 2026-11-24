@@ -17,7 +17,7 @@
       "id": "msg_archestra_sequence_123",
       "type": "message",
       "role": "assistant",
-      "model": "claude-3-5-sonnet-20241022",
+      "model": "claude-sonnet-5-5",
       "content": [
         {
           "type": "tool_use",

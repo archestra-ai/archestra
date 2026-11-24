@@ -61,6 +61,7 @@ import { constructStableRunName } from "./runtime-contract";
 import {
   admitRuntimeSteer,
   bindRuntimeChild,
+  isTransientCrossingRefusal,
   promptWithContract,
   type RuntimeCrossing,
 } from "./runtime-crossing";
@@ -1181,7 +1182,10 @@ async function recordLaunchFailure(params: {
         params.failure instanceof Error
           ? params.failure.message
           : String(params.failure),
-      failure: classifyAgentRunFailure(params.failure),
+      // Classified here, not on the error: the launch loop must not retry it.
+      failure: isTransientCrossingRefusal(params.failure)
+        ? agentRunFailure("launch.guardrails_unavailable")
+        : classifyAgentRunFailure(params.failure),
     });
   } catch (error) {
     // The run lifecycle settles the task from the rethrown error as well.

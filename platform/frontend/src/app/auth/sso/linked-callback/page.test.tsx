@@ -11,7 +11,8 @@ vi.mock("@/components/app-logo", () => ({
   AppLogo: () => <div data-testid="app-logo" />,
 }));
 
-vi.mock("@/lib/auth/linked-idp", () => ({
+vi.mock("@/lib/auth/linked-idp", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/linked-idp")>()),
   completeLinkedIdentityProviderIntent: vi.fn(),
 }));
 

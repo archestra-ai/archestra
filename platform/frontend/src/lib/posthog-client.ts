@@ -24,7 +24,12 @@ class PostHogClient {
       .whenIdle()
       .then(() => import("posthog-js"))
       .then(({ default: posthog }) => {
+        // Telemetry was turned off while PostHog was still loading.
+        if (this.state === "off") return;
         posthog.init(key, config);
+        // An opt-out is remembered in this browser. Telemetry is on for the
+        // instance again, or `init` would not have been called.
+        if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing();
         this.posthog = posthog;
         this.state = "ready";
         for (const call of this.queue.splice(0)) call(posthog);
@@ -32,9 +37,16 @@ class PostHogClient {
       .catch(() => this.disable());
   }
 
-  /** Analytics is off for this deployment: forget queued calls. */
+  /**
+   * Analytics is off for this deployment: forget queued calls. When PostHog
+   * is already running (an admin just turned telemetry off), stop capturing
+   * and recording in this tab.
+   */
   disable(): void {
-    if (this.state === "ready") return;
+    if (this.state === "ready") {
+      this.posthog?.opt_out_capturing();
+      this.posthog?.stopSessionRecording();
+    }
     this.state = "off";
     this.queue = [];
   }

@@ -1610,7 +1610,17 @@ const registry = defineArchestraTools([
         };
       }
 
-      const byOffer = await executePlan();
+      let byOffer: Awaited<ReturnType<typeof executePlan>>;
+      try {
+        byOffer = await executePlan();
+      } catch (error) {
+        // The person's ruling is spent: a retry would ask them again.
+        if (ruling && error instanceof ApiError && error.shouldRetry)
+          return errorResult(SPENT_RULING_UNCONFIRMED);
+        throw error;
+      }
+      if (ruling && transientUnanswered(byOffer.result))
+        return errorResult(SPENT_RULING_UNCONFIRMED);
       if (!ruling || !byOffer.known) return byOffer.result;
       if (await supersededByPublish(byOffer.result))
         return supersededReview(byOffer.result);
@@ -1637,6 +1647,14 @@ const registry = defineArchestraTools([
     },
   }),
 ] as const);
+
+/**
+ * What the host knows when a plan fails transiently after a person's ruling
+ * was spent on it: the plan may or may not have run.
+ * @public — exported for testability
+ */
+export const SPENT_RULING_UNCONFIRMED =
+  "Guardrails could not confirm the outcome of this plan, and the reviewer's ruling on it is already used. Do not retry it automatically: any new attempt needs a fresh review.";
 
 // A server's own rules are OpenAPPA tools too, defined beside their service.
 export const toolEntries = {
@@ -2408,6 +2426,15 @@ async function yellIdentity(params: {
 }
 
 /** Whether the runtime answered an offer that no longer stands. */
+function transientUnanswered(result: CallToolResult): boolean {
+  return (
+    result.isError === true &&
+    result.content.some(
+      (block) => block.type === "text" && TRANSIENT_UNANSWERED.test(block.text),
+    )
+  );
+}
+
 function retiredOffer(result: CallToolResult): boolean {
   return result.content.some(
     (block) =>
@@ -2459,3 +2486,11 @@ const RETIRED_OFFER_TEXTS = [
   "no live offer with this id exists",
   "changed after this offer was made, so the offer no longer applies",
 ];
+
+/**
+ * The binding's notice for a remedy whose policy check gave no answer for a
+ * transient reason (openappa-rs `render_unanswered`), which tells the model to
+ * call the same offer again.
+ */
+const TRANSIENT_UNANSWERED =
+  /^\[appa\] Not applied: the policy check `[^`]+` gave no answer \([^)]+\)\. .*Call the \S+ tool again with the same offer id\.$/s;

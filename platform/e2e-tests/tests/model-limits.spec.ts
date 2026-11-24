@@ -25,8 +25,8 @@ type ModelRow = {
 
 /**
  * A model whose id no other row shares. Two providers can serve the same id
- * (`gpt-4o` under OpenAI and Azure, say), and both the row locator and the
- * "Edit <id>" button would then match twice.
+ * (one `gpt-*` id under both Azure and GitHub Copilot, say), and both the row
+ * locator and the "Edit <id>" button would then match twice.
  */
 function pickUniqueModel(
   models: ModelRow[],
@@ -63,8 +63,8 @@ test.describe("Model context and output limits", () => {
     // cells, and so the row survives pagination.
     await page.getByPlaceholder(/search models/i).fill(model.modelId);
     // Exact matches throughout: the search is a substring filter, so an id
-    // like `gpt-4o` also brings up `gpt-4o-mini`, whose row would otherwise
-    // answer the assertions below.
+    // like `gpt-6.1-sol` also brings up `gpt-6.1-sol-2026-09-15`, whose row
+    // would otherwise answer the assertions below.
     const row = page
       .getByRole("row")
       .filter({ has: page.getByText(model.modelId, { exact: true }) });

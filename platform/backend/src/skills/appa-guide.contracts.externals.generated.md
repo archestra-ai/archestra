@@ -46,9 +46,9 @@ If the endpoint requires authentication, set `token_env` to the name of an envir
 
 Set `command` to an array specifying the executable and arguments (e.g. `command = ["python3", "./sanitize.py"]`). OpenAPPA executes the process directly without an intermediate shell, launching it with the configuration directory as its working directory and terminating child processes upon completion. Commands referencing `appa` invoke the runtime's own binary to execute built-in plugins (such as `appa file-tracker`).
 
-Commands read a single JSON consult request from standard input and write a JSON response to standard output within `timeout_ms` and `max_body_bytes`. `APPA_CONSULT_TIMEOUT_MS` informs the process of remaining execution time (accounting for queue wait). The runtime limits concurrent local program executions to eight.
+Commands read a single JSON consult request from standard input and write a JSON response to standard output within `timeout_ms` and `max_body_bytes`. When OpenAPPA reaches the end of standard output, it closes standard input, so a command that needs the whole request must read it before it closes standard output. `APPA_CONSULT_TIMEOUT_MS` informs the process of remaining execution time (accounting for queue wait). The runtime limits concurrent local program executions to eight.
 
-If a command requires credentials, specify `token_env` with an environment variable name prefixed with `APPA_PROVIDER_`. OpenAPPA passes that variable into the process environment while filtering out other internal `APPA_*` variables.
+If a command requires credentials, specify `token_env` with an environment variable name prefixed with `APPA_PROVIDER_`. OpenAPPA passes that variable into the process environment while filtering out other internal `APPA_*` variables. On Windows, where variable names ignore case, the filter also ignores case.
 
 OpenAPPA does not require credential variables to be present at policy load time; the process must handle missing credentials at runtime.
 
@@ -56,7 +56,7 @@ OpenAPPA does not require credential variables to be present at policy load time
 
 The `claude-code` and `llm` backends dispatch consult requests to language models. OpenAPPA injects fixed instructions and `declaration` constraints into the system prompt, including the label guide for annotators. Call data in `artifact` is sent as user content.
 
-Before dispatching annotator requests to external model providers (`claude-code`, `llm`, or `jev`), OpenAPPA automatically redacts detected credentials in `artifact.args` using the built-in secret detector. Fields matching credential keywords (`password`, `token`, `secret`, `api_key`, `credential`, etc.) or high-entropy tokens are replaced with `[redacted-secret]`. Redaction is best effort. Authority and sanitizer payloads are not redacted, as sanitizers require raw text for processing.
+Before dispatching annotator requests to external model providers (`claude-code`, `llm`, or `jev`), OpenAPPA automatically redacts detected credentials in `artifact.args` using the built-in secret detector. Fields matching credential keywords (`password`, `token`, `secret`, `api_key`, `credential`, etc.) or high-entropy tokens are replaced with `[redacted-secret]`. In nested object keys, OpenAPPA also replaces private keys, URL passwords, known API tokens, and AWS secret keys. Keys that become equal get a `-2`, `-3`, … suffix, so no entry is lost. The tool name of the complete call stays as written when the declaration that judges the call names that tool exactly. When the call matches a pattern or the `*` wildcard, the tool name is redacted like any other string. Redaction is best effort. Authority and sanitizer payloads are not redacted, as sanitizers require raw text for processing.
 
 OpenAPPA checks authority and annotator answers against their permits and assigns sanitized data the declared audience or trust rank. The model is responsible for making the correct judgment or removing the required content.
 

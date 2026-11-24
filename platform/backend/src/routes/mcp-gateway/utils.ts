@@ -109,6 +109,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { isOpenappaFailure } from "@/openappa/failure";
 import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
@@ -1574,6 +1575,8 @@ export async function createAgentServer(params: {
           logger.warn({ err: error }, "MCP tool execution refused");
           return errorResult(error.message);
         }
+        // Classification already kept the runtime's detail out of the message.
+        if (isOpenappaFailure(error)) return errorResult(error.message);
         // Custom validation messages and paths can contain submitted secrets.
         if (error instanceof ZodError) {
           logger.warn({ err: error }, "MCP tool arguments failed validation");

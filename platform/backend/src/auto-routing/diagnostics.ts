@@ -58,12 +58,19 @@ const USAGE_COMMIT_SLACK_MS = 60 * 1000;
 const TierTripleSchema = z.tuple([z.number(), z.number(), z.number()]);
 const TierIndexSchema = z.number().int().min(0).max(2);
 
-const PricesSchema = z.object({
-  input: z.number(),
-  cache_read: z.number(),
-  cache_write: z.number(),
-  output: z.number(),
-});
+/** A plan fitted before 1h cache writes had their own rate priced them all at the 5m one. */
+const PricesSchema = z
+  .object({
+    input: z.number(),
+    cache_read: z.number(),
+    cache_write: z.number(),
+    cache_write_1h: z.number().optional(),
+    output: z.number(),
+  })
+  .transform((usd) => ({
+    ...usd,
+    cache_write_1h: usd.cache_write_1h ?? usd.cache_write,
+  }));
 const StoredTierSetSchema = z.object({
   tiers: z.array(
     z.object({

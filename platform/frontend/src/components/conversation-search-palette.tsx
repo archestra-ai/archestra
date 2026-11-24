@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getModelProvidersNavigationUrl } from "@/app/_parts/model-providers-navigation";
 import {
   chatsNavItems,
   contentNavGroups,
@@ -127,8 +128,7 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
   "/openappa": "openappa guardrails v2 policy toml",
   "/llm/proxy": "proxy llm network",
   "/llm/proxy/virtual-keys": "virtual keys credentials",
-  "/llm/model-providers": "provider api keys models llm",
-  "/llm/models": "models catalog",
+  "/llm/model-providers": "provider api keys subscriptions models catalog llm",
   "/llm/costs": "usage cost dashboard limits budget spend",
   "/knowledge/connectors": "knowledge connectors sources sync",
   "/knowledge/files": "knowledge files documents uploads",
@@ -175,7 +175,10 @@ function useNavigationDestinations(
         label: item.tooltipLabel ?? item.title,
         value: item.url,
         keywords: NAVIGATION_KEYWORDS[item.url] ?? "",
-        href: item.url,
+        href:
+          item.url === "/llm/model-providers"
+            ? getModelProvidersNavigationUrl(permissionMap)
+            : item.url,
       }));
   }, [permissionMap, openappaEnabled, showConnect]);
 }

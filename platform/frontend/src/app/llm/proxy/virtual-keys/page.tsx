@@ -88,6 +88,7 @@ import {
 } from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -162,7 +163,24 @@ function VirtualKeysTable() {
   const [createKeyType, setCreateKeyType] = useState<VirtualKeyType | null>(
     null,
   );
-  const [editingKey, setEditingKey] = useState<VirtualKeyRow | null>(null);
+  // `?edit=<id>` opens that key's dialog, so a link can land on it; without
+  // the right to edit that key, the link only filters the list.
+  const editParam = searchParams.get("edit");
+  const { data: canEditFromUrl } = useHasPermissions(
+    { llmVirtualKey: ["update"] },
+    editParam ?? undefined,
+  );
+  const editId = canEditFromUrl ? editParam : null;
+  const {
+    entity: editingKey,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<VirtualKeyRow>({
+    paramName: "edit",
+    entityFromUrl: editId
+      ? (query.data?.data.find((key) => key.id === editId) ?? null)
+      : null,
+  });
   const [deletingKey, setDeletingKey] = useState<VirtualKeyRow | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
@@ -365,7 +383,7 @@ function VirtualKeysTable() {
               icon: <Pencil className="h-4 w-4" />,
               label: "Edit",
               permissions: { llmVirtualKey: ["update"] },
-              onClick: () => setEditingKey(row.original),
+              onClick: () => openEditDialog(row.original),
             },
             {
               icon: <Trash2 className="h-4 w-4" />,
@@ -574,7 +592,7 @@ function VirtualKeysTable() {
                           icon: <Pencil className="h-4 w-4" />,
                           label: "Edit",
                           permissions: { llmVirtualKey: ["update"] },
-                          onClick: () => setEditingKey(key),
+                          onClick: () => openEditDialog(key),
                         },
                         {
                           icon: <Trash2 className="h-4 w-4" />,
@@ -652,7 +670,7 @@ function VirtualKeysTable() {
         <EditVirtualKeyDialog
           virtualKey={editingKey}
           onOpenChange={(open) => {
-            if (!open) setEditingKey(null);
+            if (!open) closeEditDialog();
           }}
         />
         <DeleteConfirmDialog

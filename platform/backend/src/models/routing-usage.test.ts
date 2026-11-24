@@ -106,6 +106,7 @@ describe("routing usage", () => {
       input: 100 * completions,
       cacheRead: 1_000 * completions,
       cacheWrite: 50 * completions,
+      cacheWrite1h: 10 * completions,
       output: 20 * completions,
     });
   });
@@ -225,6 +226,57 @@ describe("routing usage", () => {
       });
 
       expect(rows.map((row) => row.createdAt)).toEqual([decision.createdAt]);
+    });
+
+    test("reaches back past 35 days for the minimum sessions, and no further", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const { organizationId, routerId, profileId, decision, scorer } =
+        await setup({
+          makeAgent,
+          makeOrganization,
+        });
+      const older: Date[] = [];
+      for (const days of [40, 60, 80]) {
+        const session = await addDecision({
+          organizationId,
+          routerId,
+          sessionId: `${days}-days-old`,
+          scorerVersionId: scorer.id,
+        });
+        const createdAt = new Date(Date.now() - days * DAY_MS);
+        await db
+          .update(schema.routingDecisionsTable)
+          .set({ createdAt })
+          .where(eq(schema.routingDecisionsTable.id, session.id));
+        await recordAt({
+          profileId,
+          decisionId: session.id,
+          ago: days * DAY_MS,
+        });
+        older.push(createdAt);
+      }
+      await recordAt({ profileId, decisionId: decision.id, ago: 2 * DAY_MS });
+      const window = { routerId, scorerVersionId: scorer.id };
+      const createdAt = async (minSessions: number) =>
+        (await fitHistory({ ...window, minSessions })).map(
+          (row) => row.createdAt,
+        );
+
+      expect(await createdAt(1)).toEqual([decision.createdAt]);
+      expect(await createdAt(3)).toEqual([
+        older[1],
+        older[0],
+        decision.createdAt,
+      ]);
+      expect(
+        await RoutingUsageModel.findFitVolume({
+          ...window,
+          inputWatermark: new Date(),
+          minSessions: 3,
+        }),
+      ).toMatchObject({ sessions: 3, firstCreatedAt: older[1] });
     });
 
     test("splits usage at the long-context threshold, strictly above it", async ({
@@ -375,10 +427,12 @@ async function fitHistory(params: {
   scorerVersionId: string;
   longContextThreshold?: number;
   inputWatermark?: Date;
+  minSessions?: number;
 }) {
   const history = await RoutingUsageModel.findFitHistory({
     ...params,
     inputWatermark: params.inputWatermark ?? new Date(),
+    minSessions: params.minSessions ?? 0,
     longContextThreshold: params.longContextThreshold ?? null,
   });
   return history.sample;

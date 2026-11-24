@@ -7,8 +7,11 @@ import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { clearRegisteredProcessLocalCaches } from "@/process-local-cache-registry";
 import { expect, test } from "@/test";
+import { OpenappaRefusal, openappaFailure } from "./failure";
 import {
   captureSoftBlockMode,
+  isHardBlock,
+  softBlockReason,
   softBlocksAllowed,
   waiveSoftBlock,
   withSoftBlockRequest,
@@ -152,6 +155,31 @@ test("refuse mode and explicit hard blocks do not create a bypass", async ({
   };
   expect(
     await waiveSoftBlock(session, "tool_call", "requires attention: blocked"),
+  ).toBe(false);
+  expect(await isUnenforcedSession(session)).toBe(false);
+});
+
+test("a hard block cut from a refusal's shown text still refuses a waiver through its cause", async ({
+  makeOrganization,
+}) => {
+  const session = {
+    organization_id: (await makeOrganization()).id,
+    session_id: "hard-block-refusal",
+  };
+  config.openappa.breakTheGlassOverrides = {
+    ...config.openappa.breakTheGlassOverrides,
+    unapprovableBlockMode: "allow",
+  };
+  const failure = openappaFailure(
+    new OpenappaRefusal(
+      `[appa] Blocked: ${"the return names a private file. ".repeat(10)}\nrequires attention: blocked`,
+    ),
+  );
+
+  expect(failure).toMatchObject({ statusCode: 400, shouldRetry: false });
+  expect(isHardBlock(failure.message)).toBe(false);
+  expect(
+    await waiveSoftBlock(session, "child_turn_end", softBlockReason(failure)),
   ).toBe(false);
   expect(await isUnenforcedSession(session)).toBe(false);
 });

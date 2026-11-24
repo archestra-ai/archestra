@@ -1,7 +1,5 @@
 import { ModelModel } from "@/models";
 import RoutingUsageModel from "@/models/routing-usage";
-import { quotedPrices } from "@/services/billable-usage";
-import type { Model } from "@/types";
 import type { AutoRoutingUsage } from "@/types/auto-routing-api";
 import { loadAutoRouter } from "./settings";
 import { prices, type RouterTokenPrices, TIER_NAMES } from "./tiers";
@@ -39,8 +37,8 @@ export async function describeRoutedUsage(
   });
   const smartPrices = smart
     ? {
-        short: usagePrices(smart),
-        long: threshold === null ? null : usagePrices(smart, threshold + 1),
+        short: prices(smart),
+        long: threshold === null ? null : prices(smart, threshold + 1),
       }
     : null;
   return {
@@ -73,28 +71,7 @@ type Tokens = {
   output: number;
 };
 
-function usagePrices(model: Model, promptTokens?: number) {
-  const quote = quotedPrices({
-    model: model.modelId,
-    provider: model.provider,
-    pricing: ModelModel.getEffectivePricing(
-      model,
-      undefined,
-      undefined,
-      promptTokens,
-    ),
-    instancePriced: false,
-  });
-  return {
-    ...prices(model, promptTokens),
-    cache_write_1h: Number(quote.prices.cacheWrite1h ?? 0),
-  };
-}
-
-function priced(
-  tokens: Tokens,
-  usd: RouterTokenPrices & { cache_write_1h: number },
-): number {
+function priced(tokens: Tokens, usd: RouterTokenPrices): number {
   const write1h = Math.min(Math.max(tokens.cacheWrite1h, 0), tokens.cacheWrite);
   return (
     (tokens.input * usd.input +

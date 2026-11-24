@@ -188,6 +188,7 @@ A failed run carries a stable `failure.code`, so a script can retry or stop with
 | `launch.misconfigured` | No | The agent's settings or the caller's credentials do not allow a start. |
 | `launch.capacity_timeout` | Yes | The pod did not start or resume in time. |
 | `launch.credentials_timeout` | Yes | The run's credentials did not reach the pod in time. |
+| `launch.guardrails_unavailable` | Yes | Guardrails could not bind the run for a reason that clears on its own. |
 | `pod.evicted` | Yes | Kubernetes evicted or preempted the pod. |
 | `pod.oom_killed` | No | The run reached its tier's memory limit, and the kernel killed it. |
 | `pod.workspace_full` | No | The agent filled its workspace volume. Ask an administrator for a larger volume. |

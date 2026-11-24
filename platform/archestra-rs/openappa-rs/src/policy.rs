@@ -149,6 +149,7 @@ fn config_failure(error: &ConfigError) -> BindingFailure {
         | ConfigError::DuplicateJevProfile { .. }
         | ConfigError::MissingJevKey
         | ConfigError::DuplicateExternal { .. }
+        | ConfigError::DuplicateComponent { .. }
         | ConfigError::InvalidComposedMetadata { .. }
         | ConfigError::InvalidEndpoint { .. }
         | ConfigError::CleartextEndpoint { .. }

@@ -47,7 +47,6 @@ vi.mock("@/lib/llm-provider-api-keys.query", async (importOriginal) => ({
   ...(await importOriginal()),
   useLlmProviderApiKeys: vi.fn(() => ({ data: [] })),
 }));
-vi.mock("next/navigation");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
@@ -179,6 +178,11 @@ describe("CreateVirtualKeyDialog", () => {
       await screen.findByRole("option", { name: /subscription-pool/ }),
     );
     // Picking only adds, so an added pool leaves the picker.
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Add a provider, model pool or auto router",
+      }),
+    );
     expect(
       screen.queryByRole("option", { name: /subscription-pool/ }),
     ).not.toBeInTheDocument();
@@ -199,7 +203,6 @@ describe("CreateVirtualKeyDialog", () => {
     await user.click(
       await screen.findByRole("option", { name: /subscription-pool/ }),
     );
-    await user.keyboard("{Escape}");
     mutateAsync.mockResolvedValueOnce({
       ...createdKey("standard", []),
       id: "vk-pool-only",
@@ -295,7 +298,7 @@ describe("CreateVirtualKeyDialog", () => {
     expect(screen.getByLabelText("Name")).toHaveValue(
       "Self Admin's virtual key (2)",
     );
-    expect(screen.getByRole("region", { name: "Providers" })).toHaveTextContent(
+    expect(screen.getByRole("region", { name: "Access" })).toHaveTextContent(
       "Main OpenAI",
     );
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
@@ -440,7 +443,7 @@ describe("CreateVirtualKeyDialog", () => {
       initialProviderApiKeys: null,
     });
 
-    const section = screen.getByRole("region", { name: "Providers" });
+    const section = screen.getByRole("region", { name: "Access" });
     expect(section).toHaveTextContent("Team key");
     await user.click(screen.getByRole("button", { name: "Create key" }));
 
@@ -477,8 +480,7 @@ describe("CreateVirtualKeyDialog", () => {
       }),
     );
     await user.click(await screen.findByRole("option", { name: /^Team key/ }));
-    await user.keyboard("{Escape}");
-    expect(screen.getByRole("region", { name: "Providers" })).toHaveTextContent(
+    expect(screen.getByRole("region", { name: "Access" })).toHaveTextContent(
       "Team key",
     );
   });
@@ -509,7 +511,6 @@ describe("CreateVirtualKeyDialog", () => {
       screen.queryByRole("option", { name: /^Zhipu key/ }),
     ).not.toBeInTheDocument();
     await user.click(staging);
-    await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Create key" }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
       data: expect.objectContaining({
@@ -521,41 +522,54 @@ describe("CreateVirtualKeyDialog", () => {
     });
   });
 
-  it("filters a long access list by words and by kind", async () => {
+  it("closes the picker after a pick and narrows it by kind", async () => {
     const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    server.use(
+      http.get("http://localhost:9000/api/model-pools", () =>
+        HttpResponse.json([
+          {
+            id: "pool-1",
+            name: "subscription-pool",
+            virtualApiKeyIds: [],
+            members: [
+              {
+                id: "member-1",
+                provider: "github-copilot",
+                modelId: "gpt-4.1",
+                priority: 1,
+                enabled: true,
+              },
+            ],
+          },
+        ]),
+      ),
+    );
     renderDialog("standard", {
-      parentableKeys: MANY_PROVIDER_KEYS,
-      initialProviderApiKeys: null,
+      parentableKeys: SEVERAL_KEYS,
+      initialProviderApiKeys: [],
     });
 
-    const providers = screen.getByRole("region", { name: "Providers" });
-    expect(providers).toHaveTextContent("Mistral");
-    expect(providers).toHaveTextContent("Groq");
-    await user.type(
-      screen.getByPlaceholderText("Filter by name, key, owner or model"),
-      "mistral",
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("region", { name: "Providers" }),
-      ).not.toHaveTextContent("Groq"),
-    );
-    expect(screen.getByRole("region", { name: "Providers" })).toHaveTextContent(
-      "Mistral",
-    );
-    await user.type(
-      screen.getByPlaceholderText("Filter by name, key, owner or model"),
-      " nothing-like-this",
-    );
+    const picker = screen.getByRole("combobox", {
+      name: "Add a provider, model pool or auto router",
+    });
+    await user.click(picker);
+    await screen.findByRole("option", { name: /subscription-pool/ });
+    await user.click(screen.getByRole("button", { name: /^Model pools/ }));
     expect(
-      await screen.findByText("Nothing added matches these filters."),
+      screen.queryByRole("option", { name: /^Team key/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Providers/ }));
+    expect(
+      screen.queryByRole("option", { name: /subscription-pool/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /^Team key/ }));
+    expect(picker).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByRole("button", { name: "Stop using OpenAI" }),
     ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Clear" }));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("region", { name: "Providers" }),
-      ).toHaveTextContent("Groq"),
-    );
   });
 
   it("blocks Create when no provider is used until one is picked", async () => {
@@ -575,7 +589,6 @@ describe("CreateVirtualKeyDialog", () => {
       }),
     );
     await user.click(await screen.findByRole("option", { name: /^Zhipu key/ }));
-    await user.keyboard("{Escape}");
     expect(screen.getByRole("button", { name: "Create key" })).toBeEnabled();
   });
 
@@ -779,20 +792,6 @@ const SEVERAL_KEYS = [
   },
   { id: "zhipu-key", name: "Zhipu key", provider: "zhipuai", isPrimary: true },
 ] as never[];
-
-const MANY_PROVIDER_KEYS = [
-  ["openai", "OpenAI key"],
-  ["anthropic", "Anthropic key"],
-  ["gemini", "Gemini key"],
-  ["zhipuai", "Zhipu key"],
-  ["mistral", "Mistral key"],
-  ["groq", "Groq key"],
-].map(([provider, name]) => ({
-  id: `${provider}-key`,
-  name,
-  provider,
-  isPrimary: true,
-})) as never[];
 
 function createdKey(
   keyType: "standard" | "passthrough",

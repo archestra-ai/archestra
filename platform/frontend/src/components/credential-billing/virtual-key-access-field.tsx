@@ -3,16 +3,17 @@
 import type { SupportedProvider } from "@archestra/shared";
 import {
   ChevronDown,
+  ChevronRight,
   KeyRound,
   LayersIcon,
   Plus,
   Sparkles,
   X,
 } from "lucide-react";
-import Link from "next/link";
-import { type ReactNode, useId, useMemo, useState } from "react";
+import { Fragment, useId, useMemo, useState } from "react";
 import { poolAnswers } from "@/components/credential-billing/model-pool-access";
 import {
+  KindLabel,
   PoolRow,
   PoolSummary,
 } from "@/components/credential-billing/model-pools-field";
@@ -27,16 +28,15 @@ import {
   NoProviderKeys,
   PrimaryBadge,
 } from "@/components/credential-billing/provider-key-list";
-import {
-  FilterBar,
-  FilterSelect,
-  filterSearchClass,
-} from "@/components/filter-bar";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ProviderIcon } from "@/components/provider-icon";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
-import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Command,
   CommandEmpty,
@@ -56,6 +56,7 @@ import {
   RadioGroupItem,
   radioCardClass,
 } from "@/components/ui/radio-group";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useAutoRouters,
   useAvailableAutoRouters,
@@ -70,10 +71,11 @@ import {
 } from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
 
+type TierModel = { provider: SupportedProvider; modelId: string };
 type RouterTiers = {
-  fast: { modelId: string } | null;
-  normal: { modelId: string } | null;
-  smart: { modelId: string } | null;
+  fast: TierModel | null;
+  normal: TierModel | null;
+  smart: TierModel | null;
 };
 
 const TIER_LABELS = { fast: "Fast", normal: "Normal", smart: "Smart" } as const;
@@ -213,56 +215,6 @@ export function VirtualKeyAccessField({
     })),
   );
 
-  // Narrowing the list once it is long: words match names, keys, owners and
-  // models, and the kind filter keeps one kind of access.
-  const [filterText, setFilterText] = useState("");
-  const [filterKind, setFilterKind] = useState<AccessKind | "all">("all");
-  const filtering = filterText.trim() !== "" || filterKind !== "all";
-  const shows = (kind: AccessKind, words: (string | undefined)[]) =>
-    (filterKind === "all" || filterKind === kind) &&
-    matchesEveryWord("", filterText, words.filter(isPresent));
-  const shownRouters = listedRouters.filter((router) => {
-    const tiers = tiersByRouter.get(router.id);
-    return shows("routers", [
-      router.name,
-      tiers?.fast?.modelId,
-      tiers?.normal?.modelId,
-      tiers?.smart?.modelId,
-    ]);
-  });
-  const shownPools = listedPools.filter((pool) =>
-    shows("pools", [
-      pool.name,
-      ...pool.members.flatMap((member) => [
-        member.provider,
-        catalog.label(member.provider),
-        member.modelId,
-      ]),
-    ]),
-  );
-  const shownKeys = listedKeys.filter(({ provider, label, option }) =>
-    shows("providers", [
-      label,
-      provider,
-      option.name,
-      option.owner,
-      option.detail,
-    ]),
-  );
-  const showsSharedRow =
-    includeFutureProviders &&
-    shows("providers", [
-      "all shared providers",
-      ...sharedProviders.map((provider) => catalog.label(provider)),
-    ]);
-  const providerCount = listedKeys.length + (includeFutureProviders ? 1 : 0);
-  const listedCount = listedRouters.length + listedPools.length + providerCount;
-  const kindCounts: Record<AccessKind, number> = {
-    routers: listedRouters.length,
-    pools: listedPools.length,
-    providers: providerCount,
-  };
-
   const summary = [
     includeFutureProviders
       ? `all shared providers${
@@ -327,174 +279,87 @@ export function VirtualKeyAccessField({
           onAddKey={addKey}
         />
 
-        {(listedCount >= FILTER_FROM || filtering) && (
-          <FilterBar
-            search={
-              <SearchInput
-                syncQueryParams={false}
-                value={filterText}
-                onSearchChange={setFilterText}
-                debounceMs={150}
-                placeholder="Filter by name, key, owner or model"
-                className={filterSearchClass}
-              />
-            }
-            onClearFilters={
-              filtering
-                ? () => {
-                    setFilterText("");
-                    setFilterKind("all");
-                  }
-                : undefined
-            }
-          >
-            <FilterSelect
-              value={filterKind}
-              onValueChange={(next) =>
-                setFilterKind(next as AccessKind | "all")
+        <div className="divide-y rounded-md border">
+          {listedRouters.map((router) => (
+            <RouterRow
+              key={router.id}
+              name={router.name}
+              tiers={tiersByRouter.get(router.id)}
+              onRemove={() =>
+                onAutoRouterIdsChange(
+                  autoRouterIds.filter((routerId) => routerId !== router.id),
+                )
               }
-              placeholder="Filter by kind"
-              showSearch={false}
-              items={[
-                { value: "all", label: "All kinds" },
-                ...ACCESS_KINDS.filter((kind) => kindCounts[kind.value]).map(
-                  (kind) => ({
-                    value: kind.value,
-                    label: `${kind.title} · ${kindCounts[kind.value]}`,
-                  }),
-                ),
-              ]}
             />
-          </FilterBar>
-        )}
-
-        <div>
-          {filtering &&
-            !shownRouters.length &&
-            !shownPools.length &&
-            !shownKeys.length &&
-            !showsSharedRow && (
-              <p className="py-3 text-sm text-muted-foreground">
-                Nothing added matches these filters.
+          ))}
+          {listedPools.map((pool) => (
+            <PoolRow
+              key={pool.id}
+              pool={pool}
+              kind="Model pool"
+              onRemove={() =>
+                onModelPoolIdsChange(
+                  modelPoolIds.filter((poolId) => poolId !== pool.id),
+                )
+              }
+            />
+          ))}
+          {includeFutureProviders && (
+            <div className="flex items-start gap-2 px-2 py-1.5">
+              <KeyRound
+                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm">All shared providers</span>
+                <span className="block text-xs text-muted-foreground">
+                  Each shared provider’s primary key. New providers join
+                  automatically; personal and subscription keys are left out.
+                </span>
+              </span>
+              <span className="mt-0.5 flex shrink-0 items-center gap-1">
+                {sharedProviders.map((provider) => (
+                  <ProviderIcon key={provider} provider={provider} size={14} />
+                ))}
+              </span>
+              <span className="mt-0.5">
+                <KindLabel>Automatic</KindLabel>
+              </span>
+              {/* Lines the label up with the other rows' remove buttons. */}
+              <span aria-hidden className="size-6 shrink-0" />
+            </div>
+          )}
+          {listedKeys.map(({ provider, label, several, option }) => (
+            <ListedKeyRow
+              key={option.key.id}
+              provider={provider}
+              label={label}
+              option={option}
+              kind={includeFutureProviders ? "Key override" : "Provider key"}
+              removeLabel={
+                several ? `Remove ${option.name}` : `Stop using ${label}`
+              }
+              onRemove={() =>
+                onChange(
+                  value.filter(
+                    (mapping) => mapping.providerApiKeyId !== option.key.id,
+                  ),
+                )
+              }
+            />
+          ))}
+          {providers.length === 0 && !includeFutureProviders && (
+            <div className="p-2">
+              <NoProviderKeys />
+            </div>
+          )}
+          {providers.length > 0 &&
+            listedProviders.length === 0 &&
+            !includeFutureProviders && (
+              <p className="px-3 py-2.5 text-xs text-muted-foreground">
+                No providers selected — add one above.
               </p>
             )}
-          {shownRouters.length > 0 && (
-            <KindSection
-              kind="routers"
-              count={listedRouters.length}
-              hint="Apps send the router’s name as the model."
-              manage={{ href: "/llm/auto-routing", label: "Manage routers" }}
-            >
-              {shownRouters.map((router) => (
-                <div
-                  key={router.id}
-                  className="flex min-h-9 items-center gap-2 px-2 py-1.5"
-                >
-                  <span className="shrink-0 font-mono text-sm">
-                    {router.name}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                    {tierLine(tiersByRouter.get(router.id))}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Remove ${router.name}`}
-                    onClick={() =>
-                      onAutoRouterIdsChange(
-                        autoRouterIds.filter(
-                          (routerId) => routerId !== router.id,
-                        ),
-                      )
-                    }
-                  >
-                    <X />
-                  </Button>
-                </div>
-              ))}
-            </KindSection>
-          )}
-          {shownPools.length > 0 && (
-            <KindSection
-              kind="pools"
-              count={listedPools.length}
-              hint="One model name that fails over across its members."
-              manage={{ href: "/llm/model-pools", label: "Manage pools" }}
-            >
-              {shownPools.map((pool) => (
-                <PoolRow
-                  key={pool.id}
-                  pool={pool}
-                  onRemove={() =>
-                    onModelPoolIdsChange(
-                      modelPoolIds.filter((poolId) => poolId !== pool.id),
-                    )
-                  }
-                />
-              ))}
-            </KindSection>
-          )}
-          {(!filtering || shownKeys.length > 0 || showsSharedRow) && (
-            <KindSection
-              kind="providers"
-              count={providerCount}
-              hint={
-                includeFutureProviders
-                  ? "Each shared provider’s primary key. Add one above to use another key."
-                  : "Apps call each provider’s models by name, on the key shown."
-              }
-            >
-              {providers.length === 0 && !includeFutureProviders && (
-                <NoProviderKeys />
-              )}
-              {showsSharedRow && (
-                <div className="flex min-h-9 items-start gap-2 px-2 py-1.5">
-                  <span className="min-w-0 flex-1 space-y-0.5">
-                    <span className="block text-sm">All shared providers</span>
-                    <span className="block text-xs text-muted-foreground">
-                      New providers join automatically. Personal and
-                      subscription keys are left out.
-                    </span>
-                  </span>
-                  <span className="mt-0.5 flex shrink-0 items-center gap-1 pr-2">
-                    {sharedProviders.map((provider) => (
-                      <ProviderIcon
-                        key={provider}
-                        provider={provider}
-                        size={14}
-                      />
-                    ))}
-                  </span>
-                </div>
-              )}
-              {shownKeys.map(({ provider, label, several, option }) => (
-                <ListedKeyRow
-                  key={option.key.id}
-                  provider={provider}
-                  label={label}
-                  option={option}
-                  removeLabel={
-                    several ? `Remove ${option.name}` : `Stop using ${label}`
-                  }
-                  onRemove={() =>
-                    onChange(
-                      value.filter(
-                        (mapping) => mapping.providerApiKeyId !== option.key.id,
-                      ),
-                    )
-                  }
-                />
-              ))}
-              {providers.length > 0 &&
-                listedProviders.length === 0 &&
-                !includeFutureProviders && (
-                  <p className="px-2 py-2 text-xs text-muted-foreground">
-                    No providers selected — add one above.
-                  </p>
-                )}
-            </KindSection>
-          )}
         </div>
       </section>
     </div>
@@ -554,52 +419,77 @@ const ACCESS_KINDS: {
   { value: "providers", title: "Providers", icon: KeyRound },
 ];
 
-/** The list gets a filter bar once it holds this many items. */
-const FILTER_FROM = 6;
-
-/**
- * One kind of access: its name, count and what it gives on the left, its items
- * boxed on the right. The label stays in view while a long kind scrolls past.
- */
-function KindSection({
-  kind,
-  count,
-  hint,
-  manage,
-  children,
+/** An auto router: its name, opening to the model behind each tier. */
+function RouterRow({
+  name,
+  tiers,
+  onRemove,
 }: {
-  kind: AccessKind;
-  count: number;
-  hint: string;
-  manage?: { href: string; label: string };
-  children: ReactNode;
+  name: string;
+  tiers: RouterTiers | undefined;
+  onRemove: () => void;
 }) {
-  const { title, icon: Icon } =
-    ACCESS_KINDS.find((entry) => entry.value === kind) ?? ACCESS_KINDS[0];
+  const catalog = useModelProviderCatalog();
+  const [open, setOpen] = useState(false);
+  const tierModels = tierModelsOf(tiers);
   return (
-    <section
-      aria-label={title}
-      className="grid gap-2 py-2.5 first:pt-1 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4"
-    >
-      <div className="space-y-1 sm:sticky sm:top-0 sm:self-start sm:pt-2">
-        <p className="flex items-center gap-1.5 text-sm font-medium">
-          <Icon className="size-3.5 shrink-0" aria-hidden />
-          <span>{title}</span>
-          <span className="rounded bg-muted px-1.5 text-xs font-normal tabular-nums text-muted-foreground">
-            {count}
-          </span>
-        </p>
-        <p className="text-xs text-muted-foreground">{hint}</p>
-        {manage && (
-          <Button variant="link" size="xs" className="h-auto px-0" asChild>
-            <Link href={manage.href}>{manage.label}</Link>
-          </Button>
-        )}
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="flex items-center gap-2 px-2 py-1.5">
+        <CollapsibleTrigger asChild>
+          <UnstyledButton
+            type="button"
+            aria-label={`${open ? "Hide" : "Show"} ${name} models`}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <ChevronRight
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform",
+                open && "rotate-90",
+              )}
+              aria-hidden
+            />
+            <RouterSummary name={name} tiers={tiers} />
+          </UnstyledButton>
+        </CollapsibleTrigger>
+        <KindLabel>Auto router</KindLabel>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Remove ${name}`}
+          onClick={onRemove}
+        >
+          <X />
+        </Button>
       </div>
-      <div className="@container/provider-keys min-w-0 divide-y self-start rounded-md border">
-        {children}
-      </div>
-    </section>
+      <CollapsibleContent>
+        <div className="mx-2 mb-2 rounded-md bg-muted/50 p-2 text-xs">
+          {tierModels.length ? (
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)] gap-x-3 gap-y-1.5">
+              <span className="text-muted-foreground">Tier</span>
+              <span className="text-muted-foreground">Provider</span>
+              <span className="text-muted-foreground">Model</span>
+              {tierModels.map((model) => (
+                <Fragment key={model.tier}>
+                  <span>{TIER_LABELS[model.tier]}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <ProviderIcon provider={model.provider} size={14} />
+                    <span className="truncate">
+                      {catalog.label(model.provider)}
+                    </span>
+                  </span>
+                  <span className="truncate font-mono">{model.modelId}</span>
+                </Fragment>
+              ))}
+            </div>
+          ) : (
+            <span className="text-muted-foreground">
+              Picks a fast, normal or smart model per session.
+            </span>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -625,12 +515,14 @@ function ListedKeyRow({
   provider,
   label,
   option,
+  kind,
   removeLabel,
   onRemove,
 }: {
   provider: SupportedProvider;
   label: string;
   option: KeyOption;
+  kind: string;
   removeLabel: string;
   onRemove: () => void;
 }) {
@@ -648,6 +540,7 @@ function ListedKeyRow({
           {option.models !== null && <ModelCount count={option.models} />}
         </span>
       </span>
+      <KindLabel>{kind}</KindLabel>
       <Button
         type="button"
         variant="ghost"
@@ -689,8 +582,9 @@ function ModelCount({ count }: { count: number }) {
 /**
  * One searchable list for adding access: auto routers, model pools, then each
  * provider's keys under the provider's name, so searching "anthropic" lists
- * every Anthropic key. Picking only adds, and anything already in the list is
- * left out. The list stays open for the next pick.
+ * every Anthropic key. Kind buttons under the search narrow it to routers,
+ * pools or provider keys. Picking only adds, and closes the list; anything
+ * already added is left out.
  */
 function AccessPicker({
   id,
@@ -717,6 +611,14 @@ function AccessPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [kind, setKind] = useState<AccessKind | "all">("all");
+  const changeOpen = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setSearch("");
+      setKind("all");
+    }
+  };
   const addableRouters = routers.filter(
     (router) => !autoRouterIds.includes(router.id),
   );
@@ -725,15 +627,16 @@ function AccessPicker({
     addableRouters.length === 0 &&
     addablePools.length === 0 &&
     providers.length === 0;
+  const kindCounts: Record<AccessKind, number> = {
+    routers: addableRouters.length,
+    pools: addablePools.length,
+    providers: providers.reduce((sum, entry) => sum + entry.keys.length, 0),
+  };
+  const kinds = ACCESS_KINDS.filter((entry) => kindCounts[entry.value] > 0);
+  const shows = (value: AccessKind) => kind === "all" || kind === value;
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setSearch("");
-      }}
-    >
+    <Popover open={open} onOpenChange={changeOpen}>
       <PopoverTrigger asChild>
         <Button
           id={id}
@@ -761,13 +664,43 @@ function AccessPicker({
             onValueChange={setSearch}
             placeholder="Search providers, keys, pools and routers…"
           />
+          {kinds.length > 1 && (
+            <div
+              role="toolbar"
+              aria-label="Show"
+              className="flex flex-wrap gap-1 border-b px-2 py-1.5"
+            >
+              {[
+                { value: "all" as const, title: "All" },
+                ...kinds.map((entry) => ({
+                  value: entry.value,
+                  title: `${entry.title} ${kindCounts[entry.value]}`,
+                })),
+              ].map((entry) => (
+                <Button
+                  key={entry.value}
+                  type="button"
+                  size="xs"
+                  variant={kind === entry.value ? "secondary" : "ghost"}
+                  aria-pressed={kind === entry.value}
+                  className={cn(
+                    "font-normal",
+                    kind !== entry.value && "text-muted-foreground",
+                  )}
+                  onClick={() => setKind(entry.value)}
+                >
+                  {entry.title}
+                </Button>
+              ))}
+            </div>
+          )}
           <CommandList className="max-h-[320px]">
             <CommandEmpty>
               {nothingLeft
                 ? "Everything is already added."
                 : "No matches. Anything already added is hidden."}
             </CommandEmpty>
-            {addableRouters.length > 0 && (
+            {shows("routers") && addableRouters.length > 0 && (
               <CommandGroup
                 heading={
                   <GroupHeading
@@ -781,24 +714,21 @@ function AccessPicker({
                     key={router.id}
                     value={`router:${router.id}`}
                     keywords={[router.name, "auto router", "auto routing"]}
-                    onSelect={() =>
-                      onAutoRouterIdsChange([...autoRouterIds, router.id])
-                    }
+                    onSelect={() => {
+                      onAutoRouterIdsChange([...autoRouterIds, router.id]);
+                      changeOpen(false);
+                    }}
                   >
                     <Sparkles className="size-3.5 shrink-0" aria-hidden />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate font-mono text-sm">
-                        {router.name}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {tierLine(tiersByRouter.get(router.id))}
-                      </span>
-                    </span>
+                    <RouterSummary
+                      name={router.name}
+                      tiers={tiersByRouter.get(router.id)}
+                    />
                   </CommandItem>
                 ))}
               </CommandGroup>
             )}
-            {addablePools.length > 0 && (
+            {shows("pools") && addablePools.length > 0 && (
               <CommandGroup
                 heading={
                   <GroupHeading
@@ -820,9 +750,10 @@ function AccessPicker({
                       ]),
                     ]}
                     disabled={!poolAnswers(pool)}
-                    onSelect={() =>
-                      onModelPoolIdsChange([...modelPoolIds, pool.id])
-                    }
+                    onSelect={() => {
+                      onModelPoolIdsChange([...modelPoolIds, pool.id]);
+                      changeOpen(false);
+                    }}
                   >
                     <LayersIcon className="size-3.5 shrink-0" aria-hidden />
                     <PoolSummary pool={pool} />
@@ -830,7 +761,7 @@ function AccessPicker({
                 ))}
               </CommandGroup>
             )}
-            {providers.map((entry) => (
+            {(shows("providers") ? providers : []).map((entry) => (
               <CommandGroup
                 key={entry.provider}
                 heading={
@@ -855,7 +786,10 @@ function AccessPicker({
                         ? "subscription"
                         : "metered",
                     ]}
-                    onSelect={() => onAddKey(entry.provider, option.key.id)}
+                    onSelect={() => {
+                      onAddKey(entry.provider, option.key.id);
+                      changeOpen(false);
+                    }}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
                       <KeyTitle option={option} />
@@ -885,14 +819,44 @@ function GroupHeading({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-function tierLine(tiers: RouterTiers | undefined): string {
-  if (!tiers) return "Picks a fast, normal or smart model per session";
-  return (Object.keys(TIER_LABELS) as (keyof typeof TIER_LABELS)[])
-    .flatMap((tier) => {
-      const model = tiers[tier]?.modelId;
-      return model ? [`${TIER_LABELS[tier]} ${model}`] : [];
-    })
-    .join(" · ");
+function tierModelsOf(tiers: RouterTiers | undefined) {
+  return (Object.keys(TIER_LABELS) as (keyof typeof TIER_LABELS)[]).flatMap(
+    (tier) => {
+      const model = tiers?.[tier];
+      return model ? [{ tier, ...model }] : [];
+    },
+  );
+}
+
+/** A router's name, how many models it picks from, and their providers. */
+function RouterSummary({
+  name,
+  tiers,
+}: {
+  name: string;
+  tiers: RouterTiers | undefined;
+}) {
+  const models = tierModelsOf(tiers);
+  const providers = [...new Set(models.map((model) => model.provider))];
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-2">
+      <span className="truncate font-mono text-sm">{name}</span>
+      {models.length > 0 && (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {plural(
+            new Set(models.map((model) => model.modelId)).size,
+            "model",
+            "models",
+          )}
+        </span>
+      )}
+      <span className="ml-auto flex shrink-0 items-center gap-1">
+        {providers.map((provider) => (
+          <ProviderIcon key={provider} provider={provider} size={14} />
+        ))}
+      </span>
+    </span>
+  );
 }
 
 /** Every typed word appears in the item's value or keywords, in any order. */
@@ -914,10 +878,6 @@ function matchesEveryWord(
 /** What automatic access adds at request time: a shared primary key that still works. */
 function isSharedPrimary(key: LlmProviderApiKeyResponse): boolean {
   return key.userId === null && key.isPrimary && !key.requiresReauthentication;
-}
-
-function isPresent(value: string | undefined): value is string {
-  return !!value;
 }
 
 function plural(count: number, one: string, many: string): string {

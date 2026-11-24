@@ -209,11 +209,20 @@ const NavPrimary = ({
   const { isMobile, setOpenMobile } = useSidebar();
 
   const renderItem = (item: NavItem) => (
-    <SidebarMenuItem key={item.url}>
+    <SidebarMenuItem
+      key={item.url}
+      className={cn(
+        item.nested &&
+          // Indented under the row above, on a guide line that runs on
+          // through the gaps between nested rows. The icon rail draws it as
+          // a row of its own.
+          "pl-[26px] before:absolute before:-inset-y-0.5 before:left-4 before:w-px before:bg-sidebar-border group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:before:hidden",
+      )}
+    >
       <SidebarMenuButton
         asChild
         tooltip={item.tooltipLabel ?? item.title}
-        className={item.className}
+        className={cn(item.nested && "h-7 text-[13px]", item.className)}
         isActive={
           item.customIsActive?.(pathname, searchParams) ??
           pathname.startsWith(item.url)
@@ -237,7 +246,12 @@ const NavPrimary = ({
             if (isMobile) setOpenMobile(false);
           }}
         >
-          <item.icon className={item.iconClassName} />
+          <item.icon
+            className={cn(
+              item.nested && "hidden group-data-[collapsible=icon]:block",
+              item.iconClassName,
+            )}
+          />
           <span className="min-w-0 flex-1 truncate">{item.title}</span>
           {item.beta && (
             <NavItemBadge

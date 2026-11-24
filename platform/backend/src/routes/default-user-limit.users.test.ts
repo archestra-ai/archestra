@@ -249,18 +249,30 @@ describe("user limit usage routes", () => {
     expect(body.summary).toMatchObject({ total: 1, none: 1 });
   });
 
-  test("counts a user who spent less than a cent", async ({
+  test("counts a limited user who spent less than a cent", async ({
     makeUser,
     makeMember,
     makeInteraction,
   }) => {
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId,
+      environmentId: null,
+      limitValue: 10,
+      cleanupInterval: "calendar_month",
+    });
     const user = await member({ makeUser, makeMember }, "Light Lou");
     await makeInteraction(agentId, { userId: user.id, cost: "0.0027" });
+    await makeInteraction(agentId, { userId: user.id, cost: "0.0000001" });
 
     const body = await list("?search=lou");
 
-    expect(body.data[0]).toMatchObject({ name: "Light Lou", spent: 0.0027 });
-    expect(body.summary).toMatchObject({ spenders: 1, spent: 0.0027 });
+    expect(body.data[0]).toMatchObject({
+      name: "Light Lou",
+      source: "organization_default",
+    });
+    expect(body.data[0].spent).toBeCloseTo(0.0027001, 10);
+    expect(body.summary.spenders).toBe(1);
+    expect(body.summary.spent).toBeCloseTo(0.0027001, 10);
   });
 
   test("pages through users", async ({ makeUser, makeMember }) => {

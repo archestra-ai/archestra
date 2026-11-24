@@ -156,9 +156,7 @@ export async function listUserLimitUsage(params: {
       return {
         ...base,
         ...closestCustomLimit({ limits: custom, totals: customTotals, now }),
-        fallbackSpent: roundMicroDollars(
-          Number.isFinite(fallback) ? fallback : 0,
-        ),
+        fallbackSpent: Number.isFinite(fallback) ? fallback : 0,
       };
     }
 
@@ -261,7 +259,7 @@ export async function listUserLimitUsage(params: {
     flaggedCustom: rows.filter(
       (row) => row.source === "custom" && row.status !== "ok",
     ).length,
-    spent: roundMicroDollars(rows.reduce((sum, row) => sum + row.spent, 0)),
+    spent: rows.reduce((sum, row) => sum + row.spent, 0),
     spenders: rows.filter((row) => row.spent > 0).length,
     resetsAt: globalDefault
       ? (calendarWindow(
@@ -491,7 +489,7 @@ function describeLimit(candidate: Candidate & { now: Date }) {
       ? (candidate.usage.cost / candidate.limitValue) * 100
       : 100;
   const window = calendarWindow(candidate.cleanupInterval, candidate.now);
-  const spent = roundMicroDollars(candidate.usage.cost);
+  const spent = candidate.usage.cost;
   return {
     source: candidate.source,
     environmentId: candidate.environmentId,
@@ -571,13 +569,7 @@ function projectSpend(params: {
   const elapsed = params.now.getTime() - params.window.start.getTime();
   const total = params.window.end.getTime() - params.window.start.getTime();
   if (elapsed < 60 * 60 * 1000 || params.spent <= 0) return null;
-  return roundMicroDollars((params.spent / elapsed) * total);
-}
-
-// Interactions cost fractions of a cent: rounding to cents would report a
-// light user as having spent nothing.
-function roundMicroDollars(value: number) {
-  return Math.round(value * 1_000_000) / 1_000_000;
+  return (params.spent / elapsed) * total;
 }
 
 function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {

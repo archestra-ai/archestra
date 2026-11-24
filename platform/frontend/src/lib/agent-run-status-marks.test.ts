@@ -73,7 +73,7 @@ describe("runStatusMarks", () => {
       {
         glyph: "live",
         dot: "attention",
-        description: "Running · Needs your input",
+        description: "Running · Waiting for input",
       },
     ],
     [
@@ -91,7 +91,7 @@ describe("runStatusMarks", () => {
       {
         glyph: "live",
         dot: "attention",
-        description: "Running · Needs your input",
+        description: "Running · Waiting for input",
       },
     ],
     [

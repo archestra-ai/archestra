@@ -196,7 +196,7 @@ const ATTENTION_CHIP_LABEL: Record<
   NonNullable<RunStatusInput["attentionState"]>,
   string
 > = {
-  input_required: "Needs your input",
+  input_required: "Waiting for input",
   auth_required: "Needs sign-in",
 };
 

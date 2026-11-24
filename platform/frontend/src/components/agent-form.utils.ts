@@ -162,8 +162,18 @@ export function accountPairToSave(params: {
    * fixes nothing.
    */
   fixed: { modelId: string | null } | null;
+  /**
+   * The agent allows personal subscriptions alone, and the connection is a
+   * company one: it belongs to the company option, which no run of the agent
+   * uses, so neither it nor its model is stored. Its runs take the model of
+   * each person's subscription instead of a company connection's.
+   */
+  companyPairUnused?: boolean;
 }): { llmApiKeyId?: string | null; modelId?: string | null } {
   const { fixed } = params;
+  if (params.companyPairUnused && !fixed) {
+    return { llmApiKeyId: null, modelId: null };
+  }
   if (!fixed) {
     return {
       llmApiKeyId: params.llmApiKeyId || null,

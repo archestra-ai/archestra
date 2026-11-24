@@ -531,6 +531,11 @@ interface SubagentsEditorProps {
   disabledAgentIds: string[];
   onDisabledSelectionChange: (ids: string[]) => void;
   emptyDescription?: string;
+  /**
+   * What the picked agents are called: subagents of an agent, or plain
+   * agents on a gateway, whose clients call them.
+   */
+  noun?: "subagent" | "agent";
 }
 
 function SubagentsEditor({
@@ -543,6 +548,7 @@ function SubagentsEditor({
   disabledAgentIds,
   onDisabledSelectionChange,
   emptyDescription = "Every task is handled here, with nothing handed on.",
+  noun = "subagent",
 }: SubagentsEditorProps) {
   const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
   const visibleIds = selectedIds.slice(0, 20);
@@ -603,7 +609,7 @@ function SubagentsEditor({
         </div>
       ) : !hasSelectedTargets ? (
         <div className="flex flex-col items-center rounded-md border border-dashed px-4 py-6 text-center">
-          <p className="text-sm font-medium">No subagents assigned</p>
+          <p className="text-sm font-medium">{`No ${noun}s assigned`}</p>
           <p className="text-xs text-muted-foreground">{emptyDescription}</p>
         </div>
       ) : null}
@@ -644,7 +650,7 @@ function SubagentsEditor({
           // In All mode every local agent is already a subagent, so the only
           // change the picker can make is to leave one out. Its label says so.
           triggerLabel={
-            localMode === "all" ? "Exclude a local agent" : "Add subagent"
+            localMode === "all" ? "Exclude a local agent" : `Add ${noun}`
           }
           searchPlaceholder={
             localMode === "all"
@@ -2746,15 +2752,33 @@ export function AgentForm({
   // one moved, both go.
   // Under a connection the runtime fixes, only the model is the agent's to
   // set or clear, where the runtime fixes none.
-  const llmSelectionChanged =
+  // A Claude agent drops its connection as soon as it is locked to
+  // subscriptions (`setAccountLock`); any other keeps it in the form until
+  // the save, for the company card ticked again. Saved under that lock, a
+  // company connection and its model would be nobody's: they are cleared, so
+  // neither the agent's runs nor the agents list keep showing them.
+  const companyPairUnused =
+    !!runtime &&
+    agentRuntimeEnabled &&
+    !isClaudeCodeRuntime &&
+    !connectionLockedByRuntime &&
+    !accountPairLockedForViewer &&
+    accountLock === "subscription" &&
+    !selectedApiKeyIsSubscription;
+  const clearsUnusedCompanyPair =
+    companyPairUnused &&
     !!persistedAgent &&
-    ((connectionLockedByRuntime
-      ? !runtimeFixedModelId &&
-        (llmModel ?? null) !== (persistedAgent.modelId ?? null)
-      : (llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
-        (llmModel ?? null) !== (persistedAgent.modelId ?? null)) ||
-      agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
-      agentAutoRouterId !== (persistedAgent.autoRouterId ?? null));
+    (!!persistedAgent.llmApiKeyId || !!persistedAgent.modelId);
+  const llmSelectionChanged =
+    clearsUnusedCompanyPair ||
+    (!!persistedAgent &&
+      ((connectionLockedByRuntime
+        ? !runtimeFixedModelId &&
+          (llmModel ?? null) !== (persistedAgent.modelId ?? null)
+        : (llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
+          (llmModel ?? null) !== (persistedAgent.modelId ?? null)) ||
+        agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
+        agentAutoRouterId !== (persistedAgent.autoRouterId ?? null)));
   // An agent the platform runs itself names a key and a model together. On
   // a runtime's cards each is optional: what is left empty is each person's
   // to pick.
@@ -2844,6 +2868,7 @@ export function AgentForm({
       fixed: connectionLockedByRuntime
         ? { modelId: runtimeFixedModelId }
         : null,
+      companyPairUnused,
     });
 
     setIsSaving(true);
@@ -3368,6 +3393,7 @@ export function AgentForm({
     connectionLockedByRuntime,
     companyModelId,
     runtimeFixedModelId,
+    companyPairUnused,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -4981,25 +5007,35 @@ export function AgentForm({
               {/* Section 4: Subagents */}
               {showSubagents && (
                 <SettingsSection
-                  title="Subagents"
+                  // A gateway's are agents its clients call, not agents
+                  // under another one.
+                  title={isInternalAgent ? "Subagents" : "Agents"}
                   // An agent hands the task over itself. A gateway does not
-                  // run anything — it advertises each subagent as a delegation
+                  // run anything — it advertises each agent as a delegation
                   // tool and its client decides when to call one — so saying it
                   // "hands a task over" would describe the wrong actor.
                   description={
                     isInternalAgent
                       ? "Agents this one may delegate work to, locally or over A2A."
-                      : `Agents this ${agentTypeDisplayName[agentType] || "agent"} offers its clients as delegation tools.`
+                      : agentType === "mcp_gateway"
+                        ? "Clients connected to this MCP gateway can call the agents assigned here as tools. Assign an Agent Runtime agent here so a coding agent on a laptop can hand work over to it."
+                        : `Agents this ${agentTypeDisplayName[agentType] || "agent"} offers its clients as delegation tools.`
                   }
                 >
                   {!subagentSetsLoaded ? (
                     <p className="text-sm text-muted-foreground">
-                      <span>Loading subagents…</span>
+                      <span>
+                        {isInternalAgent
+                          ? "Loading subagents…"
+                          : "Loading agents…"}
+                      </span>
                     </p>
                   ) : (
                     <div className="space-y-3">
                       <AccessModeCards
-                        label="Subagent access"
+                        label={
+                          isInternalAgent ? "Subagent access" : "Agent access"
+                        }
                         mode={accessAllSubagents ? "all" : "manual"}
                         onModeChange={(mode) =>
                           setAccessAllSubagents(mode === "all")
@@ -5035,6 +5071,7 @@ export function AgentForm({
                             ? undefined
                             : "No delegation tools appear in this gateway's tool list."
                         }
+                        noun={isInternalAgent ? "subagent" : "agent"}
                       />
                       {supportsSubagents && (
                         <SubagentLoadBalancingSection
@@ -5117,8 +5154,14 @@ export function AgentForm({
                 <fieldset disabled={canConfigureRuntime !== true}>
                   <AgentRuntimeFields
                     value={runtime}
-                    onChange={setAgentRuntime}
+                    // A saved agent with a dedicated runtime keeps it: one
+                    // without would be another kind of agent under its name.
+                    onChange={(next) => {
+                      if (next === null && agent?.runtime) return;
+                      setAgentRuntime(next);
+                    }}
                     locked={!!runtimeSettingsReadOnlyBy}
+                    keepsRuntime={!!agent?.runtime}
                   />
                 </fieldset>
               </div>

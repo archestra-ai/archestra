@@ -74,9 +74,9 @@ describe("AgentRunState", () => {
     );
 
     expect(
-      screen.getByRole("img", { name: "Running · Needs your input" }),
+      screen.getByRole("img", { name: "Running · Waiting for input" }),
     ).toBeVisible();
-    expect(screen.queryByText("Needs your input")).not.toBeInTheDocument();
+    expect(screen.queryByText("Waiting for input")).not.toBeInTheDocument();
   });
 
   it("reports a completed turn as an active session while it still calls the model", () => {

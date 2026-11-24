@@ -1566,14 +1566,16 @@ describe("AgentForm delegation state", () => {
   it.each([
     "mcp_gateway",
     "profile",
-  ] as const)("offers Subagents on %s forms, seeded from that record's sets", (agentType) => {
+  ] as const)("offers Agents, not Subagents, on %s forms, seeded from that record's sets", (agentType) => {
     render(
       <AgentForm agentType={agentType} agent={{ ...baseAgent, agentType }} />,
     );
 
+    // A gateway's agents are called by its clients, not by another agent.
+    expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Subagents" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Subagents" }),
+    ).not.toBeInTheDocument();
     expect(useAgentDelegationsMock).toHaveBeenCalledWith(baseAgent.id);
   });
 
@@ -1623,15 +1625,16 @@ describe("AgentForm delegation state", () => {
     render(<AgentForm agentType="mcp_gateway" agent={gateway} />);
 
     const section = screen
-      .getByRole("heading", { name: "Subagents" })
+      .getByRole("heading", { name: "Agents" })
       .closest("section") as HTMLElement;
+    expect(within(section).getByText("No agents assigned")).toBeInTheDocument();
     expect(
       within(section).getByText(
         "No delegation tools appear in this gateway's tool list.",
       ),
     ).toBeInTheDocument();
     await user.click(
-      within(section).getByRole("combobox", { name: "Add subagent" }),
+      within(section).getByRole("combobox", { name: "Add agent" }),
     );
     await user.click(screen.getByRole("option", { name: /Target Agent/ }));
     await user.click(screen.getByRole("button", { name: /update/i }));
@@ -4013,7 +4016,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
   });
 
-  it("enables Save after disabling a runtime with a stale preflight incompatibility", async () => {
+  it("keeps a saved agent's dedicated runtime when it is switched off", async () => {
     vi.mocked(useFeature).mockImplementation(
       ((flag: string) =>
         flag === "agentRuntime") as unknown as typeof useFeature,
@@ -4069,15 +4072,11 @@ describe("AgentForm save payload and failure handling", () => {
     await screen.findByText("Choose a compatible model or runtime to save.");
     await user.click(screen.getByRole("button", { name: "Disable runtime" }));
 
-    await waitFor(() =>
-      expect(
-        screen.queryByText("Choose a compatible model or runtime to save."),
-      ).not.toBeInTheDocument(),
-    );
-    expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: /update/i }));
-    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody()).toEqual({ runtime: null });
+    // Nothing changed: the runtime stays, and so does what it needs.
+    expect(
+      screen.getByText("Choose a compatible model or runtime to save."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
   });
 
   it("requires an image and a command before saving a runtime newly enabled on an existing agent", async () => {
@@ -6297,7 +6296,7 @@ describe("AgentForm save payload and failure handling", () => {
       expect(companyKeyWay()).not.toBeChecked();
     });
 
-    it("locks an agent to personal subscriptions while it keeps a company key of its own", async () => {
+    it("locks an agent with a company key of its own to personal subscriptions, and drops the key no run uses any more", async () => {
       // The runtime has a subscription of its own, so the lock does not
       // depend on what the agent's own connection is.
       withGrokKeys();
@@ -6323,8 +6322,9 @@ describe("AgentForm save payload and failure handling", () => {
       expect(savedBody().runtime).toMatchObject({
         accountLock: "subscription",
       });
-      // Its company key stays stored: unticking the way does not clear it.
-      expect(savedBody()).not.toHaveProperty("llmApiKeyId");
+      // Its company key and model would be nobody's: neither the runs nor
+      // the agents list keep showing them.
+      expect(savedBody()).toMatchObject({ llmApiKeyId: null, modelId: null });
     });
 
     it("lifts the ChatGPT requirement when a new Codex agent runs only on a company API key", async () => {
@@ -6459,8 +6459,23 @@ describe("AgentForm save payload and failure handling", () => {
       });
     });
 
+    it("keeps a Codex agent's own ChatGPT subscription once it allows subscriptions alone", async () => {
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command: codex, llmApiKeyId: "chatgpt-key" })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(companyKeyWay());
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody()).not.toHaveProperty("llmApiKeyId");
+    });
+
     it.each([
-      ["is turned off", "Disable runtime"],
       ["becomes one with a single account", "Set runtime image and command"],
     ])("forgets that both options were unticked when the runtime %s", async (_change, button) => {
       const user = userEvent.setup();

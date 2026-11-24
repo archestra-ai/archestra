@@ -136,7 +136,7 @@ export function AgentWorkSources({
             <div className="min-w-0 flex-[1_1_18rem] space-y-1">
               <h3 className="text-sm font-semibold">From your laptop</h3>
               <p className="text-sm text-muted-foreground">
-                {`Add the ${appName} MCP gateway to Claude Code or Codex once. Your changes, files and credentials move into a run here; "bring it back" returns a patch.`}
+                {`Connect your local coding agent, such as Claude Code or Codex, to an MCP gateway in ${appName} once. Then assign this agent to that gateway under Agents in its settings, or let the gateway use all agents. Your changes, files and credentials move into a run here; "bring it back" returns a patch.`}
               </p>
             </div>
             <span

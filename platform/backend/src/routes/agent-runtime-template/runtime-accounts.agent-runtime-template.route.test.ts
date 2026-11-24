@@ -170,8 +170,7 @@ describe("a runtime's account rule", () => {
       resolvedLlmProvider: listed.resolvedLlmProvider,
       resolvedLlmProviderKeyName: listed.resolvedLlmProviderKeyName,
       ...(listed.resolvedLlmPersonalSubscription !== undefined && {
-        resolvedLlmPersonalSubscription:
-          listed.resolvedLlmPersonalSubscription,
+        resolvedLlmPersonalSubscription: listed.resolvedLlmPersonalSubscription,
       }),
     };
   };

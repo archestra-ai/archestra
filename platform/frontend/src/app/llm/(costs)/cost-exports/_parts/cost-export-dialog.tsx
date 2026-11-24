@@ -29,12 +29,12 @@ import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { CostExport } from "@/lib/cost-export.query";
 import { CostExportStartFrom } from "./cost-export-start-from";
-import { exampleObjectKey, useCostExportForm } from "./use-cost-export-form";
+import { useCostExportForm } from "./use-cost-export-form";
 
 /**
- * Schedule a cost export, or edit one: name, destination, how often (with
- * each option's file name), where a new export starts (now, or a backfill),
- * and the folder. Edit mode keeps the Enabled switch in the footer.
+ * Schedule a cost export, or edit one: name, destination, how often, whether
+ * a new export includes past usage (a backfill), and the folder. Edit mode
+ * keeps the Enabled switch in the footer.
  */
 export function CostExportDialog({
   open,
@@ -73,10 +73,6 @@ export function CostExportDialog({
   const { data: canManageProviders } = useHasPermissions({
     organizationSettings: ["read"],
   });
-  const fileName = (schedule: CostExportSchedule) =>
-    exampleObjectKey({ ...values, schedule })
-      .split("/")
-      .pop();
 
   return (
     <FormDialog
@@ -198,20 +194,12 @@ export function CostExportDialog({
                     value={option.value}
                     className="mt-0.5"
                   />
-                  <span className="min-w-0 space-y-0.5">
-                    <span className="block text-sm">
-                      <span className="font-medium">{option.label}</span>
-                      <span className="text-muted-foreground">
-                        {" "}
-                        — {option.hint}
-                      </span>
+                  <span className="min-w-0 text-sm">
+                    <span className="font-medium">{option.label}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      — {option.hint}
                     </span>
-                    {/* Only the chosen option names its file, to keep the form short. */}
-                    {values.schedule === option.value && (
-                      <span className="block truncate font-mono text-xs text-muted-foreground">
-                        {fileName(option.value)}
-                      </span>
-                    )}
                   </span>
                 </Label>
               ))}

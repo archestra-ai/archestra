@@ -350,6 +350,9 @@ const DesktopDeviceViewSchema = z.object({
     z.object({
       catalogId: z.string(),
       name: z.string(),
+      /** An emoji icon; an image icon is linked through `iconUrl`. */
+      icon: z.string().nullable(),
+      iconUrl: z.string().nullable(),
       state: DesktopMcpServerStateSchema.nullable(),
       lastError: z.string().nullable(),
       command: z.string().nullable(),

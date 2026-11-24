@@ -55,11 +55,13 @@ describe("GET /api/desktop-devices", () => {
       organizationId,
       name: "MATLAB",
       serverType: "desktop_mcp",
+      icon: "📐",
     });
     const eda = await makeInternalMcpCatalog({
       organizationId,
       name: "eda-agent",
       serverType: "desktop_mcp",
+      icon: "data:image/png;base64,iVBORw0KGgo=",
     });
     // Not installed by this user: another user installed it, and this user
     // uninstalled it.
@@ -124,10 +126,24 @@ describe("GET /api/desktop-devices", () => {
       online: true,
     });
     expect(listed.servers).toHaveLength(2);
+    // An emoji icon is in the list. An image icon is a link to the icon
+    // route, so the list does not carry the image.
     expect(listed.servers).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ catalogId: matlab.id, name: "MATLAB" }),
-        expect.objectContaining({ catalogId: eda.id, name: "eda-agent" }),
+        expect.objectContaining({
+          catalogId: matlab.id,
+          name: "MATLAB",
+          icon: "📐",
+          iconUrl: null,
+        }),
+        expect.objectContaining({
+          catalogId: eda.id,
+          name: "eda-agent",
+          icon: null,
+          iconUrl: expect.stringContaining(
+            `/api/internal_mcp_catalog/${eda.id}/icon?v=`,
+          ),
+        }),
       ]),
     );
   });

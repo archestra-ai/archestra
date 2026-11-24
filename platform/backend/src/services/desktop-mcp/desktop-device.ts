@@ -17,6 +17,7 @@ import {
   extractAuditResourceName,
   sanitizeAuditSnapshot,
 } from "@/utils/audit-snapshot";
+import { catalogIconUrl, splitListIcon } from "@/utils/servable-icon";
 import { desktopBridgeControlService } from "./desktop-bridge-control";
 import {
   type DesktopDeviceServerConfig,
@@ -27,6 +28,9 @@ import { desktopTunnelService } from "./desktop-tunnel";
 export interface DesktopDeviceServerView {
   catalogId: string;
   name: string;
+  /** An emoji icon; an image icon is served from `iconUrl` instead. */
+  icon: string | null;
+  iconUrl: string | null;
   /**
    * The state of the MCP server. Null when it is not known: the device is
    * offline, or its tunnel client did not report yet.
@@ -223,6 +227,9 @@ function toServerView(
   return {
     catalogId: server.catalogId,
     name: server.name,
+    ...splitListIcon(server.icon, (version) =>
+      catalogIconUrl(server.catalogId, version),
+    ),
     state,
     lastError: state === "failed" ? server.lastError : null,
     command: server.command,

@@ -67,6 +67,7 @@ export function deviceServerRows(servers: DesktopServer[]): DeviceServerRow[] {
     return {
       catalogId: server.catalogId,
       name: server.name,
+      icon: server.iconUrl ?? server.icon,
       state: deviceServerStateLabel(server.state),
       failed: server.state === "failed",
       running: server.state === "running",
@@ -119,6 +120,8 @@ type DesktopServer = DesktopDevice["servers"][number];
 interface DeviceServerRow {
   catalogId: string;
   name: string;
+  /** An emoji, or the link to the image of the catalog item; null with none. */
+  icon: string | null;
   /** "Running", "Failed" and so on; null when the MCP bridge reported none. */
   state: string | null;
   failed: boolean;

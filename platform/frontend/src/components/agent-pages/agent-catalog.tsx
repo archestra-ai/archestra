@@ -6,6 +6,7 @@ import {
   buildAgentCatalogRuntime,
   buildAgentCatalogSystemPrompt,
   buildCustomAgentRuntime,
+  CHAT_APP_CHANNEL_IDS,
   CUSTOM_IMAGE_RUNTIME_ID,
   getAgentCatalogImages,
   isIntegrationHidden,
@@ -37,7 +38,6 @@ import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { useOrganization } from "@/lib/organization.query";
-import { CHAT_APPS } from "./agent-work-sources";
 
 export interface AgentCatalogTemplate {
   id: string;
@@ -495,7 +495,7 @@ function GiveItWorkFrom({ showsRuntimes }: { showsRuntimes: boolean }) {
   // Jira and email are messaging channels too, but a logo with no name says
   // little here: the strip names the chat apps and leaves the rest to the
   // agent's own page.
-  const messengers = CHAT_APPS.filter((id) => !isHidden(id));
+  const messengers = CHAT_APP_CHANNEL_IDS.filter((id) => !isHidden(id));
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg bg-muted px-4 py-3 text-sm">
       <span className="font-semibold">Give it work from</span>

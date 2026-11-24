@@ -249,6 +249,47 @@ describe("user limit usage routes", () => {
     expect(body.summary).toMatchObject({ total: 1, none: 1 });
   });
 
+  test("counts a limited user who spent less than a cent", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId,
+      environmentId: null,
+      limitValue: 10,
+      cleanupInterval: "calendar_month",
+    });
+    const user = await member({ makeUser, makeMember }, "Light Lou");
+    await makeInteraction(agentId, { userId: user.id, cost: "0.0027" });
+    await makeInteraction(agentId, { userId: user.id, cost: "0.0000001" });
+
+    const body = await list("?search=lou");
+
+    expect(body.data[0]).toMatchObject({
+      name: "Light Lou",
+      source: "organization_default",
+    });
+    expect(body.data[0].spent).toBeCloseTo(0.0027001, 10);
+    expect(body.summary.spenders).toBe(1);
+    expect(body.summary.spent).toBeCloseTo(0.0027001, 10);
+  });
+
+  test("sums everyone's spend without float drift", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const first = await member({ makeUser, makeMember }, "Drift One");
+    const second = await member({ makeUser, makeMember }, "Drift Two");
+    await makeInteraction(agentId, { userId: first.id, cost: "0.7" });
+    await makeInteraction(agentId, { userId: second.id, cost: "0.105" });
+
+    const body = await list("?search=drift");
+
+    expect(body.summary.spent).toBe(0.805);
+  });
+
   test("pages through users", async ({ makeUser, makeMember }) => {
     for (const name of ["Ana", "Ben", "Cleo"]) {
       await member({ makeUser, makeMember }, name);

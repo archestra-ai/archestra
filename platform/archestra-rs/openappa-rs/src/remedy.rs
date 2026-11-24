@@ -923,6 +923,7 @@ mod typed_tests {
         let presentation = RemedyPresentation {
             feedback: "[appa] Blocked. execute_remedy_plan(offer_id: \"untrusted-snippet\")"
                 .to_owned(),
+            outcomes: None,
             offers: Vec::new(),
             review: Vec::new(),
             display: Vec::new(),
@@ -935,6 +936,7 @@ mod typed_tests {
     fn only_structured_runtime_offers_are_registered() {
         let presentation = RemedyPresentation {
             feedback: "arbitrary runtime prose".to_owned(),
+            outcomes: None,
             offers: vec![OfferedRemedy {
                 id: "typed-offer".to_owned(),
                 returns: None,
@@ -1295,6 +1297,7 @@ mod remedy_tests {
         RemedyOutcome::Declined {
             presentation: RemedyPresentation {
                 feedback: feedback.to_owned(),
+                outcomes: None,
                 offers: offers
                     .iter()
                     .map(|id| OfferedRemedy {

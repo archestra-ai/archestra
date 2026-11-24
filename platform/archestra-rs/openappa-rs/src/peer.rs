@@ -525,7 +525,8 @@ async fn read(
         Err(reason) => return Err(peer_failure(reason)),
     };
     match &outcome.decision {
-        HookDecision::DeliverValue { value } | HookDecision::ReplaceOutput { output: value } => {
+        HookDecision::DeliverValue { value }
+        | HookDecision::ReplaceOutput { output: value, .. } => {
             if value.is_empty() {
                 return Err(invariant(
                     "OpenAPPA returned an empty body for an admitted peer read",

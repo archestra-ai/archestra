@@ -611,6 +611,7 @@ mod runtime_child_tests {
         let blocked = wire(&HookDecision::Block {
             reason: "the child has a call still open; report its outcome before the child ends"
                 .into(),
+            outcomes: None,
         })
         .unwrap();
         assert_eq!(blocked["decision"], "block");
@@ -784,6 +785,7 @@ mod runtime_child_tests {
             title: None,
             start: None,
             launch: None,
+            settings: Default::default(),
         }
     }
 
@@ -854,6 +856,7 @@ mod runtime_child_tests {
                 root: root.clone(),
                 child: child.clone(),
                 value: "exact file bytes".into(),
+                operation: None,
             },
         )
         .await;
@@ -914,10 +917,11 @@ mod runtime_child_tests {
                 root: root.clone(),
                 child: child.clone(),
                 value: "pending".into(),
+                operation: None,
             },
         )
         .await;
-        let HookDecision::Block { reason } = blocked else {
+        let HookDecision::Block { reason, .. } = blocked else {
             panic!("an open call must hold the return, got {blocked:?}");
         };
         // The binding marks exactly this hold as busy (`mark_busy_hold`), so
@@ -963,6 +967,7 @@ mod runtime_child_tests {
                 root: root.clone(),
                 child: child.clone(),
                 value: "exact file bytes".into(),
+                operation: None,
             },
         )
         .await;
@@ -1153,6 +1158,7 @@ mod runtime_child_tests {
             root: root.clone(),
             child: child.clone(),
             value: "the answer".into(),
+            operation: None,
         };
         let ended = hooks::handle(&runtime, stop()).await;
         assert_eq!(ended, HookDecision::DeferReturn);

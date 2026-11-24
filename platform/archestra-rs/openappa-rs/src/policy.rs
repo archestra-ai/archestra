@@ -723,6 +723,7 @@ mod tests {
                     title: None,
                     start: None,
                     launch: None,
+                    settings: Default::default(),
                 }
             )
             .await,
@@ -976,6 +977,7 @@ delta = { audience = ["internal"] }
                 &parent.root,
                 &parent.root,
                 &TrajectoryId(format!("{organization}-fork")),
+                Default::default(),
             );
             assert!(forked.is_ok(), "{organization}: {forked:?}");
         }
@@ -1631,6 +1633,7 @@ command = ["python3", "judge.py"]
             } else {
                 HookDecision::ReplaceOutput {
                     output: "[appa] the tool ran, but its output is not shown: it is over the 64-byte limit".into(),
+                    outcomes: None,
                 }
             };
             assert_eq!(

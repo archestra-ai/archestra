@@ -878,6 +878,7 @@ mod tests {
             title: None,
             start: None,
             launch: None,
+            settings: Default::default(),
         };
         assert_eq!(
             block_on(hooks::handle(&runtime.pinned(&original), start())),

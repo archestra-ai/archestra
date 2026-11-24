@@ -73,8 +73,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, DeclaredReturn, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind,
-    SpawnRef, ToolOutcome, TrajectoryId,
+    Actor, DeclaredReturn, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling,
+    SessionSettings, SpawnKind, SpawnRef, ToolOutcome, TrajectoryId,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -340,6 +340,7 @@ impl State {
                     &TrajectoryId(parent_root),
                     &TrajectoryId(parent_trajectory),
                     &TrajectoryId(root.to_owned()),
+                    SessionSettings::default(),
                 )
                 .map_err(fork_refused)?;
             return Ok(None);
@@ -360,6 +361,7 @@ impl State {
                 &TrajectoryId(parent_root),
                 &TrajectoryId(parent_trajectory),
                 &TrajectoryId(root.to_owned()),
+                SessionSettings::default(),
             )
             .map_err(fork_refused)?;
         Ok(Some(forked_at))
@@ -571,6 +573,7 @@ impl State {
                     title: None,
                     start: None,
                     launch: None,
+                    settings: SessionSettings::default(),
                 }
             };
             let decision = hooks::handle(&self.runtime, start).await;
@@ -772,7 +775,7 @@ impl State {
             if !matches!(gate, HookDecision::PassControl) {
                 let text = match gate {
                     HookDecision::DenyCall { feedback, .. } => feedback,
-                    HookDecision::Block { reason } => reason,
+                    HookDecision::Block { reason, .. } => reason,
                     _ => return Err(invariant("unexpected remedy control decision")),
                 };
                 let response = runtime_refusal(text)?;
@@ -978,6 +981,7 @@ impl State {
                         .output
                         .clone()
                         .ok_or_else(|| invalid_input("missing output"))?,
+                    operation: None,
                 },
                 HookEventKind::SessionStart
                 | HookEventKind::ToolResult
@@ -1217,7 +1221,7 @@ impl State {
         if cancelled && !matches!(decision, HookDecision::Ack) {
             // Only the runtime's own refusal text is named: any other answer carries output.
             let answered = match &decision {
-                HookDecision::Block { reason } => format!("a block: {reason}"),
+                HookDecision::Block { reason, .. } => format!("a block: {reason}"),
                 HookDecision::Refuse { class, detail } => {
                     format!("a refusal ({class:?}): {detail}")
                 }
@@ -1243,8 +1247,8 @@ impl State {
             HookDecision::DeliverValue { value } | HookDecision::ChildReturn { value } => {
                 value.clone()
             }
-            HookDecision::ReplaceOutput { output } => output.clone(),
-            HookDecision::Block { reason } => {
+            HookDecision::ReplaceOutput { output, .. } => output.clone(),
+            HookDecision::Block { reason, .. } => {
                 format!("[appa] Tool output withheld: {reason}")
             }
             HookDecision::Refuse { class, detail } => {

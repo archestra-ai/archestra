@@ -636,6 +636,11 @@ function BatteryDialog({
       (included?.source ?? summary?.source) !== "upload");
   const [staged, setStaged] = useState<StagedChanges>(NOTHING_STAGED);
   const stagedChanges = stagedBatteryChanges(staged, battery);
+  // A server's editor saves through one tool call, which changes a bounded
+  // number of servers: past it, nothing more is staged until Save.
+  const stagingFull =
+    changes === "owner" &&
+    staged.attach.length + staged.detach.length >= MAX_SERVER_EDITOR_CHANGES;
   const saveLaunch = useOpenAppaChatLaunch({
     subject: {
       kind: "batteryChanges",
@@ -867,7 +872,7 @@ function BatteryDialog({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            disabled={saving}
+                            disabled={saving || stagingFull}
                             aria-label={detachLabel}
                             onClick={() =>
                               setStaged((current) => ({
@@ -922,6 +927,12 @@ function BatteryDialog({
               Check the server's connection and save again, or undo that server.
             </p>
           )}
+          {stagingFull && (
+            <p className="text-sm text-muted-foreground">
+              One save changes up to {MAX_SERVER_EDITOR_CHANGES} servers. Save
+              these changes to change more.
+            </p>
+          )}
           {summary && (writable || staging) && (
             <AttachServerPicker
               batteryName={summary.name}
@@ -938,7 +949,7 @@ function BatteryDialog({
                   ...staged.attach.map(({ entry }) => entry.id),
                 ])
               }
-              pending={pending || saving}
+              pending={pending || saving || stagingFull}
               attach={
                 writable
                   ? {
@@ -1745,6 +1756,12 @@ type StagedChanges = {
 };
 
 const NOTHING_STAGED: StagedChanges = { attach: [], detach: [], include: null };
+
+/**
+ * The servers one battery change of a server's editor may name: the
+ * self-service battery tool takes one server and up to 20 others.
+ */
+const MAX_SERVER_EDITOR_CHANGES = 21;
 
 /** The staged changes as the configuration agent is asked for them. */
 function stagedBatteryChanges(

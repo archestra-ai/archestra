@@ -237,6 +237,7 @@ const {
         isGithubAppKey?: boolean;
         githubOrganizationName?: string | null;
       }>;
+      isFetched?: boolean;
     } => ({ data: [] }),
   ),
   useLlmModelsByProviderMock: vi.fn(() => ({ modelsByProvider: {} })),
@@ -6296,15 +6297,42 @@ describe("AgentForm save payload and failure handling", () => {
       expect(companyKeyWay()).not.toBeChecked();
     });
 
-    it("locks an agent with a company key of its own to personal subscriptions, and drops the key no run uses any more", async () => {
+    it("locks an agent with an incompatible company key to personal subscriptions and drops the unused pair", async () => {
       // The runtime has a subscription of its own, so the lock does not
       // depend on what the agent's own connection is.
-      withGrokKeys();
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [companyKey, xaiKey, superGrokKey],
+      });
+      useLlmModelsByProviderMock.mockReturnValue({
+        modelsByProvider: {
+          openai: [
+            {
+              dbId: "openai-model",
+              id: "gpt-5",
+              displayName: "GPT-5",
+              provider: "openai",
+              isFree: false,
+            },
+          ],
+          xai: [
+            {
+              dbId: "grok-model",
+              id: "grok-4",
+              displayName: "Grok 4",
+              provider: "xai",
+              isFree: false,
+            },
+          ],
+        },
+      });
       const user = userEvent.setup();
       render(
         <AgentForm
           agentType="agent"
-          agent={grokAgent({})}
+          agent={{
+            ...grokAgent({ llmApiKeyId: "openai-key" }),
+            modelId: "openai-model",
+          }}
           sections={["configuration"]}
         />,
       );
@@ -6322,9 +6350,64 @@ describe("AgentForm save payload and failure handling", () => {
       expect(savedBody().runtime).toMatchObject({
         accountLock: "subscription",
       });
-      // Its company key and model would be nobody's: neither the runs nor
-      // the agents list keep showing them.
+      // SuperGrok does not serve OpenAI models, so neither the company key nor
+      // its model is used by any run and both are cleared.
       expect(savedBody()).toMatchObject({ llmApiKeyId: null, modelId: null });
+    });
+
+    it("keeps a subscription-served model when locking a company-key agent to personal subscriptions", async () => {
+      withGrokKeys();
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={grokAgent({})}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(companyKeyWay());
+      expect(superGrokWay()).toBeChecked();
+      expect(companyKeyWay()).not.toBeChecked();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({
+        accountLock: "subscription",
+      });
+      // SuperGrok serves xAI models (`grok-4`), so saving preserves the model
+      // instead of clearing it (runs bind each person's SuperGrok and ignore
+      // the stored company key).
+      expect(savedBody().llmApiKeyId).toBeUndefined();
+      expect(savedBody().modelId).toBeUndefined();
+    });
+
+    it("does not clear a stored personal subscription on an unrelated edit when keys are unreadable or still loading", async () => {
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [],
+        isFetched: false,
+      });
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={grokAgent({
+            lock: "subscription",
+            llmApiKeyId: "supergrok-key",
+          })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      const descriptionInput = screen.getByLabelText("Description");
+      await user.clear(descriptionInput);
+      await user.type(descriptionInput, "Updated description");
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().description).toBe("Updated description");
+      expect(savedBody().llmApiKeyId).toBeUndefined();
+      expect(savedBody().modelId).toBeUndefined();
     });
 
     it("lifts the ChatGPT requirement when a new Codex agent runs only on a company API key", async () => {

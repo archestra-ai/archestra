@@ -163,10 +163,13 @@ export function accountPairToSave(params: {
    */
   fixed: { modelId: string | null } | null;
   /**
-   * The agent allows personal subscriptions alone, and the connection is a
-   * company one: it belongs to the company option, which no run of the agent
-   * uses, so neither it nor its model is stored. Its runs take the model of
-   * each person's subscription instead of a company connection's.
+   * The agent allows personal subscriptions alone, and the connection is
+   * positively confirmed to be a company one whose model is absent or not
+   * served by the runtime's subscription: neither it nor its model is used
+   * by any run, so both are cleared. A subscription-served model is kept
+   * with its stored pair because the backend cannot persist a model alone
+   * without a fixed runtime connection and ignores the company key at run
+   * time.
    */
   companyPairUnused?: boolean;
 }): { llmApiKeyId?: string | null; modelId?: string | null } {

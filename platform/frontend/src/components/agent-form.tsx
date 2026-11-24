@@ -2755,8 +2755,23 @@ export function AgentForm({
   // A Claude agent drops its connection as soon as it is locked to
   // subscriptions (`setAccountLock`); any other keeps it in the form until
   // the save, for the company card ticked again. Saved under that lock, a
-  // company connection and its model would be nobody's: they are cleared, so
-  // neither the agent's runs nor the agents list keep showing them.
+  // company connection with no model or with a model the runtime's
+  // subscription does not serve would be nobody's: clear it only once the
+  // key list and model catalog positively confirm that, so an unloaded or
+  // unreadable personal subscription is never wiped and a model the
+  // subscription serves stays intact (runs keep it via
+  // `keptSubscriptionModel`, while the API cannot store a model without its
+  // connection).
+  const selectedKeyIsConfirmedCompany =
+    availableApiKeysFetched &&
+    selectedApiKey !== undefined &&
+    !isPersonalSubscription(selectedApiKey);
+  const selectedModelUnusedBySubscription =
+    !llmModel ||
+    (modelCatalogLoaded &&
+      selectedLlmModelRow !== null &&
+      (!offeredSubscription ||
+        selectedLlmModelRow.provider !== offeredSubscription.provider));
   const companyPairUnused =
     !!runtime &&
     agentRuntimeEnabled &&
@@ -2764,7 +2779,8 @@ export function AgentForm({
     !connectionLockedByRuntime &&
     !accountPairLockedForViewer &&
     accountLock === "subscription" &&
-    !selectedApiKeyIsSubscription;
+    selectedKeyIsConfirmedCompany &&
+    selectedModelUnusedBySubscription;
   const clearsUnusedCompanyPair =
     companyPairUnused &&
     !!persistedAgent &&
@@ -4278,9 +4294,11 @@ export function AgentForm({
     ? "Each person's Claude subscription"
     : requiredSubscription
       ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
-      : // The subscription the runtime's rule names, whatever the agent
-        // stores.
-        runtimeRuleKind === "subscription" && offeredSubscriptionKind
+      : // The subscription the runtime's rule or agent lock names, whatever
+        // the agent stores.
+        (runtimeRuleKind === "subscription" ||
+            accountLock === "subscription") &&
+          offeredSubscriptionKind
         ? personalSubscriptionCard(offeredSubscriptionKind).title
         : agentAutoRouterId
           ? (agentAutoRouter?.label ?? "Auto")
@@ -4341,7 +4359,9 @@ export function AgentForm({
               </Alert>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {selectedApiKey && selectedApiKey.scope !== "org" ? (
+                {selectedApiKey &&
+                selectedApiKey.scope !== "org" &&
+                (!runtimeCards || companyWayOpen) ? (
                   <span>
                     Selected key will be available to everyone who has access to
                     this agent.

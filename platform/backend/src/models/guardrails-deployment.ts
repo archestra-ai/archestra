@@ -34,17 +34,15 @@ class GuardrailsDeploymentModel {
 
   /**
    * `enabled` is the on/off bit, which a replica of an older release may
-   * write alone; the saved mode is which kind of on.
+   * write alone. On is Observe only while the saved mode and the legacy
+   * columns both say so; a disagreement reads as the stricter Enforce.
    */
   static mode(row: GuardrailsDeploymentRow): GuardrailsMode {
     if (!row.enabled) return "off";
-    switch (row.mode) {
-      case "observe":
-      case "enforce":
-        return row.mode;
-      default:
-        return "enforce";
-    }
+    const legacyObserve =
+      row.humanApprovalMode === "everywhere" &&
+      row.unapprovableBlockMode === "allow";
+    return row.mode === "observe" && legacyObserve ? "observe" : "enforce";
   }
   static async isEnabled(): Promise<boolean> {
     return (await GuardrailsDeploymentModel.get()).enabled;
@@ -96,16 +94,9 @@ class GuardrailsDeploymentModel {
     return written.length > 0;
   }
 
-  /** Back to first-run settings: the legacy defaults, no saved mode. */
+  /** Back to first-run settings: no row, so every column reads its default. */
   static async reset(tx: Transaction) {
-    await tx.update(table).set({
-      mode: null,
-      personApproval: null,
-      enforcedMarks: null,
-      enabled: false,
-      humanApprovalMode: "block",
-      unapprovableBlockMode: "refuse",
-    });
+    await tx.delete(table);
   }
   static async findByIdForAudit() {
     return GuardrailsDeploymentModel.get();

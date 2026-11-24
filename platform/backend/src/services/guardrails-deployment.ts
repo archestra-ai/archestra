@@ -103,8 +103,7 @@ export async function setGuardrailsDeployment(
       modelId: update.annotatorModelId ?? null,
       apiKeyId: update.annotatorLlmApiKeyId ?? null,
     });
-  const pinned = pinnedSettings();
-  for (const { setting, variable } of pinned) {
+  for (const { setting, variable } of pinnedSettings()) {
     if (update[setting] !== undefined)
       throw new ApiError(
         400,
@@ -131,7 +130,18 @@ export async function setGuardrailsDeployment(
         "The Guardrails settings changed during this save. Try again.",
       );
     const settings = intendedSettings(row, update);
-    return { ...independent, ...settings, ...legacyTuple(settings, pinned) };
+    // A save that names no mode keeps a mode never saved unsaved, so the
+    // first published policy still switches enforcement on.
+    const keepsUnsaved =
+      row.mode === null &&
+      update.mode === undefined &&
+      update.enabled === undefined;
+    return {
+      ...independent,
+      ...settings,
+      ...(keepsUnsaved && { mode: null }),
+      ...legacyTuple(settings),
+    };
   });
   const before = await getGuardrailsDeploymentFromSnapshot({ row: stored });
   const after = await getGuardrailsDeployment();
@@ -401,12 +411,34 @@ type DeploymentSettings = {
   enforcedMarks: string[];
 };
 
-/** The settings a row holds, without environment overrides. */
+/** Approval strictness, most permissive last. */
+const APPROVAL_STRICTNESS: readonly PersonApproval[] = [
+  "ask",
+  "auto_unattended",
+  "auto_everywhere",
+];
+
+/**
+ * The settings a row holds, without environment overrides. Where a replica of
+ * an older release wrote only the legacy columns, the stricter reading wins;
+ * under Observe the legacy approval column is Observe's own value, so the
+ * saved approval stands.
+ */
 function canonicalOf(row: GuardrailsDeploymentRow): DeploymentSettings {
+  const mode = GuardrailsDeploymentModel.mode(row);
+  const legacy = PERSON_APPROVAL_OF[row.humanApprovalMode];
+  const saved = row.personApproval ?? legacy;
   return {
-    mode: GuardrailsDeploymentModel.mode(row),
+    mode,
     personApproval:
-      row.personApproval ?? PERSON_APPROVAL_OF[row.humanApprovalMode],
+      mode === "observe"
+        ? saved
+        : APPROVAL_STRICTNESS[
+            Math.min(
+              APPROVAL_STRICTNESS.indexOf(saved),
+              APPROVAL_STRICTNESS.indexOf(legacy),
+            )
+          ],
     enforcedMarks: row.enforcedMarks ?? [],
   };
 }
@@ -417,20 +449,26 @@ function intendedSettings(
   update: GuardrailsDeploymentUpdate,
 ): DeploymentSettings {
   const current = canonicalOf(row);
-  const approvalFromLegacy =
-    update.humanApprovalMode && PERSON_APPROVAL_OF[update.humanApprovalMode];
   const modeFromSwitch =
     update.enabled === undefined
       ? undefined
       : update.enabled
         ? GuardrailsDeploymentModel.mode({ ...row, enabled: true })
         : "off";
+  const mode = update.mode ?? modeFromSwitch ?? current.mode;
+  // Under Observe the legacy approval column is Observe's own value: it
+  // restates it or contradicts it, and never sets the saved approval.
+  const approvalFromLegacy =
+    mode === "observe" || update.humanApprovalMode === undefined
+      ? undefined
+      : PERSON_APPROVAL_OF[update.humanApprovalMode];
   const settings: DeploymentSettings = {
-    mode: update.mode ?? modeFromSwitch ?? current.mode,
+    mode,
     personApproval:
       update.personApproval ?? approvalFromLegacy ?? current.personApproval,
     enforcedMarks: update.enforcedMarks ?? current.enforcedMarks,
   };
+  const tuple = legacyTuple(settings);
   const conflicts =
     (update.mode !== undefined &&
       update.enabled !== undefined &&
@@ -438,9 +476,11 @@ function intendedSettings(
     (update.personApproval !== undefined &&
       approvalFromLegacy !== undefined &&
       update.personApproval !== approvalFromLegacy) ||
+    (mode === "observe" &&
+      update.humanApprovalMode !== undefined &&
+      update.humanApprovalMode !== tuple.humanApprovalMode) ||
     (update.unapprovableBlockMode !== undefined &&
-      update.unapprovableBlockMode !==
-        legacyTuple(settings, []).unapprovableBlockMode);
+      update.unapprovableBlockMode !== tuple.unapprovableBlockMode);
   if (conflicts)
     throw new ApiError(
       400,
@@ -463,25 +503,17 @@ function turnsOn(
 
 /**
  * The legacy columns as a function of the settings, for older replicas and a
- * rollback. A column an environment variable pins keeps its stored value.
+ * rollback. Written whole, pinned columns included: what is stored is what
+ * the operator chose, and an environment variable only overrides it at read.
  */
-function legacyTuple(
-  settings: DeploymentSettings,
-  pinned: ReturnType<typeof pinnedSettings>,
-) {
+function legacyTuple(settings: DeploymentSettings) {
   const observe = settings.mode === "observe";
-  const isPinned = (setting: (typeof pinned)[number]["setting"]) =>
-    pinned.some((each) => each.setting === setting);
   return {
     enabled: settings.mode !== "off",
-    ...(!isPinned("humanApprovalMode") && {
-      humanApprovalMode: observe
-        ? ("everywhere" as const)
-        : HUMAN_APPROVAL_OF[settings.personApproval],
-    }),
-    ...(!isPinned("unapprovableBlockMode") && {
-      unapprovableBlockMode: observe ? ("allow" as const) : ("refuse" as const),
-    }),
+    humanApprovalMode: observe
+      ? ("everywhere" as const)
+      : HUMAN_APPROVAL_OF[settings.personApproval],
+    unapprovableBlockMode: observe ? ("allow" as const) : ("refuse" as const),
   };
 }
 

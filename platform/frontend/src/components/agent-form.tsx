@@ -2121,12 +2121,15 @@ export function AgentForm({
     : null;
   const requiredSubscriptionKey = requiredSubscriptionKind
     ? availableApiKeys.find(
-        (key) => key.subscriptionKind === requiredSubscriptionKind,
+        (key) =>
+          key.subscriptionKind === requiredSubscriptionKind &&
+          !key.requiresReauthentication,
       )
     : undefined;
   const requiredSubscriptionSatisfied =
     !requiredSubscriptionKind ||
-    selectedApiKey?.subscriptionKind === requiredSubscriptionKind;
+    (selectedApiKey?.subscriptionKind === requiredSubscriptionKind &&
+      !selectedApiKey.requiresReauthentication);
   const selectedApiKeyIsSubscription =
     selectedApiKey !== undefined && isPersonalSubscription(selectedApiKey);
   // The provider of the agent's company connection. The reader may not be

@@ -197,6 +197,7 @@ const {
         scope: string;
         bestModelId: string;
         subscriptionKind?: string | null;
+        requiresReauthentication?: boolean;
         isPrimary?: boolean;
         isGithubAppKey?: boolean;
         githubOrganizationName?: string | null;
@@ -7191,6 +7192,44 @@ describe("AgentForm save payload and failure handling", () => {
           modelId: null,
           runtime: { accountLock: "key" },
         });
+      });
+
+      it("treats an expired ChatGPT subscription as disconnected when starting a new Codex agent", async () => {
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({
+          data: [
+            ownDefault,
+            companyKey,
+            { ...chatgptKey, requiresReauthentication: true },
+          ],
+          isFetched: true,
+        });
+        const user = userEvent.setup();
+        renderNew("codex");
+
+        // An expired ChatGPT key cannot satisfy the subscription-only start,
+        // so both ways start ticked instead of locking to an unusable key.
+        await waitFor(() => {
+          expect(subscriptionWay()).toBeChecked();
+          expect(companyKeyWay()).toBeChecked();
+        });
+
+        // Unticking the company card leaves subscriptions alone: the expired
+        // credential is not treated as connected, prompts to sign in, and
+        // blocks Create.
+        await user.click(companyKeyWay());
+        expect(subscriptionWay()).toBeChecked();
+        expect(companyKeyWay()).not.toBeChecked();
+        expect(row()).toHaveTextContent(
+          "ChatGPT Subscription. Not connected yet",
+        );
+        expect(
+          screen.getByText("ChatGPT Subscription required"),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole("link", { name: "Sign in with ChatGPT" }),
+        ).toBeInTheDocument();
+        await user.type(screen.getByLabelText(/Name/), "Expired Codex");
+        expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
       });
 
       it("takes the creator's ChatGPT subscription again once a new Codex agent is left on subscriptions alone", async () => {

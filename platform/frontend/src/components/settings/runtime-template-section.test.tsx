@@ -724,5 +724,42 @@ describe("RuntimeTemplateSection", () => {
         authentication: "provider",
       });
     });
+
+    it("shows the complete container image string in the Container summary without truncating registry segments", async () => {
+      const fullImage =
+        "registry.example.com/platform/agents/claude-code:1.4.0";
+      settings.templates = [
+        {
+          id: "00000000-0000-4000-8000-000000000003",
+          name: "Platform Claude",
+          description: "Development",
+          icon: null,
+          hidden: false,
+          position: 0,
+          locked: false,
+          runtime: {
+            ...buildCustomAgentRuntime({ image: fullImage }),
+            command: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            privileged: false,
+          },
+        },
+      ];
+      const user = userEvent.setup();
+      mount();
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Actions for Platform Claude",
+        }),
+      );
+      await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
+      const dialog = screen.getByRole("dialog", {
+        name: "Edit Platform Claude runtime",
+      });
+      expect(
+        within(dialog).getByRole("button", { name: /^Container/ }),
+      ).toHaveTextContent(`${fullImage}, archestra-claude-code`);
+    });
   });
 });

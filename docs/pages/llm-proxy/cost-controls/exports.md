@@ -2,7 +2,7 @@
 title: Export Costs
 description: Get LLM spend and usage into spreadsheets, scripts, and FinOps tools as one-off downloads, API queries, or scheduled FOCUS files in your own bucket
 order: 2
-lastUpdated: 2026-11-24
+lastUpdated: 2026-11-21
 ---
 
 Put Archestra's LLM spend next to the rest of your cloud bill. Finance gets the same numbers as the Costs page, split by team, agent, model, and person, without anyone copying them by hand.
@@ -30,15 +30,14 @@ Script the same numbers when a scheduled file does not fit, such as a nightly jo
 
 Archestra writes one CSV per hour or per day into your own Amazon S3 or Google Cloud Storage bucket, or Azure Blob Storage container. Each file is in FOCUS 1.2, the FinOps Foundation's open format for cost and usage data, which tools such as Athena, BigQuery, and DuckDB read as a table.
 
-An export writes to a [blob provider](/docs/admin/blob-providers): the bucket or container that holds the files. Managing exports takes the [`costExport`](/docs/reference/permissions#costExport:read) permissions. Scheduling, changing, or running one also requires [`llmCost:read`](/docs/reference/permissions#llmCost:read), so the permission never exports spend its holder could not see.
+Before you start, add a [blob provider](/docs/admin/blob-providers) for the bucket or container. Managing exports takes the [`costExport`](/docs/reference/permissions#costExport:read) permissions. Scheduling, changing, or running one also requires [`llmCost:read`](/docs/reference/permissions#llmCost:read), so the permission never exports spend its holder could not see.
 
-1. Open **Costs & Limits → FinOps Export** and click **Configure**. Once an export exists, the button is **Schedule export**.
-2. With no blob provider yet, the page asks for one first. Fill it in as in [Add a Blob Provider](/docs/admin/blob-providers#add-a-blob-provider), which requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), and click **Add**.
-3. Name the export and pick the blob provider under **Destination**.
-4. Under **How often**, pick **Daily** for one file per UTC day or **Hourly** for one file per hour.
-5. Under **Include past usage**, keep **No, start now**, or pick **Specific date in the past** or **All recorded usage** to also write past usage.
-6. Optionally change the **Folder**, `cost-exports` by default.
-7. Click **Schedule**, then **Run now** to write a file right away. The row shows **Writing now…**, then **Healthy** once the file is in the bucket.
+1. Open **Cost Controls → Exports** and click **Schedule export**. **Schedule exports…** in the **Export** menu on **Costs** opens the same page.
+2. Name it and pick the blob provider under **Destination**.
+3. Under **How often**, pick **Daily** for one file per UTC day or **Hourly** for one file per hour.
+4. Under **Start from**, keep **Now**, or pick **A date** or **All recorded usage** to also write past usage.
+5. Optionally change the **Folder**, `cost-exports` by default.
+6. Click **Schedule**, then **Run now** to write a file right away. The row shows **Writing now…**, then **Healthy** once the file is in the bucket.
 
 Each row shows whether the export is **Healthy**, **Waiting for first file**, **Failing**, or **Paused**. A failing row shows why the bucket refused the file: click **Fix destination** to edit the blob provider, then **Retry**. For each error and its fix, see [Fix a Failed Connection Test](/docs/admin/blob-providers#fix-a-failed-connection-test).
 
@@ -57,7 +56,7 @@ The first line is a daily file and the second an hourly file for 14:00 to 15:00 
 
 Archestra writes a period once it has been over for 15 minutes, so requests still running at its end are counted. Expect each file about 15 to 20 minutes after its hour or day ends.
 
-- With **Include past usage** set to **No, start now**, the first file is the period in progress when you create the export. A past start is a backfill: every period since then is written, oldest first.
+- With **Start from** set to **Now**, the first file is the period in progress when you create the export. A past start is a backfill: every period since then is written, oldest first.
 - **Run now** writes every period that is due. When none is due, it rewrites the latest completed period.
 - A period always goes to the same key. A rerun or retry overwrites its file, so a period is never in two files.
 - After an outage or a failed write, the export writes every period since its last file.

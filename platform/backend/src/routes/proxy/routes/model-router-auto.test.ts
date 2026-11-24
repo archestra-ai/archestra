@@ -998,6 +998,34 @@ describe("Model Router auto model", () => {
       expect(await listsAuto(org)).toBe(true);
     });
 
+    test("a gpt-6 tier is served on chat completions, as a direct call is", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const gpt6 = await createModel("openai", "gpt-6.1-sol");
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+        org.providerApiKeyId,
+        [gpt6.id],
+      );
+      await setAutoRoutingTiers(org.organizationId, { normal: gpt6 });
+
+      const response = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-gpt6",
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamModels).toEqual([gpt6.modelId]);
+      expect(await listsAuto(org)).toBe(true);
+    });
+
     test("a user grant admits that user's personal key but not a service account", async ({
       makeOrganization,
       makeSecret,

@@ -259,6 +259,7 @@ import {
   detectSandboxCommand,
   runSandboxCommandTurn,
 } from "./sandbox-command-turn";
+import { settleStoppedToolCalls } from "./stopped-tool-calls";
 import { withStreamIdleTimeout } from "./stream-idle-timeout";
 import { createToolCallRepair } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
@@ -2230,13 +2231,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     return serializedChatError;
                   },
                   onFinish: async ({
-                    messages: finalMessages,
+                    messages: streamedMessages,
                     finishReason,
                     isAborted,
                   }) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
 
+                    // A stopped run's in-flight tool calls keep their place in
+                    // the transcript, as calls that were stopped.
+                    const finalMessages =
+                      isAborted || chatAbortController.signal.aborted
+                        ? settleStoppedToolCalls(streamedMessages)
+                        : streamedMessages;
                     const lastMessage = finalMessages.at(-1);
                     const reply =
                       lastMessage?.role === "assistant" &&

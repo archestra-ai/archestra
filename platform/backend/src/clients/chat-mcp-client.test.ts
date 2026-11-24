@@ -706,17 +706,58 @@ describe("executeMcpTool error handling", () => {
     expect(result.content).toBe("Error line 1\nError line 2");
   });
 
-  test("falls back to JSON.stringify for non-text content items", async () => {
+  test("marks a result the tool flagged as an error, so the chat card can tell it from a success", async () => {
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
+      mockResult({ content: [{ type: "text", text: "Out of quota" }] }),
+    );
+
+    const result = await toolBuilderTest.executeMcpTool(baseCtx);
+    expect(result).toMatchObject({ content: "Out of quota", isError: true });
+  });
+
+  test("leaves a successful result unmarked", async () => {
     vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
       mockResult({
-        content: [{ type: "image", data: "base64..." }],
+        isError: false,
+        content: [{ type: "text", text: "done" }],
       }),
     );
 
     const result = await toolBuilderTest.executeMcpTool(baseCtx);
-    expect(result.content).toBe(
-      JSON.stringify({ type: "image", data: "base64..." }),
+    expect(result.content).toBe("done");
+    expect(result).not.toHaveProperty("isError");
+  });
+
+  test.each([
+    ["a failed", true],
+    ["a successful", false],
+  ])("%s result names an image in its text and keeps the payload out of it", async (_case, isError) => {
+    const image = { type: "image", data: "aGVsbG8=", mimeType: "image/png" };
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
+      mockResult({
+        isError,
+        content: [{ type: "text", text: "Chart:" }, image],
+      }),
     );
+
+    const result = await toolBuilderTest.executeMcpTool(baseCtx);
+    // The base64 would bloat the model's context; the card and the model get
+    // the image from rawContent instead.
+    expect(result.content).toBe("Chart:\n[image]");
+    expect(result.rawContent).toEqual([
+      { type: "text", text: "Chart:" },
+      image,
+    ]);
+  });
+
+  test("falls back to JSON.stringify for content it has no text for", async () => {
+    const link = { type: "resource_link", uri: "file:///a.txt", name: "a" };
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
+      mockResult({ content: [link] }),
+    );
+
+    const result = await toolBuilderTest.executeMcpTool(baseCtx);
+    expect(result.content).toBe(JSON.stringify(link));
   });
 
   test("returns error string when content is not an array", async () => {
@@ -898,7 +939,8 @@ describe("chat-mcp-client tool caching", () => {
         isOrganizationToken: false,
         tokenId: expect.any(String),
       }),
-      { conversationId },
+      // A dispatched call reports when it waits for its turn on its server.
+      { conversationId, onQueueChange: expect.any(Function) },
     );
 
     chatClient.clearChatMcpClient(agent.id);

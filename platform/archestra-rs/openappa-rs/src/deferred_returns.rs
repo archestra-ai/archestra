@@ -63,7 +63,7 @@ pub async fn load_deferred_return(
         }
     }
     let policy: deployments::HostedPolicy = policy.try_into()?;
-    let presenter = crate::lines::Presenter::parse(&lookup.presenter)?;
+    let presenter = crate::lines::Presenter::parse(&lookup.presenter)?.beyond_review()?;
     let result = AssertUnwindSafe(async move {
         let state = initialized().await?.encrypted(encryption)?;
         let key = SessionKey::new(&lookup.organization_id, &lookup.session_id);

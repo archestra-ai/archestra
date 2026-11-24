@@ -90,7 +90,7 @@ async fn execute(
             .variant_of(
                 &input.organization_id,
                 Some(&root),
-                input.presenter.acting()?,
+                input.presenter.beyond_review()?,
             )
             .await?,
     };

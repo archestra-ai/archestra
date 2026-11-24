@@ -326,7 +326,7 @@ impl State {
     /// that root follows, or the one a fork's parent follows. Otherwise a new root opens
     /// on the line the deployment's settings give this session.
     async fn family(&self, input: &Input, guardrails: &lines::Guardrails) -> napi::Result<Routed> {
-        let presenter = input.presenter.acting()?;
+        let presenter = input.presenter.beyond_review()?;
         let organization_id = &input.organization_id;
         let root = self.dispatch_root(input)?;
         let resolved = match self.resolve(organization_id, &root, presenter).await? {

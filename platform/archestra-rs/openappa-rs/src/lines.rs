@@ -131,11 +131,12 @@ impl Presenter {
         self == Presenter::Runtime
     }
 
-    /// Refuses a presenter that only reads to an operation that acts in a family.
-    pub(crate) fn acting(self) -> napi::Result<Presenter> {
+    /// Refuses the reviewer, who only reads offer reviews, on any other operation:
+    /// each of them may prepare or publish a deployment.
+    pub(crate) fn beyond_review(self) -> napi::Result<Presenter> {
         match self {
             Presenter::Reviewer => Err(crate::errors::invalid_input(
-                "a reviewer reads a family's offers and acts in none",
+                "a reviewer only reads a family's offer reviews",
             )),
             presenter => Ok(presenter),
         }
@@ -222,11 +223,15 @@ impl Family {
             .is_some_and(|token| token.as_str().ends_with(UNATTENDED_SUFFIX))
     }
 
-    /// Whether `presenter` may act in the family: an unattended one never by a request
-    /// holding no runtime or delegated binding, so it cannot borrow the run's approvals
-    /// or state.
+    /// Whether `presenter` may act in the family: an unattended one only by its run, a
+    /// binding the host signed into it, or a reviewer reading its offers, so no other
+    /// request borrows the run's approvals or state.
     pub(crate) fn continued_by(&self, presenter: Presenter) -> bool {
-        !(self.unattended() && presenter == Presenter::Attended)
+        !self.unattended()
+            || matches!(
+                presenter,
+                Presenter::Runtime | Presenter::Delegated | Presenter::Reviewer
+            )
     }
 
     /// The family `log` records, or `None` when it follows a line that is none of this
@@ -300,16 +305,17 @@ mod tests {
     }
 
     #[test]
-    fn an_unattended_family_is_never_continued_by_a_verified_attended_request() {
+    fn an_unattended_family_is_continued_only_by_its_run_or_a_binding_into_it() {
         let runtime = Family::opening(Variant::EnforceApproved, true);
         assert!(!runtime.continued_by(Presenter::Attended));
         assert!(runtime.continued_by(Presenter::Runtime));
-        assert!(runtime.continued_by(Presenter::Unknown));
+        assert!(!runtime.continued_by(Presenter::Unknown));
         assert!(runtime.continued_by(Presenter::Delegated));
         assert!(runtime.continued_by(Presenter::Reviewer));
-        assert!(Presenter::Reviewer.acting().is_err());
+        assert!(Presenter::Reviewer.beyond_review().is_err());
         let attended = Family::opening(Variant::EnforceApproved, false);
         assert!(attended.continued_by(Presenter::Attended));
+        assert!(attended.continued_by(Presenter::Unknown));
         let legacy = Family {
             variant: Variant::Enforce,
             settings: SessionSettings::default(),

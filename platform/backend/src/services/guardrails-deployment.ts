@@ -96,11 +96,22 @@ export function captureGuardrailsDispatchSettings(
   if (scope) scope.settings = dispatchSettingsOf(deployment);
 }
 
-export async function guardrailsDispatchSettings(): Promise<GuardrailsSettings> {
-  return (
-    requestDispatchSettings.getStore()?.settings ??
-    dispatchSettingsOf(await getGuardrailsDeployment())
-  );
+/**
+ * The settings a dispatch sends: the request's captured ones, or a fresh read.
+ * `freshMarks` rereads the enforced marks alone, keeping the captured opening
+ * mode and person approval, for a retry whose publication refused stale marks.
+ */
+export async function guardrailsDispatchSettings(options?: {
+  freshMarks?: boolean;
+}): Promise<GuardrailsSettings> {
+  const scope = requestDispatchSettings.getStore();
+  if (!scope?.settings)
+    return dispatchSettingsOf(await getGuardrailsDeployment());
+  if (options?.freshMarks) {
+    const { enforcedMarks } = await getGuardrailsDeployment();
+    scope.settings = { ...scope.settings, enforcedMarks };
+  }
+  return scope.settings;
 }
 
 /**
@@ -253,11 +264,19 @@ export async function lineWarnings(
   };
   let timer: NodeJS.Timeout | undefined;
   try {
-    const organizations = await OrganizationModel.findAllIds();
+    // Settles on its own, so one that loses the race rejects nothing unhandled.
+    const scan = async () => {
+      try {
+        const organizations = await OrganizationModel.findAllIds();
+        await mapWithConcurrency(organizations, LINE_CHECKS_AT_ONCE, check);
+      } catch (error) {
+        failed = true;
+        logger.error({ err: error }, "Guardrails line check failed");
+      }
+      return true;
+    };
     const finished = await Promise.race([
-      mapWithConcurrency(organizations, LINE_CHECKS_AT_ONCE, check).then(
-        () => true,
-      ),
+      scan(),
       new Promise<false>((resolve) => {
         timer = setTimeout(
           () => resolve(false),
@@ -270,9 +289,6 @@ export async function lineWarnings(
       ...(failed ? [LINE_CHECK_UNAVAILABLE] : []),
       ...(finished && !skipped ? [] : [LINE_CHECK_INCOMPLETE]),
     ];
-  } catch (error) {
-    logger.error({ err: error }, "Guardrails line check failed");
-    return [LINE_CHECK_UNAVAILABLE];
   } finally {
     clearTimeout(timer);
   }

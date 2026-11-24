@@ -18,6 +18,7 @@ import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaDeploymentModel from "@/models/openappa-deployment";
 import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -1231,7 +1232,7 @@ const registry = defineArchestraTools([
         trajectory: stamp,
         context,
       });
-      const presenter = remedyPresenter(context, stamp);
+      const presenter = await remedyPresenter(context, stamp);
       const spender = authenticatedRuntimeSpender({
         userId: context.userId,
         callerId: context.openappaSession?.caller_id,
@@ -1640,18 +1641,23 @@ function organizationUser(
 
 /**
  * Who presents a remedy on the stamped trajectory: the run itself only when
- * the gateway verified its binding and the stamp names its session or one of
- * its children. An ordinary user call is attended, header or not.
+ * the gateway verified its binding and the stamped session is its own or
+ * recorded under it. An ordinary user call is attended, header or not.
  */
-function remedyPresenter(
+async function remedyPresenter(
   context: ArchestraContext,
-  stamp: { session_id: string; parent_id?: string },
-): OpenAppaPresenter {
+  stamp: { session_id: string },
+): Promise<OpenAppaPresenter> {
   if (context.openappaSubagent) return "delegated";
   const session = context.openappaSession;
-  return session?.presenter === "runtime" &&
-    (stamp.session_id === session.session_id ||
-      stamp.parent_id === session.session_id)
+  if (session?.presenter !== "runtime" || !session.caller_id) return "attended";
+  return stamp.session_id === session.session_id ||
+    (await OpenAppaSessionModel.hasAncestor({
+      organizationId: session.organization_id,
+      callerId: session.caller_id,
+      sessionId: stamp.session_id,
+      ancestorSessionId: session.session_id,
+    }))
     ? "runtime"
     : "attended";
 }

@@ -10,6 +10,10 @@ import {
 import type { RuntimeIdentitySnapshot } from "@/models/proxy-request-context";
 import { scopedSessionId } from "@/openappa/actor";
 import type { OpenAppaSession } from "@/openappa/service";
+import {
+  agentRunGatewayTokenId,
+  isAgentRunGatewayToken,
+} from "@/services/agent-runtime/runtime-contract";
 import { type AgentRunActorKind, type AgentRunRecord, ApiError } from "@/types";
 import type { AgentWorkspace } from "@/types/agent-workspace";
 
@@ -83,6 +87,7 @@ type RuntimeBindingClaims = {
 };
 
 type GatewayTokenActor = {
+  tokenId?: string | null;
   userId?: string;
   teamId?: string | null;
   isOrganizationToken: boolean;
@@ -378,7 +383,9 @@ export async function resolveGatewayRuntimeSession(params: {
   runTaskId?: string;
   now?: number;
 }): Promise<GatewayRuntimeDecision> {
-  if (params.token.userId) return { kind: "none" };
+  // A user credential vouches for no run, except the one a run was issued.
+  if (params.token.userId && !isAgentRunGatewayToken(params.token))
+    return { kind: "none" };
   if (!params.bindingToken) return { kind: "none" };
   const claims = readRuntimeBinding({
     token: params.bindingToken,
@@ -407,7 +414,12 @@ export async function resolveGatewayRuntimeSession(params: {
   }
   const run = await AgentRunModel.findByTaskId(claims.taskId);
   const workspace = await AgentWorkspaceModel.findById(claims.workspaceId);
-  if (!run || !workspace) {
+  if (
+    !run ||
+    !workspace ||
+    (params.token.userId &&
+      params.token.tokenId !== agentRunGatewayTokenId(run.id))
+  ) {
     return { kind: "reject", message: "Invalid runtime binding" };
   }
   const identity = associationFrom(workspace, run);

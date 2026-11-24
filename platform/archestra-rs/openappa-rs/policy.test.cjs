@@ -508,7 +508,7 @@ test('a long kept result is stored once, and a row that holds the text twice sti
   }
 });
 
-test('a root a runtime opened refuses an attended presenter, and an attended root is continued by attended', { skip: !databaseUrl }, async () => {
+test('a root a runtime opened is continued only by its run, and an attended root is continued by attended', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const organization = `policy-test-${randomUUID()}`;
   const policy = hosted(own(allow, 'presenter'));
@@ -521,10 +521,11 @@ test('a root a runtime opened refuses an attended presenter, and an attended roo
   await assert.rejects(dispatch(unattended, 'attended', callRead(1)), { code: 'unattended_family' });
   const decided = await dispatch(unattended, 'runtime', callRead(1));
   assert.equal(decided.decision, 'allow_call');
-  await assert.rejects(native.getOpenappaStatus(organization, unattended.session_id, 'attended', policy), { code: 'unattended_family' });
-  for (const presenter of ['runtime', 'reviewer']) {
-    assert.ok(await native.getOpenappaStatus(organization, unattended.session_id, presenter, policy), presenter);
+  for (const presenter of ['attended', 'unknown']) {
+    await assert.rejects(native.getOpenappaStatus(organization, unattended.session_id, presenter, policy), { code: 'unattended_family' });
   }
+  assert.ok(await native.getOpenappaStatus(organization, unattended.session_id, 'runtime', policy));
+  await assert.rejects(native.getOpenappaStatus(organization, unattended.session_id, 'reviewer', policy), { code: 'invalid_input' });
   await assert.rejects(dispatch(unattended, 'reviewer', callRead(2)), { code: 'invalid_input' });
 
   const attended = scope();

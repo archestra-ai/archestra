@@ -15,10 +15,13 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
+  captureGuardrailsDispatchSettings,
+  getGuardrailsDeployment,
   guardrailsDispatchSettings,
   isGuardrailsV2Active,
   LINE_CHECK_INCOMPLETE,
   lineWarnings,
+  withGuardrailsRequest,
 } from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
@@ -721,6 +724,39 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       mode: "enforce",
       personApproval: "ask",
       enforcedMarks: [],
+    });
+  });
+
+  test("a request dispatches on the settings it captured, rereading only the enforced marks on a retry", async () => {
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      mode: "observe",
+      humanApprovalMode: "everywhere",
+      unapprovableBlockMode: "allow",
+      personApproval: "auto_unattended",
+      enforcedMarks: [],
+    });
+    await withGuardrailsRequest(async () => {
+      captureGuardrailsDispatchSettings(await getGuardrailsDeployment());
+      await GuardrailsDeploymentModel.set({
+        mode: "enforce",
+        personApproval: "ask",
+        enforcedMarks: ["review"],
+      });
+      expect(await guardrailsDispatchSettings()).toEqual({
+        mode: "observe",
+        personApproval: "auto_unattended",
+        enforcedMarks: [],
+      });
+      const retried = {
+        mode: "observe",
+        personApproval: "auto_unattended",
+        enforcedMarks: ["review"],
+      };
+      expect(await guardrailsDispatchSettings({ freshMarks: true })).toEqual(
+        retried,
+      );
+      expect(await guardrailsDispatchSettings()).toEqual(retried);
     });
   });
 

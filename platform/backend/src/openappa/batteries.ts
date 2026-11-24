@@ -417,14 +417,15 @@ class OpenAppaBatteriesService {
   }
 
   /**
-   * The composition the runtime serves this organization, or null while no
-   * composition ever opened and it holds only the root text.
+   * The composition stored as the one the runtime serves this organization,
+   * read without recomposing; null while none ever opened and only the root
+   * text is stored.
    */
   async servedComposition(organizationId: string): Promise<string | null> {
-    const policy = await this.getEffectivePolicy(organizationId);
-    return compositionView(policy).served.kind === "root_only"
-      ? null
-      : policy.content;
+    const stored = await OpenAppaEffectivePolicyModel.find(organizationId);
+    return stored && compositionView(stored).served.kind !== "root_only"
+      ? stored.content
+      : null;
   }
 
   /** The effective policy as the API shows it: the row and what it serves. */

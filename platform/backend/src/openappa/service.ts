@@ -353,8 +353,8 @@ export async function getOpenappaStatus(params: {
     const module = await binding();
     // Read on the organization's policy line, as a dispatch would decide.
     const status = await retryWhilePolicyMoved({
-      run: async () => {
-        const policy = await effectivePolicy(params.organizationId);
+      run: async (attempt) => {
+        const policy = await effectivePolicy(params.organizationId, attempt);
         return withNativeStorageRetry(() =>
           withOpenappaContentEncryption(
             params.organizationId,
@@ -785,7 +785,8 @@ async function withRuntime(
     const module = await binding();
     const rawResult = await retryWhilePolicyMoved({
       run: async (attempt) => {
-        if (attempt > 0) policy = await effectivePolicy(organizationId);
+        if (attempt > 0)
+          policy = await effectivePolicy(organizationId, attempt);
         return call(module, policy);
       },
     });
@@ -841,13 +842,18 @@ async function rootOnlyRefusal(
  * request boundary, so a turn that began governed finishes under its policy even
  * when the switch turns off mid-request.
  */
+/**
+ * The policy a dispatch sends. A retry after a moved policy (`attempt` > 0)
+ * reads the enforced marks again, so an obsolete set is not resent.
+ */
 async function effectivePolicy(
   organizationId: string,
+  attempt = 0,
 ): Promise<DispatchPolicy> {
   try {
     const [policy, guardrails] = await Promise.all([
       openappaBatteriesService.getEffectivePolicy(organizationId),
-      guardrailsDispatchSettings(),
+      guardrailsDispatchSettings({ freshMarks: attempt > 0 }),
     ]);
     return {
       ...(await openappaDeclarations.dispatchPolicy({
@@ -2342,8 +2348,8 @@ export async function loadDeferredReturn(params: {
     const module = await binding();
     const presentation = nativePresentation(params.controlToolName, true);
     const deferred = await retryWhilePolicyMoved({
-      run: async () => {
-        const policy = await effectivePolicy(session.organization_id);
+      run: async (attempt) => {
+        const policy = await effectivePolicy(session.organization_id, attempt);
         return withNativeStorageRetry(() =>
           withOpenappaContentEncryption(
             session.organization_id,
@@ -2925,8 +2931,8 @@ async function peerResponse<T>(
   try {
     const module = await binding();
     const raw = await retryWhilePolicyMoved({
-      run: async () =>
-        call(module, await effectivePolicy(session.organization_id)),
+      run: async (attempt) =>
+        call(module, await effectivePolicy(session.organization_id, attempt)),
     });
     return schema.parse(JSON.parse(raw));
   } catch (error) {

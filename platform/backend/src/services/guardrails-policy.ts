@@ -98,6 +98,8 @@ async function deploymentRefusal(params: {
   organizationId: string;
   content: string;
   previous: string;
+  /** Whether a kept refusal reads the composition the deployment retains. */
+  retained: boolean;
 }): Promise<{
   errors: string[];
   warnings: string[];
@@ -143,7 +145,9 @@ async function deploymentRefusal(params: {
     // The deployment keeps serving the composition it retained.
     composed:
       composed ??
-      (await openappaBatteriesService.servedComposition(organizationId)),
+      (params.retained
+        ? await openappaBatteriesService.servedComposition(organizationId)
+        : null),
   };
 }
 
@@ -268,6 +272,7 @@ export const guardrailsPolicyService = {
           organizationId,
           content,
           previous,
+          retained: params.lineWarnings !== false,
         });
         errors.push(...deployed.errors);
         warnings.push(...deployed.warnings);

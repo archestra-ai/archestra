@@ -709,7 +709,16 @@ export async function admitOpenappaRequest(params: {
       platformLoopback,
       agentRuntimeRun: boundRuntimeIdentity !== null,
     });
-    if (observedSession)
+    // A run's workspace session is recorded only for the run itself: an
+    // unbound request recorded under it would mark the run started while off.
+    if (
+      observedSession &&
+      (boundRuntimeIdentity !== null ||
+        !(await isRuntimeWorkspaceSession({
+          organizationId: agent.organizationId,
+          sessionId: observedSession.session_id,
+        })))
+    )
       return {
         kind: "observed",
         trustedContext: {

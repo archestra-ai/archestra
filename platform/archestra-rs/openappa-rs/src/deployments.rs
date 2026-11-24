@@ -381,27 +381,32 @@ fn prepare(
     let prepared = runtime.prepare_deployment(config).map_err(open_fault)?;
     let name = line.name();
     let head = store.head(&name).map_err(storage)?;
-    if let Some(composition) = &policy.composition {
-        let publishes = head.as_ref().is_none_or(|head| head.key.as_str() != key);
-        if publishes && !stored_composition(store, &line.organization_id, composition)? {
-            return Err(DeploymentError::Superseded);
+    let published = match head {
+        // The head already serves this file: pinning it advances nothing.
+        Some(head) if head.key.as_str() == key => pin_existing(runtime, &name, &prepared, &head)?,
+        head => {
+            if let Some(composition) = &policy.composition
+                && !stored_composition(store, &line.organization_id, composition)?
+            {
+                return Err(DeploymentError::Superseded);
+            }
+            let expected = head.map(|head| head.revision);
+            // A line with approvers is also composed from the enforced marks, so it
+            // publishes under the settings row's lock, which a settings write waits on,
+            // and only while the stored marks are the ones it was composed from.
+            match (&policy.composition, line.variant) {
+                (Some(_), Variant::Observe | Variant::EnforceApproved) => publish_under_marks(
+                    runtime,
+                    store,
+                    &name,
+                    &prepared,
+                    expected,
+                    &policy.guardrails.enforced_marks,
+                )?,
+                _ => publish(runtime, &name, &prepared, expected),
+            }?
         }
-    }
-    let expected = head.map(|head| head.revision);
-    // A line with approvers is also composed from the enforced marks, so it publishes
-    // under the settings row's lock, which a settings write waits on, and only while
-    // the stored marks are the ones it was composed from.
-    let published = match (&policy.composition, line.variant) {
-        (Some(_), Variant::Observe | Variant::EnforceApproved) => publish_under_marks(
-            runtime,
-            store,
-            &name,
-            &prepared,
-            expected,
-            &policy.guardrails.enforced_marks,
-        )?,
-        _ => publish(runtime, &name, &prepared, expected),
-    }?;
+    };
     let pinned = Pinned {
         content: policy.content.as_str().into(),
         enforced_marks: policy.guardrails.enforced_marks.clone(),

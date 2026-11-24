@@ -697,7 +697,7 @@ pub async fn get_openappa_status(
     policy: DispatchPolicy,
     encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OpenappaStatus>> {
-    let presenter = crate::lines::Presenter::parse(&presenter)?;
+    let presenter = crate::lines::Presenter::parse(&presenter)?.beyond_review()?;
     if organization_id.is_empty()
         || organization_id.len() > 512
         || organization_id.chars().any(char::is_control)

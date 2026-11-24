@@ -416,6 +416,30 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
         agentRuntimeRun: true,
       },
     });
+
+    // Off, an unbound request naming the run's workspace is not recorded
+    // under it: the run did not start while Guardrails were off.
+    const unboundObserved = await admitOpenappaRequest(
+      await admission({
+        agent,
+        principal: { authenticatedUserId: user.id },
+        headers: {
+          ...grokHeaders,
+          "x-grok-session-id": workloadName,
+          "x-appa-session-id": workloadName,
+        },
+        overrides: {
+          body: grokBody,
+          originalRequest: grokBody,
+          deployment: {
+            active: false,
+            observing: true,
+            unsupportedClientAction: "bypass",
+          },
+        },
+      }),
+    );
+    expect(unboundObserved.kind).toBe("ungoverned");
   } finally {
     config.openappa.offerSigningSecret = priorSecret;
   }

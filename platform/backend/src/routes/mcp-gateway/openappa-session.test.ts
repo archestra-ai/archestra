@@ -20,6 +20,8 @@ import {
   A2ATaskModel,
   AgentRunModel,
   AgentWorkspaceModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
   ServiceAccountModel,
   UserTokenModel,
 } from "@/models";
@@ -27,7 +29,11 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import ManagedOauthClientModel from "@/models/managed-oauth-client";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
-import { scopedSessionId } from "@/openappa/actor";
+import {
+  childSessionId,
+  openappaActor,
+  scopedSessionId,
+} from "@/openappa/actor";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaFailure } from "@/openappa/failure";
 import {
@@ -36,6 +42,10 @@ import {
 } from "@/openappa/unenforced";
 import authRoutes from "@/routes/auth";
 import {
+  AGENT_RUNTIME_OAUTH_CLIENT_ID,
+  agentRunGatewayTokenId,
+} from "@/services/agent-runtime/runtime-contract";
+import {
   issueRuntimeBinding,
   RUNTIME_BINDING_HEADER,
   resolveGatewayRuntimeSession,
@@ -43,6 +53,7 @@ import {
   stampRuntimeBinding,
   workloadPrincipal,
 } from "@/services/agent-runtime/runtime-identity";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import type { AgentRunActorKind } from "@/types";
@@ -617,7 +628,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
-  test("a user token may not open a Runtime workspace's session, and its remedy is attended", async ({
+  test("a user token may not open a Runtime workspace's session; the run's own token and binding act in its tree", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -637,7 +648,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       state: "TASK_STATE_WORKING",
     });
     const workloadName = `workspace-${task.id}`;
-    await AgentWorkspaceModel.create({
+    const workspace = await AgentWorkspaceModel.create({
       organizationId: agent.organizationId,
       agentId: agent.id,
       actorKind: "user",
@@ -650,6 +661,17 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       lastTaskId: task.id,
       expiresAt: new Date(Date.now() + 3600_000),
     });
+    const run = await AgentRunModel.create({
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
     native.executeRemedyByOffer.mockResolvedValue(
       JSON.stringify({
         decision: "mcp_result",
@@ -657,7 +679,12 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
         result: { content: [{ type: "text", text: "[appa] Authorized." }] },
       }),
     );
-    const remedy = (sessionHeader?: string) =>
+    const callerId = `user:${user.id}`;
+    const runSession = scopedSessionId(callerId, workloadName);
+    const remedy = (params: {
+      headers: Record<string, string>;
+      sessionId?: string;
+    }) =>
       app.inject({
         method: "POST",
         url: `/v1/mcp/${agent.id}`,
@@ -665,7 +692,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
           "content-type": "application/json",
           accept: "application/json, text/event-stream",
           authorization: `Bearer ${token}`,
-          ...(sessionHeader ? { "x-appa-session-id": sessionHeader } : {}),
+          ...params.headers,
         },
         payload: {
           jsonrpc: "2.0",
@@ -676,24 +703,114 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
               offer_id: "offer-1",
               plan: "keep",
               trajectory: currentTrajectory({
-                session_id: scopedSessionId(`user:${user.id}`, workloadName),
+                session_id: params.sessionId ?? runSession,
               }),
             },
           },
           id: "user-remedy",
         },
       });
+    const sentPresenter = () =>
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]).presenter;
 
     native.executeRemedyByOffer.mockClear();
-    const claimed = await remedy(workloadName);
+    const claimed = await remedy({
+      headers: { "x-appa-session-id": workloadName },
+    });
     expect(claimed.statusCode).toBe(409);
     expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
 
-    const headerless = await remedy();
+    const listed = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+        "x-appa-session-id": workloadName,
+      },
+      payload: { jsonrpc: "2.0", method: "tools/list", id: "list" },
+    });
+    expect(listed.statusCode, listed.body).toBe(200);
+
+    const headerless = await remedy({ headers: {} });
     expect(headerless.statusCode, headerless.body).toBe(200);
-    expect(
-      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({ presenter: "attended" });
+    expect(sentPresenter()).toBe("attended");
+
+    // The run's own token keeps the user and spends as the run once its
+    // binding verifies, down to a grandchild recorded under its session.
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa = { ...config.openappa, offerSigningSecret: secret };
+    const binding = issueRuntimeBinding({
+      secret,
+      organizationId: agent.organizationId,
+      workspaceId: workspace.id,
+      workloadName,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      expiresAt: Date.now() + 60_000,
+    });
+    if (!binding) throw new Error("Expected runtime binding token");
+    await OAuthClientModel.ensurePlatformIssuedClient({
+      id: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      name: "Agent Runtime",
+    });
+    const runToken = `run-${crypto.randomUUID()}`;
+    await OAuthAccessTokenModel.create({
+      id: agentRunGatewayTokenId(run.id),
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(runToken),
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 600_000),
+      scopes: ["mcp"],
+      referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${agent.id}`,
+    });
+    const child = childSessionId(runSession, "child");
+    const grandchild = childSessionId(child, "grandchild");
+    await database.default.insert(database.schema.openappaSessionsTable).values(
+      [
+        [runSession, undefined],
+        [child, runSession],
+        [grandchild, child],
+      ].map(([sessionId, parentId]) => ({
+        actor: openappaActor(sessionId as string),
+        root: `root-${task.id}`,
+        organizationId: agent.organizationId,
+        callerId,
+        sessionId: sessionId as string,
+        parentId: parentId ?? null,
+        startDecision: {},
+      })),
+    );
+    const runHeaders = {
+      authorization: `Bearer ${runToken}`,
+      [RUNTIME_BINDING_HEADER]: binding,
+      "x-appa-session-id": workloadName,
+      "x-archestra-run-id": task.id,
+    };
+    native.executeRemedyByOffer.mockClear();
+    const ordinary = await remedy({
+      headers: { ...runHeaders, authorization: `Bearer ${token}` },
+    });
+    expect(ordinary.statusCode, "an ordinary user token stays unbound").toBe(
+      409,
+    );
+    expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
+
+    const ran = await remedy({ headers: runHeaders, sessionId: grandchild });
+    expect(ran.statusCode, ran.body).toBe(200);
+    expect(sentPresenter()).toBe("runtime");
+
+    native.executeRemedyByOffer.mockClear();
+    const stranger = await remedy({
+      headers: runHeaders,
+      sessionId: childSessionId(scopedSessionId(callerId, "other"), "child"),
+    });
+    expect(stranger.statusCode, stranger.body).toBe(200);
+    expect(sentPresenter()).toBe("attended");
   });
 
   test("a signed runtime binding spends as the workspace, and a sibling header does not", async ({

@@ -63589,6 +63589,9 @@
                                     "nullable": true,
                                     "type": "string"
                                   },
+                                  "resolvedLlmPersonalSubscription": {
+                                    "type": "boolean"
+                                  },
                                   "llmProviderRequiresPerUserCredential": {
                                     "type": "boolean"
                                   },
@@ -65446,6 +65449,9 @@
                           "resolvedLlmModelName": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "resolvedLlmPersonalSubscription": {
+                            "type": "boolean"
                           },
                           "llmProviderRequiresPerUserCredential": {
                             "type": "boolean"
@@ -67600,6 +67606,9 @@
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
                     },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
@@ -73111,6 +73120,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
+                    },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
                     },
@@ -74658,6 +74670,9 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "resolvedLlmPersonalSubscription": {
+                          "type": "boolean"
+                        },
                         "llmProviderRequiresPerUserCredential": {
                           "type": "boolean"
                         },
@@ -75877,6 +75892,9 @@
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
                     },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
@@ -77671,6 +77689,9 @@
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
                     },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
@@ -81207,6 +81228,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
+                    },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
                     },
@@ -82570,6 +82594,9 @@
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
                     },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
@@ -90718,6 +90745,9 @@
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
                     },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
@@ -173783,6 +173813,9 @@
                               "nullable": true,
                               "type": "string"
                             },
+                            "resolvedLlmPersonalSubscription": {
+                              "type": "boolean"
+                            },
                             "llmProviderRequiresPerUserCredential": {
                               "type": "boolean"
                             },
@@ -177241,6 +177274,9 @@
                                 "resolvedLlmModelName": {
                                   "nullable": true,
                                   "type": "string"
+                                },
+                                "resolvedLlmPersonalSubscription": {
+                                  "type": "boolean"
                                 },
                                 "llmProviderRequiresPerUserCredential": {
                                   "type": "boolean"

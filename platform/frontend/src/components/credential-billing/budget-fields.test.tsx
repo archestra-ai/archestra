@@ -107,7 +107,6 @@ describe("BudgetFields billing team choices", () => {
         onBillingTeamIdChange={vi.fn()}
         spendCap={null}
         onSpendCapChange={vi.fn()}
-        onSpendCapInvalidChange={vi.fn()}
       />,
     );
 
@@ -123,34 +122,32 @@ describe("BudgetFields billing team choices", () => {
 });
 
 describe("BudgetFields spend cap input", () => {
-  it("keeps an amount with cents as typed and marks it invalid", async () => {
-    const onInvalidChange = vi.fn();
+  it("rounds an amount with cents up to whole dollars", async () => {
     const user = userEvent.setup();
-    render(<SpendCapHarness onInvalidChange={onInvalidChange} />);
+    render(<SpendCapHarness />);
     const input = screen.getByLabelText("Spend cap in dollars");
 
     await user.type(input, "0.50");
-
     expect(input).toHaveValue("0.50");
-    expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByLabelText("Saved cap")).toHaveTextContent("none");
-    expect(onInvalidChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByLabelText("Saved cap")).toHaveTextContent("1");
+    await user.tab();
+
+    expect(input).toHaveValue("1");
   });
 
-  it("saves a whole dollar amount", async () => {
-    const onInvalidChange = vi.fn();
+  it("sets no cap for an amount that is not positive", async () => {
     const user = userEvent.setup();
-    render(<SpendCapHarness onInvalidChange={onInvalidChange} />);
+    render(<SpendCapHarness />);
     const input = screen.getByLabelText("Spend cap in dollars");
 
-    await user.type(input, "-5");
-    expect(onInvalidChange).toHaveBeenLastCalledWith(true);
-    await user.clear(input);
     await user.type(input, "250");
-
-    expect(input).toHaveAttribute("aria-invalid", "false");
     expect(screen.getByLabelText("Saved cap")).toHaveTextContent("250");
-    expect(onInvalidChange).toHaveBeenLastCalledWith(false);
+    await user.clear(input);
+    await user.type(input, "-5");
+    await user.tab();
+
+    expect(screen.getByLabelText("Saved cap")).toHaveTextContent("none");
+    expect(input).toHaveValue("");
   });
 });
 
@@ -168,16 +165,11 @@ function renderBudget(spendCap: SpendCapValue) {
       onBillingTeamIdChange={vi.fn()}
       spendCap={spendCap}
       onSpendCapChange={vi.fn()}
-      onSpendCapInvalidChange={vi.fn()}
     />,
   );
 }
 
-function SpendCapHarness({
-  onInvalidChange,
-}: {
-  onInvalidChange: (invalid: boolean) => void;
-}) {
+function SpendCapHarness() {
   const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
   return (
     <>
@@ -188,7 +180,6 @@ function SpendCapHarness({
         onBillingTeamIdChange={vi.fn()}
         spendCap={spendCap}
         onSpendCapChange={setSpendCap}
-        onSpendCapInvalidChange={onInvalidChange}
       />
       <output aria-label="Saved cap">{spendCap?.limitValue ?? "none"}</output>
     </>

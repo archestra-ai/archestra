@@ -22,7 +22,6 @@ import {
   oauthClientFormReady,
   oauthClientFormValuesFrom,
   oauthClientUpdateBody,
-  spendCapInvalidHandler,
   useOauthClientScopeChange,
 } from "@/components/oauth-client/configuration-fields";
 import { PageBackLink } from "@/components/page-back-link";
@@ -263,7 +262,6 @@ export function OAuthClientEditPage({
                   onSpendCapChange={(value) =>
                     form.setValue("spendCap", value, { shouldDirty: true })
                   }
-                  onSpendCapInvalidChange={spendCapInvalidHandler(form)}
                   capLocked={!!client.spendCap && !canManageLimits}
                   currentUsage={client.spendCap?.currentUsage ?? null}
                   estimatedUsage={client.spendCap?.estimatedUsage ?? false}

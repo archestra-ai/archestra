@@ -150,10 +150,13 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
       });
 
     expect((await update({})).statusCode).toBe(200);
+    // The handler finds the router the edit keeps.
     expect((await update({ modelPoolIds: [] })).statusCode).toBe(200);
     expect(
       (await update({ modelPoolIds: [], autoRouterIds: [] })).statusCode,
     ).toBe(400);
+    // Clearing the routers leaves nothing: the handler finds no pool to keep.
+    expect((await update({ autoRouterIds: [] })).statusCode).toBe(400);
   });
 
   test("sets the key's model pools, and keeps them when an edit omits them", async ({

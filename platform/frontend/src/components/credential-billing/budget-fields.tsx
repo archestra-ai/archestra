@@ -76,7 +76,6 @@ export function BudgetFields({
   onBillingTeamIdChange,
   spendCap,
   onSpendCapChange,
-  onSpendCapInvalidChange,
   showBillingTeam = true,
   capLocked = false,
   currentUsage = null,
@@ -90,8 +89,6 @@ export function BudgetFields({
   onBillingTeamIdChange: (teamId: string | null) => void;
   spendCap: SpendCapValue;
   onSpendCapChange: (cap: SpendCapValue) => void;
-  /** True while the typed amount is not a whole number of dollars. */
-  onSpendCapInvalidChange: (invalid: boolean) => void;
   /** False for an authorization-code client, whose users pay for themselves. */
   showBillingTeam?: boolean;
   /** True when the caller may not change an existing cap. */
@@ -115,9 +112,9 @@ export function BudgetFields({
   const [chosenInterval, setChosenInterval] =
     useState<LimitCleanupInterval>("calendar_month");
   const interval = spendCap?.cleanupInterval ?? chosenInterval;
-  // Limits are whole dollars. A typed amount that is not one stays on screen
-  // with an error instead of being rewritten into a different cap.
-  const [invalidCapText, setInvalidCapText] = useState<string | null>(null);
+  // The text as typed, while the field has focus. Limits are whole dollars:
+  // the cap rounds up, and the field shows the saved amount once it blurs.
+  const [capDraft, setCapDraft] = useState<string | null>(null);
 
   const payerLabel =
     layout === "inline" ? "Who pays" : `Who pays for this ${subject}?`;
@@ -175,33 +172,20 @@ export function BudgetFields({
       <InputGroupInput
         id={`${idPrefix}-spend-cap`}
         aria-label="Spend cap in dollars"
-        inputMode="numeric"
+        inputMode="decimal"
         placeholder="No cap"
         disabled={capLocked}
-        aria-invalid={invalidCapText !== null}
-        aria-describedby={
-          invalidCapText !== null ? `${idPrefix}-spend-cap-error` : undefined
-        }
-        value={invalidCapText ?? (spendCap ? String(spendCap.limitValue) : "")}
+        value={capDraft ?? (spendCap ? String(spendCap.limitValue) : "")}
         onChange={(event) => {
-          const cap = parseSpendCap(event.target.value);
-          const invalid = cap.kind === "invalid";
-          setInvalidCapText(invalid ? event.target.value : null);
-          onSpendCapInvalidChange(invalid);
-          switch (cap.kind) {
-            case "none":
-              onSpendCapChange(null);
-              break;
-            case "amount":
-              onSpendCapChange({
-                limitValue: cap.dollars,
-                cleanupInterval: interval,
-              });
-              break;
-            case "invalid":
-              break;
-          }
+          setCapDraft(event.target.value);
+          const dollars = wholeDollarsCap(event.target.value);
+          onSpendCapChange(
+            dollars === null
+              ? null
+              : { limitValue: dollars, cleanupInterval: interval },
+          );
         }}
+        onBlur={() => setCapDraft(null)}
       />
     </InputGroup>
   );
@@ -233,14 +217,6 @@ export function BudgetFields({
   );
   const capNotes = (
     <>
-      {invalidCapText !== null && (
-        <p
-          id={`${idPrefix}-spend-cap-error`}
-          className="text-xs text-destructive"
-        >
-          <span>Enter a whole number of dollars, such as 50.</span>
-        </p>
-      )}
       {currentUsage !== null && spendCap && (
         <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span>
@@ -329,20 +305,12 @@ export function BudgetFields({
 
 const MAX_SPEND_CAP_DOLLARS = 2_147_483_647;
 
-type ParsedSpendCap =
-  | { kind: "none" }
-  | { kind: "amount"; dollars: number }
-  | { kind: "invalid" };
-
-function parseSpendCap(text: string): ParsedSpendCap {
-  const trimmed = text.trim();
-  if (trimmed === "") return { kind: "none" };
-  const dollars = Number(trimmed);
-  return /^\d+$/.test(trimmed) &&
-    dollars > 0 &&
-    dollars <= MAX_SPEND_CAP_DOLLARS
-    ? { kind: "amount", dollars }
-    : { kind: "invalid" };
+/** Whole dollars, rounded up, for a typed cap; null when it sets none. */
+function wholeDollarsCap(text: string): number | null {
+  const amount = Number(text.trim());
+  if (!text.trim() || !Number.isFinite(amount) || amount <= 0) return null;
+  const dollars = Math.ceil(amount);
+  return dollars <= MAX_SPEND_CAP_DOLLARS ? dollars : null;
 }
 
 /** Info shown in place of the billing team for clients whose users pay. */

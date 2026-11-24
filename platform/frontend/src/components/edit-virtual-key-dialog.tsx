@@ -72,7 +72,6 @@ export function EditVirtualKeyDialog({
     useState<ProviderApiKeyMappings>([]);
   const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
   const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
-  const [spendCapInvalid, setSpendCapInvalid] = useState(false);
   // Undefined until edited, so the pools this key already reaches show
   // through once they load.
   const [modelPoolIds, setModelPoolIds] = useState<string[]>();
@@ -161,7 +160,6 @@ export function EditVirtualKeyDialog({
     const initialSpendCap = toSpendCapValue(virtualKey.spendCap);
     setBillingTeamId(virtualKey.billingTeamId);
     setSpendCap(initialSpendCap);
-    setSpendCapInvalid(false);
     setModelPoolIds(undefined);
     setAutoRouterIds(undefined);
     initialSnapshotRef.current = {
@@ -244,6 +242,8 @@ export function EditVirtualKeyDialog({
     (autoRouterIds ?? grantedRouterIds).length > 0 ||
     // Same as the pools: an owner who cannot list routers keeps the key's own.
     (!canSetAutoRouters &&
+      autoRouterIds === undefined &&
+      modelPoolIds === undefined &&
       !virtualKey.includeFutureProviders &&
       virtualKey.providerApiKeys.length === 0);
   const standardReady =
@@ -254,7 +254,6 @@ export function EditVirtualKeyDialog({
   const canSubmit =
     name.trim().length > 0 &&
     (isPassthrough || standardReady) &&
-    !spendCapInvalid &&
     !updateMutation.isPending;
   const isDirty =
     permissionsDirty ||
@@ -365,7 +364,6 @@ export function EditVirtualKeyDialog({
             onBillingTeamIdChange={setBillingTeamId}
             spendCap={spendCap}
             onSpendCapChange={setSpendCap}
-            onSpendCapInvalidChange={setSpendCapInvalid}
             capLocked={
               !!virtualKey.spendCap && !canManageLimits && !canManageTeamCap
             }

@@ -178,8 +178,8 @@ export function VirtualKeyConnectionGuide({
             <InlineNotice className="flex-nowrap items-start">
               <AlertTriangle className="mt-px" />
               <InlineNoticeText>
-                Store it in a secret manager or your app&apos;s environment.
-                Only you can copy it again later, from the virtual keys list.
+                Store it in a secret manager or your app&apos;s environment. Its
+                owner can copy it again from the virtual keys list.
               </InlineNoticeText>
             </InlineNotice>
             <CopyField
@@ -195,7 +195,7 @@ export function VirtualKeyConnectionGuide({
             <InlineNoticeText>
               Set your saved key as{" "}
               <InlineCode>ARCHESTRA_LLM_VIRTUAL_KEY</InlineCode> before running
-              the example below. Its creator can copy it again from the virtual
+              the example below. Its owner can copy it again from the virtual
               keys list.
             </InlineNoticeText>
           </InlineNotice>

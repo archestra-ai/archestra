@@ -163,7 +163,6 @@ export function CreateVirtualKeyDialog({
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
   const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
-  const [spendCapInvalid, setSpendCapInvalid] = useState(false);
   const [includeFutureProviders, setIncludeFutureProviders] = useState(false);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
@@ -254,7 +253,6 @@ export function CreateVirtualKeyDialog({
       setProviderApiKeyIds(initialMappings);
       setBillingTeamId(null);
       setSpendCap(null);
-      setSpendCapInvalid(false);
       setGrants([]);
       setModelPoolIds([]);
       setAutoRouterIds([]);
@@ -317,10 +315,7 @@ export function CreateVirtualKeyDialog({
     (canSetModelPools && modelPoolIds.length > 0) ||
     (canSetAutoRouters && autoRouterIds.length > 0);
   const canSubmit =
-    newKeyName.trim().length > 0 &&
-    hasAccess &&
-    !spendCapInvalid &&
-    !createMutation.isPending;
+    newKeyName.trim().length > 0 && hasAccess && !createMutation.isPending;
 
   // Once the key is created the form is replaced by the reveal view, so there
   // is nothing left to lose — only guard the editable form.
@@ -556,7 +551,6 @@ export function CreateVirtualKeyDialog({
                   onBillingTeamIdChange={setBillingTeamId}
                   spendCap={spendCap}
                   onSpendCapChange={setSpendCap}
-                  onSpendCapInvalidChange={setSpendCapInvalid}
                 />
                 {!isPassthrough && !ownerManagesAccess && (
                   <ResourceAccessSection

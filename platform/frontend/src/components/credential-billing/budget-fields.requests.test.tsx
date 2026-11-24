@@ -82,7 +82,6 @@ it("asks the server for the billing team's cost limits only", async () => {
         onBillingTeamIdChange={vi.fn()}
         spendCap={null}
         onSpendCapChange={vi.fn()}
-        onSpendCapInvalidChange={vi.fn()}
       />
     </QueryClientProvider>,
   );

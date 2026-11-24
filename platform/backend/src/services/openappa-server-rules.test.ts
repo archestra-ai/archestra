@@ -40,6 +40,7 @@ import { FakeGitlab } from "@/test/fake-gitlab";
 import { useMswServer } from "@/test/msw";
 import {
   ensureSelfServiceInclude,
+  followPolicyChangeStatus,
   getServerRules,
   getServerRulesChangeStatus,
   listServerRulesFiles,
@@ -2265,7 +2266,6 @@ test("self-service is opt-in: off, server rules are not read while the check is 
     enabled: false,
     setting: false,
     directory: "mcp",
-    autoMerge: { enabled: false, setting: false },
   });
   await expect(
     getServerRules({
@@ -2305,7 +2305,6 @@ test("self-service is opt-in: off, server rules are not read while the check is 
     enabled: true,
     setting: true,
     directory: "mcp",
-    autoMerge: { enabled: false, setting: false },
   });
   expect(calls).toEqual(["GET rules main"]);
   expect((await getRepositoryProtection(org.id))?.branchRules).toMatchObject({
@@ -2340,7 +2339,6 @@ test("self-service is opt-in: off, server rules are not read while the check is 
       enabled: false,
       setting: true,
       directory: "mcp",
-      autoMerge: { enabled: false, setting: false },
       environment: {
         variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
         value: "disabled",
@@ -2410,7 +2408,6 @@ test("self-service is opt-in: off, server rules are not read while the check is 
     enabled: false,
     setting: false,
     directory: "mcp",
-    autoMerge: { enabled: false, setting: false },
     leftoverRule: { checkName: CHECK, url: rulesetUrl },
   });
   expect(calls).toEqual(["GET rules main"]);
@@ -3024,6 +3021,8 @@ async function serveAutoMergeRepository(params: {
   setupPullWithInclude?: boolean;
   /** The include pull request a sync opened, with no requester, as pull request 4. */
   includeFromSync?: boolean;
+  /** A policy change the APPA Keeper opened for the requester, as pull request 8. */
+  policyChange?: boolean;
   /** Permissions the installation does not grant. */
   refuse?: string[];
 }) {
@@ -3169,6 +3168,29 @@ async function serveAutoMergeRepository(params: {
           ]
         : // Opened by an earlier version, before setup named who asked for it.
           [appCommit(results[7], "Seed current OpenAPPA policy")],
+    };
+  }
+  if (params.policyChange) {
+    results[8] = "98".repeat(20);
+    repo.files[results[8]] = {
+      ...(repo.files[FIRST] ?? {}),
+      "appa.toml": `# Reviewed in the APPA Keeper.\n${root}`,
+    };
+    pulls[8] = {
+      ref: "archestra/openappa-0a32964f-f7bb-4102-96d3-4caa3b0bf3d4",
+      user: bot,
+      files: ["appa.toml"],
+      commits: [
+        {
+          sha: results[8],
+          commit: {
+            message: `Update OpenAPPA policy\n\nRequested-by: ${params.requester}`,
+            verification: { verified: true, reason: "valid" },
+          },
+          author: bot,
+          committer: { login: "web-flow", type: "User" },
+        },
+      ],
     };
   }
   if (params.another)
@@ -3379,7 +3401,7 @@ test("with auto-merge on, a self-served pull request whose check passes is merge
     action: "self_service_auto_merge",
     enabled: true,
   });
-  expect(status.selfService.autoMerge).toEqual({
+  expect(status.autoMerge).toEqual({
     enabled: true,
     setting: true,
   });
@@ -3421,7 +3443,8 @@ test("with auto-merge on, a self-served pull request whose check passes is merge
     delete config.openappa.selfServiceAutoMerge;
   }
 
-  // Self-service off takes auto-merge with it: on again starts without it.
+  // Auto-merge is the repository's setting, not self-service's: turning
+  // self-service off and on again leaves it as it was.
   await updateAppaGithubSync({
     organizationId: org.id,
     action: "self_service",
@@ -3432,10 +3455,106 @@ test("with auto-merge on, a self-served pull request whose check passes is merge
     action: "self_service",
     enabled: true,
   });
-  expect((await getAppaGithubSync(org.id)).selfService.autoMerge).toEqual({
-    enabled: false,
-    setting: false,
+  expect((await getAppaGithubSync(org.id)).autoMerge).toEqual({
+    enabled: true,
+    setting: true,
   });
+});
+
+test("with auto-merge on, a policy pull request the APPA Keeper opened merges by itself once its check passes, with self-service off; one for a member who may not update guardrails is refused and left open", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, runs, merges, deleted } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    policyChange: true,
+  });
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: false,
+  });
+  // Auto-merge takes a GitHub App source that syncs, not self-service.
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service_auto_merge",
+    enabled: true,
+  });
+  await db
+    .delete(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+
+  await checkDueAppaGithubSyncs();
+  expect(runs.find((run) => run.head_sha === results[8])?.conclusion).toBe(
+    "success",
+  );
+  expect(merges).toContainEqual({
+    number: 8,
+    sha: results[8],
+    merge_method: "squash",
+  });
+  expect(deleted).toContain(
+    "archestra/openappa-0a32964f-f7bb-4102-96d3-4caa3b0bf3d4",
+  );
+  expect(await queuedSyncs()).toHaveLength(1);
+});
+
+test("following a policy pull request reads the APPA Keeper's phase by phase, and leaves a setup pull request to the plain status", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    policyChange: true,
+    setupPull: true,
+  });
+  const follow = (number: number) =>
+    followPolicyChangeStatus({
+      organizationId: org.id,
+      userId: admin.id,
+      number,
+    });
+  expect(await follow(8)).toMatchObject({ phase: expect.any(String) });
+  // archestra/openappa-setup-…: not a policy change, so no 404 either.
+  expect(await follow(7)).toBeNull();
+});
+
+test("a policy pull request the APPA Keeper opened for a member without the permission to update guardrails fails its check and is not merged", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const member = await makeUser({ email: "member@example.com" });
+  await makeMember(member.id, org.id, { role: "member" });
+  const { results, runs, merges } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: member.email,
+    policyChange: true,
+  });
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service_auto_merge",
+    enabled: true,
+  });
+  await checkDueAppaGithubSyncs();
+  expect(runs.find((run) => run.head_sha === results[8])?.conclusion).toBe(
+    "failure",
+  );
+  expect(merges.map((entry) => entry.number)).not.toContain(8);
 });
 
 test("a self-served pull request GitHub refuses to merge is logged and left for people: tried once more the next minute, then fifteen minutes later; an App that cannot merge is not asked again every minute; the Keeper's status says so at each step", async ({
@@ -3929,9 +4048,10 @@ test("under auto-merge a self-served pull request merges only once every check o
   expect(merges).toEqual([]);
   delete checkCompletedAt[head];
 
-  // All of it passes: merged.
+  // All of it passes: the Keeper's look merges it at once, without waiting
+  // for the minute's round.
   mergeableStates[1] = "clean";
-  await checkDueAppaGithubSyncs();
+  expect(await status()).toMatchObject({ phase: "merge_pending" });
   expect(merges).toEqual([{ number: 1, sha: head, merge_method: "squash" }]);
 });
 
@@ -5188,7 +5308,6 @@ test("the self-service folder is chosen when turning on: the servers' files live
     enabled: true,
     setting: true,
     directory: "rules/servers",
-    autoMerge: { enabled: false, setting: false },
   });
   // Moving the folder while on would turn the servers' files into
   // organization policy: that takes off and on again.

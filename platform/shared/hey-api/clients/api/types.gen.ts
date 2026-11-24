@@ -127724,13 +127724,13 @@ export type GetAppaGithubSyncResponses = {
                 checkName: string;
                 url: string | null;
             };
-            autoMerge: {
-                enabled: boolean;
-                setting: boolean;
-                environment?: {
-                    variable: string;
-                    value: 'enabled' | 'disabled';
-                };
+        };
+        autoMerge: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
             };
         };
         hasPolicy: boolean;
@@ -127886,13 +127886,13 @@ export type UpdateAppaGithubSyncResponses = {
                 checkName: string;
                 url: string | null;
             };
-            autoMerge: {
-                enabled: boolean;
-                setting: boolean;
-                environment?: {
-                    variable: string;
-                    value: 'enabled' | 'disabled';
-                };
+        };
+        autoMerge: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
             };
         };
         hasPolicy: boolean;
@@ -128044,13 +128044,13 @@ export type ConfigureAppaGithubSyncResponses = {
                 checkName: string;
                 url: string | null;
             };
-            autoMerge: {
-                enabled: boolean;
-                setting: boolean;
-                environment?: {
-                    variable: string;
-                    value: 'enabled' | 'disabled';
-                };
+        };
+        autoMerge: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
             };
         };
         hasPolicy: boolean;
@@ -128700,13 +128700,13 @@ export type CreateAppaGithubRepositoryResponses = {
                 checkName: string;
                 url: string | null;
             };
-            autoMerge: {
-                enabled: boolean;
-                setting: boolean;
-                environment?: {
-                    variable: string;
-                    value: 'enabled' | 'disabled';
-                };
+        };
+        autoMerge: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
             };
         };
         hasPolicy: boolean;

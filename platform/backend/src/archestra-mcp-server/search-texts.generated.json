@@ -248,8 +248,8 @@
     "searchText": "get read organization guardrails policy toml revision, included batteries, MCP server aliases, effective composed enforcement status, credential bindings, enforcement active check, Git sync setup, deployment hint, recover lost publish response, review policy before editing"
   },
   "get_guardrails_policy_change_status": {
-    "definitionHash": "2df97f11069b766692408b57edd1fba5840d4e06200213992319c3d8800b5df9",
-    "searchText": "check guardrails policy change status, pull request review state, PR number, merged approved pending, Git sync applied, queue sync, policy deployment progress, track policy update approval"
+    "definitionHash": "f97196bdec3c38464ae7a165c16a6c82e199a7864e43c7e7140c27acd713e057",
+    "searchText": "check guardrails policy change status, follow pull request phase, policy check passed failed, auto merge pending refused, merged applied, Git sync applied, queue sync, wait for next phase, track policy update approval"
   },
   "get_guardrails_server_rules": {
     "definitionHash": "ab29784127e077516838501b9ac47d30276e365951d36c1cdfb1080b8b2cb200",
@@ -636,8 +636,8 @@
     "searchText": "unlink app from project, remove app association, detach application from project, disconnect app, project app links management, undo link, project id, app id"
   },
   "update_guardrails_policy": {
-    "definitionHash": "4be5b8d5687b455babd330c5cea324ba2cb95c319183a5a07abc5baf15116170",
-    "searchText": "publish update guardrails policy organization.appa.toml, apply edits or full rewrite, save policy revision, open pull request or GitLab merge request via Git sync, diff changed lines, enable enforcement, AI safety rules configuration, optimistic concurrency expected revision"
+    "definitionHash": "2df157c180637f00cb1021ff4728a2d6a7cf669314661e81976c3681ef29e0ce",
+    "searchText": "publish update guardrails policy organization.appa.toml, apply edits or full rewrite, save policy revision, open pull request or GitLab merge request via Git sync, auto merge after checks pass, diff changed lines, enable enforcement, AI safety rules configuration, expected revision"
   },
   "update_guardrails_validation": {
     "definitionHash": "41bb8456e1f529b971f6f8d3465c3a20b77a667fd03482c8b749d4bf2c700032",

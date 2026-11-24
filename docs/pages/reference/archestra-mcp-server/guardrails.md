@@ -323,6 +323,8 @@ Required RBAC permission: [`guardrailsPolicy:read`](/docs/reference/permissions#
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `number` | `integer` | Yes |  |
+| `wait` | `boolean` | No | Return only once the phase moves on from `since`, settles, or some forty seconds pass. GitHub App sources only. |
+| `since` | `"check_pending" \| "check_failed" \| "check_passed" \| "merge_pending" \| "merge_refused" \| "merged" \| "applied" \| "closed"` | No | The `phase` the last call returned, to wait past. |
 
 
 ### get_remedy_plans

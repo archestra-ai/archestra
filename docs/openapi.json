@@ -496747,49 +496747,48 @@
                             "url"
                           ],
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting",
+                        "directory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "autoMerge": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         },
-                        "autoMerge": {
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
                           "type": "object",
                           "properties": {
-                            "enabled": {
-                              "type": "boolean"
+                            "variable": {
+                              "type": "string"
                             },
-                            "setting": {
-                              "type": "boolean"
-                            },
-                            "environment": {
-                              "type": "object",
-                              "properties": {
-                                "variable": {
-                                  "type": "string"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "enum": [
-                                    "enabled",
-                                    "disabled"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "variable",
-                                "value"
-                              ],
-                              "additionalProperties": false
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
                             }
                           },
                           "required": [
-                            "enabled",
-                            "setting"
+                            "variable",
+                            "value"
                           ],
                           "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
-                        "setting",
-                        "directory",
-                        "autoMerge"
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -496899,6 +496898,7 @@
                     "enabled",
                     "source",
                     "selfService",
+                    "autoMerge",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -497422,49 +497422,48 @@
                             "url"
                           ],
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting",
+                        "directory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "autoMerge": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         },
-                        "autoMerge": {
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
                           "type": "object",
                           "properties": {
-                            "enabled": {
-                              "type": "boolean"
+                            "variable": {
+                              "type": "string"
                             },
-                            "setting": {
-                              "type": "boolean"
-                            },
-                            "environment": {
-                              "type": "object",
-                              "properties": {
-                                "variable": {
-                                  "type": "string"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "enum": [
-                                    "enabled",
-                                    "disabled"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "variable",
-                                "value"
-                              ],
-                              "additionalProperties": false
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
                             }
                           },
                           "required": [
-                            "enabled",
-                            "setting"
+                            "variable",
+                            "value"
                           ],
                           "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
-                        "setting",
-                        "directory",
-                        "autoMerge"
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -497574,6 +497573,7 @@
                     "enabled",
                     "source",
                     "selfService",
+                    "autoMerge",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -498125,49 +498125,48 @@
                             "url"
                           ],
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting",
+                        "directory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "autoMerge": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         },
-                        "autoMerge": {
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
                           "type": "object",
                           "properties": {
-                            "enabled": {
-                              "type": "boolean"
+                            "variable": {
+                              "type": "string"
                             },
-                            "setting": {
-                              "type": "boolean"
-                            },
-                            "environment": {
-                              "type": "object",
-                              "properties": {
-                                "variable": {
-                                  "type": "string"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "enum": [
-                                    "enabled",
-                                    "disabled"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "variable",
-                                "value"
-                              ],
-                              "additionalProperties": false
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
                             }
                           },
                           "required": [
-                            "enabled",
-                            "setting"
+                            "variable",
+                            "value"
                           ],
                           "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
-                        "setting",
-                        "directory",
-                        "autoMerge"
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -498277,6 +498276,7 @@
                     "enabled",
                     "source",
                     "selfService",
+                    "autoMerge",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -500470,49 +500470,48 @@
                             "url"
                           ],
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting",
+                        "directory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "autoMerge": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         },
-                        "autoMerge": {
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
                           "type": "object",
                           "properties": {
-                            "enabled": {
-                              "type": "boolean"
+                            "variable": {
+                              "type": "string"
                             },
-                            "setting": {
-                              "type": "boolean"
-                            },
-                            "environment": {
-                              "type": "object",
-                              "properties": {
-                                "variable": {
-                                  "type": "string"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "enum": [
-                                    "enabled",
-                                    "disabled"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "variable",
-                                "value"
-                              ],
-                              "additionalProperties": false
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
                             }
                           },
                           "required": [
-                            "enabled",
-                            "setting"
+                            "variable",
+                            "value"
                           ],
                           "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
-                        "setting",
-                        "directory",
-                        "autoMerge"
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -500622,6 +500621,7 @@
                     "enabled",
                     "source",
                     "selfService",
+                    "autoMerge",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",

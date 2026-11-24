@@ -5,6 +5,7 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -22,6 +23,7 @@ import {
   includedFileErrors,
   includesServerRules,
   includesServerRulesFolder,
+  isPolicyChangeBranch,
   isServerRulesBranch,
   parsePolicyToml,
   repositoryIncludePaths,
@@ -48,12 +50,14 @@ import {
   resolveOpenAppaGithubAccess,
 } from "@/services/openappa-github-access";
 import {
+  autoMergeActive,
   checkAppaPullRequestsSoon,
   checkIntegrationId,
   getAppaSelfService,
   heldMergeReason,
   listedNames,
   mergeReadiness,
+  mergeReadyPullRequestsSoon,
   mergeRefusalOf,
   ownersAsNamedFor,
   ownersNotEditable,
@@ -62,7 +66,6 @@ import {
   rulesFileRefusal,
   rulesFileServers,
   selfServiceActive,
-  selfServiceAutoMergeActive,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { withOpenAppaLease } from "@/services/openappa-leases";
@@ -221,7 +224,7 @@ export async function previewServerRulesChange(
   },
 ) {
   const change = await checkedChange(params);
-  const autoMerge = selfServiceAutoMergeActive(change.source);
+  const autoMerge = autoMergeActive(change.source);
   return {
     stage: "preview" as const,
     // A server's rules always change through a pull request.
@@ -285,7 +288,7 @@ export async function proposeServerRulesChange(
   });
   // Under auto-merge it is checked and merged now, not at the next minute's
   // round of checks.
-  if (selfServiceAutoMergeActive(change.source))
+  if (autoMergeActive(change.source))
     void checkAppaPullRequestsSoon(params.organizationId);
   return {
     stage: "proposed" as const,
@@ -293,9 +296,9 @@ export async function proposeServerRulesChange(
     ...opened,
     repo: change.source.repo,
     ...change.view,
-    autoMerge: selfServiceAutoMergeActive(change.source),
-    instruction: selfServiceAutoMergeActive(change.source)
-      ? `Give the user the link. The pull request merges by itself once its ${POLICY_CHECK_NAME} check and the repository's other checks pass; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_server_rules_change_status with this number, wait=true and the last phase as since, tell the user each change in one short sentence, and keep calling until done is true. Then say whether the rules are active, or what went wrong and what to do.`
+    autoMerge: autoMergeActive(change.source),
+    instruction: autoMergeActive(change.source)
+      ? `Give the user the link. The pull request merges by itself once its ${POLICY_CHECK_NAME} check and the repository's other checks pass; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_server_rules_change_status with this number and wait=true; on each later call also pass the phase the last call returned as since. Tell the user each change in one short sentence, and keep calling until done is true. Then say whether the rules are active, or what went wrong and what to do.`
       : `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
   };
 }
@@ -437,8 +440,87 @@ export async function getServerRulesChangeStatus(
     pollMs?: number;
   },
 ) {
-  let source = await requireSource(params.organizationId);
+  const source = await requireSource(params.organizationId);
   const server = await serverFor(params, serverRulesFolderOf(source));
+  return followChangeStatus({
+    ...params,
+    source,
+    ours: (ref) => isServerRulesBranch(ref, server.prefix),
+    notOurs: "No rules change for this server has that number",
+    reread: () => requireSource(params.organizationId),
+  });
+}
+
+/**
+ * Where a policy or validation pull request the APPA Keeper or Settings
+ * opened stands, phase by phase, as a server's rules change is followed; null
+ * when the source is not a GitHub App source that syncs, whose pull requests
+ * carry no policy check to follow, and for a pull request on another branch
+ * Archestra opens (setup, self-service, template files), which the plain
+ * status reports.
+ */
+export async function followPolicyChangeStatus(params: {
+  organizationId: string;
+  userId: string;
+  number: number;
+  wait?: boolean;
+  since?: ChangePhase;
+}) {
+  const source = await appSource(params.organizationId);
+  if (!source) return null;
+  // As the plain status: the pull request is read through the credential.
+  if (
+    !(await userHasPermission(
+      params.userId,
+      params.organizationId,
+      "credential",
+      "read",
+    ))
+  )
+    throw new ApiError(403, "GitHub credential read permission is required");
+  try {
+    return await followChangeStatus({
+      ...params,
+      source,
+      ours: isPolicyChangeBranch,
+      notOurs: NOT_A_POLICY_CHANGE,
+      reread: async () => (await appSource(params.organizationId)) ?? source,
+    });
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.statusCode === 404 &&
+      error.message === NOT_A_POLICY_CHANGE
+    )
+      return null;
+    throw error;
+  }
+}
+
+const NOT_A_POLICY_CHANGE = "OpenAPPA policy pull request not found";
+
+/**
+ * Where a pull request Archestra opened for a change stands, from opened to
+ * applied, for the APPA Keeper to follow: a server's rules (by its tool
+ * prefix) or a policy change. With `wait`, it returns as soon as the phase
+ * moves on from `since`, settles, or the wait is over.
+ */
+export async function followChangeStatus(params: {
+  organizationId: string;
+  number: number;
+  source: Source;
+  /** Whether the pull request's head branch is one this follow may read. */
+  ours: (ref: string) => boolean;
+  /** The refusal for a pull request on another branch. */
+  notOurs: string;
+  /** The source again, read anew on each look of a wait. */
+  reread: () => Promise<Source>;
+  wait?: boolean;
+  since?: ChangePhase;
+  waitMs?: number;
+  pollMs?: number;
+}) {
+  let source = params.source;
   // The check posted on the head is read too, which takes Checks.
   const { token, api } = await githubWriter(source, { checks: "read" });
   const base = `${api}/repos/${source.repo}`;
@@ -450,15 +532,17 @@ export async function getServerRulesChangeStatus(
   let last: Awaited<ReturnType<typeof readChangeStatus>> | undefined;
   for (let read = 0; ; read += 1) {
     // Git sync may have applied the merge since the last look.
-    if (read > 0) source = await requireSource(params.organizationId);
+    if (read > 0) source = await params.reread();
     // No look starts once the wait is over: the last one's answer stands.
     if (last && Date.now() >= deadline) return last;
     let status: Awaited<ReturnType<typeof readChangeStatus>>;
     try {
       status = await readChangeStatus({
-        ...params,
+        organizationId: params.organizationId,
+        number: params.number,
+        ours: params.ours,
+        notOurs: params.notOurs,
         source,
-        prefix: server.prefix,
         token,
         base,
         appId,
@@ -505,7 +589,8 @@ async function readChangeStatus(params: {
   organizationId: string;
   number: number;
   source: Source;
-  prefix: string;
+  ours: (ref: string) => boolean;
+  notOurs: string;
   token: string;
   base: string;
   appId: number | undefined;
@@ -530,10 +615,10 @@ async function readChangeStatus(params: {
     created_at?: string;
     head?: { ref?: string; sha?: string };
   }>({ token, url: `${base}/pulls/${params.number}`, signal });
-  if (!isServerRulesBranch(pull.head?.ref ?? "", params.prefix))
-    throw new ApiError(404, "No rules change for this server has that number");
+  if (!params.ours(pull.head?.ref ?? ""))
+    throw new ApiError(404, params.notOurs);
   const merged = pull.merged === true && !!pull.merge_commit_sha;
-  const autoMerge = selfServiceAutoMergeActive(source);
+  const autoMerge = autoMergeActive(source);
   const answer = (phase: ChangePhase, extra: StatusExtra = {}) => ({
     number: pull.number,
     url: pull.html_url,
@@ -696,7 +781,30 @@ async function readChangeStatus(params: {
         at: new Date().toISOString(),
       },
     });
+  // Every check passed and nothing holds it: the App merges it now rather
+  // than at the minute's round, and the next look finds it merged. The look
+  // waits for that round only as long as its own time allows: the round
+  // checks every pull request of the repository and can take longer.
+  await settledWithin(
+    mergeReadyPullRequestsSoon(params.organizationId),
+    Math.min(MERGE_ROUND_WAIT, (params.deadline ?? Infinity) - Date.now()),
+  );
   return answer("merge_pending", { check });
+}
+
+/** The longest a status look waits for the merge round it starts. */
+const MERGE_ROUND_WAIT = 10_000;
+
+/** Wait for the work, or for the time given, whichever ends first. */
+async function settledWithin(work: Promise<unknown>, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    work,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, Math.max(0, ms));
+    }),
+  ]);
+  clearTimeout(timer);
 }
 
 /** How long a first refused merge stands for the retry the next minute brings. */
@@ -1641,7 +1749,32 @@ async function requireSource(organizationId: string) {
   };
 }
 
-type Source = Awaited<ReturnType<typeof requireSource>>;
+/**
+ * A GitHub App source that syncs and has an accepted commit, with
+ * self-service or without: the one whose pull requests the App checks and
+ * merges. Null otherwise.
+ */
+async function appSource(organizationId: string): Promise<Source | null> {
+  const source = await OpenAppaGithubSyncModel.find(organizationId);
+  if (
+    !source?.interval ||
+    !source.repo ||
+    !source.path ||
+    !source.sourceCommit ||
+    !source.githubAppConfigId
+  )
+    return null;
+  return {
+    ...source,
+    repo: source.repo,
+    path: source.path,
+    sourceCommit: source.sourceCommit,
+  };
+}
+
+type Source = NonNullable<
+  Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
+> & { repo: string; path: string; sourceCommit: string };
 type ChangedFile = { path: string; content: string };
 
 /**

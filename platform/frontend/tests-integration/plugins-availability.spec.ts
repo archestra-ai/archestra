@@ -24,9 +24,8 @@ test("plugins navigation and authoring ignore the plugins feature flag", async (
   await expect(
     page.getByRole("link", { name: "Plugins", exact: true }).first(),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Add your first plugin" }).click();
-  await page.getByRole("button", { name: /Blank template/ }).click();
-  await expect(page).toHaveURL(/\/plugins\/new/);
+  await page.getByRole("link", { name: "Create a plugin", exact: true }).click();
+  await expect(page).toHaveURL(/\/plugins\/new\?source=blank$/);
   await expect(
     page.getByRole("textbox", { name: "Display name", exact: true }),
   ).toBeVisible();

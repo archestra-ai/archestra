@@ -14931,11 +14931,8 @@ describe("a provider-hosted call refused before any ruling", () => {
             : { decision: "ack" },
         );
       });
-    const contextFor = () => {
-      const context = requestContext({
-        sessionId: "hosted-notice",
-        organizationId,
-      });
+    const contextFor = (sessionId = "hosted-notice") => {
+      const context = requestContext({ sessionId, organizationId });
       trustedOf(context).request = {
         tools: stubRequestTools(),
         session: {},
@@ -14986,6 +14983,36 @@ describe("a provider-hosted call refused before any ruling", () => {
       // The runtime was never asked to answer the notice's result.
       expect(events.filter((each) => each.event === "tool_result")).toEqual([]);
       await plugin.onCleanup(next);
+
+      // Another session's call must not read that notice, even where the
+      // session and call ids join to the same text.
+      const work = contextFor("work");
+      await plugin.onSessionInit(work);
+      await plugin.onHostedToolCalls({
+        ...work,
+        hostedToolCalls: [
+          {
+            id: "branch:ws_1",
+            name: "web_search",
+            arguments: { query: "rust" },
+            output: "search results",
+          },
+        ],
+      });
+      await plugin.onCleanup(work);
+      const branch = contextFor("work:branch");
+      await plugin.onSessionInit(branch);
+      events.length = 0;
+      await plugin.onToolResults({
+        ...branch,
+        toolResults: [
+          { id: "ws_1", name: "read_file", content: "file", isError: false },
+        ],
+      });
+      expect(
+        events.filter((each) => each.event === "tool_result"),
+      ).toHaveLength(1);
+      await plugin.onCleanup(branch);
     } finally {
       dispatch.mockRestore();
       connection.mockRestore();

@@ -3065,7 +3065,11 @@ function unansweredNoticeKey(params: {
 }): AllowedCacheKey {
   return sessionScopedCacheKey(
     CacheKey.OpenAppaUnansweredAnnotationNotice,
-    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+    JSON.stringify([
+      params.session.organization_id,
+      params.session.session_id,
+      withoutTrajectoryStamp(params.callId),
+    ]),
   );
 }
 

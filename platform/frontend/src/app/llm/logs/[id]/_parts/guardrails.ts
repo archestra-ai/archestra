@@ -175,6 +175,9 @@ export function buildGuardrails({
     consults: traceConsults,
     timeToX,
   });
+  const firstRecordAt = Math.min(
+    ...labelChanges.map((change) => new Date(change.createdAt).getTime()),
+  );
   const spanKeys = new Set(timeline.spans.map((span) => span.key));
   const traceYells = yells
     .map((yell): TraceYell => {
@@ -210,7 +213,7 @@ export function buildGuardrails({
       return {
         trust: hit.trust,
         audience: hit.audience,
-        inferred: hit.cause === null,
+        inferred: ms < firstRecordAt,
       };
     },
   };

@@ -77,7 +77,33 @@ describe("buildGuardrails", () => {
         "/openappa/policy?line=4",
       ],
     ]);
-    // Before the first record, the label is that record's before-state.
+    // The session_start record is the baseline, so it is recorded, not inferred.
+    expect(guardrails?.labelAt(BASE + 6_000)).toEqual({
+      trust: "trusted",
+      audience: expect.any(String),
+      inferred: false,
+    });
+    expect(guardrails?.labelAt(BASE + 8_000)).toEqual({
+      trust: "suspicious",
+      audience: expect.any(String),
+      inferred: false,
+    });
+  });
+
+  it("infers the baseline only for rows before the first label record", () => {
+    const guardrails = buildGuardrails({
+      timeline: timeline(),
+      consults: [],
+      labelChanges: [
+        change({
+          event: "tool_result",
+          at: 7_000,
+          callId: "call:toolu_read",
+          trustAfter: "suspicious",
+        }),
+      ],
+    });
+
     expect(guardrails?.labelAt(BASE + 6_000)).toEqual({
       trust: "trusted",
       audience: expect.any(String),

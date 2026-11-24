@@ -2,12 +2,24 @@ import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
-  render,
+  render as renderComponent,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Like the app shell, provide the query cache used by navigation icons.
+function render(ui: Parameters<typeof renderComponent>[0]) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return renderComponent(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 // Mock ResizeObserver which is used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({

@@ -486,6 +486,7 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the feedback dialog interfere with other tests.
+  ...getJson("/api/onboarding/first-run-setup", { show: false }),
   ...getJson("/api/onboarding/seen-nav-items", {
     items: [
       "nav:projects",

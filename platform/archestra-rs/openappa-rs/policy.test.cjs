@@ -315,7 +315,7 @@ function inAnotherProcess(dispatches) {
       const answers = [];
       for (const { session, event, policy } of input.dispatches) {
         try {
-          answers.push(JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), { content: policy, credentials: {} })).decision);
+          answers.push(JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), typeof policy === 'string' ? { content: policy, credentials: {} } : policy)).decision);
         } catch (error) {
           answers.push(error.message);
         }
@@ -326,6 +326,51 @@ function inAnotherProcess(dispatches) {
   assert.equal(child.status, 0, child.stderr);
   return JSON.parse(child.stdout);
 }
+
+test('a cold process does not pin an approver line composed from enforced marks the settings no longer hold', { skip: !databaseUrl, timeout: 60000 }, async (t) => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const db = new Client({ connectionString: databaseUrl });
+  await db.connect();
+  const organization = `stale-marks-${randomUUID()}`;
+  const saved = (await db.query("SELECT enforced_marks FROM guardrails_deployment WHERE id = 'global'")).rows[0];
+  const setMarks = (marks) => db.query(
+    "INSERT INTO guardrails_deployment (id, enforced_marks) VALUES ('global', $1) ON CONFLICT (id) DO UPDATE SET enforced_marks = $1",
+    [marks],
+  );
+  t.after(async () => {
+    if (saved) await setMarks(saved.enforced_marks);
+    else await db.query("DELETE FROM guardrails_deployment WHERE id = 'global'");
+    await db.query('DELETE FROM organization WHERE id = $1', [organization]);
+    await db.end();
+  });
+  const content = own(allow, 'marks');
+  await db.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization]);
+  await db.query(
+    `INSERT INTO openappa_effective_policies (organization_id, content, content_hash, root_revision, install_fingerprint, compiled_at)
+     VALUES ($1, $2, 'saved', 1, 'test', now())`,
+    [organization, content],
+  );
+  const policy = (enforcedMarks) => ({
+    content,
+    credentials: {},
+    compositionHash: 'saved',
+    guardrails: { mode: 'observe', personApproval: 'ask', enforcedMarks },
+  });
+  const scope = () => ({ organization_id: organization, presenter: 'attended', caller_id: 'user:test', session_id: randomUUID() });
+  const start = { event: 'session_start' };
+
+  await setMarks([]);
+  assert.equal(JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope(), ...start }), policy([]))).decision, 'ack');
+  await setMarks(['review']);
+  // The head another process published serves the very bytes the stale marks compose.
+  assert.deepEqual(
+    inAnotherProcess([
+      { session: scope(), event: start, policy: policy([]) },
+      { session: scope(), event: start, policy: policy(['review']) },
+    ]),
+    [POLICY_MOVED.message, 'ack'],
+  );
+});
 
 test('a process pinned behind a head another process published re-pins it within the same call', { skip: !databaseUrl, timeout: 60000 }, async (t) => {
   await native.initializeOpenappa(databaseUrl, 2);

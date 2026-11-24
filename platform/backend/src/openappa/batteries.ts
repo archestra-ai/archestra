@@ -428,6 +428,26 @@ class OpenAppaBatteriesService {
       : null;
   }
 
+  /**
+   * The served composition, or why none can be checked yet: the stored one
+   * answers an older root revision, or none is stored for a saved root.
+   */
+  async currentComposition(
+    organizationId: string,
+  ): Promise<
+    { kind: "none" } | { kind: "stale" } | { kind: "served"; content: string }
+  > {
+    const [stored, root] = await Promise.all([
+      OpenAppaEffectivePolicyModel.find(organizationId),
+      guardrailsPolicyService.get(organizationId),
+    ]);
+    if (stored ? stored.rootRevision !== root.revision : root.revision !== 0)
+      return { kind: "stale" };
+    return stored && compositionView(stored).served.kind !== "root_only"
+      ? { kind: "served", content: stored.content }
+      : { kind: "none" };
+  }
+
   /** The effective policy as the API shows it: the row and what it serves. */
   async effectivePolicyView(
     organizationId: string,

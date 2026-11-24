@@ -150,9 +150,10 @@ export async function isRuntimeWorkspaceSession(params: {
   organizationId: string;
   sessionId: string;
 }): Promise<boolean> {
-  const workloadName = params.sessionId.slice(
-    params.sessionId.lastIndexOf("|") + 1,
-  );
+  // A workspace's session is always scoped to its actor; an unscoped one is none.
+  const scope = params.sessionId.lastIndexOf("|");
+  if (scope < 0) return false;
+  const workloadName = params.sessionId.slice(scope + 1);
   const workspace = await AgentWorkspaceModel.findByWorkloadName(workloadName);
   return (
     workspace?.organizationId === params.organizationId &&

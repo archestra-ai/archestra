@@ -719,6 +719,19 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       "a scan past its deadline answers that it is incomplete",
     ).toEqual([LINE_CHECK_INCOMPLETE]);
     expect(await lineWarnings(observe)).toHaveLength(1);
+    const uncapped = capped.replace("planner_cap = 1", "planner_cap = 8");
+    await GuardrailsPolicyModel.saveDeclarationMigration({
+      organizationId,
+      content: uncapped,
+      contentHash: createHash("sha256").update(uncapped).digest("hex"),
+      expectedRevision: 1,
+    });
+    expect(
+      await lineWarnings(observe),
+      "a composition the saved root moved past is not checked as current",
+    ).toContain(LINE_CHECK_INCOMPLETE);
+    await openappaBatteriesService.recompile(organizationId);
+    expect(await lineWarnings(observe)).toEqual([]);
     await save({ personApproval: "auto_everywhere" });
     expect(await guardrailsDispatchSettings()).toEqual({
       mode: "enforce",

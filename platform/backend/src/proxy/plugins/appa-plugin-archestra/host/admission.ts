@@ -717,6 +717,13 @@ export async function admitOpenappaRequest(params: {
         !(await isRuntimeWorkspaceSession({
           organizationId: agent.organizationId,
           sessionId: observedSession.session_id,
+        }).catch((error) => {
+          // Off, nothing governs the turn: an unknown owner only goes unrecorded.
+          logger.warn(
+            { err: error, sessionId: observedSession.session_id },
+            "OpenAPPA could not check the observed session against Agent Runtime workspaces",
+          );
+          return true;
         })))
     )
       return {

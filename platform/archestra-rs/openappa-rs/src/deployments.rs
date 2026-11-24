@@ -381,9 +381,22 @@ fn prepare(
     let prepared = runtime.prepare_deployment(config).map_err(open_fault)?;
     let name = line.name();
     let head = store.head(&name).map_err(storage)?;
+    // A line with approvers is also composed from the enforced marks, so it is served
+    // under the settings row's lock, which a settings write waits on, and only while the
+    // stored marks are the ones it was composed from.
+    let marked = policy.composition.is_some()
+        && matches!(line.variant, Variant::Observe | Variant::EnforceApproved);
     let published = match head {
         // The head already serves this file: pinning it advances nothing.
-        Some(head) if head.key.as_str() == key => pin_existing(runtime, &name, &prepared, &head)?,
+        Some(head) if head.key.as_str() == key => {
+            let (runtime, name, prepared) = (runtime.clone(), name.clone(), prepared.clone());
+            let pin = move || pin_existing(&runtime, &name, &prepared, &head);
+            match marked {
+                true => under_marks(store, &policy.guardrails.enforced_marks, pin)?,
+                false => Some(pin()),
+            }
+            .ok_or(DeploymentError::Superseded)??
+        }
         head => {
             if let Some(composition) = &policy.composition
                 && !stored_composition(store, &line.organization_id, composition)?
@@ -391,20 +404,13 @@ fn prepare(
                 return Err(DeploymentError::Superseded);
             }
             let expected = head.map(|head| head.revision);
-            // A line with approvers is also composed from the enforced marks, so it
-            // publishes under the settings row's lock, which a settings write waits on,
-            // and only while the stored marks are the ones it was composed from.
-            match (&policy.composition, line.variant) {
-                (Some(_), Variant::Observe | Variant::EnforceApproved) => publish_under_marks(
-                    runtime,
-                    store,
-                    &name,
-                    &prepared,
-                    expected,
-                    &policy.guardrails.enforced_marks,
-                )?,
-                _ => publish(runtime, &name, &prepared, expected),
-            }?
+            let (runtime, name, prepared) = (runtime.clone(), name.clone(), prepared.clone());
+            let publish = move || publish(&runtime, &name, &prepared, expected);
+            match marked {
+                true => under_marks(store, &policy.guardrails.enforced_marks, publish)?,
+                false => Some(publish()),
+            }
+            .ok_or(DeploymentError::Superseded)??
         }
     };
     let pinned = Pinned {
@@ -489,23 +495,15 @@ fn publish(
         })
 }
 
-/// Publishes holding a share lock on the Guardrails settings row, and only while its
-/// enforced marks are `enforced_marks`: a settings write then lands before or after
-/// the publish, never between the check and it.
-fn publish_under_marks(
-    runtime: &Arc<Runtime>,
+/// Runs `serve` holding a share lock on the Guardrails settings row, and only while its
+/// enforced marks are `enforced_marks`: a settings write then lands before or after the
+/// served deployment, never between the check and it. None when the marks moved.
+fn under_marks<T: Send + 'static>(
     store: &LogStore,
-    name: &DeploymentName,
-    prepared: &PreparedDeployment,
-    expected: Option<PolicyRevision>,
     enforced_marks: &BTreeSet<String>,
-) -> Result<Result<PublishedDeployment, DeploymentError>, Fault> {
-    let (runtime, name, prepared, marks) = (
-        runtime.clone(),
-        name.clone(),
-        prepared.clone(),
-        enforced_marks.clone(),
-    );
+    serve: impl FnOnce() -> T + Send + 'static,
+) -> Result<Option<T>, Fault> {
+    let marks = enforced_marks.clone();
     Ok(crate::Sql(store).with_client(move |client| {
         let mut settings = client.transaction()?;
         let stored: BTreeSet<String> = settings
@@ -518,11 +516,11 @@ fn publish_under_marks(
             .into_iter()
             .collect();
         if stored != marks {
-            return Ok(Err(DeploymentError::Superseded));
+            return Ok(None);
         }
-        let published = publish(&runtime, &name, &prepared, expected);
+        let served = serve();
         settings.commit()?;
-        Ok(published)
+        Ok(Some(served))
     })?)
 }
 

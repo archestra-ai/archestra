@@ -246,13 +246,18 @@ export async function lineWarnings(
       return;
     }
     try {
-      const served =
-        await openappaBatteriesService.servedComposition(organizationId);
-      if (served === null) return;
-      const warnings = await openappaDeclarations.lineWarnings(served, {
-        enforcedMarks: settings.enforcedMarks,
-        lines,
-      });
+      const composition =
+        await openappaBatteriesService.currentComposition(organizationId);
+      // A composition the saved root has moved past would answer for the wrong text.
+      if (composition.kind === "stale") skipped = true;
+      if (composition.kind !== "served") return;
+      const warnings = await openappaDeclarations.lineWarnings(
+        composition.content,
+        {
+          enforcedMarks: settings.enforcedMarks,
+          lines,
+        },
+      );
       for (const warning of warnings) gathered.add(warning);
     } catch (error) {
       failed = true;

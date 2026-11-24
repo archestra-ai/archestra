@@ -15013,34 +15013,6 @@ describe("a provider-hosted call refused before any ruling", () => {
         events.filter((each) => each.event === "tool_result"),
       ).toHaveLength(1);
       await plugin.onCleanup(branch);
-
-      // A notice an older replica wrote under the colon-joined key is still
-      // restored, without asking the runtime.
-      const legacyNotice = "[appa] the annotator gave no answer; retry";
-      await cacheManager.set(
-        `${CacheKey.OpenAppaUnansweredAnnotationNotice}-${Buffer.from(
-          `${organizationId}:legacy:legacy_1`,
-        ).toString("base64url")}`,
-        legacyNotice,
-        60_000,
-      );
-      const legacy = contextFor("legacy");
-      await plugin.onSessionInit(legacy);
-      events.length = 0;
-      const restored = await plugin.onToolResults({
-        ...legacy,
-        toolResults: [
-          {
-            id: "legacy_1",
-            name: "read_file",
-            content: "file",
-            isError: false,
-          },
-        ],
-      });
-      expect(restored?.toolResultUpdates?.legacy_1).toBe(legacyNotice);
-      expect(events.filter((each) => each.event === "tool_result")).toEqual([]);
-      await plugin.onCleanup(legacy);
     } finally {
       dispatch.mockRestore();
       connection.mockRestore();

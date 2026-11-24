@@ -7245,7 +7245,7 @@ type NativeAppaGuidanceWire =
 
 /**
  * Governed Chat Completions providers that reject `role: "developer"` and must
- * receive OpenAPPA guidance in the leading `system` prompt or last `user` turn.
+ * receive OpenAPPA guidance in the leading `system` prompt or final message.
  * All other governed interaction types fall back to `appaWireFamily`.
  */
 const CHAT_COMPLETIONS_NO_DEVELOPER: ReadonlySet<SupportedProviderDiscriminator> =
@@ -7417,8 +7417,8 @@ function appendQuestionContinuation(params: {
   scope?: "request" | "turn";
   /**
    * On a provider-thread continue: `skip` guidance the thread already holds
-   * (fixed for the session), or deliver `turn` guidance in the new user turn,
-   * which the thread keeps, instead of the system prompt it owns.
+   * (fixed for the session), or deliver `turn` guidance in the final message
+   * after its last cache breakpoint, instead of the system prompt it owns.
    */
   onContinue?: "skip" | "turn";
 }): void {
@@ -7427,7 +7427,7 @@ function appendQuestionContinuation(params: {
   if (!wire || !isRecord(params.request)) return;
   if (params.onContinue === "skip") return;
   if (params.onContinue === "turn") {
-    appendToLastUserTurn(params.request, guidance, {
+    appendTurnGuidance(params.request, guidance, {
       plainText: wire === "chatCompletions:noDeveloper",
     });
     return;
@@ -7492,20 +7492,20 @@ function appendQuestionContinuation(params: {
   }
   if (wire === "chatCompletions:noDeveloper") {
     // xAI Chat Completions rejects `developer`; fixed guidance merges into the
-    // leading `system` prompt and transient turn guidance trails in the user
-    // turn after the cached prefix.
+    // leading `system` prompt and transient guidance ends the final message
+    // after the cached prefix.
     if (params.scope === "request") {
       mergeLeadingSystemMessage(params.request, guidance);
       return;
     }
-    appendToLastUserTurn(params.request, guidance, { plainText: true });
+    appendTurnGuidance(params.request, guidance, { plainText: true });
     return;
   }
   if (wire === "anthropic:messages") {
-    // Keep transient guidance after the cached prefix. Changing system would
-    // invalidate all cached messages, including signed thinking blocks.
+    // Transient guidance goes after the last cache breakpoint in the final
+    // message. Earlier messages and system stay unchanged.
     if (params.scope !== "request") {
-      appendToLastUserTurn(params.request, guidance);
+      appendTurnGuidance(params.request, guidance);
       return;
     }
     if (Array.isArray(params.request.system)) {
@@ -7526,8 +7526,8 @@ function appendQuestionContinuation(params: {
   }
 }
 
-/** Adds turn guidance without placing user text before leading system prompts or after native SDK control frames. */
-function appendToLastUserTurn(
+/** Adds turn guidance after the last cache breakpoint in the final message. */
+function appendTurnGuidance(
   request: Record<string, unknown>,
   text: string,
   options?: { plainText?: boolean },
@@ -7544,16 +7544,19 @@ function appendToLastUserTurn(
     conversationStart++;
   }
   let index = messages.length - 1;
-  // Native SDKs can end a turn with system control messages. They must remain
-  // last (or immediately before an assistant); they are not conversation turns.
+  // A blank system message carries no cache breakpoint, and the Anthropic
+  // adapter drops it before sending. The guidance goes before it.
   while (
     index >= conversationStart &&
     isRecord(messages[index]) &&
-    messages[index].role === "system"
+    messages[index].role === "system" &&
+    isBlankSystemContent(messages[index].content)
   )
     index--;
   const last = messages[index];
-  if (!isRecord(last) || last.role !== "user") {
+  const trailingSystem =
+    index >= conversationStart && isRecord(last) && last.role === "system";
+  if (!isRecord(last) || (last.role !== "user" && !trailingSystem)) {
     messages.splice(index + 1, 0, {
       role: "user",
       content: options?.plainText ? text : [{ type: "text", text }],
@@ -7583,6 +7586,21 @@ function appendToLastUserTurn(
   } else {
     last.content = options?.plainText ? text : [{ type: "text", text }];
   }
+}
+
+/** True when the Anthropic adapter would drop a system message with this content. */
+function isBlankSystemContent(content: unknown): boolean {
+  if (typeof content === "string") return content.trim().length === 0;
+  return (
+    Array.isArray(content) &&
+    content.every(
+      (part) =>
+        isRecord(part) &&
+        part.type === "text" &&
+        typeof part.text === "string" &&
+        part.text.trim().length === 0,
+    )
+  );
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

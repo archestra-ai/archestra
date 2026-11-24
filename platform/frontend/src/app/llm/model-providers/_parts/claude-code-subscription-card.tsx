@@ -56,8 +56,8 @@ export function ClaudeCodeSubscriptionCard({
     : expired
       ? "Your sign-in expired or was revoked. Sign in again to use this subscription."
       : connected
-        ? "Your Claude Pro or Max subscription is linked for all your Claude Code agents."
-        : "Connect your Claude Pro or Max subscription for Claude Code agents.";
+        ? "Your Claude Code subscription is linked through your Claude account."
+        : "Connect your Claude account to use your subscription";
 
   const openAccountDialog = () => {
     setDialogOpen(true);
@@ -116,7 +116,7 @@ export function ClaudeCodeSubscriptionCard({
         open={disconnectOpen}
         onOpenChange={setDisconnectOpen}
         title="Disconnect Claude Code"
-        description="Disconnect prevents new runs across all your Claude Code agents from using this account. Running sessions keep their token. Revoke the token in Claude to end its access."
+        description="Disconnecting stops new runs from using this account. Active runs keep their token until revoked in Claude."
         confirmLabel="Disconnect"
         pendingLabel="Disconnecting..."
         isPending={disconnect.isPending}

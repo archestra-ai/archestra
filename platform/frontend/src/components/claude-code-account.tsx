@@ -118,7 +118,11 @@ export function ClaudeCodeAccountDialog({
         if (!value) setCode("");
       }}
       title={connected ? "Claude Code account" : "Connect Claude Code"}
-      description="Use your personal Claude Pro or Max subscription. Connect once to use your account across all your Claude Code agents. Other people connect their own accounts."
+      description={
+        connected
+          ? "Your Claude Code subscription is linked through your Claude account."
+          : "Connect your Claude account to use your subscription."
+      }
       size="small"
       className="sm:max-w-xl"
       footer={
@@ -455,8 +459,7 @@ function ClaudeCodeAccountFlow({
               Connected for you
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              This account is available to all your Claude Code agents. Other
-              users sign in separately.
+              Available to all your Claude Code agents.
             </p>
           </div>
         </div>
@@ -467,9 +470,8 @@ function ClaudeCodeAccountFlow({
           </p>
         )}
         <p className="text-xs text-muted-foreground">
-          Disconnect prevents new runs across all your Claude Code agents from
-          using this account. Running sessions keep their token. Revoke the
-          token in Claude to end its access.
+          Disconnecting stops new runs from using this account. Active runs keep
+          their token until revoked in Claude.
         </p>
         <Button
           type="button"

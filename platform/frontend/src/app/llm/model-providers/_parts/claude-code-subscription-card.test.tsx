@@ -120,7 +120,7 @@ describe("ClaudeCodeSubscriptionCard", () => {
     expect(await within(card).findByText("Connected")).toBeVisible();
     expect(
       within(card).getByText(
-        "Your Claude Pro or Max subscription is linked for all your Claude Code agents.",
+        "Your Claude Code subscription is linked through your Claude account.",
       ),
     ).toBeVisible();
 

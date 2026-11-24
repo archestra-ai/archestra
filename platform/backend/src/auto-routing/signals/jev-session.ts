@@ -1,8 +1,11 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { z } from "zod";
 import config from "@/config";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type { AutoRoutingScorerState } from "@/types/auto-routing-api";
 import { DecisionsResponseSchema } from "@/types/llm-providers/jev/api";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
+import { type CircuitPermit, ScorerCircuitBreaker } from "./circuit-breaker";
 import { JEV_SESSION_SPEC, type JevSessionSpec, type ScorerSpec } from "./spec";
 import {
   type PreRunInput,
@@ -82,68 +85,178 @@ export class JevSessionSource
     input: PreRunInput,
     ctx: SignalSourceContext,
   ): Promise<JevSessionReading> {
-    const { apiKey, baseUrl } = await resolveProviderApiKey({
-      organizationId: ctx.organizationId,
-      provider: "jev",
-      agentLlmApiKeyId: ctx.apiKeyId,
-    });
+    const { apiKey, baseUrl, chatApiKeyId, source } =
+      await resolveProviderApiKey({
+        organizationId: ctx.organizationId,
+        provider: "jev",
+        agentLlmApiKeyId: ctx.apiKeyId,
+      });
     if (!apiKey) {
       throw new SignalSourceError(
         "no_credentials",
         "No Jev API key is configured for the organization",
       );
     }
-    const request: DecisionsRequest = {
-      model: this.spec.model,
-      state: sessionState(input),
-      questions: this.spec.questions,
-    };
-    const timeout = AbortSignal.timeout(
-      ctx.timeoutMs ?? config.autoRouting.scorerTimeoutMs,
-    );
-    const body = await postDecisions({
-      url: baseUrl ?? config.llm.jev.baseUrl,
-      apiKey: apiKey.replace(/^Bearer\s+/i, ""),
-      request,
-      signal: timeout,
-    }).catch((error: unknown) => {
-      throw transportFailure(error, timeout);
-    });
-    const parsed = SessionAnswersSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new SignalSourceError(
-        "invalid_response",
-        "Jev answers do not match",
-        {
-          cause: parsed.error,
-        },
-      );
+    const url = baseUrl ?? config.llm.jev.baseUrl;
+    assertHttpUrl(url);
+    const normalizedApiKey = apiKey.replace(/^Bearer\s+/i, "");
+    let permit: CircuitPermit | null = null;
+    if (ctx.useCircuitBreaker) {
+      const breakerKey = hashBreakerKey({
+        credentialScope: chatApiKeyId
+          ? `key:${chatApiKeyId}`
+          : `source:${source}`,
+        apiKey: normalizedApiKey,
+        url,
+        model: this.spec.model,
+      });
+      permit = jevCircuitBreaker.acquire(breakerKey);
+      if (!permit) {
+        throw new SignalSourceError(
+          "circuit_open",
+          "Jev scorer circuit breaker is open",
+        );
+      }
     }
-    const { tier_needed, long_context } = parsed.data.answers;
-    const inputTokens = parsed.data.usage?.input_tokens ?? null;
-    const outputTokens = parsed.data.usage?.output_tokens ?? null;
-    // A custom endpoint may charge a different rate. Only the first-party
-    // endpoint can use TypeSafe's published rate when no cost is reported.
-    // TypeSafe: https://help.typesafe.ai/articles/5187202169-how-much-does-jev-cost
-    // Output tokens are free. Keep this rate out of endpoint-agnostic model sync.
-    const inputPricePerMillion =
-      (baseUrl ?? config.llm.jev.baseUrl) ===
-        "https://api.typesafe.ai/v1/systemone" &&
-      this.spec.model === "jev-1.13.0"
-        ? 0.042
-        : null;
-    const calculatedCost =
-      inputTokens !== null && inputPricePerMillion !== null
-        ? (inputTokens * inputPricePerMillion) / 1_000_000
-        : null;
-    return {
-      tierNeeded: tierDistribution(tier_needed.probabilities),
-      pLong: long_context.noul,
-      costUsd: parsed.data.usage?.cost ?? calculatedCost,
-      inputTokens,
-      outputTokens,
-    };
+    let request: DecisionsRequest;
+    try {
+      request = {
+        model: this.spec.model,
+        state: sessionState(input),
+        questions: this.spec.questions,
+      };
+    } catch (error) {
+      if (permit) jevCircuitBreaker.release(permit);
+      throw error;
+    }
+    try {
+      const timeout = AbortSignal.timeout(
+        ctx.timeoutMs ?? config.autoRouting.scorerTimeoutMs,
+      );
+      const body = await postDecisions({
+        url,
+        apiKey: normalizedApiKey,
+        request,
+        signal: timeout,
+      }).catch((error: unknown) => {
+        throw transportFailure(error, timeout);
+      });
+      const parsed = SessionAnswersSchema.safeParse(body);
+      if (!parsed.success) {
+        throw new SignalSourceError(
+          "invalid_response",
+          "Jev answers do not match",
+          {
+            cause: parsed.error,
+          },
+        );
+      }
+      const { tier_needed, long_context } = parsed.data.answers;
+      const inputTokens = parsed.data.usage?.input_tokens ?? null;
+      const outputTokens = parsed.data.usage?.output_tokens ?? null;
+      // A custom endpoint may charge a different rate. Only the first-party
+      // endpoint can use TypeSafe's published rate when no cost is reported.
+      // TypeSafe: https://help.typesafe.ai/articles/5187202169-how-much-does-jev-cost
+      // Output tokens are free. Keep this rate out of endpoint-agnostic model sync.
+      const inputPricePerMillion =
+        url === "https://api.typesafe.ai/v1/systemone" &&
+        this.spec.model === "jev-1.13.0"
+          ? 0.042
+          : null;
+      const calculatedCost =
+        inputTokens !== null && inputPricePerMillion !== null
+          ? (inputTokens * inputPricePerMillion) / 1_000_000
+          : null;
+      const reading: JevSessionReading = {
+        tierNeeded: tierDistribution(tier_needed.probabilities),
+        pLong: long_context.noul,
+        costUsd: parsed.data.usage?.cost ?? calculatedCost,
+        inputTokens,
+        outputTokens,
+      };
+      if (permit) jevCircuitBreaker.recordSuccess(permit);
+      return reading;
+    } catch (error) {
+      if (permit) {
+        if (error instanceof SignalSourceError) {
+          if (isTransientScorerError(error)) {
+            jevCircuitBreaker.recordTransientFailure(
+              permit,
+              error.retryAfterMs !== undefined
+                ? { cooldownMs: error.retryAfterMs }
+                : undefined,
+            );
+          } else {
+            jevCircuitBreaker.recordNeutral(permit);
+          }
+        } else {
+          jevCircuitBreaker.release(permit);
+        }
+      }
+      throw error;
+    }
   }
+}
+
+// === Internal ===
+
+const BREAKER_KEY_SALT = randomBytes(32);
+const MAX_RETRY_AFTER_MS = 30_000;
+const jevCircuitBreaker = registerProcessLocalCache(new ScorerCircuitBreaker());
+
+function assertHttpUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch (error) {
+    throw new SignalSourceError("http", "Jev endpoint URL is invalid", {
+      cause: error,
+    });
+  }
+  if (
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    parsed.username.length > 0 ||
+    parsed.password.length > 0
+  ) {
+    throw new SignalSourceError("http", "Jev endpoint URL is invalid");
+  }
+}
+
+function parseRetryAfterMs(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const trimmed = header.trim();
+  if (trimmed.length === 0) return undefined;
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    if (!Number.isFinite(seconds)) return undefined;
+    return Math.max(0, Math.min(seconds * 1_000, MAX_RETRY_AFTER_MS));
+  }
+  const timestamp = Date.parse(trimmed);
+  if (!Number.isFinite(timestamp)) return undefined;
+  return Math.max(0, Math.min(timestamp - Date.now(), MAX_RETRY_AFTER_MS));
+}
+
+function hashBreakerKey(params: {
+  credentialScope: string;
+  apiKey: string;
+  url: string;
+  model: string;
+}): string {
+  return createHmac("sha256", BREAKER_KEY_SALT)
+    .update(
+      `${params.credentialScope}\u0000${params.apiKey}\u0000${params.url}\u0000${params.model}`,
+    )
+    .digest("hex");
+}
+
+function isTransientScorerError(error: SignalSourceError): boolean {
+  return (
+    error.reason === "timeout" ||
+    (error.reason === "http" &&
+      (error.status === undefined ||
+        error.status === 429 ||
+        error.status >= 500))
+  );
 }
 
 async function postDecisions(params: {
@@ -162,11 +275,16 @@ async function postDecisions(params: {
     signal: params.signal,
   });
   if (!response.ok) {
+    const retryAfterMs =
+      response.status === 429
+        ? parseRetryAfterMs(response.headers.get("retry-after"))
+        : undefined;
     throw new SignalSourceError(
       "http",
       `Jev answered HTTP ${response.status}`,
       {
         status: response.status,
+        ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
       },
     );
   }

@@ -23,7 +23,8 @@ import {
 import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
-import { getCostControlsNavigationUrl } from "@/app/_parts/costs-navigation";
+import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
+import { getModelProvidersNavigationUrl } from "@/app/_parts/model-providers-navigation";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import {
@@ -208,11 +209,20 @@ const NavPrimary = ({
   const { isMobile, setOpenMobile } = useSidebar();
 
   const renderItem = (item: NavItem) => (
-    <SidebarMenuItem key={item.url}>
+    <SidebarMenuItem
+      key={item.url}
+      className={cn(
+        item.nested &&
+          // Indented under the row above, on a guide line that runs on
+          // through the gaps between nested rows. The icon rail draws it as
+          // a row of its own.
+          "pl-[26px] before:absolute before:-inset-y-0.5 before:left-4 before:w-px before:bg-sidebar-border group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:before:hidden",
+      )}
+    >
       <SidebarMenuButton
         asChild
         tooltip={item.tooltipLabel ?? item.title}
-        className={item.className}
+        className={cn(item.nested && "h-7 text-[13px]", item.className)}
         isActive={
           item.customIsActive?.(pathname, searchParams) ??
           pathname.startsWith(item.url)
@@ -236,7 +246,12 @@ const NavPrimary = ({
             if (isMobile) setOpenMobile(false);
           }}
         >
-          <item.icon className={item.iconClassName} />
+          <item.icon
+            className={cn(
+              item.nested && "hidden group-data-[collapsible=icon]:block",
+              item.iconClassName,
+            )}
+          />
           <span className="min-w-0 flex-1 truncate">{item.title}</span>
           {item.beta && (
             <NavItemBadge
@@ -544,8 +559,8 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
-          // Cost Controls is one row over two pages, so it has to choose
-          // which one it opens: a reader who may read exports but not limits
+          // Costs & Limits is one row over two pages, so it has to choose
+          // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
           .map((item) => {
             if (
@@ -557,10 +572,21 @@ export function AppSidebar() {
               // Yells, or the Policy page for their MCP servers' rules.
               return { ...item, url: "/openappa/policy" };
             }
-            if (item.url === "/llm/limits") {
+            if (item.url === "/llm/model-providers") {
               return {
                 ...item,
-                url: getCostControlsNavigationUrl(permissionMap),
+                url: getModelProvidersNavigationUrl(permissionMap),
+              };
+            }
+            if (item.url === "/llm/costs") {
+              return {
+                ...item,
+                title:
+                  permissionMap?.["/llm/costs"] === false &&
+                  permissionMap?.["/llm/limits"]
+                    ? "Limits"
+                    : item.title,
+                url: getCostsNavigationUrl(permissionMap),
               };
             }
             // Same reason one row over: /settings is a stub that forwards to

@@ -104,7 +104,11 @@ function ConsultDetail({ id }: { id: string }) {
       }
       documentTitle={consult.externalName}
       stackHeaderOnMobile
-      backLink={<PageBackLink href="/logs">Back to Logs</PageBackLink>}
+      backLink={
+        <PageBackLink href="/consults/logs">
+          Back to Guardrails logs
+        </PageBackLink>
+      }
       description="Not part of a logged LLM session, so it has no trace to open in."
     >
       <div className="space-y-4">
@@ -170,7 +174,11 @@ function ConsultShell({ children }: { children: ReactNode }) {
     <PageLayout
       denseContent
       title="Consult"
-      backLink={<PageBackLink href="/logs">Back to Logs</PageBackLink>}
+      backLink={
+        <PageBackLink href="/consults/logs">
+          Back to Guardrails logs
+        </PageBackLink>
+      }
     >
       {children}
     </PageLayout>

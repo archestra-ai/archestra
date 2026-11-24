@@ -26,7 +26,7 @@ let mockSearch = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: mockReplace }),
-  usePathname: () => "/adoption",
+  usePathname: () => "/connections/logs",
   useSearchParams: () => mockSearch,
 }));
 

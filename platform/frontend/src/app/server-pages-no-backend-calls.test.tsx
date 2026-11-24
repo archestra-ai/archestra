@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChatPageServer from "@/app/llm/logs/[id]/page";
 import McpGatewaysPageServer from "@/app/mcp/gateways/page";
 import McpToolCallDetailPageServer from "@/app/mcp/logs/[id]/page";
+import McpGatewayLogsPageServer from "@/app/mcp/logs/page";
 import McpRegistryPage from "@/app/mcp/registry/page";
 import { SHELL_SEED_HEADER } from "@/lib/auth/shell-seed";
 
@@ -68,6 +69,7 @@ describe("server pages that read the client cache", () => {
   it.each<[string, () => Promise<ReactElement> | ReactElement]>([
     ["/mcp/gateways", McpGatewaysPageServer],
     ["/mcp/registry", () => McpRegistryPage(registrySearchParams)],
+    ["/mcp/logs", McpGatewayLogsPageServer],
     ["/mcp/logs/[id]", () => McpToolCallDetailPageServer(params)],
     ["/llm/logs/[id]", () => ChatPageServer(params)],
   ])("%s renders without calling the backend", async (_path, page) => {

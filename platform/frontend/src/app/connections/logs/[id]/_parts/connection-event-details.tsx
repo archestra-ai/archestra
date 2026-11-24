@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { AgentIcon, agentLabel } from "@/app/adoption/_parts/agent-icon";
+import {
+  AgentIcon,
+  agentLabel,
+} from "@/app/connections/logs/_parts/agent-icon";
 import { AgentIdenticon, PersonAvatar } from "@/app/llm/logs/_parts/hue-avatar";
 import { CopyButton } from "@/components/copy-button";
 import {

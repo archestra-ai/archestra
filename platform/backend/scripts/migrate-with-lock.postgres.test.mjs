@@ -361,6 +361,7 @@ async function mcpIndexFixture() {
     "migrate-with-lock.mjs",
     "concurrent-index-leftovers.mjs",
     "rds-iam.mjs",
+    "spinner-free-output.mjs",
   ])
     await copyFile(
       path.join(backend, "scripts", file),

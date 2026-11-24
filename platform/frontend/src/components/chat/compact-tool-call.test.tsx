@@ -638,7 +638,7 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByText(/draft replay/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View Validations" }),
-    ).toHaveAttribute("href", "/openappa/policy");
+    ).toHaveAttribute("href", "/openappa/validation");
     expect(
       screen.getByRole("button", {
         name: "update guardrails validation",
@@ -669,14 +669,14 @@ describe("CompactToolGroup", () => {
         screen.getByRole("link", { name: "View Validations" }),
       ).toHaveAttribute(
         "href",
-        "/openappa/policy?entry=validation%3Atraces%2Fcheck.appa",
+        "/openappa/validation/file?path=traces%2Fcheck.appa",
       );
     }
     rerender(show({ structuredContent: { ...publication, run: null } }));
     expect(screen.getByText("· saved ·")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View Validations" }),
-    ).toHaveAttribute("href", "/openappa/policy");
+    ).toHaveAttribute("href", "/openappa/validation");
     rerender(
       show({
         structuredContent: {

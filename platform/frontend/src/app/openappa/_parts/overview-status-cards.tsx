@@ -224,7 +224,7 @@ function ValidationCard() {
             <span>Write a validation</span>
           </OpenAppaChatButton>
           <Button size="sm" variant="outline" asChild>
-            <Link href="/openappa/policy">
+            <Link href="/openappa/validation">
               <span>View Validations</span>
               <ArrowRight />
             </Link>
@@ -281,7 +281,7 @@ function YellsCard() {
       action={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" asChild>
-            <Link href="/logs?type=guardrails&record=yell">
+            <Link href="/consults/logs?type=yell&yellStatus=unresolved">
               Review yells <ArrowRight />
             </Link>
           </Button>

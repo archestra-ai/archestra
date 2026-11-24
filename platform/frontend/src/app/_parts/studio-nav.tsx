@@ -4,13 +4,10 @@ import {
   AppWindow,
   Bot,
   Boxes,
-  Brain,
-  ChartColumn,
   CircleDollarSign,
   Database,
   Files,
   FolderKanban,
-  Gauge,
   KeyRound,
   Layers,
   type LucideIcon,
@@ -90,6 +87,12 @@ export interface NavItem {
    * this, gating falls back to `url`.
    */
   permissionUrls?: string[];
+  /**
+   * One of the pages of the row above it, drawn indented under it with a
+   * guide line and no icon. The collapsed icon rail and the search palette
+   * still treat it as a row of its own.
+   */
+  nested?: boolean;
 }
 
 export interface NavGroup {
@@ -221,8 +224,22 @@ export const contentNavGroups: NavGroup[] = [
     label: "LLM",
     items: [
       {
-        // Exact match: the proxy's sibling tabs are rows of their own now, so
-        // a prefix match would light this row on all three.
+        // Subscriptions & API Keys and Models share a tab bar, so one row
+        // covers both; `getModelProvidersNavigationUrl` opens the first one
+        // the reader may see.
+        title: "Model Providers",
+        url: "/llm/model-providers",
+        icon: Boxes,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/model-providers") ||
+          pathname.startsWith("/llm/models"),
+        permissionUrls: ["/llm/model-providers", "/llm/models"],
+        // The dot covers both tabs (see DOTTED_NAV_ITEMS).
+        dotKey: "nav:model-providers",
+      },
+      {
+        // Exact match: the pages nested below are rows of their own, so a
+        // prefix match would light this row on Virtual Keys too.
         title: "LLM Proxy",
         url: "/llm/proxy",
         icon: Network,
@@ -232,23 +249,7 @@ export const contentNavGroups: NavGroup[] = [
         title: "Virtual Keys",
         url: "/llm/proxy/virtual-keys",
         icon: KeyRound,
-      },
-      {
-        title: "Model Providers",
-        url: "/llm/model-providers",
-        icon: Boxes,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/model-providers"),
-        // The dot covers the pair (see DOTTED_NAV_ITEMS): opening Models
-        // clears it too.
-        dotKey: "nav:model-providers",
-      },
-      {
-        title: "Models",
-        url: "/llm/models",
-        icon: Brain,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/models"),
+        nested: true,
       },
       {
         title: "Model Pools",
@@ -258,6 +259,7 @@ export const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/model-pools"),
         beta: true,
         badgeLabel: "Beta",
+        nested: true,
       },
       {
         title: "Auto Routing",
@@ -267,18 +269,19 @@ export const contentNavGroups: NavGroup[] = [
           pathname.startsWith(AUTO_ROUTING_URL),
         beta: true,
         badgeLabel: "Beta",
+        nested: true,
       },
       {
-        // Limits and Exports share a tab bar, so one row covers both;
-        // `getCostControlsNavigationUrl` opens the first one the reader may
-        // see.
-        title: "Cost Controls",
-        url: "/llm/limits",
-        icon: Gauge,
+        // Costs and Limits share a tab bar, so one row covers both;
+        // `getCostsNavigationUrl` picks which of the two it opens for a
+        // reader who may not read both.
+        title: "Costs & Limits",
+        url: "/llm/costs",
+        icon: CircleDollarSign,
         customIsActive: (pathname: string) =>
-          pathname === "/llm/limits" ||
-          pathname.startsWith("/llm/cost-exports"),
-        permissionUrls: ["/llm/limits", "/llm/cost-exports"],
+          pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
+        permissionUrls: ["/llm/costs", "/llm/limits"],
+        nested: true,
       },
     ],
   },
@@ -315,42 +318,21 @@ export const contentNavGroups: NavGroup[] = [
     ],
   },
   {
-    // Looking back at what happened: every event, who adopted which agents,
-    // and what it cost.
-    id: "insights",
-    label: "Insights",
+    // The rows that span every group above: what tools did, and how the
+    // deployment is configured.
+    id: "platform",
     items: [
       {
         title: "Logs",
-        url: "/logs",
+        url: "/llm/logs",
         icon: MessagesSquare,
         customIsActive: (pathname: string) =>
-          pathname === "/logs" ||
-          // Each event's detail page lives under its own type's path.
           pathname.startsWith("/llm/logs") ||
           pathname.startsWith("/mcp/logs") ||
           pathname.startsWith("/audit/logs") ||
           pathname.startsWith("/connections/logs") ||
           pathname.startsWith("/consults/logs"),
       },
-      {
-        title: "Adoption",
-        url: "/adoption",
-        icon: ChartColumn,
-        customIsActive: (pathname: string) => pathname.startsWith("/adoption"),
-      },
-      {
-        title: "Costs",
-        url: "/llm/costs",
-        icon: CircleDollarSign,
-        customIsActive: (pathname: string) => pathname.startsWith("/llm/costs"),
-      },
-    ],
-  },
-  {
-    // How the deployment is configured.
-    id: "platform",
-    items: [
       {
         title: "Settings",
         url: "/settings",

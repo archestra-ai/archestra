@@ -199,7 +199,7 @@ for (const viewport of [
           body: { modelId: null, chatApiKeyId: null },
         },
       ]);
-      await page.goto("/openappa/policy");
+      await page.goto("/openappa/policy/workspace");
       // The bar names the open file's kind only in the Source view.
       const policySource = page
         .getByTestId("policy-file-kind")
@@ -260,7 +260,7 @@ for (const viewport of [
       await page.screenshot({ path: testInfo.outputPath("github-dialog.png") });
       await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
       await expect(dialog).toBeHidden();
-      await page.goto("/openappa/policy");
+      await page.goto("/openappa/policy/workspace");
       await expect(
         page.getByRole("heading", { name: "Policy Beta" }),
       ).toBeVisible();

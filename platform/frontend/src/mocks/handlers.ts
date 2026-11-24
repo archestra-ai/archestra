@@ -456,6 +456,7 @@ export const handlers: HttpHandler[] = [
     templates: [],
     popularAgentOverrides: organizationSeed.popularAgentOverrides,
   }),
+  ...getJson("/api/limits", []),
   ...getJson("/api/default-user-limits", []),
   // Per-user limit usage on the Limits page: no members, nothing spent.
   ...getJson("/api/default-user-limits/users", {
@@ -486,6 +487,7 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the feedback dialog interfere with other tests.
+  ...getJson("/api/onboarding/first-run-setup", { show: false }),
   ...getJson("/api/onboarding/seen-nav-items", {
     items: [
       "nav:projects",

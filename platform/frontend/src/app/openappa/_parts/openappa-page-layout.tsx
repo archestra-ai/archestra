@@ -2,8 +2,9 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,12 +16,33 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
+import { POLICY_WORKSPACE_PATH } from "@/lib/openappa-policy-views";
+import {
+  OpenAppaHeaderModeContext,
+  OpenAppaPageActionSlotContext,
+  OpenAppaPageHeaderSlotsContext,
+} from "./openappa-page-action";
 import { OverviewHeaderActions } from "./overview-header-actions";
 import { openAppaUrl } from "./overview-setup-cards";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const [pageActionSlot, setPageActionSlot] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const [titleSlot, setTitleSlot] = useState<HTMLSpanElement | null>(null);
+  const [statusSlot, setStatusSlot] = useState<HTMLSpanElement | null>(null);
+  const [descriptionSlot, setDescriptionSlot] =
+    useState<HTMLSpanElement | null>(null);
+  const [requestedMode, setRequestedMode] = useState<{
+    back: boolean;
+  } | null>(null);
+  // A validation file is a detail page: it names itself in the header and
+  // leads back to the list, instead of repeating "Validations" and the tabs.
+  // Other pages can ask for the same header with `useOpenAppaDetailHeader`.
+  const fileDetail = pathname === "/openappa/validation/file";
+  const detail = fileDetail || requestedMode !== null;
   const { data: canReadPolicy } = useHasPermissions({
     guardrailsPolicy: ["read"],
   });
@@ -49,27 +71,44 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
             </>
           ),
         }
-      : pathname === "/openappa/policy"
+      : pathname === "/openappa/policy" || pathname === POLICY_WORKSPACE_PATH
         ? {
             title: "Policy",
             description: scoped
-              ? "The guardrail rules for your MCP servers. Open a file to see what its tools may do."
-              : "The files that decide what an agent's tool calls may do: your organization's policy, the batteries it includes, and the validations that check them.",
+              ? "Review the guardrail rules for the MCP servers you can open."
+              : "Review your guardrail policy and the effective rules applied to tool calls, including rules from batteries.",
           }
-        : {
-            title: "Guardrails",
-            description: (
-              <>
-                {`${appName} uses OpenAPPA to check tool calls against your policy and keep data visible only to people allowed to see it.`}{" "}
-                <ExternalDocsLink href={openAppaUrl("/how-it-works")}>
-                  How it works
-                </ExternalDocsLink>
-              </>
-            ),
-          };
+        : pathname === "/openappa/tests" ||
+            pathname.startsWith("/openappa/validation")
+          ? {
+              title:
+                pathname === "/openappa/validation/history"
+                  ? "Validation run history"
+                  : pathname === "/openappa/validation/new"
+                    ? "Add validation"
+                    : "Validations",
+              description:
+                pathname === "/openappa/validation/history"
+                  ? "Review previous validation results."
+                  : pathname === "/openappa/validation/new"
+                    ? "Write a scenario and save it as a validation file."
+                    : "Write policy scenarios and check their expected decisions.",
+            }
+          : {
+              title: "Guardrails",
+              description: (
+                <>
+                  {`${appName} uses OpenAPPA to check tool calls against your policy and keep data visible only to people allowed to see it.`}{" "}
+                  <ExternalDocsLink href={openAppaUrl("/how-it-works")}>
+                    How it works
+                  </ExternalDocsLink>
+                </>
+              ),
+            };
   // Until a policy is saved, the Overview shows only that first step.
   const firstStepOnly = isFresh === true && pathname === "/openappa";
 
+  // One tree for both header forms, so switching never remounts the page.
   return (
     <PageLayout
       // Maturity, not runtime state, so it belongs to the name rather than to
@@ -77,24 +116,42 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
       // than a flex gap: a CSS gap leaves no separator in the accessible name,
       // which a screen reader then reads as one word.
       title={
-        <span>
-          {page.title}{" "}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="secondary" className="align-middle">
-                Beta
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>{GUARDRAILS_BETA_TOOLTIP}</TooltipContent>
-          </Tooltip>
-        </span>
+        detail ? (
+          <span ref={setTitleSlot} />
+        ) : (
+          <span>
+            {page.title}{" "}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="align-middle">
+                  Beta
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>{GUARDRAILS_BETA_TOOLTIP}</TooltipContent>
+            </Tooltip>
+          </span>
+        )
       }
       // The policy source is an editor: it takes the height the viewport has.
-      fillContent={pathname === "/openappa/policy"}
-      documentTitle={page.title}
-      description={page.description}
+      fillContent={pathname === POLICY_WORKSPACE_PATH}
+      documentTitle={fileDetail ? "Validation" : page.title}
+      backLink={
+        fileDetail || requestedMode?.back ? (
+          <PageBackLink href="/openappa/validation">
+            Back to validations
+          </PageBackLink>
+        ) : undefined
+      }
+      status={
+        detail ? (
+          <span ref={setStatusSlot} className="empty:hidden" />
+        ) : undefined
+      }
+      description={
+        detail ? <span ref={setDescriptionSlot} /> : page.description
+      }
       tabs={
-        firstStepOnly
+        firstStepOnly || detail
           ? []
           : [
               ...(canReadPolicy
@@ -102,6 +159,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
                     { label: "Overview", href: "/openappa" },
                     { label: "Policy", href: "/openappa/policy" },
                     { label: "Batteries", href: "/openappa/batteries" },
+                    { label: "Validations", href: "/openappa/validation" },
                   ]
                 : scoped
                   ? [{ label: "Policy", href: "/openappa/policy" }]
@@ -109,12 +167,31 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
             ]
       }
       actionButton={
-        !firstStepOnly && pathname === "/openappa" ? (
+        pathname === "/openappa/validation" || fileDetail ? (
+          <div ref={setPageActionSlot} />
+        ) : firstStepOnly ||
+          pathname === "/openappa/tests" ||
+          pathname.startsWith("/openappa/validation") ||
+          pathname === "/openappa/policy" ||
+          pathname === POLICY_WORKSPACE_PATH ? null : pathname ===
+          "/openappa" ? (
           <OverviewHeaderActions />
         ) : null
       }
     >
-      {children}
+      <OpenAppaPageHeaderSlotsContext.Provider
+        value={{
+          title: titleSlot,
+          status: statusSlot,
+          description: descriptionSlot,
+        }}
+      >
+        <OpenAppaPageActionSlotContext.Provider value={pageActionSlot}>
+          <OpenAppaHeaderModeContext.Provider value={setRequestedMode}>
+            {children}
+          </OpenAppaHeaderModeContext.Provider>
+        </OpenAppaPageActionSlotContext.Provider>
+      </OpenAppaPageHeaderSlotsContext.Provider>
     </PageLayout>
   );
 }

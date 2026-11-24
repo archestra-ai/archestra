@@ -19,6 +19,7 @@ import {
   oauthClientFormReady,
   oauthClientFormValuesFrom,
   oauthClientUpdateBody,
+  spendCapInvalidHandler,
   useOauthClientScopeChange,
 } from "@/components/oauth-client/configuration-fields";
 import { OAuthClientIdentityFields } from "@/components/oauth-client/identity-fields";
@@ -228,6 +229,7 @@ export function EditManagedOAuthClientDialog({
             onSpendCapChange={(value) =>
               form.setValue("spendCap", value, { shouldDirty: true })
             }
+            onSpendCapInvalidChange={spendCapInvalidHandler(form)}
             capLocked={!!oauthClient.spendCap && !canManageLimits}
             currentUsage={oauthClient.spendCap?.currentUsage ?? null}
             estimatedUsage={oauthClient.spendCap?.estimatedUsage ?? false}

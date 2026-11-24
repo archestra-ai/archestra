@@ -5,6 +5,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { ensureAutoRouter } from "@/test/auto-routing";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
@@ -121,6 +122,38 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     expect(
       await VirtualApiKeyModel.findByIdForAudit(key.id, organizationId),
     ).toEqual(before);
+  });
+
+  test("a key that keeps an auto router may drop every provider key", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    grantEverywhere(["llmVirtualKey"]);
+    const openai = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "openai",
+    });
+    const router = await ensureAutoRouter(organizationId);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "router key",
+        providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
+        autoRouterIds: [router.id],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const update = (payload: Record<string, unknown>) =>
+      app.inject({
+        method: "PATCH",
+        url: `/api/llm-virtual-keys/${created.json().id}`,
+        payload: { name: "router key", providerApiKeys: [], ...payload },
+      });
+
+    expect((await update({})).statusCode).toBe(200);
+    expect((await update({ modelPoolIds: [] })).statusCode).toBe(200);
+    expect(
+      (await update({ modelPoolIds: [], autoRouterIds: [] })).statusCode,
+    ).toBe(400);
   });
 
   test("sets the key's model pools, and keeps them when an edit omits them", async ({

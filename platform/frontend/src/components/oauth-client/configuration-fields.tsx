@@ -240,6 +240,7 @@ export function OAuthClientAdvancedFields({
             onSpendCapChange={(value) =>
               form.setValue("spendCap", value, { shouldDirty: true })
             }
+            onSpendCapInvalidChange={spendCapInvalidHandler(form)}
           />
         </section>
       )}
@@ -418,6 +419,19 @@ export function useOauthClientScopeChange(
     },
   });
   return { change: mutation.mutate, isPending: mutation.isPending };
+}
+
+/**
+ * Keeps an unusable spend cap amount as a form error, which `handleSubmit`
+ * refuses to submit past.
+ */
+export function spendCapInvalidHandler(
+  form: UseFormReturn<OAuthClientFormValues>,
+) {
+  return (invalid: boolean) =>
+    invalid
+      ? form.setError("spendCap", { type: "validate" })
+      : form.clearErrors("spendCap");
 }
 
 export function oauthClientFormReady(values: OAuthClientFormValues): boolean {

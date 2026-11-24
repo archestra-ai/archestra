@@ -838,7 +838,7 @@ describe("ConnectPage (no connect request)", () => {
     render(<ConnectionPage />);
     const link = screen.queryByRole("link", { name: "Statistics" });
     if (allowed) {
-      expect(link).toHaveAttribute("href", "/adoption");
+      expect(link).toHaveAttribute("href", "/connections/logs");
     } else {
       expect(link).not.toBeInTheDocument();
     }

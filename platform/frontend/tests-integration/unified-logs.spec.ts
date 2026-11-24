@@ -34,17 +34,17 @@ test.describe("Logs", () => {
     await expect(page).not.toHaveURL(/status=problems/);
   });
 
-  test("a row opens its event, and Back to Logs returns to the same view", async ({
-    page,
-  }) => {
+  // The detail page leads back to its own type's list while this page is
+  // unlisted, so only the way in is pinned here.
+  test("a row opens its event", async ({ page }) => {
     await page.goto("/logs?type=mcp");
     const row = page.locator('a[href^="/mcp/logs/"]').first();
     const href = await row.getAttribute("href");
     await row.click();
     await expect(page).toHaveURL(new RegExp(`${href}$`));
-
-    await page.getByRole("link", { name: "Back to Logs" }).click();
-    await expect(page).toHaveURL(/\/logs\?type=mcp$/);
+    await expect(
+      page.getByRole("link", { name: "Back to MCP Logs" }),
+    ).toBeVisible();
   });
 });
 

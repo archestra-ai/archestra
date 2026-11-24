@@ -4,12 +4,10 @@ import {
   AppWindow,
   Bot,
   Boxes,
-  ChartColumn,
   CircleDollarSign,
   Database,
   Files,
   FolderKanban,
-  Gauge,
   KeyRound,
   Layers,
   type LucideIcon,
@@ -274,16 +272,15 @@ export const contentNavGroups: NavGroup[] = [
         nested: true,
       },
       {
-        // Limits and Exports share a tab bar, so one row covers both;
-        // `getCostControlsNavigationUrl` opens the first one the reader may
-        // see.
-        title: "Cost Controls",
-        url: "/llm/limits",
-        icon: Gauge,
+        // Costs and Limits share a tab bar, so one row covers both;
+        // `getCostsNavigationUrl` picks which of the two it opens for a
+        // reader who may not read both.
+        title: "Costs & Limits",
+        url: "/llm/costs",
+        icon: CircleDollarSign,
         customIsActive: (pathname: string) =>
-          pathname === "/llm/limits" ||
-          pathname.startsWith("/llm/cost-exports"),
-        permissionUrls: ["/llm/limits", "/llm/cost-exports"],
+          pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
+        permissionUrls: ["/llm/costs", "/llm/limits"],
         nested: true,
       },
     ],
@@ -321,42 +318,21 @@ export const contentNavGroups: NavGroup[] = [
     ],
   },
   {
-    // Looking back at what happened: every event, who adopted which agents,
-    // and what it cost.
-    id: "insights",
-    label: "Insights",
+    // The rows that span every group above: what tools did, and how the
+    // deployment is configured.
+    id: "platform",
     items: [
       {
         title: "Logs",
-        url: "/logs",
+        url: "/llm/logs",
         icon: MessagesSquare,
         customIsActive: (pathname: string) =>
-          pathname === "/logs" ||
-          // Each event's detail page lives under its own type's path.
           pathname.startsWith("/llm/logs") ||
           pathname.startsWith("/mcp/logs") ||
           pathname.startsWith("/audit/logs") ||
           pathname.startsWith("/connections/logs") ||
           pathname.startsWith("/consults/logs"),
       },
-      {
-        title: "Adoption",
-        url: "/adoption",
-        icon: ChartColumn,
-        customIsActive: (pathname: string) => pathname.startsWith("/adoption"),
-      },
-      {
-        title: "Costs",
-        url: "/llm/costs",
-        icon: CircleDollarSign,
-        customIsActive: (pathname: string) => pathname.startsWith("/llm/costs"),
-      },
-    ],
-  },
-  {
-    // How the deployment is configured.
-    id: "platform",
-    items: [
       {
         title: "Settings",
         url: "/settings",

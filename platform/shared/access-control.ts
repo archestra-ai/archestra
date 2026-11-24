@@ -2320,6 +2320,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Also open to a member who may read some MCP server's rules file: the
   // page then lists only those files (`useServerRulesAccess`).
   "/openappa/policy": { guardrailsPolicy: ["read"] },
+  // The file workspace over the same policy; not linked from the navigation.
+  "/openappa/policy/workspace": { guardrailsPolicy: ["read"] },
   "/openappa/batteries": { guardrailsPolicy: ["read"] },
 
   // Logs
@@ -2327,10 +2329,17 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // (`alternativePagePermissionsMap`), and the page shows what the caller
   // may read.
   "/logs": { log: ["read"] },
+  // The per-type log pages the sidebar opens; `/logs` above is not linked
+  // from the navigation yet.
+  "/llm/logs": { log: ["read"] },
+  "/mcp/logs": { log: ["read"] },
+  "/audit/logs": { auditLog: ["read"] },
+  "/consults/logs": { guardrailsLog: ["read"] },
   "/consults/logs/[id]": { guardrailsLog: ["read"] },
   "/consults/logs/yells/[id]": { guardrailsLog: ["read"] },
   "/audit/logs/[id]": { auditLog: ["read"] },
-  "/adoption": { clientConnection: ["admin"] },
+  // Shows every member's connections and the adoption built from them.
+  "/connections/logs": { clientConnection: ["admin"] },
   "/connections/logs/[id]": { clientConnection: ["read"] },
 
   // Knowledge

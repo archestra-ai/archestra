@@ -42,7 +42,7 @@ test.describe("Authentication redirect flows", {
 
     try {
       // Try to access a protected page while logged out
-      const targetPath = "/logs";
+      const targetPath = "/llm/logs";
       await page.goto(`${UI_BASE_URL}${targetPath}`);
 
       // Should be redirected to sign-in with redirectTo parameter

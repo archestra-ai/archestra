@@ -3,7 +3,7 @@ import { test } from "./fixtures";
 
 const now = new Date().toISOString();
 
-test.describe("Adoption layout", () => {
+test.describe("Agent connections layout", () => {
   test.beforeEach(async ({ mswControl }) => {
     await mswControl.registerMany([
       {
@@ -76,7 +76,7 @@ test.describe("Adoption layout", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto("/adoption?view=coverage");
+    await page.goto("/connections/logs?view=users");
     const table = page.getByRole("table");
     const parent = table
       .getByRole("row")
@@ -119,7 +119,7 @@ test.describe("Adoption layout", () => {
 });
 
 async function cardBoxes(page: Page) {
-  await page.goto("/adoption");
+  await page.goto("/connections/logs");
   const summary = page.getByRole("region", { name: "Connection summary" });
   const boxes = [];
   for (const title of ["Users", "Active users", "Calls"]) {

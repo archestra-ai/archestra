@@ -1292,10 +1292,12 @@ const registry = defineArchestraTools([
         sessionId: stamp.session_id,
         offerId: remedy.offer_id,
       });
-      // A publish while the reviewer decides retires the offer: the answer then
-      // applies to nothing, and the result says why.
+      // A publish on the session's line while the reviewer decides retires the
+      // offer: the answer then applies to nothing, and the result says why.
       const headBeforeReview = review
-        ? await OpenAppaDeploymentModel.head(context.organizationId)
+        ? await OpenAppaDeploymentModel.head(
+            review.deployment ?? context.organizationId,
+          )
         : null;
 
       let ruling: "approve" | "deny" | undefined;
@@ -1504,7 +1506,10 @@ const registry = defineArchestraTools([
         });
       const supersededByPublish = async (result: CallToolResult) =>
         retiredOffer(result) &&
-        (await policyPublishedSince(organizationId, headBeforeReview));
+        (await policyPublishedSince(
+          review?.deployment ?? organizationId,
+          headBeforeReview,
+        ));
       let byOffer: Awaited<ReturnType<typeof executePlan>>;
       try {
         byOffer = await executePlan();
@@ -2276,12 +2281,12 @@ function retiredOffer(result: CallToolResult): boolean {
   );
 }
 
-/** Whether the organization published a policy revision after `before`. */
+/** Whether the deployment line published a policy revision after `before`. */
 async function policyPublishedSince(
-  organizationId: string,
+  line: string,
   before: { revision: number } | null,
 ): Promise<boolean> {
-  const after = await OpenAppaDeploymentModel.head(organizationId);
+  const after = await OpenAppaDeploymentModel.head(line);
   return after !== null && after.revision > (before?.revision ?? 0);
 }
 

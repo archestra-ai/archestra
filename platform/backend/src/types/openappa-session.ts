@@ -11,9 +11,10 @@ export type OpenAppaSession = {
    */
   fork_of?: string;
   /**
-   * Set only where the session was authenticated by an Agent Runtime credential.
-   * A new root it opens takes the line `personApproval = auto_unattended` gives
-   * unattended sessions; a child or fork follows its family's line instead.
+   * `true` only where an Agent Runtime credential authenticated the session: a
+   * new root it opens is unattended. `false` where the host verified the
+   * request holds no runtime or delegated binding, so it cannot continue a
+   * family a runtime opened. Absent where the host cannot tell.
    */
-  agent_runtime?: true;
+  agent_runtime?: boolean;
 };

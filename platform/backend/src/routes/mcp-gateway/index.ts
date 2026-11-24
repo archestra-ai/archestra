@@ -433,6 +433,10 @@ async function handleMcpPostRequest(
               scope: `user:${tokenAuthContext.userId}`,
             })
           : undefined;
+    // A user token vouches for no runtime: it cannot continue a family an
+    // Agent Runtime run opened.
+    if (runtimeSession.kind !== "session" && openappaSession)
+      openappaSession = { ...openappaSession, agent_runtime: false };
     if (runtimeSession.kind === "session" && openappaEnabled()) {
       const workspace = await resolveRuntimeSessionForWorkspace({
         organizationId: runtimeSession.identity.organizationId,

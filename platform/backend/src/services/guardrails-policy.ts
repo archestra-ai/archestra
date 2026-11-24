@@ -98,13 +98,20 @@ async function deploymentRefusal(params: {
   organizationId: string;
   content: string;
   previous: string;
-}): Promise<{ errors: string[]; warnings: string[] }> {
+}): Promise<{
+  errors: string[];
+  warnings: string[];
+  /** What the deployment would serve, when it composes. */
+  composed: string | null;
+}> {
   const { organizationId, content, previous } = params;
   const submitted = await openappaBatteriesService.composeInDeployment({
     organizationId,
     content,
   });
-  if (submitted.refusal.length === 0) return { errors: [], warnings: [] };
+  const { composed } = submitted;
+  if (submitted.refusal.length === 0)
+    return { errors: [], warnings: [], composed };
   const kept = new Set(
     previous === content
       ? submitted.refusal
@@ -123,12 +130,14 @@ async function deploymentRefusal(params: {
     return {
       errors: [...introduced, ...submitted.heldBack].map(inDeployment),
       warnings: [],
+      composed,
     };
   return {
     errors: [],
     warnings: [...submitted.refusal, ...submitted.heldBack].map(
       (line) => inDeployment(line) + keptNote,
     ),
+    composed,
   };
 }
 
@@ -194,6 +203,8 @@ export const guardrailsPolicyService = {
       resolved?: { submitted: PolicyResolution; previous: PolicyResolution };
       /** Repository files the text includes, read from elsewhere than the accepted commit. */
       files?: ReadonlyMap<string, string>;
+      /** False skips the lines' fallback warnings, for a caller that reads only errors. */
+      lineWarnings?: false;
     },
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
@@ -245,12 +256,8 @@ export const guardrailsPolicyService = {
           resolution,
         }),
       });
-      const composedContent = composed.content ?? null;
-      if (composedContent === null) errors.push(...composed.errors);
+      if ((composed.content ?? null) === null) errors.push(...composed.errors);
       else {
-        warnings.push(
-          ...(await openappaDeclarations.lineWarnings(composedContent)),
-        );
         const deployed = await deploymentRefusal({
           organizationId,
           content,
@@ -258,6 +265,10 @@ export const guardrailsPolicyService = {
         });
         errors.push(...deployed.errors);
         warnings.push(...deployed.warnings);
+        if (params.lineWarnings !== false && deployed.composed !== null)
+          warnings.push(
+            ...(await openappaDeclarations.lineWarnings(deployed.composed)),
+          );
       }
     }
     if (errors.length === 0 && params.userId)

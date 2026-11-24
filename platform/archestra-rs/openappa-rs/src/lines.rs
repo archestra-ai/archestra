@@ -95,13 +95,41 @@ pub(crate) enum Variant {
 pub(crate) const VARIANTS: [Variant; 3] =
     [Variant::Enforce, Variant::Observe, Variant::EnforceApproved];
 
-/// Each variant's token as the session pins it. The tokens are constant spellings of the
-/// `LineVariant` grammar, which a test pins.
-static TOKENS: LazyLock<[LineVariant; 3]> = LazyLock::new(|| {
+/// The token suffix of a family an Agent Runtime credential opened.
+const UNATTENDED_SUFFIX: &str = "-unattended";
+
+/// Each variant's token as a session pins it, attended then unattended. The tokens are
+/// constant spellings of the `LineVariant` grammar, which a test pins.
+static TOKENS: LazyLock<[[LineVariant; 2]; 3]> = LazyLock::new(|| {
     VARIANTS.map(|variant| {
-        LineVariant::parse(variant.token()).expect("a variant token is a line variant")
+        [
+            variant.token().to_owned(),
+            format!("{}{UNATTENDED_SUFFIX}", variant.token()),
+        ]
+        .map(|token| LineVariant::parse(&token).expect("a variant token is a line variant"))
     })
 });
+
+/// Who presents a dispatch, as the host authenticated it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Presenter {
+    /// An Agent Runtime credential.
+    Runtime,
+    /// A request the host verified holds no runtime or delegated binding.
+    Attended,
+    /// A host path that cannot tell; it opens attended families.
+    Unknown,
+}
+
+impl Presenter {
+    pub(crate) fn of(agent_runtime: Option<bool>) -> Presenter {
+        match agent_runtime {
+            Some(true) => Presenter::Runtime,
+            Some(false) => Presenter::Attended,
+            None => Presenter::Unknown,
+        }
+    }
+}
 
 impl Variant {
     pub(crate) fn token(self) -> &'static str {
@@ -127,15 +155,15 @@ impl Variant {
         }
     }
 
-    /// What a family opening on this line pins: its token, and Observe's auto-accepted
-    /// narrowing.
-    pub(crate) fn settings(self) -> SessionSettings {
+    /// What a family opening on this line pins: its token, which also records an
+    /// unattended opener, and Observe's auto-accepted narrowing.
+    pub(crate) fn settings(self, unattended: bool) -> SessionSettings {
         SessionSettings {
             auto_apply: match self {
                 Variant::Observe => AutoApply::RulingsAndAccept,
                 Variant::Enforce | Variant::EnforceApproved => AutoApply::RulingsOnly,
             },
-            line_variant: Some(TOKENS[self.index()].clone()),
+            line_variant: Some(TOKENS[self.index()][usize::from(unattended)].clone()),
         }
     }
 }
@@ -162,11 +190,25 @@ pub(crate) struct Family {
 
 impl Family {
     /// A family about to open on `variant`.
-    pub(crate) fn opening(variant: Variant) -> Family {
+    pub(crate) fn opening(variant: Variant, unattended: bool) -> Family {
         Family {
             variant,
-            settings: variant.settings(),
+            settings: variant.settings(unattended),
         }
+    }
+
+    /// Whether an Agent Runtime credential opened the family.
+    pub(crate) fn unattended(&self) -> bool {
+        self.settings
+            .line_variant
+            .as_ref()
+            .is_some_and(|token| token.as_str().ends_with(UNATTENDED_SUFFIX))
+    }
+
+    /// Whether `presenter` may continue the family: an unattended one never by a request
+    /// verified to hold no runtime binding, so it cannot borrow the family's approvals.
+    pub(crate) fn continued_by(&self, presenter: Presenter) -> bool {
+        !(self.unattended() && presenter == Presenter::Attended)
     }
 
     /// The family `log` records, or `None` when it follows a line that is none of this
@@ -221,30 +263,51 @@ mod tests {
     }
 
     #[test]
-    fn every_variant_token_is_a_line_variant() {
+    fn every_variant_token_is_a_line_variant_and_records_its_opener() {
         for variant in VARIANTS {
             assert_eq!(
                 variant
-                    .settings()
+                    .settings(false)
                     .line_variant
                     .map(|token| token.as_str().to_owned()),
                 Some(variant.token().to_owned())
             );
+            for unattended in [false, true] {
+                assert_eq!(
+                    Family::opening(variant, unattended).unattended(),
+                    unattended
+                );
+            }
         }
+    }
+
+    #[test]
+    fn an_unattended_family_is_never_continued_by_a_verified_attended_request() {
+        let runtime = Family::opening(Variant::EnforceApproved, true);
+        assert!(!runtime.continued_by(Presenter::Attended));
+        assert!(runtime.continued_by(Presenter::Runtime));
+        assert!(runtime.continued_by(Presenter::Unknown));
+        let attended = Family::opening(Variant::EnforceApproved, false);
+        assert!(attended.continued_by(Presenter::Attended));
+        let legacy = Family {
+            variant: Variant::Enforce,
+            settings: SessionSettings::default(),
+        };
+        assert!(legacy.continued_by(Presenter::Attended));
     }
 
     #[test]
     fn observe_auto_accepts_and_enforce_applies_rulings_only() {
         assert_eq!(
-            Variant::Observe.settings().auto_apply,
+            Variant::Observe.settings(false).auto_apply,
             AutoApply::RulingsAndAccept
         );
         assert_eq!(
-            Variant::Enforce.settings().auto_apply,
+            Variant::Enforce.settings(false).auto_apply,
             AutoApply::RulingsOnly
         );
         assert_eq!(
-            Variant::EnforceApproved.settings().auto_apply,
+            Variant::EnforceApproved.settings(true).auto_apply,
             AutoApply::RulingsOnly
         );
     }

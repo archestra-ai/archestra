@@ -223,7 +223,7 @@ where
         Err(moved) if is_policy_moved(&moved) => {
             let Some(head) = state
                 .deployments
-                .repin(&state.runtime, &state.store, line, &deployment)
+                .repin(&state.runtime, &state.store, line, policy, &deployment)
                 .await?
             else {
                 return Err(policy_moved());
@@ -268,11 +268,16 @@ async fn run(
 ) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
         let state = initialized().await?.encrypted(encryption)?;
-        let (root, family) = match state.family(&input, &policy.guardrails)? {
+        let (root, family) = match state.family(&input, &policy.guardrails).await? {
             Routed::Follows { root, family } => (root, family),
-            Routed::Opens { root, variant } => {
-                (root, state.opening(&input, variant, &policy).await?)
-            }
+            Routed::Opens {
+                root,
+                variant,
+                unattended,
+            } => (
+                root,
+                state.opening(&input, variant, unattended, &policy).await?,
+            ),
         };
         let line = lines::Line {
             organization_id: input.organization_id.clone(),
@@ -312,6 +317,7 @@ enum Routed {
     Opens {
         root: String,
         variant: lines::Variant,
+        unattended: bool,
     },
 }
 
@@ -319,21 +325,35 @@ impl State {
     /// The root a dispatch for `input` decides in, and the family it belongs to: the one
     /// that root follows, or the one a fork's parent follows. Otherwise a new root opens
     /// on the line the deployment's settings give this session.
-    fn family(&self, input: &Input, guardrails: &lines::Guardrails) -> napi::Result<Routed> {
+    async fn family(&self, input: &Input, guardrails: &lines::Guardrails) -> napi::Result<Routed> {
+        let presenter = lines::Presenter::of(input.agent_runtime);
         let root = self.dispatch_root(input)?;
-        if let Some(family) = self.followed(&input.organization_id, &root)? {
-            return Ok(Routed::Follows { root, family });
+        let followed = match self.followed(&input.organization_id, &root).await? {
+            Some(family) => Some(family),
+            None => match &input.fork_of {
+                Some(fork_of) => {
+                    let parent = SessionKey::new(&input.organization_id, fork_of);
+                    match recorded_root(&Sql(&self.store), &parent)? {
+                        Some(parent_root) => {
+                            self.followed(&input.organization_id, &parent_root).await?
+                        }
+                        None => None,
+                    }
+                }
+                None => None,
+            },
+        };
+        match followed {
+            Some(family) if !family.continued_by(presenter) => Err(invalid_input(
+                "An Agent Runtime run opened this OpenAPPA session; only a request carrying that run's runtime binding continues it",
+            )),
+            Some(family) => Ok(Routed::Follows { root, family }),
+            None => Ok(Routed::Opens {
+                root,
+                variant: guardrails.opening(presenter == lines::Presenter::Runtime),
+                unattended: presenter == lines::Presenter::Runtime,
+            }),
         }
-        if let Some(fork_of) = &input.fork_of {
-            let parent = SessionKey::new(&input.organization_id, fork_of);
-            if let Some(parent_root) = recorded_root(&Sql(&self.store), &parent)?
-                && let Some(family) = self.followed(&input.organization_id, &parent_root)?
-            {
-                return Ok(Routed::Follows { root, family });
-            }
-        }
-        let variant = guardrails.opening(input.agent_runtime);
-        Ok(Routed::Opens { root, variant })
     }
 
     /// The family a new root opens: on `variant`'s line, or on the Enforce line when that
@@ -342,10 +362,11 @@ impl State {
         &self,
         input: &Input,
         variant: lines::Variant,
+        unattended: bool,
         policy: &deployments::HostedPolicy,
     ) -> napi::Result<lines::Family> {
         if variant == lines::Variant::Enforce {
-            return Ok(lines::Family::opening(variant));
+            return Ok(lines::Family::opening(variant, unattended));
         }
         let line = lines::Line {
             organization_id: input.organization_id.clone(),
@@ -362,32 +383,41 @@ impl State {
             )
             .await
             .map_err(deployment_refusal)?;
-        Ok(lines::Family::opening(match falls_back {
+        let variant = match falls_back {
             true => lines::Variant::Enforce,
             false => variant,
-        }))
+        };
+        Ok(lines::Family::opening(variant, unattended))
     }
 
     /// The line a started family follows; the Enforce line when `root` names none yet.
-    fn variant_of(
+    async fn variant_of(
         &self,
         organization_id: &str,
         root: Option<&str>,
     ) -> napi::Result<lines::Variant> {
         let followed = match root {
-            Some(root) => self.followed(organization_id, root)?,
+            Some(root) => self.followed(organization_id, root).await?,
             None => None,
         };
         Ok(followed.map_or(lines::Variant::Enforce, |family| family.variant))
     }
 
     /// The family `root` follows, read from its log, or `None` before it opened.
-    fn followed(&self, organization_id: &str, root: &str) -> napi::Result<Option<lines::Family>> {
+    async fn followed(
+        &self,
+        organization_id: &str,
+        root: &str,
+    ) -> napi::Result<Option<lines::Family>> {
         let families = &self.deployments.families;
         if let Some(family) = families.get(organization_id, root) {
             return Ok(Some(family));
         }
-        let log = match self.store.log(&TrajectoryId(root.to_owned())) {
+        let (store, trajectory) = (self.store.clone(), TrajectoryId(root.to_owned()));
+        let log = match tokio::task::spawn_blocking(move || store.log(&trajectory))
+            .await
+            .map_err(panicked)?
+        {
             Ok(log) => log,
             Err(appa_eventlog::ReadError::UnknownRoot { .. }) => return Ok(None),
             Err(error) => return Err(errors::read_failure(error)),

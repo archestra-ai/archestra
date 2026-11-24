@@ -2623,6 +2623,11 @@ export async function loadOfferReview(params: {
   scope?: ReviewScopeItem[];
   /** The ruling authority's own hint to the reviewer. */
   hint?: string;
+  /**
+   * The deployment line whose publish retires the offer; absent, the
+   * organization's Enforce line, which its id names.
+   */
+  deployment?: string;
 } | null> {
   try {
     if (
@@ -2654,6 +2659,7 @@ export async function loadOfferReview(params: {
       ...(result.arguments ? { arguments: result.arguments } : {}),
       ...(scope ? { scope } : {}),
       ...(result.hint ? { hint: result.hint } : {}),
+      deployment: result.deployment,
     };
   } catch (error) {
     logger.warn(

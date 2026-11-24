@@ -51,11 +51,12 @@ export interface BatteryTargetView {
 }
 
 /**
- * Composes each variant line over a document already composed by the host, as a
- * dispatch would, and says why any of them cannot carry its approvers. Such a line
- * serves the document alone, and sessions meant for it open on the Enforce line.
+ * Composes the named variant lines (absent: each one) over a document already composed
+ * by the host, as a dispatch would, and says why any of them cannot carry its
+ * approvers. Such a line serves the document alone, and sessions meant for it open on
+ * the Enforce line.
  */
-export declare function checkOpenappaLines(content: string, enforcedMarks: Array<string>): Promise<Array<LineRefusal>>
+export declare function checkOpenappaLines(content: string, enforcedMarks: Array<string>, variants?: Array<'observe' | 'enforce-approved'>): Promise<Array<LineRefusal>>
 
 export interface ChildAddressRecord {
   /** Fully scoped session id of the parent that addressed the child. */
@@ -333,6 +334,11 @@ export interface OfferReviewOutput {
   scope?: string
   /** The ruling authority's own hint to the reviewer, when it declares one. */
   hint?: string
+  /**
+   * The deployment line the session's family follows, whose head moving retires
+   * the offer.
+   */
+  deployment: string
 }
 
 /**

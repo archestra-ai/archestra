@@ -228,18 +228,32 @@ pub struct LineRefusal {
     pub error: String,
 }
 
-/// Composes each variant line over a document already composed by the host, as a
-/// dispatch would, and says why any of them cannot carry its approvers. Such a line
-/// serves the document alone, and sessions meant for it open on the Enforce line.
+/// Composes the named variant lines (absent: each one) over a document already composed
+/// by the host, as a dispatch would, and says why any of them cannot carry its
+/// approvers. Such a line serves the document alone, and sessions meant for it open on
+/// the Enforce line.
 #[napi(js_name = "checkOpenappaLines")]
 pub async fn check_openappa_lines(
     content: String,
     enforced_marks: Vec<String>,
+    #[napi(ts_arg_type = "Array<'observe' | 'enforce-approved'>")] variants: Option<Vec<String>>,
 ) -> napi::Result<Vec<LineRefusal>> {
     let enforced: std::collections::BTreeSet<String> = enforced_marks.into_iter().collect();
+    let checked: Vec<crate::lines::Variant> = match variants {
+        None => crate::lines::VARIANTS.to_vec(),
+        Some(tokens) => tokens
+            .iter()
+            .map(|token| {
+                crate::lines::VARIANTS
+                    .into_iter()
+                    .find(|variant| variant.token() == token)
+                    .ok_or_else(|| invalid_input(format!("unknown line variant {token:?}")))
+            })
+            .collect::<napi::Result<_>>()?,
+    };
     tokio::task::spawn_blocking(move || {
         std::panic::catch_unwind(|| {
-            crate::lines::VARIANTS
+            checked
                 .into_iter()
                 .filter_map(|variant| {
                     crate::fragments::compose(&content, variant, &enforced)
@@ -707,7 +721,7 @@ pub async fn get_openappa_status(
         };
         let line = crate::lines::Line {
             organization_id: organization_id.clone(),
-            variant: state.variant_of(&organization_id, Some(&root))?,
+            variant: state.variant_of(&organization_id, Some(&root)).await?,
         };
         on_deployment(&state, &line, &policy, |pinned| {
             let key = SessionKey::new(&organization_id, &session_id);

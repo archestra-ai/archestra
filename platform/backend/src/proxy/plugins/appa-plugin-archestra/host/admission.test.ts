@@ -350,19 +350,28 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
       },
     });
 
-    // The same client without the runtime credential is an attended session.
+    // The same user naming the runtime's session without its binding reaches
+    // the same scoped id, marked as holding no binding: the runtime refuses it
+    // a family the run opened.
     const attended = await admitOpenappaRequest(
       await admission({
         agent,
         principal: { authenticatedUserId: user.id },
-        headers: grokHeaders,
+        headers: {
+          ...grokHeaders,
+          "x-grok-session-id": workloadName,
+          "x-appa-session-id": workloadName,
+        },
         overrides: { body: grokBody, originalRequest: grokBody },
       }),
     );
-    expect(attended.kind).toBe("governed");
-    expect(
-      attended.kind === "governed" ? attended.session.agent_runtime : true,
-    ).toBeUndefined();
+    expect(attended).toMatchObject({
+      kind: "governed",
+      session: {
+        session_id: `user:${user.id}|${workloadName}`,
+        agent_runtime: false,
+      },
+    });
 
     const observed = await admitOpenappaRequest(
       await admission({

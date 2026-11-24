@@ -27,6 +27,7 @@ use std::{
 
 use crate::{
     errors::{BindingFailure, Fault},
+    lines::Variant,
     lines::{Families, Guardrails, Line},
     policy::open_fault,
 };
@@ -116,9 +117,12 @@ struct Pinned {
 impl Pinned {
     /// Whether `policy` compiles to this deployment: the same document, and the same
     /// answer for every variable it looked up.
-    fn serves(&self, policy: &HostedPolicy) -> bool {
+    /// Whether this deployment of `variant`'s line serves `policy`. The Enforce line
+    /// composes no approvers, so the enforced marks do not change what it serves.
+    fn serves(&self, variant: Variant, policy: &HostedPolicy) -> bool {
         *self.content == *policy.content
-            && self.enforced_marks == policy.guardrails.enforced_marks
+            && (variant == Variant::Enforce
+                || self.enforced_marks == policy.guardrails.enforced_marks)
             && answers_digest(
                 self.variables
                     .iter()
@@ -206,14 +210,16 @@ impl Deployments {
         runtime: &Arc<Runtime>,
         store: &Arc<LogStore>,
         line: &Line,
+        policy: &HostedPolicy,
         stale: &PublishedDeployment,
     ) -> Result<Option<PublishedDeployment>, Fault> {
         let Some(pinned) = self
             .held(line)
             .filter(|pinned| pinned.published.revision() == stale.revision())
         else {
-            // A concurrent dispatch already moved this line's deployment on.
-            return Ok(self.held(line).map(|pinned| pinned.published));
+            // A concurrent dispatch already moved this line's deployment on, which this
+            // dispatch takes only when it serves the same policy.
+            return Ok(self.serving(line, policy).map(|pinned| pinned.published));
         };
         let (runtime, store) = (runtime.clone(), store.clone());
         let name = line.name();
@@ -295,7 +301,8 @@ impl Deployments {
 
     /// The deployment held for this line when it still serves `policy`.
     fn serving(&self, line: &Line, policy: &HostedPolicy) -> Option<Pinned> {
-        self.held(line).filter(|pinned| pinned.serves(policy))
+        self.held(line)
+            .filter(|pinned| pinned.serves(line.variant, policy))
     }
 
     /// Drop the line's deployment when it is still `pinned`, so the next
@@ -333,6 +340,10 @@ fn prepare(
     policy: &HostedPolicy,
     agent_yell: bool,
 ) -> Result<Pinned, DeploymentError> {
+    let document: toml::Table = toml::from_str(&policy.content)
+        .map_err(|error| Fault::binding(BindingFailure::InvalidInput, error))?;
+    crate::fragments::refuse_reserved_authorities(&document)
+        .map_err(|error| Fault::binding(BindingFailure::InvalidInput, error))?;
     let served = crate::fragments::compose(
         &policy.content,
         line.variant,
@@ -364,6 +375,14 @@ fn prepare(
     if let Some(composition) = &policy.composition {
         let publishes = head.as_ref().is_none_or(|head| head.key.as_str() != key);
         if publishes && !stored_composition(store, &line.organization_id, composition)? {
+            return Err(DeploymentError::Superseded);
+        }
+        // A line with approvers is also composed from the enforced marks; one composed
+        // from marks an operator has since changed must not replace a newer head.
+        if publishes
+            && line.variant != Variant::Enforce
+            && !stored_enforced_marks(store, &policy.guardrails.enforced_marks)?
+        {
             return Err(DeploymentError::Superseded);
         }
     }
@@ -441,6 +460,23 @@ fn stored_composition(
     Ok(stored.is_none_or(|stored| stored == composition))
 }
 
+/// Whether `enforced_marks` are the deployment's stored enforced marks.
+fn stored_enforced_marks(
+    store: &LogStore,
+    enforced_marks: &BTreeSet<String>,
+) -> Result<bool, Fault> {
+    let stored = crate::Sql(store).with_client(|client| {
+        Ok(client
+            .query_opt(
+                "SELECT enforced_marks FROM guardrails_deployment LIMIT 1",
+                &[],
+            )?
+            .and_then(|row| row.get::<_, Option<Vec<String>>>(0))
+            .unwrap_or_default())
+    })?;
+    Ok(stored.into_iter().collect::<BTreeSet<_>>() == *enforced_marks)
+}
+
 /// The key the event log stores a policy file under: the SHA-256 of its exact bytes,
 /// lowercase hex.
 fn policy_file_key(bytes: &[u8]) -> String {
@@ -472,7 +508,7 @@ fn answers_digest<'a>(answers: impl Iterator<Item = (&'a str, Option<String>)>) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lines::{Family, Variant};
+    use crate::lines::{Family, Presenter, Variant};
     use appa_eventlog::{Backend, LogStore};
     use appa_runtime::hooks;
     use appa_runtime_api::{
@@ -633,9 +669,24 @@ mod tests {
         runtime: &TestRuntime,
         line: &Line,
     ) -> PublishedDeployment {
-        block_on(deployments.deployment(runtime, &runtime.store, line, &policy(GATED, None), false))
-            .ok()
-            .expect("the line composes and publishes")
+        serving(deployments, runtime, line, GATED)
+    }
+
+    fn serving(
+        deployments: &Deployments,
+        runtime: &TestRuntime,
+        line: &Line,
+        content: &str,
+    ) -> PublishedDeployment {
+        block_on(deployments.deployment(
+            runtime,
+            &runtime.store,
+            line,
+            &policy(content, None),
+            false,
+        ))
+        .ok()
+        .expect("the line composes and publishes")
     }
 
     fn open(runtime: &Runtime, root: &TrajectoryId, settings: SessionSettings) -> HookDecision {
@@ -654,16 +705,20 @@ mod tests {
     }
 
     fn review(runtime: &Runtime, root: &TrajectoryId) -> HookDecision {
+        call(runtime, root, "host/archestra/review")
+    }
+
+    fn call(runtime: &Runtime, root: &TrajectoryId, tool: &str) -> HookDecision {
         block_on(hooks::handle(
             runtime,
             HookEvent::ToolCall {
-                call_id: Some(format!("review-{}", root.as_str())),
+                call_id: Some(format!("{tool}-{}", root.as_str())),
                 actor: Actor {
                     root: root.clone(),
                     child: None,
                 },
                 call: ProposedCall {
-                    tool: "host/archestra/review".into(),
+                    tool: tool.into(),
                     arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
                     cwd: None,
                 },
@@ -693,7 +748,7 @@ mod tests {
             open(
                 &observing,
                 &watched,
-                Family::opening(Variant::Observe).settings
+                Family::opening(Variant::Observe, false).settings
             ),
             HookDecision::Ack
         );
@@ -701,13 +756,13 @@ mod tests {
             open(
                 &enforcing,
                 &enforced,
-                Family::opening(Variant::Enforce).settings
+                Family::opening(Variant::Enforce, false).settings
             ),
             HookDecision::Ack
         );
 
         let family = Family::of_log("org-a", &runtime.store.log(&watched).unwrap());
-        assert_eq!(family, Some(Family::opening(Variant::Observe)));
+        assert_eq!(family, Some(Family::opening(Variant::Observe, false)));
         assert_eq!(
             family.map(|family| family.settings.auto_apply),
             Some(appa_runtime_api::AutoApply::RulingsAndAccept)
@@ -739,16 +794,108 @@ mod tests {
         };
         let approving = runtime.pinned(&on_line(&deployments, &runtime, &approved));
         let root = TrajectoryId("unattended-root".into());
-        let settings = Family::opening(Variant::EnforceApproved).settings;
+        let settings = Family::opening(Variant::EnforceApproved, true).settings;
         assert_eq!(
             settings.auto_apply,
             appa_runtime_api::AutoApply::RulingsOnly
         );
         assert_eq!(open(&approving, &root, settings), HookDecision::Ack);
+        let family = Family::of_log("org-a", &runtime.store.log(&root).unwrap())
+            .expect("the family follows the approved line");
+        assert!(
+            family.unattended() && !family.continued_by(Presenter::Attended),
+            "a runtime-opened family is refused to a request without its binding"
+        );
         assert!(matches!(
             review(&approving, &root),
             HookDecision::AllowCall { .. }
         ));
+    }
+
+    #[test]
+    fn no_injected_approver_clears_a_mark_an_enforced_tool_requires() {
+        let tagged = format!(
+            "{GATED}[[policy.tool]]\nname = \"host/archestra/wire\"\ndelta = {{}}\ntags = [\"enforced\"]\nrequires = {{ attention = [\"review\"] }}\n[[policy.tool]]\nname = \"host/archestra/note\"\ndelta = {{}}\nrequires = {{ attention = [\"note\"] }}\n"
+        );
+        let runtime = runtime();
+        let deployments = Deployments::default();
+        for (variant, unattended) in [(Variant::Observe, false), (Variant::EnforceApproved, true)] {
+            let line = Line {
+                organization_id: "org-a".to_owned(),
+                variant,
+            };
+            let pinned = runtime.pinned(&serving(&deployments, &runtime, &line, &tagged));
+            let root = TrajectoryId(format!("tagged-{}", variant.token()));
+            let settings = Family::opening(variant, unattended).settings;
+            assert_eq!(open(&pinned, &root, settings), HookDecision::Ack);
+            assert!(
+                !matches!(
+                    call(&pinned, &root, "host/archestra/wire"),
+                    HookDecision::AllowCall { .. }
+                ),
+                "{variant:?} leaves the enforced tool's mark to a person"
+            );
+            assert!(
+                matches!(
+                    call(&pinned, &root, "host/archestra/note"),
+                    HookDecision::AllowCall { .. }
+                ),
+                "{variant:?} still clears an unrelated mark"
+            );
+        }
+    }
+
+    #[test]
+    fn a_reserved_approver_name_is_refused_on_every_line() {
+        let runtime = runtime();
+        let deployments = Deployments::default();
+        let reserved = GATED.replace("human-approval", "archestra-observe");
+        for variant in crate::lines::VARIANTS {
+            let line = Line {
+                organization_id: "org-a".to_owned(),
+                variant,
+            };
+            assert!(
+                block_on(deployments.deployment(
+                    &runtime,
+                    &runtime.store,
+                    &line,
+                    &policy(&reserved, None),
+                    false
+                ))
+                .is_err(),
+                "{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn only_a_line_with_approvers_is_rebuilt_when_the_enforced_marks_change() {
+        let runtime = runtime();
+        let deployments = Deployments::default();
+        let marked = |marks: &[&str]| HostedPolicy {
+            guardrails: Guardrails::parse(
+                "observe",
+                "ask",
+                marks.iter().map(|mark| (*mark).to_owned()).collect(),
+            )
+            .unwrap(),
+            ..policy(GATED, None)
+        };
+        for variant in [Variant::Enforce, Variant::Observe] {
+            let line = Line {
+                organization_id: "org-a".to_owned(),
+                variant,
+            };
+            block_on(deployments.deployment(&runtime, &runtime.store, &line, &marked(&[]), false))
+                .ok()
+                .expect("the line publishes");
+            assert_eq!(
+                deployments.serving(&line, &marked(&["review"])).is_some(),
+                variant == Variant::Enforce,
+                "{variant:?}"
+            );
+        }
     }
 
     #[test]
@@ -1019,9 +1166,15 @@ mod tests {
             2
         );
         assert!(
-            block_on(ones.repin(&one, &store, &enforce("org-a"), &first))
-                .unwrap()
-                .is_none(),
+            block_on(ones.repin(
+                &one,
+                &store,
+                &enforce("org-a"),
+                &policy(JEV, Some("one")),
+                &first
+            ))
+            .unwrap()
+            .is_none(),
             "another policy at the head is not published over"
         );
         assert!(
@@ -1043,9 +1196,15 @@ mod tests {
             revision(&others, &other, "org-a", &policy(&edited, Some("one"))),
             4
         );
-        let head = block_on(ones.repin(&one, &store, &enforce("org-a"), &second))
-            .unwrap()
-            .expect("the head names this deployment's policy");
+        let head = block_on(ones.repin(
+            &one,
+            &store,
+            &enforce("org-a"),
+            &policy(&edited, Some("one")),
+            &second,
+        ))
+        .unwrap()
+        .expect("the head names this deployment's policy");
         assert_eq!(head.revision(), 4);
         assert_eq!(
             revision(&ones, &one, "org-a", &policy(&edited, Some("one"))),
@@ -1176,9 +1335,15 @@ mod tests {
         assert_eq!(store.head(&line).unwrap().unwrap(), advanced);
         assert_eq!(store.log(&root).unwrap().facts().len(), opening_facts);
         assert!(
-            block_on(deployments.repin(&runtime, &store, &enforce(ORGANIZATION), &original))
-                .unwrap()
-                .is_none()
+            block_on(deployments.repin(
+                &runtime,
+                &store,
+                &enforce(ORGANIZATION),
+                &policy(BEFORE, None),
+                &original
+            ))
+            .unwrap()
+            .is_none()
         );
         assert_eq!(store.head(&line).unwrap().unwrap(), advanced);
     }

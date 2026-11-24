@@ -59,11 +59,12 @@ pub(crate) fn compose(
     refuse_reserved_authorities(&document)?;
     let read = Read::of(content, &document)?;
     let registry = read.policy.engine().registry();
+    let withheld = withheld_marks(registry, enforced_marks);
     let approvers = match variant {
         Variant::Enforce => Vec::new(),
-        Variant::Observe => vec![observe_approver(registry, enforced_marks)],
+        Variant::Observe => vec![observe_approver(registry, &withheld)],
         Variant::EnforceApproved => {
-            person_approvers(registry, &read.implementations, &document, enforced_marks)
+            person_approvers(registry, &read.implementations, &document, &withheld)
         }
     };
     if approvers.is_empty() {
@@ -158,27 +159,47 @@ fn strings<'a>(names: impl IntoIterator<Item = &'a str>) -> toml::Value {
         .into()
 }
 
+fn enforced(tool: &ToolDeclaration) -> bool {
+    tool.tags().iter().any(|tag| tag.as_str() == ENFORCED_TAG)
+}
+
 /// `["enforced"]` when some tool carries the tag; an exception nothing carries is noise.
 fn enforced_exception(registry: &Registry) -> Vec<String> {
-    let tagged = registry
-        .tools()
-        .any(|tool| tool.tags().iter().any(|tag| tag.as_str() == ENFORCED_TAG));
-    match tagged {
+    match registry.tools().any(enforced) {
         true => vec![ENFORCED_TAG.to_owned()],
         false => Vec::new(),
     }
 }
 
-/// The marks an injected approver may attend: the given ones, never `blocked` or an
-/// enforced mark.
+/// The marks no injected approver attends: the enforced ones, and every mark an
+/// `enforced` tool requires, since attention routes by mark and never reads tags.
+fn withheld_marks(registry: &Registry, enforced_marks: &BTreeSet<String>) -> BTreeSet<String> {
+    registry
+        .tools()
+        .filter(|tool| enforced(tool))
+        .flat_map(|tool| match tool {
+            ToolDeclaration::Declared(annotation) => annotation
+                .requires
+                .attention
+                .iter()
+                .map(|mark| mark.as_str().to_owned())
+                .collect(),
+            ToolDeclaration::Annotated { .. } => Vec::new(),
+        })
+        .chain(enforced_marks.iter().cloned())
+        .collect()
+}
+
+/// The marks an injected approver may attend: the given ones, never `blocked` or a
+/// withheld mark.
 fn attendable<'a>(
     marks: impl IntoIterator<Item = &'a str>,
-    enforced_marks: &'a BTreeSet<String>,
+    withheld: &'a BTreeSet<String>,
 ) -> BTreeSet<&'a str> {
     marks
         .into_iter()
         .filter(|mark| *mark != appa_engine::names::MarkName::BLOCKED)
-        .filter(|mark| !enforced_marks.contains(*mark))
+        .filter(|mark| !withheld.contains(*mark))
         .collect()
 }
 
@@ -220,9 +241,9 @@ fn effect_kinds(registry: &Registry) -> BTreeSet<&str> {
 }
 
 /// The Observe approver: trust and audience over everything, every `no_prior` waiver, and
-/// every mark but `blocked` and the enforced ones. The `enforced` tag keeps its tools' trust,
-/// audience and history gaps out; attention never reads tags.
-fn observe_approver(registry: &Registry, enforced_marks: &BTreeSet<String>) -> Approver {
+/// every mark but `blocked` and the withheld ones. The `enforced` tag keeps its tools' trust,
+/// audience and history gaps out.
+fn observe_approver(registry: &Registry, withheld: &BTreeSet<String>) -> Approver {
     let mut permits = toml::Table::new();
     if let Some(top) = registry.trust_chain().names().last() {
         permits.insert("trust_below".into(), top.into());
@@ -234,7 +255,7 @@ fn observe_approver(registry: &Registry, enforced_marks: &BTreeSet<String>) -> A
     }
     let marks = attendable(
         registry.attention_marks().map(|mark| mark.as_str()),
-        enforced_marks,
+        withheld,
     );
     if !marks.is_empty() {
         permits.insert("attention".into(), strings(marks));
@@ -266,15 +287,15 @@ fn route(implementations: &BTreeMap<String, Implementation>, authority: &Authori
     }
 }
 
-/// Whether some tool lies in both authorities' jurisdiction, ignoring their exceptions.
-fn overlap(one: &Authority, other: &Authority) -> bool {
+/// Whether some call may lie in both authorities' jurisdiction: an unscoped one reaches
+/// every call, a scoped pair shares a registered tool. Exceptions are ignored, so this
+/// errs towards overlap.
+fn overlap(registry: &Registry, one: &Authority, other: &Authority) -> bool {
     one.scope.is_unscoped()
         || other.scope.is_unscoped()
-        || one
-            .scope
-            .tags
-            .iter()
-            .any(|tag| other.scope.tags.contains(tag))
+        || registry
+            .tools()
+            .any(|tool| one.scope.covers(tool.tags()) && other.scope.covers(tool.tags()))
 }
 
 /// One person approver per person-asking authority, covering what only a person would have
@@ -285,7 +306,7 @@ fn person_approvers(
     registry: &Registry,
     implementations: &BTreeMap<String, Implementation>,
     document: &toml::Table,
-    enforced_marks: &BTreeSet<String>,
+    withheld: &BTreeSet<String>,
 ) -> Vec<Approver> {
     let authorities = registry.authorities();
     let agents: Vec<&Authority> = authorities
@@ -303,9 +324,19 @@ fn person_approvers(
         .filter_map(|person| {
             let overlapping: Vec<&&Authority> = agents
                 .iter()
-                .filter(|agent| overlap(person, agent))
+                .filter(|agent| overlap(registry, person, agent))
                 .collect();
             let written = written_permits(document, person.name.as_str());
+            // An approver scoped to `enforced` alone would also except it; its tag-routed
+            // permits are dropped rather than left unscoped.
+            let tags: Vec<String> = person
+                .scope
+                .tags
+                .iter()
+                .map(|tag| tag.as_str().to_owned())
+                .filter(|tag| tag != ENFORCED_TAG)
+                .collect();
+            let routed = person.scope.is_unscoped() || !tags.is_empty();
             let mut permits = toml::Table::new();
             let dimensions = [
                 (
@@ -324,7 +355,9 @@ fn person_approvers(
                 ),
             ];
             for (key, declared, shared) in dimensions {
-                if let (true, false, Some(value)) = (declared, shared, written.get(key)) {
+                if let (true, true, false, Some(value)) =
+                    (routed, declared, shared, written.get(key))
+                {
                     permits.insert(key.into(), value.clone());
                 }
             }
@@ -339,10 +372,10 @@ fn person_approvers(
                 .map(|kind| kind.as_str())
                 .filter(|kind| !agent_waivers.contains(kind))
                 .collect();
-            if !waivers.is_empty() {
+            if routed && !waivers.is_empty() {
                 permits.insert("effects_containing".into(), strings(waivers));
             }
-            let marks: BTreeSet<&str> = attendable(attended(registry, person), enforced_marks)
+            let marks: BTreeSet<&str> = attendable(attended(registry, person), withheld)
                 .into_iter()
                 .filter(|mark| !agent_marks.contains(mark))
                 .collect();
@@ -362,12 +395,7 @@ fn person_approvers(
                 .collect();
             Some(Approver {
                 name: format!("{PERSON_APPROVER_PREFIX}{}", person.name.as_str()),
-                tags: person
-                    .scope
-                    .tags
-                    .iter()
-                    .map(|tag| tag.as_str().to_owned())
-                    .collect(),
+                tags,
                 except_tags,
                 permits,
             })
@@ -549,6 +577,93 @@ builtin = "hitl"
             assert!(compose(&saved, Variant::Observe, &BTreeSet::new()).is_err());
         }
         assert!(crate::policy::validate_hosted(HITL).is_ok());
+    }
+
+    /// A person authority and an agent authority scoped to disjoint tags, both reaching
+    /// one tool that carries both tags and needs trust.
+    fn scoped(person_tags: &str) -> String {
+        format!(
+            r#"[policy]
+version = 2
+
+[[policy.tool]]
+name = "host/archestra/pay"
+delta = {{}}
+tags = ["finance", "sensitive", "enforced"]
+requires = {{ trust = "trusted" }}
+
+[[policy.tool]]
+name = "host/archestra/quote"
+delta = {{}}
+tags = ["finance"]
+requires = {{ trust = "trusted" }}
+
+[[policy.tool]]
+name = "host/archestra/review"
+delta = {{}}
+requires = {{ attention = ["review"] }}
+
+[[policy.authority]]
+name = "human-approval"
+tags = {person_tags}
+
+[policy.authority.permits]
+trust_below = "trusted"
+attention = ["*"]
+
+[[policy.authority]]
+name = "judge"
+tags = ["sensitive"]
+
+[policy.authority.permits]
+trust_below = "trusted"
+
+[externals.authorities.human-approval]
+builtin = "hitl"
+
+[externals.authorities.judge]
+url = "https://judge.example/rule"
+"#
+        )
+    }
+
+    #[test]
+    fn an_agent_scoped_to_another_tag_of_a_shared_tool_overlaps_the_person() {
+        let document = composed(&scoped(r#"["finance"]"#), Variant::EnforceApproved, &[]);
+        let person = authority(&document, "archestra-person-approval-human-approval");
+        assert!(
+            person.is_none_or(|person| permits(&person).get("trust_below").is_none()),
+            "the judge also rules on the pay tool's trust gap"
+        );
+        let disjoint = scoped(r#"["finance"]"#).replace(
+            "tags = [\"finance\", \"sensitive\", \"enforced\"]",
+            "tags = [\"finance\", \"enforced\"]",
+        );
+        let document = composed(&disjoint, Variant::EnforceApproved, &[]);
+        let person = authority(&document, "archestra-person-approval-human-approval")
+            .expect("no tool lies under both authorities");
+        assert!(permits(&person).get("trust_below").is_some());
+    }
+
+    #[test]
+    fn a_person_authority_scoped_to_enforced_alone_keeps_only_its_attention() {
+        let document = composed(&scoped(r#"["enforced"]"#), Variant::EnforceApproved, &[]);
+        let person = authority(&document, "archestra-person-approval-human-approval")
+            .expect("the attention permit remains");
+        assert_eq!(list(&person, "tags"), None);
+        assert_eq!(
+            list(&person, "except_tags"),
+            Some(vec!["enforced".to_owned()])
+        );
+        assert!(permits(&person).get("trust_below").is_none());
+        let document = composed(
+            &scoped(r#"["enforced", "finance"]"#),
+            Variant::EnforceApproved,
+            &[],
+        );
+        let person = authority(&document, "archestra-person-approval-human-approval")
+            .expect("the approver keeps its other tag");
+        assert_eq!(list(&person, "tags"), Some(vec!["finance".to_owned()]));
     }
 
     #[test]

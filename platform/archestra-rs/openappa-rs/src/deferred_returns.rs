@@ -66,7 +66,9 @@ pub async fn load_deferred_return(
         let root = crate::session::recorded_root(&Sql(&state.store), &key)?;
         let line = crate::lines::Line {
             organization_id: lookup.organization_id.clone(),
-            variant: state.variant_of(&lookup.organization_id, root.as_deref())?,
+            variant: state
+                .variant_of(&lookup.organization_id, root.as_deref())
+                .await?,
         };
         on_deployment(&state, &line, &policy, |pinned| {
             deferred_return(pinned, lookup.clone())

@@ -558,6 +558,10 @@ export async function admitOpenappaRequest(params: {
       }
       // The launcher stored the authenticated parent before giving the pod data.
       session = runtimeSession;
+    } else if (session && !subagentBinding) {
+      // No binding vouches for this request, so it cannot continue a family an
+      // Agent Runtime run opened.
+      session = { ...session, agent_runtime: false };
     }
     if (!session)
       throw new ApiError(

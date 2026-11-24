@@ -451,7 +451,12 @@ class OpenAppaBatteriesService {
   async composeInDeployment(params: {
     organizationId: string;
     content: string;
-  }): Promise<{ refusal: string[]; heldBack: string[] }> {
+  }): Promise<{
+    refusal: string[];
+    heldBack: string[];
+    /** The composition the deployment would serve; null when it is refused. */
+    composed: string | null;
+  }> {
     const { organizationId, content } = params;
     const [root, installs] = await Promise.all([
       guardrailsPolicyService.get(organizationId),
@@ -475,6 +480,7 @@ class OpenAppaBatteriesService {
           ? [...(planned.foldErrors ?? []), ...composed.errors]
           : [],
       heldBack: held.map(heldBackNote),
+      composed: composed.content ?? null,
     };
   }
 

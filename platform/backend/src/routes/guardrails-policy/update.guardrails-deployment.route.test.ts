@@ -13,7 +13,10 @@ import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  guardrailsDispatchSettings,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-deployment.routes";
@@ -696,6 +699,16 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       await save({ unsupportedClientAction: "block" }),
       "a save that routes no session checks nothing",
     ).toEqual([]);
+    expect(
+      await save({ mode: "off", personApproval: "auto_unattended" }),
+      "Off opens no family on a line with approvers",
+    ).toEqual([]);
+    await save({ personApproval: "auto_everywhere" });
+    expect(await guardrailsDispatchSettings()).toEqual({
+      mode: "enforce",
+      personApproval: "ask",
+      enforcedMarks: [],
+    });
   });
 
   test("refuses writes without management permission", async () => {

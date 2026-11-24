@@ -83,7 +83,7 @@ pub async fn execute_remedy_by_offer(
         parent_id: owner.parent_id,
         principal: None,
         fork_of: None,
-        agent_runtime: false,
+        agent_runtime: None,
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
@@ -130,6 +130,9 @@ pub struct OfferReviewOutput {
     pub scope: Option<String>,
     /// The ruling authority's own hint to the reviewer, when it declares one.
     pub hint: Option<String>,
+    /// The deployment line the session's family follows, whose head moving retires
+    /// the offer.
+    pub deployment: String,
 }
 
 /// Reads an offer's original refusal from authenticated, host-scoped journal
@@ -166,9 +169,24 @@ pub async fn load_offer_review(
     let state = initialized().await?.encrypted(encryption)?;
     let leased = state.lease().await?;
     let pg = &Sql(&leased.state.store);
+    let key = crate::session::SessionKey::new(&organization_id, &session_id);
+    let root = crate::session::recorded_root(pg, &key)?;
+    let deployment = leased
+        .state
+        .variant_of(&organization_id, root.as_deref())
+        .await?
+        .line(&organization_id)
+        .as_str()
+        .to_owned();
+    let on_line = |review: Option<OfferReviewOutput>| {
+        review.map(|review| OfferReviewOutput {
+            deployment: deployment.clone(),
+            ..review
+        })
+    };
     if pg.0.cipher().is_encrypted() {
         let receipts = encrypted_receipts(pg, &organization_id, &session_id)?;
-        return Ok(review_in(receipts, &offer_id, &session_id));
+        return Ok(on_line(review_in(receipts, &offer_id, &session_id)));
     }
     // The SQL closure needs its own offer id copy because it must be 'static.
     let target_offer_id = offer_id.clone();
@@ -212,6 +230,7 @@ pub async fn load_offer_review(
                     arguments: row.get("arguments"),
                     scope: row.get("scope"),
                     hint: row.get("hint"),
+                    deployment: String::new(),
                 }));
             }
             let opened = sealed::read(
@@ -228,7 +247,7 @@ pub async fn load_offer_review(
             ))
         })
         ?;
-    Ok(review)
+    Ok(on_line(review))
 }
 
 /// The review entry for `offer_id` among a session's receipts, newest first,
@@ -255,6 +274,7 @@ fn review_in(
             arguments: source.get("arguments").map(Value::to_string),
             scope: review.get("scope").map(Value::to_string),
             hint: review["hint"].as_str().map(str::to_owned),
+            deployment: String::new(),
         })
     })
 }

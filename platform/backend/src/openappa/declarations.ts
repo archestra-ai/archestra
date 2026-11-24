@@ -569,14 +569,16 @@ class OpenAppaDeclarations {
       settings?.enforcedMarks ??
       (await GuardrailsDeploymentModel.get()).enforcedMarks ??
       [];
-    const refusals = await native.checkOpenappaLines(content, enforcedMarks);
-    return refusals
-      .filter(({ variant }) => settings?.lines.has(variant) ?? true)
-      .map(({ variant, error }) =>
-        variant === "observe"
-          ? `Observe can't run with this policy, so new sessions follow Enforce: ${error}`
-          : `Automatic approval for requests a person would answer can't run with this policy, so those requests still ask a person: ${error}`,
-      );
+    const refusals = await native.checkOpenappaLines(
+      content,
+      enforcedMarks,
+      settings && [...settings.lines],
+    );
+    return refusals.map(({ variant, error }) =>
+      variant === "observe"
+        ? `Observe can't run with this policy, so new sessions follow Enforce: ${error}`
+        : `Automatic approval for requests a person would answer can't run with this policy, so those requests still ask a person: ${error}`,
+    );
   }
 
   /**

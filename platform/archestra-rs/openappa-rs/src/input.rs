@@ -121,10 +121,12 @@ pub(crate) struct Input {
     /// initialized from that session's state. Mutually exclusive with `parent_id`.
     #[serde(default)]
     pub(crate) fork_of: Option<String>,
-    /// The session is authenticated by an Agent Runtime credential. Read only when its
-    /// event opens a new root: a child or a fork follows its family's line.
+    /// `true`: authenticated by an Agent Runtime credential, which opens an unattended
+    /// family. `false`: the host verified the request holds no runtime or delegated
+    /// binding, so it cannot continue an unattended family. Absent: the host cannot
+    /// tell; a new root opens attended.
     #[serde(default)]
-    pub(crate) agent_runtime: bool,
+    pub(crate) agent_runtime: Option<bool>,
     pub(crate) event: HookEventKind,
     #[serde(default)]
     pub(crate) operation_id: Option<String>,

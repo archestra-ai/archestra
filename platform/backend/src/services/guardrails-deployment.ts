@@ -22,6 +22,7 @@ import type {
   HumanApprovalMode,
   PersonApproval,
 } from "@/types/guardrails-policy";
+import { mapWithConcurrency } from "@/utils/concurrency";
 
 export type GuardrailsV2Activation = "active" | "inactive";
 
@@ -75,17 +76,25 @@ export async function getGuardrailsDeploymentFromSnapshot(
 
 /**
  * The settings a dispatch carries to the runtime, which picks from them the line
- * a session opening now follows. A dispatch made while Guardrails are off
- * finishes its turn on the Enforce line.
+ * a session opening now follows.
  */
 export async function guardrailsDispatchSettings(): Promise<GuardrailsSettings> {
-  const { mode, personApproval, enforcedMarks } =
-    await getGuardrailsDeployment();
-  return {
-    mode: mode === "observe" ? "observe" : "enforce",
-    personApproval,
-    enforcedMarks,
-  };
+  return dispatchSettingsOf(await getGuardrailsDeployment());
+}
+
+/**
+ * A dispatch made while Guardrails are off finishes its turn on the Enforce
+ * line, asking a person, so no family opens with approvers after the switch.
+ */
+function dispatchSettingsOf(deployment: {
+  mode: GuardrailsMode;
+  personApproval: PersonApproval;
+  enforcedMarks: string[];
+}): GuardrailsSettings {
+  const { mode, personApproval, enforcedMarks } = deployment;
+  return mode === "off"
+    ? { mode: "enforce", personApproval: "ask", enforcedMarks }
+    : { mode, personApproval, enforcedMarks };
 }
 
 /**
@@ -158,15 +167,26 @@ export async function setGuardrailsDeployment(
     update.enforcedMarks !== undefined ||
     update.enabled !== undefined ||
     update.humanApprovalMode !== undefined;
-  return { ...after, warnings: routing ? await lineWarnings() : [] };
+  return {
+    ...after,
+    warnings:
+      routing && after.active
+        ? await lineWarnings(dispatchSettingsOf(after))
+        : [],
+  };
 }
 
+const LINE_CHECKS_AT_ONCE = 4;
+
+export const LINE_CHECK_UNAVAILABLE =
+  "The settings are saved, but whether every organization's policy can carry them could not be checked. See the backend log.";
+
 /**
- * Why a line the saved settings open sessions on can't carry its approvers
- * over some organization's policy, so those sessions follow Enforce instead.
+ * Why a line `settings` open sessions on can't carry its approvers over some
+ * organization's served policy, so those sessions follow Enforce instead. The
+ * settings are already saved, so a check that fails says so and fails nothing.
  */
-async function lineWarnings(): Promise<string[]> {
-  const settings = await guardrailsDispatchSettings();
+async function lineWarnings(settings: GuardrailsSettings): Promise<string[]> {
   const lines = new Set<LineRefusal["variant"]>(
     settings.mode === "observe"
       ? ["observe"]
@@ -175,16 +195,34 @@ async function lineWarnings(): Promise<string[]> {
         : ["enforce-approved"],
   );
   if (lines.size === 0) return [];
-  const warnings = await Promise.all(
-    (await OrganizationModel.findAllIds()).map(async (organizationId) =>
-      openappaDeclarations.lineWarnings(
-        (await openappaBatteriesService.getEffectivePolicy(organizationId))
-          .content,
-        { enforcedMarks: settings.enforcedMarks, lines },
+  try {
+    const checked = await mapWithConcurrency(
+      await OrganizationModel.findAllIds(),
+      LINE_CHECKS_AT_ONCE,
+      async (organizationId) =>
+        openappaDeclarations.lineWarnings(
+          (await openappaBatteriesService.getEffectivePolicy(organizationId))
+            .content,
+          { enforcedMarks: settings.enforcedMarks, lines },
+        ),
+    );
+    const failed = checked.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (failed.length > 0)
+      logger.error({ errors: failed }, "Guardrails line check failed");
+    return [
+      ...new Set(
+        checked.flatMap((result) =>
+          result.status === "fulfilled" ? result.value : [],
+        ),
       ),
-    ),
-  );
-  return [...new Set(warnings.flat())];
+      ...(failed.length > 0 ? [LINE_CHECK_UNAVAILABLE] : []),
+    ];
+  } catch (error) {
+    logger.error({ err: error }, "Guardrails line check failed");
+    return [LINE_CHECK_UNAVAILABLE];
+  }
 }
 
 /**
@@ -404,6 +442,7 @@ async function refusedPolicies(): Promise<string[]> {
     const { errors } = await guardrailsPolicyService.validate(policy.content, {
       organizationId,
       previous: policy.content,
+      lineWarnings: false,
     });
     if (errors.length > 0)
       refusals.push(`Revision ${policy.revision}: ${errors.join("; ")}`);

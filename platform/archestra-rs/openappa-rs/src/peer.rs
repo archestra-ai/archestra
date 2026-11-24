@@ -86,7 +86,9 @@ async fn execute(
     let root = acting_root(&Sql(&state.store), &input)?;
     let line = super::lines::Line {
         organization_id: input.organization_id.clone(),
-        variant: state.variant_of(&input.organization_id, Some(&root))?,
+        variant: state
+            .variant_of(&input.organization_id, Some(&root))
+            .await?,
     };
     super::on_deployment(&state, &line, &policy, |pinned| {
         execute_pinned(pinned, &input, kind)

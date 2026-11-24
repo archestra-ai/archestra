@@ -197,6 +197,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       h.options = { includeToolUse: false, streamStopReason: "end_turn" };
       vi.spyOn(GuardrailsDeploymentModel, "get").mockResolvedValue({
         id: "deployment",
+        mode: null,
+        personApproval: null,
+        enforcedMarks: null,
         enabled: false,
         unsupportedClientAction: "bypass",
         breakTheGlassEnabled: true,
@@ -1636,6 +1639,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         if (gets > 1) {
           return {
             id: "global",
+            mode: null,
+            personApproval: null,
+            enforcedMarks: null,
             enabled: false,
             unsupportedClientAction: "bypass",
             breakTheGlassEnabled: true,

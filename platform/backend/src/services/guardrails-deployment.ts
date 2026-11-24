@@ -4,7 +4,9 @@ import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
-import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import GuardrailsDeploymentModel, {
+  type GuardrailsDeploymentUpdate,
+} from "@/models/guardrails-deployment";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -12,9 +14,9 @@ import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
 import type {
+  GuardrailsMode,
   HumanApprovalMode,
-  UnapprovableBlockMode,
-  UnsupportedAppaClientAction,
+  PersonApproval,
 } from "@/types/guardrails-policy";
 
 export type GuardrailsV2Activation = "active" | "inactive";
@@ -42,31 +44,34 @@ export async function getGuardrailsDeployment() {
 export async function getGuardrailsDeploymentFromSnapshot(
   snapshot?: Parameters<typeof GuardrailsDeploymentModel.get>[0],
 ) {
-  const {
-    enabled,
-    unsupportedClientAction,
-    breakTheGlassEnabled,
-    humanApprovalMode,
-    unapprovableBlockMode,
-    annotatorModelId,
-    annotatorLlmApiKeyId,
-  } = await GuardrailsDeploymentModel.get(snapshot);
-  // An environment variable, while set, wins over the stored setting.
+  const row = await GuardrailsDeploymentModel.get(snapshot);
+  // An environment variable, while set, wins over the stored setting, and a
+  // new setting it pins as well.
   const overrides = config.openappa.breakTheGlassOverrides ?? {};
+  const humanApprovalMode =
+    overrides.humanApprovalMode ?? row.humanApprovalMode;
+  const mode = GuardrailsDeploymentModel.mode(row);
   return {
-    enabled,
-    unsupportedClientAction,
-    breakTheGlassEnabled,
-    humanApprovalMode: overrides.humanApprovalMode ?? humanApprovalMode,
+    mode,
+    personApproval:
+      (overrides.humanApprovalMode === undefined ? row.personApproval : null) ??
+      PERSON_APPROVAL_OF[humanApprovalMode],
+    enforcedMarks: row.enforcedMarks ?? [],
+    enabled: mode !== "off",
+    unsupportedClientAction: row.unsupportedClientAction,
+    breakTheGlassEnabled: row.breakTheGlassEnabled,
+    humanApprovalMode,
     unapprovableBlockMode:
-      overrides.unapprovableBlockMode ?? unapprovableBlockMode,
+      overrides.unapprovableBlockMode ?? row.unapprovableBlockMode,
     environmentOverrides: BREAK_THE_GLASS_VARIABLES.filter(
       ({ setting }) => overrides[setting] !== undefined,
+    ).flatMap(({ variable, pins }) =>
+      pins.map((setting) => ({ setting, variable })),
     ),
-    annotatorModelId,
-    annotatorLlmApiKeyId,
+    annotatorModelId: row.annotatorModelId,
+    annotatorLlmApiKeyId: row.annotatorLlmApiKeyId,
     featureEnabled: enterpriseTier.isOpenappaActive(),
-    active: enterpriseTier.isOpenappaActive() && enabled,
+    active: enterpriseTier.isOpenappaActive() && mode !== "off",
   };
 }
 
@@ -91,16 +96,9 @@ export function breakTheGlassActiveIn(deployment: {
  * the same check a save runs. Turning it off is never refused.
  */
 export async function setGuardrailsDeployment(
-  update: {
-    enabled?: boolean;
-    unsupportedClientAction?: UnsupportedAppaClientAction;
-    breakTheGlassEnabled?: boolean;
-    humanApprovalMode?: HumanApprovalMode;
-    unapprovableBlockMode?: UnapprovableBlockMode;
-    annotatorModelId?: string | null;
-    annotatorLlmApiKeyId?: string | null;
-  },
+  update: GuardrailsDeploymentUpdate,
   actor?: { userId: string; organizationId?: string },
+  legacy: "closest_tuple" | "as_given" = "closest_tuple",
 ) {
   if (
     update.annotatorModelId !== undefined ||
@@ -111,7 +109,14 @@ export async function setGuardrailsDeployment(
       modelId: update.annotatorModelId ?? null,
       apiKeyId: update.annotatorLlmApiKeyId ?? null,
     });
-  if (update.enabled && enterpriseTier.isOpenappaActive()) {
+  const stored = await GuardrailsDeploymentModel.get();
+  const written =
+    legacy === "closest_tuple" ? withClosestTuple(stored, update) : update;
+  const turnsOn =
+    written.enabled &&
+    (update.enabled === true ||
+      GuardrailsDeploymentModel.mode(stored) === "off");
+  if (turnsOn && enterpriseTier.isOpenappaActive()) {
     const refusals = await refusedPolicies();
     if (refusals.length > 0)
       throw new ApiError(
@@ -119,7 +124,7 @@ export async function setGuardrailsDeployment(
         `Guardrails v2 was not enabled: the guardrails policy is refused, so every proxied request would fail. Fix the policy on the OpenAPPA page first. ${refusals.join(" ")}`,
       );
   }
-  const before = await getGuardrailsDeployment();
+  const before = await getGuardrailsDeploymentFromSnapshot({ row: stored });
   for (const { setting, variable } of before.environmentOverrides) {
     if (update[setting] !== undefined)
       throw new ApiError(
@@ -127,7 +132,7 @@ export async function setGuardrailsDeployment(
         `${variable} sets this deployment's ${setting}. Unset it to edit this setting.`,
       );
   }
-  await GuardrailsDeploymentModel.set(update);
+  await GuardrailsDeploymentModel.set(written);
   const after = await getGuardrailsDeployment();
   // Back on: each repository's policy is pulled now, so what merged while
   // enforcement was off is enforced, not the commit accepted before.
@@ -168,6 +173,9 @@ function deploymentSettings(
   deployment: Awaited<ReturnType<typeof getGuardrailsDeployment>>,
 ) {
   return {
+    mode: deployment.mode,
+    personApproval: deployment.personApproval,
+    enforcedMarks: deployment.enforcedMarks,
     enabled: deployment.enabled,
     active: deployment.active,
     unsupportedClientAction: deployment.unsupportedClientAction,
@@ -194,8 +202,15 @@ export async function firstPolicyRefusal(
   userId: string | undefined,
   revision: number,
 ): Promise<FirstPolicyEnforcement | null> {
-  const current = await getGuardrailsDeployment();
-  if (revision !== 1 || current.enabled || !current.featureEnabled)
+  const stored = await GuardrailsDeploymentModel.get();
+  const current = await getGuardrailsDeploymentFromSnapshot({ row: stored });
+  // A mode an administrator saved, Off included, is theirs to change.
+  if (
+    revision !== 1 ||
+    current.enabled ||
+    stored.mode !== null ||
+    !current.featureEnabled
+  )
     return { enabled: current.active, turnedOn: false };
   if (
     !userId ||
@@ -238,9 +253,11 @@ export async function turnOnForFirstPolicy(params: {
   if (refusal) return refusal;
   const before = await GuardrailsDeploymentModel.findByIdForAudit();
   try {
+    // Only the switch: the other legacy columns keep what was stored.
     await setGuardrailsDeployment(
-      { enabled: true },
+      { mode: "enforce", enabled: true },
       { userId, organizationId },
+      "as_given",
     );
   } catch (error) {
     if (error instanceof ApiError)
@@ -320,14 +337,91 @@ async function refusedPolicies(): Promise<string[]> {
   return refusals;
 }
 
-/** The Break the glass settings an environment variable can set, and its name. */
+/**
+ * The Break the glass settings an environment variable can set, its name, and
+ * the settings it pins against edits.
+ */
 const BREAK_THE_GLASS_VARIABLES = [
   {
     setting: "humanApprovalMode",
     variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+    pins: ["humanApprovalMode", "personApproval"],
   },
   {
     setting: "unapprovableBlockMode",
     variable: "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",
+    pins: ["unapprovableBlockMode"],
   },
-] as const;
+] as const satisfies readonly {
+  setting: keyof GuardrailsDeploymentUpdate;
+  variable: string;
+  pins: readonly (keyof GuardrailsDeploymentUpdate)[];
+}[];
+
+const PERSON_APPROVAL_OF: Record<HumanApprovalMode, PersonApproval> = {
+  block: "ask",
+  unattended: "auto_unattended",
+  everywhere: "auto_everywhere",
+};
+const HUMAN_APPROVAL_OF: Record<PersonApproval, HumanApprovalMode> = {
+  ask: "block",
+  auto_unattended: "unattended",
+  auto_everywhere: "everywhere",
+};
+
+/**
+ * What a save writes: a new setting also writes its closest legacy tuple, so
+ * older replicas and a rollback behave as close to it as they can; a legacy
+ * edit moves a saved new setting along with it.
+ */
+function withClosestTuple(
+  stored: Awaited<ReturnType<typeof GuardrailsDeploymentModel.get>>,
+  update: GuardrailsDeploymentUpdate,
+): GuardrailsDeploymentUpdate {
+  const next = { ...stored, ...update };
+  if (update.mode !== undefined || update.personApproval !== undefined)
+    return {
+      ...update,
+      ...legacyTuple(
+        GuardrailsDeploymentModel.mode(next),
+        next.personApproval ?? PERSON_APPROVAL_OF[next.humanApprovalMode],
+      ),
+    };
+  return {
+    ...update,
+    ...(update.enabled !== undefined &&
+      stored.mode !== null && {
+        mode: update.enabled
+          ? stored.mode === "off"
+            ? "enforce"
+            : stored.mode
+          : "off",
+      }),
+    ...(update.humanApprovalMode !== undefined &&
+      stored.personApproval !== null && {
+        personApproval: PERSON_APPROVAL_OF[update.humanApprovalMode],
+      }),
+  };
+}
+
+function legacyTuple(
+  mode: GuardrailsMode,
+  personApproval: PersonApproval,
+): GuardrailsDeploymentUpdate {
+  switch (mode) {
+    case "off":
+      return { enabled: false };
+    case "observe":
+      return {
+        enabled: true,
+        unapprovableBlockMode: "allow",
+        humanApprovalMode: "everywhere",
+      };
+    case "enforce":
+      return {
+        enabled: true,
+        unapprovableBlockMode: "refuse",
+        humanApprovalMode: HUMAN_APPROVAL_OF[personApproval],
+      };
+  }
+}

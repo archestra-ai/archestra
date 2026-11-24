@@ -1,6 +1,8 @@
 import { boolean, pgTable, text, uuid, varchar } from "drizzle-orm/pg-core";
 import type {
+  GuardrailsMode,
   HumanApprovalMode,
+  PersonApproval,
   UnapprovableBlockMode,
   UnsupportedAppaClientAction,
 } from "@/types/guardrails-policy";
@@ -10,20 +12,41 @@ import modelsTable from "./model";
 // One row for the deployment; deliberately not owned by an organization.
 const guardrailsDeploymentTable = pgTable("guardrails_deployment", {
   id: text("id").primaryKey(),
+  // Null until an administrator saves them; read derives them from the
+  // legacy columns below.
+  mode: varchar("mode", { length: 16 }).$type<GuardrailsMode>(),
+  personApproval: varchar("person_approval", {
+    length: 16,
+  }).$type<PersonApproval>(),
+  enforcedMarks: text("enforced_marks").array(),
+  /**
+   * @deprecated Legacy switch, superseded by `mode`. A save of the settings
+   * above also writes its closest legacy tuple, for older replicas and a
+   * rollback.
+   */
   enabled: boolean("enabled").notNull().default(false),
   unsupportedClientAction: varchar("unsupported_client_action", { length: 16 })
     .$type<UnsupportedAppaClientAction>()
     .notNull()
     .default("bypass"),
-  // Whether a yell also turns OpenAPPA off for the session that sends it.
+  /**
+   * @deprecated Whether a yell also turns OpenAPPA off for the session that
+   * sends it.
+   */
   breakTheGlassEnabled: boolean("superyell_enabled").notNull().default(true),
-  // Whether a call waiting for human approval runs anyway, with a yell. By
-  // default it waits, as before Break the glass: waiving is an opt-in.
+  /**
+   * @deprecated Superseded by `personApproval`. Whether a call waiting for
+   * human approval runs anyway, with a yell. By default it waits, as before
+   * Break the glass: waiving is an opt-in.
+   */
   humanApprovalMode: varchar("human_approval_mode", { length: 16 })
     .$type<HumanApprovalMode>()
     .notNull()
     .default("block"),
-  // Whether a call no remedy can lift runs anyway, with a yell.
+  /**
+   * @deprecated Superseded by `mode`. Whether a call no remedy can lift runs
+   * anyway, with a yell.
+   */
   unapprovableBlockMode: varchar("unapprovable_block_mode", { length: 16 })
     .$type<UnapprovableBlockMode>()
     .notNull()

@@ -1,14 +1,14 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
-import type {
-  HumanApprovalMode,
-  UnapprovableBlockMode,
-  UnsupportedAppaClientAction,
-} from "@/types/guardrails-policy";
+import type { GuardrailsMode } from "@/types/guardrails-policy";
 
 const table = schema.guardrailsDeploymentTable;
 const id = "global";
+type GuardrailsDeploymentRow = typeof table.$inferSelect;
+export type GuardrailsDeploymentUpdate = Partial<
+  Omit<typeof table.$inferInsert, "id">
+>;
 class GuardrailsDeploymentModel {
   static async get(snapshot?: { row: typeof table.$inferSelect | null }) {
     const row = snapshot
@@ -17,6 +17,9 @@ class GuardrailsDeploymentModel {
     return (
       row ?? {
         id,
+        mode: null,
+        personApproval: null,
+        enforcedMarks: null,
         enabled: false,
         unsupportedClientAction: "bypass" as const,
         breakTheGlassEnabled: true,
@@ -28,21 +31,21 @@ class GuardrailsDeploymentModel {
     );
   }
 
+  /** The saved mode, else the one the legacy switch derives. */
+  static mode(row: GuardrailsDeploymentRow): GuardrailsMode {
+    return row.mode ?? (row.enabled ? "enforce" : "off");
+  }
   static async isEnabled(): Promise<boolean> {
-    return (await GuardrailsDeploymentModel.get()).enabled;
+    return (
+      GuardrailsDeploymentModel.mode(await GuardrailsDeploymentModel.get()) !==
+      "off"
+    );
   }
+  /** The legacy switch alone: the mode derives from it again. */
   static async setEnabled(enabled: boolean) {
-    return GuardrailsDeploymentModel.set({ enabled });
+    return GuardrailsDeploymentModel.set({ enabled, mode: null });
   }
-  static async set(update: {
-    enabled?: boolean;
-    unsupportedClientAction?: UnsupportedAppaClientAction;
-    breakTheGlassEnabled?: boolean;
-    humanApprovalMode?: HumanApprovalMode;
-    unapprovableBlockMode?: UnapprovableBlockMode;
-    annotatorModelId?: string | null;
-    annotatorLlmApiKeyId?: string | null;
-  }) {
+  static async set(update: GuardrailsDeploymentUpdate) {
     await db
       .insert(table)
       .values({ id, ...update })

@@ -7,12 +7,19 @@ import {
 } from "@/services/guardrails-deployment";
 import { constructResponseSchema } from "@/types";
 import {
+  EnforcedMarksSchema,
+  GuardrailsModeSchema,
   HumanApprovalModeSchema,
+  PersonApprovalSchema,
   UnapprovableBlockModeSchema,
   UnsupportedAppaClientActionSchema,
 } from "@/types/guardrails-policy";
 
 const status = z.object({
+  mode: GuardrailsModeSchema,
+  personApproval: PersonApprovalSchema,
+  enforcedMarks: z.array(z.string()),
+  /** Deprecated legacy settings below: derived from and written with the above. */
   enabled: z.boolean(),
   unsupportedClientAction: UnsupportedAppaClientActionSchema,
   breakTheGlassEnabled: z.boolean(),
@@ -21,7 +28,11 @@ const status = z.object({
   /** Settings an environment variable sets; the API refuses to change them. */
   environmentOverrides: z.array(
     z.object({
-      setting: z.enum(["humanApprovalMode", "unapprovableBlockMode"]),
+      setting: z.enum([
+        "humanApprovalMode",
+        "personApproval",
+        "unapprovableBlockMode",
+      ]),
       variable: z.string(),
     }),
   ),
@@ -50,6 +61,9 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         tags: ["Guardrails"],
         body: z
           .strictObject({
+            mode: GuardrailsModeSchema.optional(),
+            personApproval: PersonApprovalSchema.optional(),
+            enforcedMarks: EnforcedMarksSchema.optional(),
             enabled: z.boolean().optional(),
             unsupportedClientAction:
               UnsupportedAppaClientActionSchema.optional(),
@@ -60,14 +74,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             annotatorLlmApiKeyId: z.string().uuid().nullable().optional(),
           })
           .refine(
-            (body) =>
-              body.enabled !== undefined ||
-              body.unsupportedClientAction !== undefined ||
-              body.breakTheGlassEnabled !== undefined ||
-              body.humanApprovalMode !== undefined ||
-              body.unapprovableBlockMode !== undefined ||
-              body.annotatorModelId !== undefined ||
-              body.annotatorLlmApiKeyId !== undefined,
+            (body) => Object.values(body).some((value) => value !== undefined),
             "Set at least one guardrails deployment setting",
           ),
         response: constructResponseSchema(status),

@@ -68521,13 +68521,16 @@ export type GetGuardrailsDeploymentResponses = {
      * Default Response
      */
     200: {
+        mode: 'off' | 'observe' | 'enforce';
+        personApproval: 'ask' | 'auto_unattended' | 'auto_everywhere';
+        enforcedMarks: Array<string>;
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
         humanApprovalMode: 'block' | 'unattended' | 'everywhere';
         unapprovableBlockMode: 'refuse' | 'allow';
         environmentOverrides: Array<{
-            setting: 'humanApprovalMode' | 'unapprovableBlockMode';
+            setting: 'humanApprovalMode' | 'personApproval' | 'unapprovableBlockMode';
             variable: string;
         }>;
         annotatorModelId: string | null;
@@ -68541,6 +68544,9 @@ export type GetGuardrailsDeploymentResponse = GetGuardrailsDeploymentResponses[k
 
 export type UpdateGuardrailsDeploymentData = {
     body: {
+        mode?: 'off' | 'observe' | 'enforce';
+        personApproval?: 'ask' | 'auto_unattended' | 'auto_everywhere';
+        enforcedMarks?: Array<string>;
         enabled?: boolean;
         unsupportedClientAction?: 'bypass' | 'block';
         breakTheGlassEnabled?: boolean;
@@ -68627,13 +68633,16 @@ export type UpdateGuardrailsDeploymentResponses = {
      * Default Response
      */
     200: {
+        mode: 'off' | 'observe' | 'enforce';
+        personApproval: 'ask' | 'auto_unattended' | 'auto_everywhere';
+        enforcedMarks: Array<string>;
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
         humanApprovalMode: 'block' | 'unattended' | 'everywhere';
         unapprovableBlockMode: 'refuse' | 'allow';
         environmentOverrides: Array<{
-            setting: 'humanApprovalMode' | 'unapprovableBlockMode';
+            setting: 'humanApprovalMode' | 'personApproval' | 'unapprovableBlockMode';
             variable: string;
         }>;
         annotatorModelId: string | null;

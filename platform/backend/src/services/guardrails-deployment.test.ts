@@ -10,6 +10,7 @@ import { spyOnLogger } from "@/test/logging";
 import {
   readGuardrailsV2Activation,
   setGuardrailsDeployment,
+  turnOnForFirstPolicy,
 } from "./guardrails-deployment";
 
 spyOnLogger();
@@ -134,5 +135,47 @@ describe("setGuardrailsDeployment", () => {
     await clear();
     await setGuardrailsDeployment({ enabled: true });
     expect(await queued()).toEqual([]);
+  });
+});
+
+describe("turnOnForFirstPolicy", () => {
+  test("saves Enforce only while no mode was saved, and never overwrites one", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: "admin" });
+    const first = { organizationId, userId, revision: 1 };
+
+    for (const mode of ["off", "observe"] as const) {
+      await setGuardrailsDeployment({ mode });
+      const before = await GuardrailsDeploymentModel.get();
+      await expect(turnOnForFirstPolicy(first)).resolves.toMatchObject({
+        turnedOn: false,
+      });
+      expect(await GuardrailsDeploymentModel.get()).toEqual(before);
+    }
+
+    await db.delete(schema.guardrailsDeploymentTable);
+    await GuardrailsDeploymentModel.set({
+      unapprovableBlockMode: "allow",
+      humanApprovalMode: "unattended",
+      breakTheGlassEnabled: false,
+    });
+    await expect(turnOnForFirstPolicy(first)).resolves.toEqual({
+      enabled: true,
+      turnedOn: true,
+    });
+    // Only the switch is written: the other legacy settings stay as stored.
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      mode: "enforce",
+      enabled: true,
+      unapprovableBlockMode: "allow",
+      humanApprovalMode: "unattended",
+      breakTheGlassEnabled: false,
+    });
   });
 });

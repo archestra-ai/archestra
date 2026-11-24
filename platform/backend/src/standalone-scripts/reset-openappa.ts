@@ -2,10 +2,10 @@
 /**
  * Put OpenAPPA back to its first-run state so onboarding can be run again.
  *
- * Turns the deployment switch off and deletes, for every organization, the
- * policy revisions (the policy reads as the built-in default again), the
- * battery rows and uploaded packages, the composed policy and the GitHub sync
- * source. The runtime ledger (sessions, events, decisions, and each
+ * Turns the deployment switch off, clears its saved mode settings, and
+ * deletes, for every organization, the policy revisions (the policy reads as
+ * the built-in default again), the battery rows and uploaded packages, the
+ * composed policy and the GitHub sync source. The runtime ledger (sessions, events, decisions, and each
  * organization's published policy revisions) is left alone: the next dispatch
  * publishes the default policy as the organization's next revision.
  * With no saved revision, the next policy saved turns enforcement on again,
@@ -38,7 +38,12 @@ async function main() {
     throw new Error("Refusing to reset OpenAPPA in production.");
   await initializeDatabase();
   await db.transaction(async (tx) => {
-    await tx.update(guardrailsDeploymentTable).set({ enabled: false });
+    await tx.update(guardrailsDeploymentTable).set({
+      mode: null,
+      personApproval: null,
+      enforcedMarks: null,
+      enabled: false,
+    });
     for (const table of [
       openappaBatteryInstallsTable,
       openappaEffectivePoliciesTable,

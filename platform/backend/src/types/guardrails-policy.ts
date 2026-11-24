@@ -29,6 +29,27 @@ export type HumanApprovalMode = z.infer<typeof HumanApprovalModeSchema>;
 export const UnapprovableBlockModeSchema = z.enum(["refuse", "allow"]);
 export type UnapprovableBlockMode = z.infer<typeof UnapprovableBlockModeSchema>;
 
+export const GuardrailsModeSchema = z.enum(["off", "observe", "enforce"]);
+export type GuardrailsMode = z.infer<typeof GuardrailsModeSchema>;
+
+/**
+ * Who answers what a person would be asked, in Enforce: the person (`ask`),
+ * or the platform, in sessions an Agent Runtime credential opened
+ * (`auto_unattended`) or in every session (`auto_everywhere`).
+ */
+export const PersonApprovalSchema = z.enum([
+  "ask",
+  "auto_unattended",
+  "auto_everywhere",
+]);
+export type PersonApproval = z.infer<typeof PersonApprovalSchema>;
+
+/** Attention marks the Observe approver never attends. */
+export const EnforcedMarksSchema = z
+  .array(z.string().trim().min(1).max(128))
+  .max(64)
+  .refine((marks) => new Set(marks).size === marks.length, "Duplicate mark");
+
 export const GuardrailsPolicySchema = createSelectSchema(
   guardrailsPolicyRevisionsTable,
 ).extend({ updatedAt: z.coerce.date().nullable() });

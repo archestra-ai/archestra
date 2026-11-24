@@ -68,6 +68,9 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         const response = await set(enabled);
         expect(response.statusCode, response.body).toBe(200);
         expect(response.json()).toEqual({
+          mode: enabled ? "enforce" : "off",
+          personApproval: "ask",
+          enforcedMarks: [],
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
@@ -200,6 +203,10 @@ describe("Deployment-wide Guardrails v2 switch", () => {
             setting: "humanApprovalMode",
             variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
           },
+          {
+            setting: "personApproval",
+            variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+          },
         ],
       });
       const refused = await app.inject({
@@ -231,6 +238,129 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(stored.json()).toMatchObject({
       humanApprovalMode: "everywhere",
       environmentOverrides: [],
+    });
+  });
+
+  test("with no mode saved, the settings derive from the legacy columns", async () => {
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      humanApprovalMode: "unattended",
+      unapprovableBlockMode: "allow",
+    });
+    const read = await app.inject({
+      method: "GET",
+      url: "/api/guardrails-deployment",
+    });
+    expect(read.json()).toMatchObject({
+      mode: "enforce",
+      personApproval: "auto_unattended",
+      enforcedMarks: [],
+      enabled: true,
+    });
+  });
+
+  test("a saved mode writes its closest legacy tuple, and a legacy edit moves the saved mode", async () => {
+    const put = (payload: Record<string, unknown>) =>
+      app.inject({ method: "PUT", url: "/api/guardrails-deployment", payload });
+    const legacy = async () => {
+      const row = await GuardrailsDeploymentModel.get();
+      return {
+        enabled: row.enabled,
+        humanApprovalMode: row.humanApprovalMode,
+        unapprovableBlockMode: row.unapprovableBlockMode,
+      };
+    };
+
+    const observe = await put({ mode: "observe", enforcedMarks: ["payments"] });
+    expect(observe.statusCode, observe.body).toBe(200);
+    expect(observe.json()).toMatchObject({
+      mode: "observe",
+      enforcedMarks: ["payments"],
+      active: true,
+    });
+    expect(await legacy()).toEqual({
+      enabled: true,
+      humanApprovalMode: "everywhere",
+      unapprovableBlockMode: "allow",
+    });
+
+    expect(
+      (
+        await put({ mode: "enforce", personApproval: "auto_unattended" })
+      ).json(),
+    ).toMatchObject({ mode: "enforce", personApproval: "auto_unattended" });
+    expect(await legacy()).toEqual({
+      enabled: true,
+      humanApprovalMode: "unattended",
+      unapprovableBlockMode: "refuse",
+    });
+
+    expect((await put({ mode: "off" })).json()).toMatchObject({
+      mode: "off",
+      enabled: false,
+      active: false,
+    });
+    expect((await legacy()).enabled).toBe(false);
+
+    // The switch the current page still writes keeps the saved mode in step.
+    expect((await put({ enabled: true })).json()).toMatchObject({
+      mode: "enforce",
+    });
+    expect((await put({ humanApprovalMode: "block" })).json()).toMatchObject({
+      personApproval: "ask",
+    });
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          action: "organization.updated",
+          before: expect.objectContaining({ mode: null }),
+          after: expect.objectContaining({ mode: "observe" }),
+        }),
+      );
+    });
+    expect(
+      (await put({ enforcedMarks: ["payments", "payments"] })).statusCode,
+    ).toBe(400);
+    expect((await put({ mode: "audit" })).statusCode).toBe(400);
+  });
+
+  test("the approval variable wins over saved person approval and pins it against edits", async () => {
+    await GuardrailsDeploymentModel.set({
+      humanApprovalMode: "everywhere",
+      personApproval: "auto_everywhere",
+    });
+    config.openappa.breakTheGlassOverrides = { humanApprovalMode: "block" };
+    const read = await app.inject({
+      method: "GET",
+      url: "/api/guardrails-deployment",
+    });
+    expect(read.json()).toMatchObject({
+      personApproval: "ask",
+      humanApprovalMode: "block",
+      environmentOverrides: [
+        {
+          setting: "humanApprovalMode",
+          variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+        },
+        {
+          setting: "personApproval",
+          variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+        },
+      ],
+    });
+    const refused = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-deployment",
+      payload: { personApproval: "auto_unattended" },
+    });
+    expect(refused.statusCode).toBe(400);
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      personApproval: "auto_everywhere",
+      humanApprovalMode: "everywhere",
     });
   });
 

@@ -7,7 +7,7 @@ import {
   KeyRound,
   LayersIcon,
   Plus,
-  Sparkles,
+  Shuffle,
   X,
 } from "lucide-react";
 import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
@@ -285,7 +285,7 @@ export function VirtualKeyAccessField({
               <AccessRow
                 key={router.id}
                 name={router.name}
-                icons={uniqueProviders(tierModels)}
+                icon={<Shuffle className="size-4" />}
                 title={<span className="font-mono">{router.name}</span>}
                 meta={
                   modelCount ? (
@@ -331,7 +331,7 @@ export function VirtualKeyAccessField({
               <AccessRow
                 key={pool.id}
                 name={pool.name}
-                icons={uniqueProviders(members)}
+                icon={<LayersIcon className="size-4" />}
                 title={<span className="font-mono">{pool.name}</span>}
                 meta={
                   <>
@@ -416,7 +416,7 @@ export function VirtualKeyAccessField({
               <AccessRow
                 key={provider}
                 name={label}
-                icons={[provider]}
+                icon={<ProviderIcon provider={provider} size={16} />}
                 title={<span>{label}</span>}
                 meta={
                   <>
@@ -546,24 +546,20 @@ function ModeCard({
 
 type AccessKind = "routers" | "pools" | "providers";
 
-const ACCESS_KINDS: {
-  value: AccessKind;
-  title: string;
-  icon: typeof Sparkles;
-}[] = [
-  { value: "routers", title: "Auto routers", icon: Sparkles },
-  { value: "pools", title: "Model pools", icon: LayersIcon },
-  { value: "providers", title: "Providers", icon: KeyRound },
+const ACCESS_KINDS: { value: AccessKind; title: string }[] = [
+  { value: "routers", title: "Auto routers" },
+  { value: "pools", title: "Model pools" },
+  { value: "providers", title: "Providers" },
 ];
 
 /**
- * One row of added access: a chevron, the providers behind it as icons, its
- * name and a short line, then what kind it is and a remove button. Clicking
+ * One row of added access: a chevron, an icon for what it is, its name and a
+ * short line, then what kind it is and a remove button. Clicking
  * the row opens the details.
  */
 function AccessRow({
   name,
-  icons,
+  icon,
   title,
   meta,
   kind,
@@ -572,7 +568,8 @@ function AccessRow({
   children,
 }: {
   name: string;
-  icons: SupportedProvider[];
+  /** What the row is, at a glance: the router or pool icon, or the provider's logo. */
+  icon: ReactNode;
   title: ReactNode;
   meta: ReactNode;
   kind: string;
@@ -597,7 +594,9 @@ function AccessRow({
               )}
               aria-hidden
             />
-            <LeadingIcons providers={icons} />
+            <span aria-hidden className="flex w-8 shrink-0 justify-center">
+              {icon}
+            </span>
             <span className="shrink-0 truncate text-sm">{title}</span>
             <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
               {meta}
@@ -622,28 +621,6 @@ function AccessRow({
         </div>
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-/** One provider's logo, or the first two of several overlapping. */
-function LeadingIcons({ providers }: { providers: SupportedProvider[] }) {
-  return (
-    <span aria-hidden className="flex w-8 shrink-0 justify-center">
-      {providers.length <= 1 ? (
-        providers[0] && <ProviderIcon provider={providers[0]} size={16} />
-      ) : (
-        <span className="flex -space-x-1.5">
-          {providers.slice(0, 2).map((provider) => (
-            <span
-              key={provider}
-              className="flex size-5 items-center justify-center rounded-full bg-muted ring-1 ring-background"
-            >
-              <ProviderIcon provider={provider} size={12} />
-            </span>
-          ))}
-        </span>
-      )}
-    </span>
   );
 }
 
@@ -884,7 +861,7 @@ function AccessPicker({
                       changeOpen(false);
                     }}
                   >
-                    <Sparkles className="size-3.5 shrink-0" aria-hidden />
+                    <Shuffle className="size-3.5 shrink-0" aria-hidden />
                     <RouterSummary
                       name={router.name}
                       tiers={tiersByRouter.get(router.id)}
@@ -1043,10 +1020,6 @@ function matchesEveryWord(
 /** What automatic access adds at request time: a shared primary key that still works. */
 function isSharedPrimary(key: LlmProviderApiKeyResponse): boolean {
   return key.userId === null && key.isPrimary && !key.requiresReauthentication;
-}
-
-function uniqueProviders(items: { provider: string }[]): SupportedProvider[] {
-  return [...new Set(items.map((item) => item.provider as SupportedProvider))];
 }
 
 function plural(count: number, one: string, many: string): string {

@@ -34,6 +34,7 @@ import { replaceBrowserUrl } from "@/lib/utils/browser-redirect";
 import {
   buildOAuthCallbackPayload,
   extractOAuthCallbackParams,
+  getInstallFailureErrorState,
   getOAuthCallbackErrorState,
   type OAuthCallbackErrorState,
   toInternalReturnPath,
@@ -139,7 +140,7 @@ function OAuthCallbackContent() {
           const userConfigValues = getOAuthUserConfigValues();
 
           // Install the MCP server with the secret reference
-          await installMutation.mutateAsync({
+          const installResult = await installMutation.mutateAsync({
             name,
             catalogId,
             secretId,
@@ -151,6 +152,25 @@ function OAuthCallbackContent() {
             ...(serverType === "local" &&
               userConfigValues && { userConfigValues }),
           });
+
+          // The sign-in worked and the install did not. The mutation reports
+          // that in its result, not by throwing: stay here and say why, since
+          // going back would look like nothing happened.
+          if (installResult.errorMessage) {
+            clearCallbackProcessing(code, state);
+            clearInstallContext();
+            clearOAuthPendingChatResume();
+            setErrorReturnPath(
+              toInternalReturnPath(getOAuthReturnUrl(), window.location.origin),
+            );
+            setCallbackError(
+              getInstallFailureErrorState({
+                serverName: name,
+                reason: installResult.errorMessage,
+              }),
+            );
+            return;
+          }
 
           const isFirstInstallation = getOAuthIsFirstInstallation();
           const returnUrl = getOAuthReturnUrl();

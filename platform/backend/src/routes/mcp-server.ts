@@ -675,6 +675,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         throw new ApiError(400, "Credential references cannot be supplied");
       }
+      // The sign-in made this secret for this install alone, and its grant is
+      // now spent: when the install fails, nothing else can use it.
+      if (secretId) {
+        createdSecretId = secretId;
+      }
 
       // A desktop MCP server starts on the user's device only after its
       // installation exists, so the installation is created waiting and is
@@ -750,7 +755,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (!isValid) {
             // Clean up the secret we just created if validation fails
             if (createdSecretId) {
-              secretManager().deleteSecret(createdSecretId);
+              await secretManager().deleteSecret(createdSecretId);
             }
 
             throw new ApiError(

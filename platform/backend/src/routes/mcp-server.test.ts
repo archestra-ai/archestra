@@ -717,6 +717,64 @@ describe("mcp server inspect route", () => {
     ).toEqual({ access_token: "fake-existing-token" });
   });
 
+  test("a failed install after sign-in leaves no sign-in secret behind", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "http://127.0.0.1:30082/mcp",
+      oauthConfig: {
+        name: "OAuth MCP",
+        server_url: "http://127.0.0.1:30082/mcp",
+        grant_type: "authorization_code",
+        client_id: "test-oauth-client",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read"],
+        default_scopes: ["read"],
+        supports_resource_metadata: false,
+      },
+    });
+    connectAndGetToolsMock.mockRejectedValue(
+      new Error(
+        "Failed to connect to MCP server OAuth MCP: Upstream MCP server returned HTTP 429 while listing tools. The MCP server is limiting requests. Try again in a minute.",
+      ),
+    );
+    const signInSecret = await secretManager().createSecret(
+      { access_token: "fake-sign-in-token" },
+      "oauth-sign-in-token",
+    );
+    await issueMcpOAuthCredentialGrant({
+      secretId: signInSecret.id,
+      catalogId: catalog.id,
+      callerBinding: getMcpOAuthCallerBinding({
+        user,
+        organizationId,
+        authMethod: "session",
+        sessionInfo: { id: "test-mcp-session" },
+      } as FastifyRequest),
+    });
+
+    const install = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: catalog.name,
+        catalogId: catalog.id,
+        secretId: signInSecret.id,
+      },
+    });
+
+    expect(install.statusCode).toBe(400);
+    expect(install.json().error.message).toContain("HTTP 429");
+    // The grant is spent, so no later install can use this secret: every
+    // failed attempt used to leave one more behind.
+    expect(await secretManager().getSecret(signInSecret.id)).toBeNull();
+    expect(await McpServerModel.hasSecretReference(signInSecret.id)).toBe(
+      false,
+    );
+  });
+
   test("OAuth callback credentials can be installed and rotated once by their caller", async ({
     makeInternalMcpCatalog,
   }) => {

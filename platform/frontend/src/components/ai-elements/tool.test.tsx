@@ -201,12 +201,36 @@ describe("ToolOutput for results that are not plain text", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
-  it("renders nothing for a failed call with no result: the error text is shown beside it", () => {
+  it("shows a failed call's error once, whether or not a result repeats it", () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
-    const { container } = render(
+    const { rerender } = render(
       <ToolOutput label="Error" output={undefined} errorText="Timed out" />,
     );
+    expect(screen.getAllByText("Timed out")).toHaveLength(1);
 
-    expect(container).toBeEmptyDOMElement();
+    // The usual shape: the result's text is the error text.
+    rerender(
+      <ToolOutput
+        label="Error"
+        output={{ content: "Error: disk is full", isError: true }}
+        errorText="Error: disk is full"
+      />,
+    );
+    expect(screen.getAllByText("Error: disk is full")).toHaveLength(1);
+    expect(screen.getAllByText("Error")).toHaveLength(1);
+  });
+
+  it("keeps a result that says something the error does not", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    render(
+      <ToolOutput
+        label="Error"
+        output={{ content: '{"attempts":3}' }}
+        errorText="Gave up"
+      />,
+    );
+
+    expect(screen.getByText("Gave up")).toBeVisible();
+    expect(screen.getByText(/"attempts":/)).toBeVisible();
   });
 });

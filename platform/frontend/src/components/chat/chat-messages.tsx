@@ -50,7 +50,6 @@ import {
   SectionLabel,
   Tool,
   ToolContent,
-  ToolErrorDetails,
   ToolHeader,
   ToolInput,
   ToolOutput,
@@ -2092,8 +2091,6 @@ const MessageTool = memo(
     const mcpAppToolInput =
       runToolInput?.tool_args ?? (part.input as Record<string, unknown>);
 
-    // Use the text content string when available; fall back to the raw output for non-MCP tools.
-    const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
     const policyToolName = parseFullToolName(mcpAppToolName).toolName;
     const validationChange = [
@@ -2349,9 +2346,6 @@ const MessageTool = memo(
                 ]}
               />
             )}
-          {errorText && !authToolBody ? (
-            <ToolErrorDetails errorText={errorText} />
-          ) : null}
           {authToolBody}
           {credentialSetup && (
             <RuntimeCredentialSetupTool
@@ -2396,10 +2390,15 @@ const MessageTool = memo(
                 onSendMessage={onSendMessage}
               />
             )}
-          {/* Show error output even when UI resource is present - errors take priority */}
-          {!authToolBody && errorText && uiResourceUri && toolResultPart && (
-            <ToolOutput label="Error" output={output} errorText={errorText} />
-          )}
+          {/* A failed call shows its error once, in one section, with or
+              without a result beside it and whatever UI it would have had. */}
+          {!authToolBody && errorText ? (
+            <ToolOutput
+              label="Error"
+              output={rawOutput}
+              errorText={errorText}
+            />
+          ) : null}
           {/* A policy change's result reads as its diff. */}
           {!authToolBody && policyChange && (
             <>
@@ -2416,25 +2415,11 @@ const MessageTool = memo(
           {/* Show the result when NOT rendering a UI resource. The whole
               result goes in, so its images render beside its text. */}
           {!authToolBody &&
+            !errorText &&
             !uiResourceUri &&
             !policyChange &&
-            toolResultPart && (
-              <ToolOutput
-                label={errorText ? "Error" : "Result"}
-                output={rawOutput}
-                errorText={errorText}
-              />
-            )}
-          {!authToolBody &&
-            !uiResourceUri &&
-            !policyChange &&
-            !toolResultPart &&
-            Boolean(part.output) && (
-              <ToolOutput
-                label={errorText ? "Error" : "Result"}
-                output={rawOutput}
-                errorText={errorText}
-              />
+            (toolResultPart || Boolean(part.output)) && (
+              <ToolOutput label="Result" output={rawOutput} />
             )}
         </ToolContent>
       </Tool>

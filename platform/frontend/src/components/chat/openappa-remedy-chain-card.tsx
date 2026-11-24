@@ -11,7 +11,6 @@ import {
   SectionLabel,
   Tool,
   ToolContent,
-  ToolErrorDetails,
   ToolHeader,
   type ToolHeaderProps,
   ToolInput,
@@ -207,15 +206,14 @@ function RemedyStepCard({
         {hasToolRequest(input) ? (
           <ToolInput input={stripAppaPrefixFromRuling(input)} />
         ) : null}
-        {output !== undefined ? (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={output}
-            errorText={errorText}
-          />
+        {output !== undefined && !errorText ? (
+          <ToolOutput label="Result" output={output} />
         ) : null}
       </ToolContent>
-      {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
+      {/* Why a step failed shows without expanding it. */}
+      {errorText ? (
+        <ToolOutput label="Error" output={output} errorText={errorText} />
+      ) : null}
       <ApprovalRow
         part={part}
         onToolApprovalResponse={onToolApprovalResponse}

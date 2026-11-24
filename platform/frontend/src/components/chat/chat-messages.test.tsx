@@ -92,11 +92,18 @@ vi.mock("@/components/ai-elements/tool", () => ({
   ToolInput: ({ input }: { input: unknown }) => (
     <pre>{JSON.stringify(input)}</pre>
   ),
-  ToolOutput: ({ output }: { output: unknown }) => (
-    <pre>{JSON.stringify(output)}</pre>
-  ),
-  ToolErrorDetails: ({ errorText }: { errorText: string }) => (
-    <div>{errorText}</div>
+  // Like the real one: a failed call's error text and its result, in one section.
+  ToolOutput: ({
+    output,
+    errorText,
+  }: {
+    output: unknown;
+    errorText?: string;
+  }) => (
+    <div>
+      {errorText ? <div>{errorText}</div> : null}
+      <pre>{JSON.stringify(output)}</pre>
+    </div>
   ),
   SectionLabel: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>

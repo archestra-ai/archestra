@@ -16,7 +16,6 @@ import {
   SectionLabel,
   Tool,
   ToolContent,
-  ToolErrorDetails,
   ToolHeader,
   ToolInput,
   ToolOutput,
@@ -1196,7 +1195,6 @@ function ExpandedToolCard({
               ]}
             />
           )}
-        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
         {/* A policy change's result reads as its diff, a save's as one line. */}
         {policyChange || saveResult ? (
           <div className="px-3 pt-2">
@@ -1215,20 +1213,14 @@ function ExpandedToolCard({
         ) : saveResult === "policy" ? (
           <OpenAppaPolicyCompletion output={policyOutput} />
         ) : null}
-        {toolResultPart && !policyChange && !saveResult && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
-        )}
-        {!toolResultPart &&
-          !policyChange &&
+        {/* One section for the outcome. A failed call shows its error here
+            once, with or without a result beside it. */}
+        {!policyChange &&
           !saveResult &&
-          Boolean(part.output) && (
+          (toolResultPart || Boolean(part.output) || errorText) && (
             <ToolOutput
               label={errorText ? "Error" : "Result"}
-              output={part.output}
+              output={toolResultPart ? toolResultPart.output : part.output}
               errorText={errorText}
             />
           )}

@@ -337,19 +337,10 @@ const TruncatedCodeBlock = ({
   );
 };
 
-export type ToolErrorDetailsProps = ComponentProps<"div"> & {
-  errorText: string;
-};
-
-export const ToolErrorDetails = ({
-  className,
-  errorText,
-  ...props
-}: ToolErrorDetailsProps) => (
-  <div className={cn("overflow-hidden px-3 py-2", className)} {...props}>
-    <div className="rounded-md bg-destructive/10 p-3 text-destructive text-xs whitespace-pre-wrap break-words select-text">
-      {errorText}
-    </div>
+/** An error's text, in the one place a card shows it. */
+const ToolErrorText = ({ text }: { text: string }) => (
+  <div className="rounded-md bg-destructive/10 p-3 text-destructive text-xs whitespace-pre-wrap break-words select-text">
+    {text}
   </div>
 );
 
@@ -369,16 +360,21 @@ export const ToolOutput = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const labelText = label ?? (errorText ? "Error" : "Response");
 
-  // No result to show. An error's text is the caller's to render.
-  if (output === undefined || output === null) {
+  const hasOutput = output !== undefined && output !== null;
+  if (!hasOutput && !errorText) {
     return null;
   }
 
-  const displayOutput = normalizeToolOutput(output);
-  const images = getDisplayableImages(output);
+  const displayOutput = hasOutput ? normalizeToolOutput(output) : undefined;
+  const images = hasOutput ? getDisplayableImages(output) : [];
+  // An error is shown once. Its text is usually the result's own text, so
+  // the two are one block; a result that says more than the error, or
+  // something else, follows it.
+  const error = splitErrorFromOutput(errorText, displayOutput);
   // A result with no text and no image: say so, never show the wrapper the
   // platform stores the result in.
   const isEmpty =
+    !error &&
     images.length === 0 &&
     (displayOutput === undefined ||
       displayOutput === null ||
@@ -391,8 +387,12 @@ export const ToolOutput = ({
         The tool returned no content.
       </p>
     );
-  } else if (displayOutput === "" || displayOutput == null) {
-    // Only images: they render below.
+  } else if (
+    error?.coversOutput ||
+    displayOutput === "" ||
+    displayOutput == null
+  ) {
+    // The error text says it all, or only images follow: they render below.
     Output = null;
   } else if (
     typeof displayOutput === "object" ||
@@ -432,15 +432,9 @@ export const ToolOutput = ({
       {...props}
     >
       <SectionLabel accent={accent}>{labelText}</SectionLabel>
+      {error ? <ToolErrorText text={error.text} /> : null}
       {Output ? (
-        <div
-          className={cn(
-            "overflow-x-auto rounded-md text-xs [&_table]:w-full",
-            errorText && !isEmpty
-              ? "bg-destructive/10 text-destructive"
-              : "text-foreground",
-          )}
-        >
+        <div className="overflow-x-auto rounded-md text-xs text-foreground [&_table]:w-full">
           {Output}
         </div>
       ) : null}
@@ -460,6 +454,33 @@ export const ToolOutput = ({
     </div>
   );
 };
+
+/**
+ * What an error section shows for an error and the result that came with it.
+ * `coversOutput` means the text already holds everything the result says, so
+ * the result is not printed a second time.
+ */
+function splitErrorFromOutput(
+  errorText: string | undefined,
+  displayOutput: unknown,
+): { text: string; coversOutput: boolean } | null {
+  if (!errorText) return null;
+  if (displayOutput === undefined || displayOutput === null) {
+    return { text: errorText, coversOutput: true };
+  }
+  if (typeof displayOutput !== "string") {
+    return { text: errorText, coversOutput: false };
+  }
+  const outputText = displayOutput.trim();
+  if (errorText.includes(outputText)) {
+    return { text: errorText, coversOutput: true };
+  }
+  // The result repeats the error and adds to it: show the longer text.
+  if (outputText.includes(errorText.trim())) {
+    return { text: outputText, coversOutput: true };
+  }
+  return { text: errorText, coversOutput: false };
+}
 
 /**
  * Entries of a plain-object input when at least one value is a multi-line

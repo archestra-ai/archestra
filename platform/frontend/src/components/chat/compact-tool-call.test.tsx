@@ -1632,6 +1632,48 @@ describe("CompactToolGroup", () => {
     ).toBeVisible();
   });
 
+  it.each([
+    [
+      "a result the tool marked as an error",
+      {
+        state: "output-available",
+        output: { content: "Error: disk is full", isError: true },
+      },
+    ],
+    [
+      "a call that threw",
+      { state: "output-error", errorText: "Error: disk is full" },
+    ],
+  ])("shows the error of %s once on its card", (_case, outcome) => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "failed",
+              toolName: "fixtures__fail_with_error",
+              part: {
+                type: "tool-fixtures__fail_with_error",
+                toolCallId: "call-failed",
+                input: { message: "disk is full" },
+                ...outcome,
+              } as never,
+              toolResultPart: null,
+              errorText: "Error: disk is full",
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "fail with error (error)" }),
+    );
+    // It used to appear twice: in a red box, and again as the Error section.
+    expect(screen.getAllByText("Error: disk is full")).toHaveLength(1);
+  });
+
   it("reads a call that waits for its turn on its server as queued, not running", () => {
     const call = (id: string) => ({
       kind: "tool" as const,

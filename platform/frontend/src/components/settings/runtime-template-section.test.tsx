@@ -183,7 +183,7 @@ const openAccounts = async (
     await screen.findByRole("button", { name: `Actions for ${name}` }),
   );
   await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-  const dialog = screen.getByRole("dialog", { name: `Edit ${name}` });
+  const dialog = screen.getByRole("dialog", { name: `Edit ${name} runtime` });
   await user.click(
     within(dialog).getByRole("button", { name: /^Accounts that can run it/ }),
   );
@@ -226,7 +226,9 @@ describe("RuntimeTemplateSection", () => {
       await screen.findByRole("button", { name: "Actions for Claude Code" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
+    const dialog = screen.getByRole("dialog", {
+      name: "Edit Claude Code runtime",
+    });
     await user.click(
       within(dialog).getByRole("button", { name: /^Accounts that can run it/ }),
     );
@@ -586,7 +588,9 @@ describe("RuntimeTemplateSection", () => {
       await pick(user, connectionField(dialog), /Company Anthropic/);
       await pick(user, modelField(dialog), /Claude Sonnet/);
       expect(
-        within(dialog).getByText("Every agent uses this connection and model."),
+        within(dialog).getByText(
+          "Every agent on this runtime uses this connection and model.",
+        ),
       ).toBeVisible();
       await saveRuntime(user, dialog);
       expect(settings.builtIns["claude-code"]?.settings).toMatchObject({

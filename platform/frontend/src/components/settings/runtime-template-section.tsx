@@ -179,8 +179,7 @@ export function RuntimeTemplateSection({
       id,
       name: AGENT_CATALOG_NAMES[id],
       description:
-        builtIns.find((item) => item.id === id)?.summary ??
-        "Maintained runtime",
+        builtIns.find((item) => item.id === id)?.summary ?? "Built-in runtime",
       image: images[id],
       icon: null,
       hidden: state.popularAgentOverrides?.[id]?.hidden ?? false,
@@ -672,7 +671,9 @@ function RuntimeTemplateDialog({
             <DialogHeader>
               <div className="flex items-center gap-2">
                 <DialogTitle>
-                  {template ? `Edit ${template.name}` : "Add custom runtime"}
+                  {template
+                    ? `Edit ${template.name} runtime`
+                    : "Add custom runtime"}
                 </DialogTitle>
                 <RuntimeKindLabel builtIn={false} />
               </div>
@@ -945,7 +946,7 @@ function BuiltInRuntimeDialog({
       >
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <DialogTitle>Edit {name}</DialogTitle>
+            <DialogTitle>Edit {name} runtime</DialogTitle>
             <RuntimeKindLabel builtIn />
           </div>
           <DialogDescription>Defaults for new {name} agents.</DialogDescription>
@@ -959,7 +960,7 @@ function BuiltInRuntimeDialog({
               id={`${rowId}-container`}
               value="container"
               title="Container"
-              description="The maintained image and client."
+              description="The built-in image and client."
               summary={containerSummary(runtime)}
             >
               <FieldDescription>

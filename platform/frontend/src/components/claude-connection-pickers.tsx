@@ -14,6 +14,11 @@ import {
 import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { ChatSetupMenu } from "@/components/chat/chat-setup-menu";
+import type { ConnectionKey } from "@/components/claude-connection-pickers.utils";
+import {
+  companyConnectionIdOf,
+  noCompanyConnection,
+} from "@/components/claude-connection-pickers.utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,12 +39,8 @@ import {
 } from "@/lib/claude-code-account.query";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { type LlmModel, useLlmModels } from "@/lib/llm-models.query";
-import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { logoNameForProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils/tailwind";
-
-type ConnectionKey = Pick<LlmProviderApiKey, "id" | "name" | "provider"> &
-  Partial<Pick<LlmProviderApiKey, "subscriptionKind" | "scope">>;
 
 /**
  * Which company connection pays for an agent's runs, and which model it
@@ -152,22 +153,19 @@ export function CompanyConnectionPickers({
   );
   const usable = companyKeys.filter(keyFilter);
   const hiddenCount = companyKeys.length - usable.length;
-  // The agent's own key can be somebody's personal subscription, on an agent
-  // that runs only on subscriptions. That is nobody's company connection:
-  // the fields then show none, and ask for one.
-  const companyKeyId = keys.some(
-    (key) => key.id === apiKeyId && isPersonalSubscription(key),
-  )
-    ? null
-    : apiKeyId;
+  const companyKeyId = companyConnectionIdOf(keys, apiKeyId);
   const connection = keys.find((key) => key.id === companyKeyId);
 
   if (
     !compact &&
-    !usable.length &&
-    !companyKeyId &&
-    !connectionFixed &&
-    !lockedConnection
+    noCompanyConnection({
+      keys,
+      apiKeyId,
+      runsOn,
+      sharedOnly,
+      connectionFixed,
+      lockedConnection,
+    })
   ) {
     return (
       <div className="space-y-2">
@@ -438,16 +436,17 @@ export function SubscriptionModelPicker({
 }
 
 const CLAUDE_COPY = {
-  none: "No connection here can run Claude",
+  none: "No company connection can run Claude yet",
   needs:
-    "Claude Code needs an Anthropic API key, Amazon Bedrock, or Vertex AI with Anthropic models.",
+    "Claude Code needs an Anthropic API key, Amazon Bedrock, or Vertex AI with Anthropic models. Add one to use it here.",
   add: "Add an Anthropic key",
   listed: "Only keys that can run Claude are listed.",
   model: "Select a Claude model",
 };
 const RUNTIME_COPY = {
-  none: "No connection here can run this agent",
-  needs: "Its runtime needs a key of a provider it can call.",
+  none: "No company connection can run this agent yet",
+  needs:
+    "Its runtime needs a key of a provider it can call. Add one to use it here.",
   add: "Add a key",
   listed: "Only keys this runtime can call are listed.",
   model: "Select a model",

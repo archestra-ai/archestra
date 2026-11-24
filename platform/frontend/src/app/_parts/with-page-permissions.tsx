@@ -11,6 +11,7 @@ import {
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ClientRedirect } from "@/components/client-redirect";
 import { useHasPagePermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
@@ -27,6 +28,8 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   // The Policy page also opens to a reader of some MCP server's rules.
   const serverRules = useServerRulesAccess();
   const isPolicy = pathname === POLICY_PATH;
+  const agentRuntime = useFeature("agentRuntime");
+  const isModelProviders = pathname === MODEL_PROVIDERS_PATH;
 
   // No loader while the permission check is in flight. It used to render one
   // here, inside the shell and centred on the content column — a different
@@ -40,7 +43,10 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   // way to the Forbidden page only if the answer is "no chat:read".
   if (
     (isPending ||
-      (isPolicy && !hasRequiredPermissions && serverRules.scoped === null)) &&
+      (isPolicy && !hasRequiredPermissions && serverRules.scoped === null) ||
+      (isModelProviders &&
+        !hasRequiredPermissions &&
+        agentRuntime === undefined)) &&
     requiredPermissions
   ) {
     return isOptimisticChatPath(pathname) ? <>{children}</> : null;
@@ -68,7 +74,11 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   if (
     requiredPermissions &&
     !hasRequiredPermissions &&
-    !(isPolicy && serverRules.scoped)
+    !(isPolicy && serverRules.scoped) &&
+    // Personal Claude Code subscription management lives on Model Providers
+    // and is self-service when Agent Runtime is enabled; provider-key lists
+    // remain gated inside the page.
+    !(isModelProviders && agentRuntime === true)
   ) {
     return <ForbiddenPage />;
   }
@@ -85,6 +95,7 @@ function isOptimisticChatPath(pathname: string) {
 
 const NON_CONVERSATION_CHAT_SEGMENTS = new Set(["new", "runs"]);
 
+const MODEL_PROVIDERS_PATH = "/llm/model-providers";
 const POLICY_PATH = "/openappa/policy";
 
 function resolvePagePermissions(pathname: string) {

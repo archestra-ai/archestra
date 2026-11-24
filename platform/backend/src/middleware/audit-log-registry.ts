@@ -290,6 +290,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.updated",
     onlyWhenChanged: true,
   },
+  "/api/agent-runtime/claude-code/account": {
+    resourceType: "credential",
+    action: "credential.updated",
+    onlyWhenChanged: true,
+  },
+  "/api/agent-runtime/claude-code/account/complete": {
+    resourceType: "credential",
+    action: "credential.updated",
+    onlyWhenChanged: true,
+  },
   "/api/credentials": {
     resourceType: "credential",
     fetchById: (id, orgId) =>

@@ -975,6 +975,70 @@ describe("GET /api/agents/:id/runtime/account", () => {
     });
   });
 
+  test("a locked subscription sets the agent's incompatible company model aside and runs one the person's subscription serves", async ({
+    makeAgent,
+  }) => {
+    const own = await makeKeyWithModel({
+      organizationId: ctx.organizationId,
+      provider: "xai",
+      modelId: "grok-3",
+    });
+    const agent = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      llmApiKeyId: own.key.id,
+      modelId: own.model.id,
+      runtime: runtimeFor({
+        inferenceProtocol: "openai_responses",
+        command: ["archestra-codex"],
+        accountLock: "subscription",
+      }),
+    });
+    const chatGpt = await makeKeyWithModel({
+      organizationId: ctx.organizationId,
+      provider: "openai",
+      modelId: "gpt-5.4",
+      userId: ctx.user.id,
+      apiKeyValue: "chatgpt-oauth:example-subscription",
+    });
+    const preflight = async () =>
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${agent.id}/runtime/preflight`,
+        })
+      ).json();
+
+    const choose = (modelId: string | null) =>
+      app.inject({
+        method: "PUT",
+        url: `/api/agents/${agent.id}/runtime/account`,
+        payload: { authentication: "subscription", modelId },
+      });
+    // The xAI model came with the company connection the agent stored
+    // before it was locked: neither is what its runs use now.
+    expect(await preflight()).toMatchObject({
+      ready: true,
+      accountError: null,
+      accountErrorFromModel: false,
+      missingSubscription: null,
+    });
+    expect((await read(agent.id)).json()).toMatchObject({
+      lock: "subscription",
+      choice: null,
+      choiceError: null,
+    });
+
+    const chosen = await choose(chatGpt.model.id);
+
+    expect(chosen.statusCode, chosen.body).toBe(200);
+    expect(await preflight()).toMatchObject({
+      ready: true,
+      accountError: null,
+      accountErrorFromModel: false,
+    });
+  });
   test("keeps a problem of the agent's own account out of the choice error", async ({
     makeAgent,
   }) => {

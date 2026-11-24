@@ -5,7 +5,6 @@ import { AlertTriangle, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AccountPageAction } from "@/app/account/_components/account-page-action";
-import { ClaudeCodeSubscription } from "@/app/account/_components/claude-code-subscription";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -276,7 +275,6 @@ export function RuntimeCredentialsSection({
           </Button>
         </AccountPageAction>
       )}
-      <ClaudeCodeSubscription />
       <CollectionFilters>
         <FilterBar
           onClearFilters={hasActiveFilters ? clearFilters : undefined}

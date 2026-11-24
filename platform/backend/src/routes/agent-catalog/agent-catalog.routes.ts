@@ -14,6 +14,7 @@ import { AgentModel } from "@/models";
 import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { listA2aRemoteAgents } from "@/services/a2a-outbound-registry";
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
+import { populateAgentListSubscriptionAccounts } from "@/services/agent-runtime/agent-list-account";
 import {
   AgentCatalogResponseSchema,
   type AgentCatalogRow,
@@ -215,6 +216,10 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agents,
         organizationId,
         userId: user.id,
+      });
+      await populateAgentListSubscriptionAccounts({
+        agents,
+        organizationId,
       });
       const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
       const externalAgentsById = new Map(

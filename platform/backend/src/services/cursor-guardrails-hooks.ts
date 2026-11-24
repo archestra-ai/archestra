@@ -603,10 +603,8 @@ async function ruleOnCall(params: {
     ? refusalGuidance(
         refusalAction({
           outcome: decision.outcome,
-          remedies:
-            decision.offers === undefined ||
-            decision.offers.length > 0 ||
-            Boolean(decision.review?.length),
+          offers: decision.offers,
+          review: decision.review,
         }),
       )
     : "";
@@ -662,8 +660,8 @@ async function reportResult(
       isYellToolShortName(archestraMcpBranding.getToolShortName(tool.name)))
   )
     return {};
-  // The runtime never saw a call made while enforcement was off, nor the run
-  // of a denied call Break the glass let through: nothing to check it against.
+  // The runtime never saw a call made while enforcement was off: nothing to
+  // check it against.
   const unenforced = await findUnenforcedCalls({ session, toolCallIds: [id] });
   if (unenforced.reasons.has(id)) return {};
   const output = failed

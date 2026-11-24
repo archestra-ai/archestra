@@ -33,7 +33,10 @@ import {
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments, readNotice } from "@/openappa/notice";
-import { refusalGuidance } from "@/openappa/refusal-outcome";
+import {
+  type RefusalOutcome,
+  refusalGuidance,
+} from "@/openappa/refusal-outcome";
 import { prepareAppaRequest } from "@/openappa/request";
 import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as appaService from "@/openappa/service";
@@ -7658,6 +7661,64 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
+  test.for<RefusalOutcome>([
+    { kind: "hard_block" },
+    { kind: "integrity" },
+  ])("files no missing-remedy-tools report for a $kind denial, which no remedy lifts", async (outcome, {
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    config.openappa.yellEnabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "planless-session",
+      organizationId,
+    });
+    (
+      context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as Record<
+        string,
+        unknown
+      >
+    ).request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [],
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        {
+          kind: "deny" as const,
+          feedback: "[appa] Refused: nothing lifts this",
+          recorded: true as const,
+          offers: [],
+          outcome,
+        },
+      ]);
+    try {
+      await plugin.onSessionInit(context);
+      for (let attempt = 0; attempt < 2; attempt++)
+        expect(
+          await plugin.onToolCalls({
+            ...context,
+            toolCalls: [{ id: "call", name: "exec", arguments: {} }],
+          }),
+        ).toMatchObject({ decision: "refuse" });
+      expect(
+        (
+          await OpenAppaYellModel.list({
+            organizationId,
+            status: "all",
+            limit: 10,
+          })
+        ).data,
+      ).toEqual([]);
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
   test("withdraws the calls the runtime admitted when the turn is refused for want of a notice tool", async () => {
     // The refusal withholds the whole response, so an admitted call from the
     // same batch never runs; the runtime must not keep it reserved. A control
@@ -8058,6 +8119,7 @@ describe("rendering runtime text for this client", () => {
           kind: "deny" as const,
           feedback: "[appa] Refused: no plan.",
           recorded: true as const,
+          offers: ["offer-1"],
         },
       ]);
     const cancelCalls = vi
@@ -8173,7 +8235,9 @@ describe("rendering runtime text for this client", () => {
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
       .mockResolvedValueOnce([unrecorded])
-      .mockResolvedValueOnce([{ ...unrecorded, recorded: true as const }]);
+      .mockResolvedValueOnce([
+        { ...unrecorded, recorded: true as const, offers: ["offer-1"] },
+      ]);
     const cancelCalls = vi
       .spyOn(appaService, "cancelCalls")
       .mockResolvedValue(undefined);
@@ -8365,6 +8429,15 @@ describe("rendering runtime text for this client", () => {
     });
 
     test("withdraws the admitted call when the refusal fails before it is sent", async () => {
+      evaluateToolCalls.mockImplementation(async () => [
+        { kind: "allow" as const },
+        {
+          kind: "deny" as const,
+          feedback: ruling,
+          recorded: true as const,
+          offers: ["offer-1"],
+        },
+      ]);
       const set = cacheManager.set.bind(cacheManager);
       const cacheSet = vi
         .spyOn(cacheManager, "set")
@@ -8473,7 +8546,39 @@ describe("rendering runtime text for this client", () => {
       }
     });
 
-    test("still swaps in the wait tool first while Claude Code's servers are pending", async () => {
+    // Waiting for the remedy tools helps only a ruling that has remedies.
+    test.each<{
+      name: string;
+      denial: { offers: string[]; outcome?: RefusalOutcome };
+      waits: boolean;
+    }>([
+      {
+        name: "an offered remedy",
+        denial: { offers: ["offer-1"] },
+        waits: true,
+      },
+      { name: "a hard block", denial: { offers: [] }, waits: false },
+      {
+        name: "a missing fact",
+        denial: {
+          offers: [],
+          outcome: { kind: "missing_fact", retry: "after_repair" },
+        },
+        waits: false,
+      },
+    ])("swaps in the wait tool while Claude Code's servers are pending only for $name", async ({
+      denial,
+      waits,
+    }) => {
+      evaluateToolCalls.mockImplementation(async () => [
+        { kind: "allow" as const },
+        {
+          kind: "deny" as const,
+          feedback: ruling,
+          recorded: true as const,
+          ...denial,
+        },
+      ]);
       const outcome = await rule({
         sessionId: "pending",
         adapter: new AppaClaudeCodeAdapter(),
@@ -8485,13 +8590,15 @@ describe("rendering runtime text for this client", () => {
           { name: "WaitForMcpServers" },
         ],
       });
-      expect(outcome).toEqual({
+      const wait = { id: "denied", name: "WaitForMcpServers" };
+      expect(outcome).toMatchObject({
         decision: "allow",
         toolCalls: [
           admitted,
-          { id: "denied", name: "WaitForMcpServers", arguments: "{}" },
+          waits
+            ? expect.objectContaining(wait)
+            : expect.not.objectContaining(wait),
         ],
-        blocked: [{ id: "denied", name: "Bash", reason: ruling }],
       });
       expect(cancelCalls).not.toHaveBeenCalled();
     });

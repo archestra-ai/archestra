@@ -81,8 +81,11 @@ import type { OpenAppaSession } from "@/types/openappa-session";
 import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import {
+  NoRefusalOutcomeFields,
   type RefusalOutcome,
   RefusalOutcomeFields,
+  refusalAction,
+  refusalGuidance,
   statedRefusalOutcome,
 } from "./refusal-outcome";
 import { policyView } from "./result-view";
@@ -127,17 +130,32 @@ const NativeValueSchema = z
 
 const NativeDecisionSchema = z
   .discriminatedUnion("decision", [
-    z.object({ decision: z.literal("ack"), ...ResultDecisionFields }),
+    z.object({
+      decision: z.literal("ack"),
+      ...ResultDecisionFields,
+      ...NoRefusalOutcomeFields,
+    }),
     z.object({
       decision: z.literal("allow_call"),
+      ...NoRefusalOutcomeFields,
       spawn_binding: z.string().min(1).optional(),
       // The spawn was released under the deferred return its call declared.
       defers_return: z.literal(true).optional(),
     }),
     // A subagent's answer the runtime kept for its parent's decision; no body.
-    z.object({ decision: z.literal("defer_return") }),
-    z.object({ decision: z.literal("pass_control") }),
-    z.object({ decision: z.literal("held"), running: z.array(z.string()) }),
+    z.object({
+      decision: z.literal("defer_return"),
+      ...NoRefusalOutcomeFields,
+    }),
+    z.object({
+      decision: z.literal("pass_control"),
+      ...NoRefusalOutcomeFields,
+    }),
+    z.object({
+      decision: z.literal("held"),
+      running: z.array(z.string()),
+      ...NoRefusalOutcomeFields,
+    }),
     z.object({
       decision: z.literal("deny_call"),
       feedback: z.string(),
@@ -166,20 +184,25 @@ const NativeDecisionSchema = z
       decision: z.literal("replace_output"),
       ...RefusalOutcomeFields,
       ...ResultDecisionFields,
+      // The bytes that stand in for the output; never the output itself.
+      approved_output: z.string(),
     }),
     z.object({
       decision: z.literal("deliver_value"),
       value: NativeValueSchema,
       ...ResultDecisionFields,
+      ...NoRefusalOutcomeFields,
     }),
     z.object({
       decision: z.literal("child_return"),
       value: NativeValueSchema,
       ...ResultDecisionFields,
+      ...NoRefusalOutcomeFields,
     }),
     z.object({
       decision: z.literal("context"),
       text: z.string().optional(),
+      ...NoRefusalOutcomeFields,
     }),
     z.object({
       decision: z.literal("refuse"),
@@ -1084,7 +1107,7 @@ async function approveToolResult(params: {
     (decision.decision === "mcp_result" ||
       decision.decision === "replace_output");
   return {
-    content,
+    content: content + unjudgedGuidance(outcome),
     outputSource,
     ...((!unknownControl || outcome?.kind === "hard_block") &&
     (decision.decision === "block" ||
@@ -1113,15 +1136,6 @@ async function approveToolResult(params: {
  * blocked, approves it: a question that quotes the ruling gives the user
  * that, where a bare "approve" typed in chat did not.
  */
-function unexecutedControlResult(content: unknown): ProcessedToolResult {
-  const text = toolResultText(content);
-  return {
-    content: `[appa] The remedy did not run, so the plan is not applied. The result the client returned:\n\n${truncated(text, MAX_UNEXECUTED_RESULT_CHARS)}\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}`,
-    outputSource: "runtime",
-    code: UNRELEASED_CALL_CODE,
-  };
-}
-
 const UNEXECUTED_REMEDY_QUESTION_HINT =
   "[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
 
@@ -1137,39 +1151,21 @@ function resultOutput(result: CommonToolResult): string {
   );
 }
 
-function toolResultText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (content === null || content === undefined) return "";
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === "string") return part;
-        if (part && typeof part === "object" && "text" in part) {
-          const text = (part as { text: unknown }).text;
-          return typeof text === "string" ? text : JSON.stringify(text);
-        }
-        return "";
-      })
-      .filter((text) => text.length > 0)
-      .join("\n");
-  }
-  return JSON.stringify(content);
-}
-
-/** Cuts at `limit` code units, never between the halves of a surrogate pair. */
-function truncated(text: string, limit: number): string {
-  if (text.length <= limit) return text;
-  const code = text.charCodeAt(limit - 1);
-  const end = code >= 0xd800 && code <= 0xdbff ? limit - 1 : limit;
-  return `${text.slice(0, end)}…`;
-}
-
 const INTEGRITY: RefusalOutcome = { kind: "integrity" };
 
 /** The runtime's code for a result that matches no released call. */
 /** The runtime holds no released call that a reported result could answer. */
 export const UNRELEASED_CALL_CODE = "unreleased_call";
-const MAX_UNEXECUTED_RESULT_CHARS = 4000;
+
+/**
+ * A remedy result the runtime did not release. Nothing proves the client ran
+ * the remedy, so its body is not passed on.
+ */
+const UNEXECUTED_CONTROL_RESULT: ProcessedToolResult = {
+  content: `[appa] The remedy did not run, so the plan is not applied.\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}`,
+  outputSource: "runtime",
+  code: UNRELEASED_CALL_CODE,
+};
 
 function statedOutcomeOf(
   decision: NativeDecision,
@@ -1326,7 +1322,7 @@ export async function processProxyResults(params: {
       ? { content: pendingReview, outputSource: "runtime" }
       : approved.code === UNRELEASED_CALL_CODE &&
           params.isControlResult?.(result) === true
-        ? unexecutedControlResult(result.content)
+        ? UNEXECUTED_CONTROL_RESULT
         : approved;
   }
   return {
@@ -1996,21 +1992,37 @@ export async function approveSpawnReturn(params: {
 }
 
 function runtimeToolResult(decision: NativeDecision): CallToolResult {
-  if (decision.decision !== "mcp_result")
-    return {
-      isError: true,
-      content: [
-        {
-          type: "text",
-          text: decisionMessage(decision),
-        },
-      ],
-    };
-  if (decision.result) return decision.result;
-  return {
-    isError: false,
-    content: [{ type: "text", text: decision.approved_output ?? "" }],
-  };
+  const result: CallToolResult =
+    decision.decision !== "mcp_result"
+      ? {
+          isError: true,
+          content: [{ type: "text", text: decisionMessage(decision) }],
+        }
+      : (decision.result ?? {
+          isError: false,
+          content: [{ type: "text", text: decision.approved_output ?? "" }],
+        });
+  const guidance = unjudgedGuidance(refusalOutcomeOf(decision));
+  return guidance
+    ? {
+        ...result,
+        content: [...result.content, { type: "text", text: guidance.trim() }],
+      }
+    : result;
+}
+
+/**
+ * Whether to ask again, for an operation the runtime could not judge. A
+ * ruling's own guidance is the caller's to render.
+ */
+function unjudgedGuidance(outcome: RefusalOutcome | undefined): string {
+  if (outcome === undefined) return "";
+  const action = refusalAction({
+    outcome,
+    offers: undefined,
+    review: undefined,
+  });
+  return action.kind === "refuse_unjudged" ? refusalGuidance(action) : "";
 }
 
 /** How a delegation call's child may return, when the platform declares it. */

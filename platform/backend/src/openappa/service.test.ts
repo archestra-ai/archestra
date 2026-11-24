@@ -28,6 +28,7 @@ import { recoverDiagnosticTurn } from "./diagnostic-recovery";
 import { enterOpenappaEncryptedChat } from "./encrypted-chat";
 import { OpenappaRefusal, OpenappaRootOnlyError } from "./failure";
 import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
+import { refusalGuidance } from "./refusal-outcome";
 import {
   addressRuntimeChild,
   admitPeerMessage,
@@ -1574,19 +1575,41 @@ describe("APPA feature boundary", () => {
     expect(decision).toMatchObject({ kind: "deny", recorded: true, outcome });
   });
 
+  const denial = { decision: "deny_call", feedback: "[appa] Blocked" };
   test.each([
-    { outcomes: ["missing_fact"], deciding: "missing_fact" },
-    { outcomes: ["hard_block", "consent"], deciding: "hard_block" },
-    { outcomes: ["integrity"], deciding: "integrity", retry: "later" },
-    { outcomes: ["not_an_outcome"], deciding: "not_an_outcome" },
-  ])("a ruling whose outcome fields break their invariants is refused: %j", async (stated) => {
-    native.dispatchHook.mockResolvedValue(
-      JSON.stringify({
-        decision: "deny_call",
-        feedback: "[appa] Blocked",
-        ...stated,
-      }),
-    );
+    { ...denial, outcomes: ["missing_fact"], deciding: "missing_fact" },
+    { ...denial, outcomes: ["hard_block", "consent"], deciding: "hard_block" },
+    {
+      ...denial,
+      outcomes: ["integrity"],
+      deciding: "integrity",
+      retry: "later",
+    },
+    { ...denial, outcomes: ["not_an_outcome"], deciding: "not_an_outcome" },
+    // Nothing lifts these, so a remedy beside them contradicts the ruling.
+    {
+      ...denial,
+      outcomes: ["hard_block"],
+      deciding: "hard_block",
+      offers: [{ offer_id: "offer-1" }],
+    },
+    {
+      ...denial,
+      outcomes: ["integrity"],
+      deciding: "integrity",
+      review: [{ offer_id: "review-1", text: "Await review" }],
+    },
+    // An admission states no refusal; one that does is not read as an allow.
+    { decision: "allow_call", outcomes: ["integrity"], deciding: "integrity" },
+    { decision: "ack", retry: "later" },
+    // A replacement must carry the bytes that stand in for the output.
+    {
+      decision: "replace_output",
+      outcomes: ["hard_block"],
+      deciding: "hard_block",
+    },
+  ])("a decision that breaks the wire's invariants is refused: %j", async (decision) => {
+    native.dispatchHook.mockResolvedValue(JSON.stringify(decision));
     await expect(
       evaluateToolCalls(
         session,
@@ -1974,6 +1997,40 @@ describe("APPA feature boundary", () => {
     }
   });
 
+  test.each([
+    "later",
+    "after_repair",
+  ] as const)("a result the runtime withheld, unable to judge it, says when to ask again (%s)", async (retry) => {
+    const withheld = "[appa] Tool output withheld.";
+    native.dispatchHook.mockImplementation(async (raw: string) =>
+      JSON.stringify(
+        JSON.parse(raw).event === "tool_result"
+          ? {
+              decision: "replace_output",
+              approved_output: withheld,
+              output_source: "runtime",
+              outcomes: ["missing_fact"],
+              deciding: "missing_fact",
+              retry,
+            }
+          : { decision: "ack" },
+      ),
+    );
+
+    const result = await processProxyResults({
+      session,
+      canonicalize: (name) => name,
+      results: [
+        { id: "call", name: "read_file", content: "secret", isError: false },
+      ],
+    });
+
+    expect(result.toolResultUpdates.call).toMatchObject({
+      content: withheld + refusalGuidance({ kind: "refuse_unjudged", retry }),
+      refused: true,
+    });
+  });
+
   describe("a remedy call the gateway never ran", () => {
     const CONTROL = "mcp__gw__archestra__execute_remedy_plan";
     const WITHHELD =
@@ -1981,7 +2038,7 @@ describe("APPA feature boundary", () => {
     const REFUSAL =
       "Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Auto-Mode Bypass]. STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed.";
     const NOT_APPLIED =
-      "[appa] The remedy did not run, so the plan is not applied. The result the client returned:\n\n";
+      "[appa] The remedy did not run, so the plan is not applied.";
     const ASK =
       "\n\n[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
     const isControlResult = (result: { name: string }) =>
@@ -2018,30 +2075,25 @@ describe("APPA feature boundary", () => {
         results: [{ id: "remedy", ...result }],
       });
 
-    test("shows the model the client's refusal and says the plan is not applied", async () => {
-      const result = await process({
-        name: CONTROL,
-        content: [{ type: "text", text: REFUSAL }],
-        isError: true,
-      });
+    // Nothing proves the client ran the remedy, so its body never passes:
+    // whatever it holds, the model reads one fixed notice.
+    test.each([
+      { label: "a client refusal", content: [{ type: "text", text: REFUSAL }] },
+      { label: "a bare string", content: "The user rejected this tool call." },
+      { label: "no content", content: null },
+      { label: "a long body", content: `${"a".repeat(3999)}\u{1F600}tail` },
+    ])("says the plan is not applied and never echoes $label", async ({
+      content,
+    }) => {
+      for (const isError of [true, false]) {
+        const result = await process({ name: CONTROL, content, isError });
 
-      expect(result.toolResultUpdates.remedy).toEqual({
-        content: `${NOT_APPLIED}${REFUSAL}${ASK}`,
-        outputSource: "runtime",
-        code: "unreleased_call",
-      });
-    });
-
-    test("needs no error flag, which OpenAI wires never set", async () => {
-      const result = await process({
-        name: CONTROL,
-        content: "The user rejected this tool call.",
-        isError: false,
-      });
-
-      expect(result.toolResultUpdates.remedy?.content).toBe(
-        `${NOT_APPLIED}The user rejected this tool call.${ASK}`,
-      );
+        expect(result.toolResultUpdates.remedy).toEqual({
+          content: `${NOT_APPLIED}${ASK}`,
+          outputSource: "runtime",
+          code: "unreleased_call",
+        });
+      }
     });
 
     test("still withholds a result that is not this request's remedy call", async () => {
@@ -2052,39 +2104,6 @@ describe("APPA feature boundary", () => {
       });
 
       expect(result.toolResultUpdates.remedy?.content).toBe(WITHHELD);
-    });
-
-    test.each([
-      {
-        label: "a list of strings",
-        content: ["denied by hook"],
-        shown: "denied by hook",
-      },
-      { label: "no content", content: null, shown: "" },
-      {
-        label: "a text part that is not a string",
-        content: [{ type: "text", text: { reason: "denied" } }],
-        shown: '{"reason":"denied"}',
-      },
-    ])("keeps the text of $label", async ({ content, shown }) => {
-      const result = await process({ name: CONTROL, content, isError: true });
-
-      expect(result.toolResultUpdates.remedy?.content).toBe(
-        `${NOT_APPLIED}${shown}${ASK}`,
-      );
-    });
-
-    test("cuts a long result without splitting a character", async () => {
-      const result = await process({
-        name: CONTROL,
-        content: `${"a".repeat(3999)}\u{1F600}tail`,
-        isError: true,
-      });
-
-      const shown = (result.toolResultUpdates.remedy?.content ?? "").slice(
-        NOT_APPLIED.length,
-      );
-      expect(shown).toBe(`${"a".repeat(3999)}…${ASK}`);
     });
 
     test("keeps the runtime's answer for a remedy the gateway ran", async () => {
@@ -4276,6 +4295,42 @@ describe("remedy by offer", () => {
         args: { offer_id: "offer" },
       }),
     ).rejects.toThrow("OpenAPPA returned no offer lookup state");
+  });
+
+  test("a remedy the control gate could not judge tells the caller when to ask again", async () => {
+    const body = { type: "text" as const, text: "[appa] Not judged yet." };
+    native.executeRemedyByOffer.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "mcp_result",
+        offer: { status: "known" },
+        outcomes: ["missing_fact"],
+        deciding: "missing_fact",
+        retry: "after_repair",
+        result: { isError: true, content: [body] },
+      }),
+    );
+
+    const { result } = await executeRemedyByOffer({
+      organizationId,
+      sessionId: "session",
+      toolCallId: "client-remedy-unjudged",
+      originalArguments: '{"offer_id":"offer"}',
+      args: { offer_id: "offer" },
+    });
+
+    expect(result).toEqual({
+      isError: true,
+      content: [
+        body,
+        {
+          type: "text",
+          text: refusalGuidance({
+            kind: "refuse_unjudged",
+            retry: "after_repair",
+          }).trim(),
+        },
+      ],
+    });
   });
 
   test("rejects malformed native MCP resource content before forwarding it", async () => {

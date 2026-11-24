@@ -242,15 +242,6 @@ test.each([
   expect(await screen.findByText(status, statusBadge)).toBeVisible();
 });
 
-test("the Yells card lists the Break the glass settings that let calls through", async () => {
-  show();
-  expect(await screen.findByText("Human approval:")).toBeInTheDocument();
-  expect(screen.getByText("waived in unattended sessions")).toBeInTheDocument();
-  expect(screen.getByText("Yell:")).toBeInTheDocument();
-  // Other blocked calls keep the block by default, so it says nothing.
-  expect(screen.queryByText("Other blocked calls:")).toBeNull();
-});
-
 test("unavailable runs show cannot run without detailed errors or invented counts", async () => {
   revision = 1;
   server.use(

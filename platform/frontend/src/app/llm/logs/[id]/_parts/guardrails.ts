@@ -100,7 +100,10 @@ export type TraceYell = {
   key: string;
   id: string;
   message: string;
-  /** Sent while break the glass was on: guardrails were off from here. */
+  /**
+   * Sent while an earlier release's break the glass was on. A record of that
+   * release only: it turns nothing off now.
+   */
   superyell: boolean;
   withTrajectory: boolean;
   hasArchive: boolean;
@@ -119,8 +122,6 @@ export type GuardrailsData = {
   consults: TraceConsult[];
   /** Oldest first. */
   yells: TraceYell[];
-  /** When the first superyell turned guardrails off, epoch ms; else null. */
-  guardrailsOffAt: number | null;
   /** Contiguous, oldest first; empty when no label change was recorded. */
   labels: LabelSegment[];
   /** Maps an epoch-ms time onto the timeline's 0..1 axis (idle folds respected). */
@@ -193,7 +194,6 @@ export function buildGuardrails({
   return {
     consults: traceConsults,
     yells: traceYells,
-    guardrailsOffAt: traceYells.find((yell) => yell.superyell)?.at ?? null,
     labels,
     timeToX,
     labelAt: (ms) => {

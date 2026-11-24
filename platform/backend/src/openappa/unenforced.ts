@@ -8,6 +8,7 @@ import type { OpenAppaSession } from "@/openappa/service";
 import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
+  ExemptCallReason,
   UnenforcedCallReason,
   UnenforcedSessionReason,
 } from "@/types/openappa-unenforced";
@@ -162,7 +163,7 @@ export async function findUnenforcedCalls(params: {
 /** What a session's records say about the calls of one request. */
 export type UnenforcedCalls = {
   /** Why the runtime did not see each recorded call, by call id. */
-  reasons: ReadonlyMap<string, UnenforcedCallReason>;
+  reasons: ReadonlyMap<string, ExemptCallReason>;
   /**
    * The children that ran while enforcement was off: of a recorded spawn, or
    * started then.
@@ -226,17 +227,13 @@ async function decideUnenforced(
   | { unenforced: false }
   | { unenforced: true; reason: UnenforcedSessionReason; record?: true }
 > {
-  // Rows an earlier release wrote for a superyelled session take no part: a
-  // yell no longer turns a session off.
-  const recorded = (
-    await OpenAppaUnenforcedModel.findSessions({
-      organizationId: session.organization_id,
-      sessionIds: [
-        session.session_id,
-        ...(session.parent_id ? [session.parent_id] : []),
-      ],
-    })
-  ).filter((row) => row.reason === "enforcement_off");
+  const recorded = await OpenAppaUnenforcedModel.findSessions({
+    organizationId: session.organization_id,
+    sessionIds: [
+      session.session_id,
+      ...(session.parent_id ? [session.parent_id] : []),
+    ],
+  });
   const own = recorded.some(
     (row) =>
       row.sessionId === session.session_id &&

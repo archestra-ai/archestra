@@ -1,6 +1,7 @@
 import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
+  ExemptCallReason,
   UnenforcedCallReason,
   UnenforcedSessionReason,
 } from "@/types/openappa-unenforced";
@@ -11,7 +12,10 @@ const calls = schema.openappaUnenforcedCallsTable;
 /**
  * The parts of sessions that ran while Guardrails enforcement was off. The
  * proxy records them while enforcement is off, and OpenAPPA ignores them after
- * it turns on. A record never changes, so a second write of it does nothing.
+ * it turns on. An observation never changes, so a second write of it does
+ * nothing. Rows an earlier release wrote for a superyell or a waived call
+ * exempt nothing: no read returns them, and an observation overwrites a
+ * superyell row.
  */
 class OpenAppaUnenforcedModel {
   static async recordSession(params: {
@@ -27,7 +31,15 @@ class OpenAppaUnenforcedModel {
         parentId: params.parentId ?? null,
         reason: "enforcement_off",
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: [sessions.organizationId, sessions.sessionId],
+        set: {
+          parentId: params.parentId ?? null,
+          reason: "enforcement_off",
+          createdAt: sql`now()`,
+        },
+        setWhere: eq(sessions.reason, "superyell"),
+      });
   }
 
   /**
@@ -56,6 +68,7 @@ class OpenAppaUnenforcedModel {
       .where(
         and(
           eq(sessions.organizationId, params.organizationId),
+          eq(sessions.reason, "enforcement_off"),
           sql`starts_with(${sessions.sessionId}, ${`${params.rootSessionId}:`})`,
           sql`${sessions.sessionId} = ${sessions.parentId} || ${`:${params.nativeId}`}`,
         ),
@@ -85,6 +98,7 @@ class OpenAppaUnenforcedModel {
       .where(
         and(
           eq(sessions.organizationId, params.organizationId),
+          eq(sessions.reason, "enforcement_off"),
           inArray(sessions.sessionId, [...new Set(params.sessionIds)]),
         ),
       );
@@ -146,7 +160,7 @@ class OpenAppaUnenforcedModel {
   }): Promise<
     Array<{
       toolCallId: string;
-      reason: UnenforcedCallReason;
+      reason: ExemptCallReason;
       childNativeId: string | null;
     }>
   > {
@@ -157,7 +171,7 @@ class OpenAppaUnenforcedModel {
       (toolCallIds.length === 0 && childNativeIds.length === 0)
     )
       return [];
-    return db
+    const rows = await db
       .select({
         toolCallId: calls.toolCallId,
         reason: calls.reason,
@@ -175,6 +189,9 @@ class OpenAppaUnenforcedModel {
           ),
         ),
       );
+    return rows.flatMap(({ reason, ...row }) =>
+      reason === "waived" ? [] : [{ ...row, reason }],
+    );
   }
 }
 

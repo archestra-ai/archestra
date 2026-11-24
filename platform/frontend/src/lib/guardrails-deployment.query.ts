@@ -85,32 +85,6 @@ export function useUpdateUnsupportedClientAction() {
   });
 }
 
-/** The Break the glass settings: any of them, saved together. */
-export function useUpdateBreakTheGlass() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      body: Pick<
-        NonNullable<archestraApiTypes.UpdateGuardrailsDeploymentData["body"]>,
-        "breakTheGlassEnabled" | "humanApprovalMode" | "unapprovableBlockMode"
-      >,
-    ) => {
-      const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
-        body,
-      });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      client.setQueryData(queryKey, data);
-      client.invalidateQueries({ queryKey });
-    },
-  });
-}
-
 /** The model and key OpenAPPA's model annotators answer with; both null is the organization default. */
 export function useUpdateAnnotatorModel() {
   const client = useQueryClient();

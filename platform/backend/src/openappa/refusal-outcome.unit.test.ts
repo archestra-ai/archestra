@@ -3,6 +3,7 @@ import { NO_REMEDY_PLAN_HINT } from "./no-remedy-plan-hint";
 import {
   type RefusalAction,
   type RefusalOutcome,
+  receiptRefusalAction,
   refusalAction,
   refusalGuidance,
   statedRefusalOutcome,
@@ -109,6 +110,16 @@ describe("statedRefusalOutcome", () => {
       remedies: true,
     },
     {
+      name: "a hard block beside offers",
+      fields: { outcomes: ["hard_block"], deciding: "hard_block" },
+      remedies: true,
+    },
+    {
+      name: "an integrity fault beside offers",
+      fields: { outcomes: ["integrity"], deciding: "integrity" },
+      remedies: true,
+    },
+    {
       name: "a hard block beside a remedy",
       fields: { outcomes: ["hard_block", "consent"], deciding: "hard_block" },
       remedies: true,
@@ -132,65 +143,129 @@ describe("statedRefusalOutcome", () => {
 });
 
 describe("refusalAction", () => {
+  const listed = { offers: ["offer-1"], review: undefined };
+  const none = { offers: [], review: undefined };
+  const unknown = { offers: undefined, review: undefined };
   test.each<{
+    name: string;
     outcome: RefusalOutcome | undefined;
-    remedies: boolean;
+    lists: { offers: string[] | undefined; review: unknown[] | undefined };
     action: RefusalAction;
   }>([
     {
+      name: "an integrity fault",
       outcome: { kind: "integrity" },
-      remedies: false,
+      lists: none,
       action: { kind: "refuse", why: "integrity" },
     },
     {
+      name: "a hard block",
       outcome: { kind: "hard_block" },
-      remedies: false,
+      lists: none,
       action: { kind: "refuse", why: "hard_block" },
     },
     {
+      name: "a missing fact to retry later",
       outcome: { kind: "missing_fact", retry: "later" },
-      remedies: false,
+      lists: none,
       action: { kind: "refuse_unjudged", retry: "later" },
     },
     {
+      name: "a missing fact to retry after repair",
       outcome: { kind: "missing_fact", retry: "after_repair" },
-      remedies: false,
+      lists: unknown,
       action: { kind: "refuse_unjudged", retry: "after_repair" },
     },
     {
+      name: "remedies",
       outcome: {
         kind: "remediable",
         deciding: "waivable_gap",
         held: ["waivable_gap"],
       },
-      remedies: true,
+      lists: listed,
       action: { kind: "offer_remedies" },
     },
-    // A receipt written before outcomes were stated is read by what it holds.
-    { outcome: undefined, remedies: true, action: { kind: "offer_remedies" } },
+    // A receipt written before outcomes were stated is read by what it lists.
     {
+      name: "an unstated ruling with an offer",
       outcome: undefined,
-      remedies: false,
+      lists: listed,
+      action: { kind: "offer_remedies" },
+    },
+    {
+      name: "an unstated ruling with a review",
+      outcome: undefined,
+      lists: { offers: [], review: [{ offer_id: "review-1" }] },
+      action: { kind: "offer_remedies" },
+    },
+    {
+      name: "an unstated ruling with no offers",
+      outcome: undefined,
+      lists: none,
       action: { kind: "refuse", why: "hard_block" },
     },
-  ])("maps $outcome.kind (remedies: $remedies) to $action.kind", ({
-    outcome,
-    remedies,
-    action,
-  }) => {
-    expect(refusalAction({ outcome, remedies })).toEqual(action);
+    {
+      name: "an unstated ruling that lists nothing",
+      outcome: undefined,
+      lists: unknown,
+      action: { kind: "refuse", why: "unstated" },
+    },
+  ])("maps $name", ({ outcome, lists, action }) => {
+    expect(refusalAction({ outcome, ...lists })).toEqual(action);
   });
+});
 
-  test("an outcome decides over the remedies a decision carries", () => {
-    expect(
-      refusalAction({ outcome: { kind: "hard_block" }, remedies: true }),
-    ).toEqual({ kind: "refuse", why: "hard_block" });
+describe("receiptRefusalAction", () => {
+  test.each<{
+    name: string;
+    receipt: unknown;
+    action: RefusalAction | undefined;
+  }>([
+    {
+      name: "an offered ruling",
+      receipt: { decision: "deny_call", offers: [{ offer_id: "offer-1" }] },
+      action: { kind: "offer_remedies" },
+    },
+    {
+      name: "a stated remedy",
+      receipt: {
+        decision: "deny_call",
+        outcomes: ["consent"],
+        deciding: "consent",
+        offers: [{ offer_id: "offer-1" }],
+      },
+      action: { kind: "offer_remedies" },
+    },
+    {
+      name: "a hard block that also lists an offer",
+      receipt: {
+        decision: "deny_call",
+        outcomes: ["hard_block"],
+        deciding: "hard_block",
+        offers: [{ offer_id: "offer-1" }],
+      },
+      action: undefined,
+    },
+    {
+      name: "a cancelled call's receipt",
+      receipt: { decision: "deny_call" },
+      action: { kind: "refuse", why: "unstated" },
+    },
+    {
+      name: "an admission",
+      receipt: { decision: "allow_call" },
+      action: undefined,
+    },
+  ])("reads $name", ({ receipt, action }) => {
+    expect(receiptRefusalAction(receipt)).toEqual(action);
   });
 });
 
 describe("refusalGuidance", () => {
-  test("adds nothing while remedies stand, and the no-plan hint for a refusal nothing lifts", () => {
+  test("adds nothing while remedies stand or a ruling states nothing, and the no-plan hint for a refusal nothing lifts", () => {
     expect(refusalGuidance({ kind: "offer_remedies" })).toBe("");
+    expect(refusalGuidance({ kind: "refuse", why: "unstated" })).toBe("");
     expect(refusalGuidance({ kind: "refuse", why: "integrity" })).toBe(
       NO_REMEDY_PLAN_HINT,
     );

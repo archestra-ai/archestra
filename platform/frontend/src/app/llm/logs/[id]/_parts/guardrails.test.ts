@@ -174,7 +174,7 @@ describe("buildGuardrails", () => {
     expect(labelChange?.target).toEqual({ type: "request", key: "asks" });
   });
 
-  it("places yells on their calls and turns guardrails off at the first superyell", () => {
+  it("places yells on their calls, superyells among them", () => {
     const guardrails = buildGuardrails({
       timeline: timeline(),
       consults: [],
@@ -200,7 +200,6 @@ describe("buildGuardrails", () => {
       ["yell:off", "tool:write", true],
       ["yell:late", null, true],
     ]);
-    expect(guardrails?.guardrailsOffAt).toBe(BASE + 12_000);
   });
 
   it("has nothing to show without checks or a label history", () => {

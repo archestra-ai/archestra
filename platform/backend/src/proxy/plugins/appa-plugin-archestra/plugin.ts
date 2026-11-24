@@ -100,7 +100,11 @@ import {
   policyArguments,
   previewAppToolTarget,
 } from "@/openappa/policy-arguments";
-import { refusalAction, refusalGuidance } from "@/openappa/refusal-outcome";
+import {
+  receiptRefusalAction,
+  refusalAction,
+  refusalGuidance,
+} from "@/openappa/refusal-outcome";
 import {
   isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
@@ -498,15 +502,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ],
     });
     // The runtime never saw a call the model made while enforcement was off,
-    // nor the run of a denied call an earlier release's Break the glass let
-    // through, so OpenAPPA ignores its result: the result reaches the model
-    // as it is.
-    const toolResults = answers.filter((result) => {
-      const reason = binding.unenforcedCalls.reasons.get(
-        withoutTrajectoryStamp(result.id),
-      );
-      return reason !== "made" && reason !== "waived";
-    });
+    // so OpenAPPA ignores its result: the result reaches the model as it is.
+    const toolResults = answers.filter(
+      (result) =>
+        binding.unenforcedCalls.reasons.get(
+          withoutTrajectoryStamp(result.id),
+        ) !== "made",
+    );
     const childResultUpdates: Record<string, string> = Object.create(null);
     const ordinaryResultUpdates: Record<string, string> = Object.create(null);
     const ordinary = binding.adapter?.nativeQuestion?.ordinaryResultFromAskUser;
@@ -949,10 +951,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         approved.content += refusalGuidance(
           refusalAction({
             outcome: approved.outcome,
-            remedies:
-              approved.offers === undefined ||
-              approved.offers.length > 0 ||
-              Boolean(approved.review?.length),
+            offers: approved.offers,
+            review: approved.review,
           }),
         );
       }
@@ -2105,11 +2105,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const action = decision.recorded
         ? refusalAction({
             outcome: decision.outcome,
-            // Offers a ruling does not list are not known to be absent.
-            remedies:
-              decision.offers === undefined ||
-              decision.offers.length > 0 ||
-              Boolean(decision.review?.length),
+            offers: decision.offers,
+            review: decision.review,
           })
         : undefined;
       // The call was not judged, or was refused before any ruling, so there
@@ -2118,7 +2115,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // them.
       const unjudged =
         decision.proxyNotice === true || action?.kind === "refuse_unjudged";
-      const noPlan = action?.kind === "refuse";
+      const noPlan = action?.kind === "refuse" && action.why !== "unstated";
+      // Only a ruling with remedies is worth carrying on a stand-in call or
+      // loading the remedy tools for.
+      const offersRemedies = action?.kind === "offer_remedies";
       // Raw transcript access is a host boundary, with no policy remedy.
       // Loading gateway tools cannot change it and must not cause a retry.
       const transcriptRefusal = blockedTranscriptCalls.has(call.id);
@@ -2153,10 +2153,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // denial the runtime did not record has no ruling to answer with, so
         // it is refused below.
         let wait: { name: string; arguments: string } | undefined;
-        if (
-          decision.recorded &&
-          !(binding.adapter?.id === "grok-build" && noPlan)
-        ) {
+        if (offersRemedies) {
           pendingServersTool ??= this.pendingServersTool(
             binding,
             session,
@@ -2182,12 +2179,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         try {
           transient =
             needsRemedyTools &&
+            !noPlan &&
             !binding.request.defersTools &&
             binding.request.declaredTools.length > 0 &&
             !(await this.remedyToolsMissingBefore(session));
           // A client that defers tools has not failed to receive remedies: it
           // has not loaded the tools yet.
-          if (needsRemedyTools && !transient && !binding.request.defersTools) {
+          if (
+            needsRemedyTools &&
+            !noPlan &&
+            !transient &&
+            !binding.request.defersTools
+          ) {
             await recordOpenAppaClientFailure({
               session,
               toolCallId: call.id,
@@ -2211,7 +2214,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           : !needsRemedyTools
             ? ruling
             : binding.request.defersTools
-              ? noPlan
+              ? !offersRemedies
                 ? ruling
                 : `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
               : noPlan
@@ -7806,15 +7809,8 @@ async function hasRemedyOfferResult(params: {
     const decision = recorded.get(id)?.decision;
     const offeredRuling =
       isRecord(decision) &&
-      decision.decision === "deny_call" &&
       typeof decision.feedback === "string" &&
-      Array.isArray(decision.offers) &&
-      decision.offers.some(
-        (offer) =>
-          isRecord(offer) &&
-          typeof offer.offer_id === "string" &&
-          offer.offer_id.length > 0,
-      )
+      receiptRefusalAction(decision)?.kind === "offer_remedies"
         ? decision.feedback
         : undefined;
     if (
@@ -7840,11 +7836,19 @@ async function hasRemedyOfferResult(params: {
       return [];
     if (
       approved.denied &&
-      (approved.offers !== undefined || approved.review?.length)
+      (approved.outcome !== undefined ||
+        approved.offers !== undefined ||
+        approved.review?.length)
     ) {
       // Current denial metadata outranks both the original journal offer and
       // generic remedy hints. Unknown metadata still uses the scoped fallback.
-      return approved.offers?.length || approved.review?.length ? [index] : [];
+      return refusalAction({
+        outcome: approved.outcome,
+        offers: approved.offers,
+        review: approved.review,
+      }).kind === "offer_remedies"
+        ? [index]
+        : [];
     }
     if (
       offeredRuling === undefined &&

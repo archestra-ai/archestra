@@ -114,3 +114,104 @@ describe("OpenAppaUnenforcedModel.findCalls", () => {
     );
   });
 });
+
+describe("legacy records exempt nothing", () => {
+  test("no read returns a superyell session or a waived call", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await db.insert(schema.openappaUnenforcedSessionsTable).values([
+      { organizationId: org.id, sessionId: "root:off", parentId: "root" },
+      {
+        organizationId: org.id,
+        sessionId: "root:off:worker",
+        parentId: "root:off",
+        reason: "superyell",
+      },
+      {
+        organizationId: org.id,
+        sessionId: "root:worker",
+        parentId: "root",
+      },
+    ]);
+    await db.insert(schema.openappaUnenforcedCallsTable).values([
+      {
+        organizationId: org.id,
+        sessionId: "root",
+        toolCallId: "denied-run",
+        reason: "waived",
+      },
+      {
+        organizationId: org.id,
+        sessionId: "root",
+        toolCallId: "spawn",
+        reason: "waived",
+        childNativeId: "waived-child",
+      },
+    ]);
+
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: org.id,
+        sessionIds: ["root:off:worker"],
+      }),
+    ).toEqual([]);
+    // The legacy sibling at another depth does not make the id ambiguous.
+    expect(
+      await OpenAppaUnenforcedModel.findFamilyMembers({
+        organizationId: org.id,
+        rootSessionId: "root",
+        nativeId: "worker",
+      }),
+    ).toEqual([
+      { sessionId: "root:worker", parentId: "root", reason: "enforcement_off" },
+    ]);
+    expect(
+      await OpenAppaUnenforcedModel.findCalls({
+        organizationId: org.id,
+        sessionIds: ["root"],
+        toolCallIds: ["denied-run", "spawn"],
+        childNativeIds: ["waived-child"],
+      }),
+    ).toEqual([]);
+  });
+
+  test("an enforcement-off observation replaces a superyell row, and nothing replaces an observation", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const old = new Date(Date.now() - 40 * DAY_MS);
+    await db.insert(schema.openappaUnenforcedSessionsTable).values({
+      organizationId: org.id,
+      sessionId: "root:child",
+      reason: "superyell",
+      createdAt: old,
+    });
+
+    await OpenAppaUnenforcedModel.recordSession({
+      organizationId: org.id,
+      sessionId: "root:child",
+      parentId: "root",
+    });
+    await OpenAppaUnenforcedModel.recordSession({
+      organizationId: org.id,
+      sessionId: "root:child",
+      parentId: "elsewhere",
+    });
+
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: org.id,
+        sessionIds: ["root:child"],
+      }),
+    ).toEqual([
+      { sessionId: "root:child", parentId: "root", reason: "enforcement_off" },
+    ]);
+    // The observation is fresh, so the retention sweep keeps it.
+    expect(
+      await OpenAppaUnenforcedModel.deleteOlderThan(
+        new Date(Date.now() - 30 * DAY_MS),
+      ),
+    ).toEqual({ sessions: 0, calls: 0 });
+  });
+});

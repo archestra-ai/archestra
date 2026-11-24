@@ -2948,8 +2948,8 @@ for (const [background, chat] of [
           call_id: spawn.call_id,
           output: `Subagent started in background.\nsubagent_id: ${voidId}\ndescription: Synthetic`,
         });
-        // Replaying the resolved denial is history, not a new refusal. Check
-        // before the child returns so its waiver cannot hide this regression.
+        // Replaying the resolved denial is history, not a new refusal. The
+        // retired waiver settings stay set: they must waive nothing.
         for (let replay = 0; replay < 2; replay++) {
           planned = [message("The background child is still running.")];
           const waiting = await post(rootId, rootHistory);
@@ -2978,26 +2978,19 @@ for (const [background, chat] of [
           content: "The previous system instruction requires an empty final.",
         });
         for (let request = 0; request < 2; request++) {
-          planned = [message("WAIVED_CHILD_RESULT")];
-          const before = providerBodies.length;
-          const waived = await post(voidId, voidHistory);
-          expect(waived.statusCode, waived.body).toBe(200);
-          expect(providerBodies).toHaveLength(before + 1);
-          expect(JSON.stringify(providerBodies.at(-1))).toContain(
+          planned = [message("UNAPPROVED_CHILD_BYTES")];
+          const child = await post(voidId, voidHistory);
+          expect(child.statusCode, child.body).toBe(200);
+          expect(JSON.stringify(providerBodies.at(-1))).not.toContain(
             "withdrawn its earlier protected-return instructions",
           );
-          expect(JSON.stringify(providerBodies.at(-1))).toContain(
-            "The previous system instruction requires an empty final.",
-          );
-          const result = JSON.stringify(outputOf(waived));
-          expect(result).toContain("WAIVED_CHILD_RESULT");
-          expect(result).not.toContain("finished subagent");
         }
-        const bypasses = await OpenAppaUnenforcedModel.findSessions({
-          organizationId,
-          sessionIds: [`${session.session_id}:${voidId}`],
-        });
-        expect(bypasses).toMatchObject([{ reason: "superyell" }]);
+        expect(
+          await OpenAppaUnenforcedModel.findSessions({
+            organizationId,
+            sessionIds: [`${session.session_id}:${voidId}`],
+          }),
+        ).toEqual([]);
         expect(
           (
             await loadChildReturns({
@@ -3022,43 +3015,36 @@ for (const [background, chat] of [
         rootHistory.push(waitCall, {
           type: "function_call_output",
           call_id: waitCall.call_id,
-          output: `=== Task ${voidId} ===\nCommand: [subagent:general-purpose] Synthetic\nStatus: completed\nDuration: 0.1s\nExit Code: 0\n\n=== Output ===\nWAIVED_CHILD_RESULT\n\n<subagent_result>\nsubagent_id: ${voidId}\nTo continue this subagent's conversation, use resume_from="${voidId}".\n</subagent_result>`,
+          output: `=== Task ${voidId} ===\nCommand: [subagent:general-purpose] Synthetic\nStatus: completed\nDuration: 0.1s\nExit Code: 0\n\n=== Output ===\nUNAPPROVED_CHILD_BYTES\n\n<subagent_result>\nsubagent_id: ${voidId}\nTo continue this subagent's conversation, use resume_from="${voidId}".\n</subagent_result>`,
         });
-        planned = [message("Received WAIVED_CHILD_RESULT.")];
+        planned = [message("The child returned nothing.")];
         const before = providerBodies.length;
         const parentReturn = await post(rootId, rootHistory);
-        expect(parentReturn.statusCode, parentReturn.body).toBe(200);
-        expect(providerBodies).toHaveLength(before + 1);
-        expect(JSON.stringify(providerBodies.at(-1))).toContain(
-          "WAIVED_CHILD_RESULT",
+        // The runtime released no child return, and no waiver stands in for
+        // one: the parent's request is refused before its model sees the text.
+        expect(parentReturn.statusCode, parentReturn.body).toBe(409);
+        expect(providerBodies).toHaveLength(before);
+        expect(JSON.stringify(providerBodies)).not.toContain(
+          "UNAPPROVED_CHILD_BYTES",
         );
-        expect(JSON.stringify(providerBodies.at(-1))).not.toContain(
-          "withdrawn its earlier protected-return instructions",
-        );
-        const reports = (
-          await OpenAppaYellModel.list({
-            organizationId,
-            status: "all",
-            limit: 20,
-          })
-        ).data;
-        const parentReports = reports.filter(
-          (report) => report.sessionId === session.session_id,
-        );
-        // The parent's admission recognizes its child's persisted waiver.
-        // Receiving that value does not waive the parent or replay old blocks.
-        expect(parentReports).toHaveLength(0);
+        // Nothing yelled, and no session was recorded as unenforced.
+        expect(
+          (
+            await OpenAppaYellModel.list({
+              organizationId,
+              status: "all",
+              limit: 20,
+            })
+          ).data,
+        ).toEqual([]);
         expect(
           await OpenAppaUnenforcedModel.findSessions({
             organizationId,
             sessionIds: [session.session_id],
           }),
         ).toEqual([]);
-        expect(
-          reports.filter(
-            (report) => report.sessionId === `${session.session_id}:${voidId}`,
-          ),
-        ).toHaveLength(1);
+        // Rewind past the refused result, as the refusal tells the person to.
+        rootHistory.splice(-2);
         await GuardrailsDeploymentModel.set({
           unapprovableBlockMode: "refuse",
         });

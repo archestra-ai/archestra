@@ -33,7 +33,7 @@ pub fn run() -> Result<ExitCode, AutostartError> {
     let update = state
         .as_ref()
         .and_then(|file| file.as_ref()?.update.as_ref())
-        .map(|update| update_report(update.version.as_deref(), update.auto && cfg!(windows)));
+        .map(|update| update_report(update.version.as_deref(), update.auto));
     let mut text = report(
         status,
         archestra.as_deref(),
@@ -49,8 +49,7 @@ pub fn run() -> Result<ExitCode, AutostartError> {
 }
 
 /// What the status says of an update. The MCP bridge installs it by itself
-/// on Windows, when Archestra allows that; on macOS and Linux the user runs
-/// the command.
+/// when Archestra allows that; else the user runs the command.
 fn update_report(version: Option<&str>, installs_by_itself: bool) -> String {
     let available = match version {
         Some(version) => format!("version {version} is available"),

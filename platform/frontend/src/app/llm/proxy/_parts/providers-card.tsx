@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useLlmModels } from "@/lib/llm-models.query";
+import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   ChipButton,
@@ -51,7 +51,9 @@ const STARTER_PROVIDERS: SupportedProvider[] = [
 export function ProvidersCard() {
   const providerCatalog = useModelProviderCatalog({ fresh: true });
   const { data: keys = [], isPending } = useLlmProviderApiKeys();
-  const { data: models = [] } = useLlmModels();
+  // The models each key brings, as the Models page lists them: decision
+  // models such as Jev's included.
+  const { data: models = [] } = useModelsWithApiKeys({ toastOnError: false });
   // A dialog to add a key: for any provider (null) or one chosen here.
   const [adding, setAdding] = useState<SupportedProvider | null | undefined>();
   const [subscription, setSubscription] = useState<SubscriptionOffer | null>(
@@ -68,14 +70,20 @@ export function ProvidersCard() {
     ),
   ];
   const isEmpty = !isPending && providers.length === 0;
-  const modelCount = (provider: SupportedProvider) =>
-    models.filter((model) => model.provider === provider).length;
+  const providerKeysOf = (provider: SupportedProvider) =>
+    keys.filter(
+      (key) => key.provider === provider && !providerCatalog.isKeyHidden(key),
+    );
+  const modelCount = (provider: SupportedProvider) => {
+    const keyIds = new Set(providerKeysOf(provider).map((key) => key.id));
+    return models.filter((model) =>
+      model.apiKeys.some((apiKey) => keyIds.has(apiKey.id)),
+    ).length;
+  };
   // The Models page filters by one provider key: the provider's primary one,
   // or its first.
   const modelsHref = (provider: SupportedProvider) => {
-    const providerKeys = keys.filter(
-      (key) => key.provider === provider && !providerCatalog.isKeyHidden(key),
-    );
+    const providerKeys = providerKeysOf(provider);
     const key =
       providerKeys.find((candidate) => candidate.isPrimary) ?? providerKeys[0];
     return key ? `/llm/models?apiKey=${key.id}` : "/llm/models";
@@ -207,14 +215,14 @@ export function ProvidersCard() {
               <ChipLink
                 key={provider}
                 href={modelsHref(provider)}
-                title={`${label} · ${count} models`}
+                title={`${label} · ${count} ${count === 1 ? "model" : "models"}`}
               >
                 <ProviderLogo provider={provider} />
                 {label}
                 <span
                   className="rounded-full bg-foreground/[0.07] px-1.5 py-px text-[11px] font-medium"
                   role="img"
-                  aria-label={`${count} models`}
+                  aria-label={`${count} ${count === 1 ? "model" : "models"}`}
                 >
                   {count}
                 </span>

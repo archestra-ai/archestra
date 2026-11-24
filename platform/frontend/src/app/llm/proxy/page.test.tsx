@@ -102,7 +102,6 @@ const server = setupServer(
     HttpResponse.json(providerKeys),
   ),
   http.get(`${API_ORIGIN}/api/llm-models`, () => HttpResponse.json([])),
-  // The models the viewer's keys serve, which the provider chips count.
   http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
     HttpResponse.json([
       {
@@ -184,6 +183,20 @@ function renderPage() {
   );
 }
 
+function linkedModel(modelId: string, provider: string, apiKeyId: string) {
+  return {
+    id: `db-${modelId}`,
+    modelId,
+    provider,
+    apiKeys: [{ id: apiKeyId }],
+    ignored: false,
+    embeddingDimensions: null,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    supportedEndpoints: null,
+  };
+}
+
 function card(name: string) {
   return screen.getByRole("region", { name });
 }
@@ -196,6 +209,14 @@ describe("LLM Proxy dashboard", () => {
       ),
       http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
         HttpResponse.json([ROUTER]),
+      ),
+      // The models each key brings, Jev's decision model among them.
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          linkedModel("claude-a", "anthropic", ANTHROPIC_KEY.id),
+          linkedModel("claude-b", "anthropic", ANTHROPIC_KEY.id),
+          { ...linkedModel("jev-1", "jev", JEV_KEY.id), outputModalities: [] },
+        ]),
       ),
     );
     renderPage();
@@ -210,11 +231,11 @@ describe("LLM Proxy dashboard", () => {
       await within(anthropic).findByLabelText("2 models"),
     ).toBeInTheDocument();
     // A key that must be signed in again is marked on its provider.
+    const jev = screen.getByRole("link", { name: /Jev/ });
     expect(
-      within(screen.getByRole("link", { name: /Jev/ })).getByLabelText(
-        "Needs reconnecting",
-      ),
+      within(jev).getByLabelText("Needs reconnecting"),
     ).toBeInTheDocument();
+    expect(within(jev).getByLabelText("1 model")).toBeInTheDocument();
 
     expect(
       await screen.findByRole("link", { name: /claude-sonnet/ }),
@@ -438,17 +459,7 @@ describe("LLM Proxy dashboard endpoint", () => {
       ),
       http.get(`${API_ORIGIN}/api/llm-models`, () =>
         HttpResponse.json([
-          {
-            modelId: "claude-a",
-            provider: "anthropic",
-            apiKeys: [{ id: ANTHROPIC_KEY.id }],
-            ignored: false,
-            embeddingDimensions: null,
-            inputModalities: ["text"],
-            outputModalities: ["text"],
-            isBest: true,
-            supportedEndpoints: null,
-          },
+          linkedModel("claude-a", "anthropic", ANTHROPIC_KEY.id),
         ]),
       ),
     );

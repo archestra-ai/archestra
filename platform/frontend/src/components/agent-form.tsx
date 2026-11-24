@@ -3964,18 +3964,20 @@ export function AgentForm({
         onChange={changeCompanyAccount}
       />
       {defaultModelCannotRun && (
-        <output
+        <InlineNotice
+          role="status"
           aria-live="polite"
-          className="flex items-start gap-1.5 text-xs text-muted-foreground"
+          variant="warning"
+          className="items-start"
         >
-          <InfoIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
-          <span>
+          <InfoIcon className="mt-0.5" aria-hidden="true" />
+          <InlineNoticeText>
             The organization&apos;s default model,{" "}
             {organizationDefaultModel.model?.displayName}, cannot run on this
             runtime. Each person must pick a connection, unless you set one
             here.
-          </span>
-        </output>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
       {createApiKeyDialog}
     </>

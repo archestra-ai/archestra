@@ -183,7 +183,7 @@ export function SubagentLoadBalancingSection({
             </div>
             <FieldDescription>
               <span>
-                {`Controls how delegated runs are spread across the ${runtimeAgents} assigned to ${targetLabel}. It also controls how a failed run is retried, moved to a larger tier when it runs out of memory, or handed to another of them. Delegations to other agents are not affected.`}
+                {`Distributes delegated runs across the ${runtimeAgents} assigned to ${targetLabel} only, with retries, out-of-memory tier upgrades, and failover.`}
               </span>
             </FieldDescription>
           </div>

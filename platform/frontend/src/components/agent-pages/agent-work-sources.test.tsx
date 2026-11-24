@@ -143,6 +143,16 @@ describe("AgentWorkSources", () => {
     expect(
       screen.getByRole("link", { name: "Connect your local agent" }),
     ).toHaveAttribute("href", "/connection");
+    const laptopSteps = screen
+      .getByRole("heading", { level: 3, name: "From your laptop" })
+      .parentElement?.querySelectorAll("ol > li");
+    expect(laptopSteps).toHaveLength(3);
+    expect(laptopSteps?.[1]).toHaveTextContent(
+      "Open MCP Gateways → your gateway → Settings → Agents, then select Agent access → Manual → Add agent (or Agent access → All agents).",
+    );
+    expect(laptopSteps?.[2]).toHaveTextContent(
+      'In your local agent, type "hand this over to Archestra" to start a run with your changes, files, and credentials. Type "bring it back" to get a patch.',
+    );
     // Only this agent's channels, not every channel in the workspace.
     const channels = screen
       .getByRole("heading", { level: 3, name: "In your channels" })

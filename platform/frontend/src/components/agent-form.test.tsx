@@ -7966,7 +7966,14 @@ describe("AgentForm save payload and failure handling", () => {
           expect(screen.queryByText(NOTE)).toBeNull();
           // The company API key alone: each person needs a connection.
           await user.click(subscriptionWay());
-          expect(screen.getByText(NOTE)).toBeInTheDocument();
+          const noticeText = screen.getByText(NOTE);
+          expect(noticeText).toBeInTheDocument();
+          const notice = noticeText.closest('[data-slot="inline-notice"]');
+          expect(notice).toHaveAttribute("role", "status");
+          expect(notice).toHaveClass(
+            "border-[#EBCB8B]",
+            "dark:border-amber-500/30",
+          );
           // What the API resolves for each person is the API's to say: the
           // form holds no save back for it.
           await user.type(screen.getByLabelText(/Name/), "Their agent");

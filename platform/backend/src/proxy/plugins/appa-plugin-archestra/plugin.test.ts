@@ -520,12 +520,13 @@ describe("asking through the client's own question tool", () => {
       const binding = (
         plugin as unknown as { bindings: Map<object, Pending> }
       ).bindings.get(context.resources);
-      if (params.pending && binding) {
+      const arm = () => {
+        if (!params.pending || !binding) return;
         binding.unreadNativeAnswerOfferIds = ["offer-2"];
         binding.pendingHitlReviewOfferIds = ["offer-1"];
         binding.requiresRemedyContinuation = true;
         binding.requiresQuestionContinuation = true;
-      }
+      };
       const system = [
         {
           type: "text",
@@ -578,7 +579,10 @@ describe("asking through the client's own question tool", () => {
       if (params.historyTail)
         request.messages.push(...structuredClone(params.historyTail));
       const beforeMessages = structuredClone(request.messages);
+      // Each pass arms every kind of guidance again, so a repeated pass
+      // applies all of it a second time.
       for (let pass = 0; pass < (params.passes ?? 1); pass++) {
+        arm();
         await plugin.onBeforeModel({ ...context, request });
       }
       await plugin.onCleanup(context);
@@ -698,7 +702,7 @@ describe("asking through the client's own question tool", () => {
     });
 
     for (const assistantTail of [false, true]) {
-      test(`Anthropic guidance preserves native control-frame ordering with assistant tail ${assistantTail}`, async ({
+      test(`Anthropic guidance ends a trailing control frame and keeps message order with assistant tail ${assistantTail}`, async ({
         makeOrganization,
       }) => {
         const { id } = await makeOrganization();
@@ -980,6 +984,57 @@ describe("asking through the client's own question tool", () => {
       ).toBe(true);
     });
 
+    for (const blank of [[], [{ type: "text", text: " " }], "", " "]) {
+      test(`Anthropic guidance skips a blank trailing system message ${JSON.stringify(blank)}`, async ({
+        makeOrganization,
+      }) => {
+        const { id } = await makeOrganization();
+        const breakpoint = {
+          role: "system",
+          content: [
+            {
+              type: "text",
+              text: "cached control frame",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+        };
+        const placeholder = { role: "system", content: blank };
+
+        const afterFrame = await guided({
+          organizationId: id,
+          thread: "create",
+          pending: true,
+          controlTail: [breakpoint, placeholder],
+        });
+        expect(afterFrame.messages.slice(0, -2)).toEqual(
+          afterFrame.beforeMessages.slice(0, -2),
+        );
+        expect(afterFrame.messages.at(-1)).toEqual(placeholder);
+        const blocks = afterFrame.messages.at(-2)?.content as {
+          type: string;
+          text?: string;
+        }[];
+        expect(blocks[0]).toEqual(breakpoint.content[0]);
+        for (const text of PER_TURN)
+          expect(JSON.stringify(blocks.slice(1))).toContain(text);
+
+        const afterUser = await guided({
+          organizationId: id,
+          thread: "create",
+          pending: true,
+          controlTail: [placeholder],
+        });
+        expect(afterUser.messages).toHaveLength(
+          afterUser.beforeMessages.length,
+        );
+        expect(afterUser.messages.at(-1)).toEqual(placeholder);
+        expect(afterUser.messages.at(-2)?.role).toBe("user");
+        for (const text of PER_TURN)
+          expect(JSON.stringify(afterUser.messages.at(-2))).toContain(text);
+      });
+    }
+
     test("Kimi guidance appends to a trailing system string after the cached prefix", async ({
       makeOrganization,
     }) => {
@@ -991,13 +1046,16 @@ describe("asking through the client's own question tool", () => {
       ];
       const result = await guided({
         organizationId: id,
-        thread: "continue",
+        thread: "create",
         pending: true,
         interactionType: "kimi-code:chatCompletions",
         messages,
       });
 
-      expect(result.messages.slice(0, -1)).toEqual(messages.slice(0, -1));
+      expect(result.messages.slice(1, -1)).toEqual(messages.slice(1, -1));
+      expect(
+        String(result.messages[0]?.content).startsWith("leading system"),
+      ).toBe(true);
       expect(result.messages.at(-1)?.role).toBe("system");
       const content = result.messages.at(-1)?.content;
       expect(typeof content).toBe("string");

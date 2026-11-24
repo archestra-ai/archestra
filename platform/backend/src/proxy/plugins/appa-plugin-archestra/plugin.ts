@@ -8905,12 +8905,21 @@ function appendTurnGuidance(
   ) {
     conversationStart++;
   }
-  const lastIndex = messages.length - 1;
-  const last = messages[lastIndex];
+  let index = messages.length - 1;
+  // A blank system message carries no cache breakpoint, and the Anthropic
+  // adapter drops it before sending. The guidance goes before it.
+  while (
+    index >= conversationStart &&
+    isRecord(messages[index]) &&
+    messages[index].role === "system" &&
+    isBlankSystemContent(messages[index].content)
+  )
+    index--;
+  const last = messages[index];
   const trailingSystem =
-    lastIndex >= conversationStart && isRecord(last) && last.role === "system";
+    index >= conversationStart && isRecord(last) && last.role === "system";
   if (!isRecord(last) || (last.role !== "user" && !trailingSystem)) {
-    messages.push({
+    messages.splice(index + 1, 0, {
       role: "user",
       content: options?.plainText ? text : [{ type: "text", text }],
     });
@@ -8922,10 +8931,6 @@ function appendTurnGuidance(
       if (last.content.includes(text)) return;
       last.content =
         last.content.length > 0 ? `${last.content}\n\n${text}` : text;
-      return;
-    }
-    if (trailingSystem && last.content.length === 0) {
-      last.content = [{ type: "text", text }];
       return;
     }
     last.content = [
@@ -8943,6 +8948,21 @@ function appendTurnGuidance(
   } else {
     last.content = options?.plainText ? text : [{ type: "text", text }];
   }
+}
+
+/** True when the Anthropic adapter would drop a system message with this content. */
+function isBlankSystemContent(content: unknown): boolean {
+  if (typeof content === "string") return content.trim().length === 0;
+  return (
+    Array.isArray(content) &&
+    content.every(
+      (part) =>
+        isRecord(part) &&
+        part.type === "text" &&
+        typeof part.text === "string" &&
+        part.text.trim().length === 0,
+    )
+  );
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

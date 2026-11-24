@@ -30,9 +30,11 @@ Script the same numbers when a scheduled file does not fit, such as a nightly jo
 
 ## Schedule Exports to Object Storage
 
-Archestra exports LLM cost and usage data in FOCUS, the open format for billing data. AWS, Azure, and Google Cloud export their bills in it too, so you can track LLM spend together with the rest of your costs.
+Archestra exports LLM cost and usage data in FOCUS, the open format for billing data. AWS, Azure, and Google Cloud export their bills in it too, so you can track LLM spend together with the rest of your costs. Files go to a [blob provider](/docs/admin/blob-providers): an Amazon S3 or Google Cloud Storage bucket, or an Azure Blob Storage container.
 
-To set one up, open **Costs & Limits → FinOps Export** and click **Configure**. Files go to a [blob provider](/docs/admin/blob-providers): an Amazon S3 or Google Cloud Storage bucket, or an Azure Blob Storage container.
+To set one up, open **Costs & Limits → FinOps Export** and click **Configure**.
+
+### How It Works
 
 <span id="where-files-land"></span>Each hour or day is one file, under the blob provider's key prefix, then the export's **Folder**:
 
@@ -44,8 +46,6 @@ To set one up, open **Costs & Limits → FinOps Export** and click **Configure**
 The first line is a daily file and the second an hourly file for 14:00 to 15:00 UTC.
 
 <span id="when-files-are-written"></span>A file is written about 15 to 20 minutes after its hour or day ends, so requests still running at the end are counted. **Run now** writes the latest completed period without waiting. A rerun overwrites the same file, so a period is never in two files.
-
-A failing export shows on its row why the bucket refused the file. Click **Fix destination** to edit the blob provider, then **Retry**. For each error and its fix, see [Fix a Failed Connection Test](/docs/admin/blob-providers#fix-a-failed-connection-test).
 
 ### File Format
 

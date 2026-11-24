@@ -47,13 +47,7 @@ Every command acts on your own device. Add `--help` to any of them for details.
 
 The MCP bridge updates by itself. When your Archestra offers another version, it installs that version when no tool call is running, and starts again.
 
-To update at once, run `archestra update`. Run it yourself in these cases:
-
-- **Version before 0.1.9 on macOS or Linux:** that version does not update by itself. Later versions do.
-- **Automatic update turned off:** your Archestra has [`ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED).
-- **Started with `--foreground`:** an MCP bridge that runs in a terminal does not update by itself.
-
-**Personal Settings → Device** and `archestra bridge status` show the version of your device, and say when another version is available.
+To update manually, run `archestra update`.
 
 ## Uninstall
 

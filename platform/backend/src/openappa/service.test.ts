@@ -4353,6 +4353,7 @@ describe("remedy by offer", () => {
     );
 
     const { result } = await executeRemedyByOffer({
+      presenter: "attended",
       organizationId,
       sessionId: "session",
       toolCallId: "client-remedy-unjudged",

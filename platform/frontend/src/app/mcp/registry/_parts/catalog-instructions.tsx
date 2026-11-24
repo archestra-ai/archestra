@@ -4,12 +4,23 @@ import remarkGfm from "remark-gfm";
 
 /**
  * The setup instructions (markdown) of a catalog item: what a person installs
- * or turns on before the server works, with links. Shown atop the catalog
- * form and in the dialog that connects a desktop MCP server.
+ * or turns on before the server works, with links.
  */
-export function CatalogInstructions({ markdown }: { markdown: string }) {
+export function CatalogInstructions({
+  markdown,
+  inline = false,
+}: {
+  markdown: string;
+  inline?: boolean;
+}) {
   return (
-    <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm [&>*:last-child]:mb-0">
+    <div
+      className={
+        inline
+          ? "text-sm [&>*:last-child]:mb-0"
+          : "rounded-md border border-border bg-muted/40 px-4 py-3 text-sm [&>*:last-child]:mb-0"
+      }
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={INSTRUCTIONS_MARKDOWN_COMPONENTS}

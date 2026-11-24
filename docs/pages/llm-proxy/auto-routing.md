@@ -2,7 +2,7 @@
 title: Auto Routing
 description: Create auto routers that pick a fast, normal, or smart model for each session of agents, chats and apps, within a daily budget
 order: 6
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-24
 beta: "Auto Routing is in Beta."
 ---
 
@@ -30,7 +30,7 @@ If you want load balancing and failover across keys for a single model, use a [m
 Jev does not pick the model. Jev scores the session's opening context, and Archestra's own routing plan uses those scores, your traffic history, model prices, and daily budget to choose the tier.
 
 1. **Score the opening turn:** on a session's first request, Jev estimates two things: the probability that fast, normal, or smart is the weakest tier that can finish the whole session as well as a frontier model, and the chance that the session's context will grow past roughly 100,000 tokens.
-2. **Estimate cost and quality per tier:** using a plan fitted from the router's past sessions, Archestra predicts how many tokens this kind of session tends to use, what share will hit long-context pricing, and what it would cost on each of your three models.
+2. **Estimate cost and quality per tier:** using a plan fitted from the router's own finished sessions, Archestra predicts how many tokens this kind of session tends to use, what share will hit long-context pricing, and what it would cost on each of your three models.
 3. **Spend the budget where it buys the most quality:** the plan picks the tier that maximizes expected quality within your daily budget. Under a tight budget, only sessions where a stronger model buys the biggest quality gain per extra dollar move up a tier; under a larger budget, more sessions do.
 4. **Stay on that model for the session:** follow-up turns reuse the saved choice without calling Jev again.
 
@@ -137,7 +137,7 @@ A session with an explicit session ID is routed once on its first request and st
 - **Without a session ID:** Archestra derives the session from the virtual key, the first user message, the initial system instructions, and the tool names. Changing the initial instructions or tool list gets a new routing decision.
 - **What gets sent to the scorer:** a clipped excerpt of the opening user message and system instructions, plus the tool names. Common API keys, bearer tokens, and long opaque secrets are redacted first. Tool descriptions, schemas, tool results, and follow-up turns are never sent.
 
-A background job builds a versioned routing plan from each router's past sessions. Editing a router triggers a new plan within about a minute, and every router refits at least once a day.
+A background job builds a versioned routing plan from each router's own finished sessions. Editing a router triggers a new plan within about a minute, and every router refits at least once a day.
 
 ## Test and Simulate Through the API
 
@@ -154,24 +154,13 @@ curl -X POST "https://<archestra-host>/api/auto-routing/routers/<router-id>/prev
   -d '{"text": "Refactor this Rust async parser to avoid cloning buffers on every frame."}'
 ```
 
-## Learning From Past Sessions
-
-A router learns from past proxy traffic only when its **Overview** has a **Past sessions** card: the `auto` router of an organization that used Auto Routing before it could hold several routers. Every router you create starts cold. For the `auto` router, past sessions can bootstrap a plan immediately instead of waiting for live `auto` traffic. Once a router has 200 finished sessions of its own, its plan is fitted on those alone.
-
-Both steps run from the **Past sessions** card, which lists each run and what it cost.
-
-1. **Find past sessions.** Runs on its own when you first enable auto routing, and again when you click **Score** and the last count is more than a day old. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
-2. **Score them.** You start this with **Score**, which shows what was found and the estimated cost before anything is sent. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set, then fits a plan. The limit is checked against estimated cost, so actual charges can run slightly over it. **Stop** ends a run early, and the sessions it already scored still count.
-
-Only sessions with a client-supplied session ID that began inside the window are used, and sessions whose content was not logged or is end-to-end encrypted are skipped. After a decision-model change, the old scores stop counting, and the router uses its normal model until enough live or past sessions are scored again.
-
 ## When It Falls Back to the Normal Model
 
 Archestra routes a session to the router's normal model whenever it cannot make a reliable decision, and keeps that fallback for the rest of the session.
 
 | Condition | What happens |
 | --- | --- |
-| **Cold start** | The router has fewer than 200 finished sessions of its own, and its own and scored past sessions together are fewer than [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS). |
+| **Cold start** | The router has fewer than 200 finished sessions of its own. To change that number, set [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS). |
 | **No valid plan** | No plan has been published yet, or the active plan is stale because the tier models or their prices changed. |
 | **Scorer error or timeout** | Jev fails, is unreachable, or exceeds [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS). |
 | **No user text** | The request has no user text to score, such as Bedrock Converse payloads. |

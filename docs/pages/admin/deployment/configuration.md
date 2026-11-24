@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-16
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -573,8 +573,8 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`** - How long the session scorer may take before the router falls back to the normal model.
   - Default: `2000`
 
-- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions needed before auto routing publishes a plan instead of using the normal model. Scored past sessions count toward it. A router with 200 finished sessions of its own gets a plan regardless, so only a lower value changes when that router starts routing.
-  - Default: `1000`
+- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions of its own a router needs before auto routing publishes a plan instead of using the normal model. Lower it to start routing sooner on light traffic.
+  - Default: `200`
 
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL of your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
   - Default: unset (provider off)

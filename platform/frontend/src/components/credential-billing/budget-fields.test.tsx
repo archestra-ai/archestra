@@ -144,24 +144,28 @@ describe("BudgetFields spend cap input", () => {
     );
     const input = screen.getByLabelText("Spend cap in dollars");
 
-    await user.type(input, ",50");
+    await user.type(input, "-1");
     await user.tab();
 
     expect(screen.getByLabelText("Saved cap")).toHaveTextContent("250");
     expect(input).toHaveValue("250");
   });
 
-  it("reads a pasted amount with a dollar sign and thousands separators", async () => {
+  it.each([
+    ["$1,000", "1000"],
+    ["$1 000", "1000"],
+    ["1,50", "2"],
+  ])("reads a pasted %s as %s dollars", async (pasted, saved) => {
     const user = userEvent.setup();
     render(<SpendCapHarness />);
     const input = screen.getByLabelText("Spend cap in dollars");
 
     await user.click(input);
-    await user.paste("$1,000");
+    await user.paste(pasted);
     await user.tab();
 
-    expect(screen.getByLabelText("Saved cap")).toHaveTextContent("1000");
-    expect(input).toHaveValue("1000");
+    expect(screen.getByLabelText("Saved cap")).toHaveTextContent(saved);
+    expect(input).toHaveValue(saved);
   });
 
   it("keeps the saved cap when a typed replacement ends out of range", async () => {

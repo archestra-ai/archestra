@@ -329,12 +329,15 @@ function parseCap(
   | { kind: "cleared" }
   | { kind: "dollars"; dollars: number }
   | { kind: "unusable" } {
-  const trimmed = text.trim().replace(/^\$\s*/, "");
-  if (trimmed === "") return { kind: "cleared" };
-  // Thousands separators only in groups of three: "1,50" stays ambiguous.
-  const amount = /^\d{1,3}(,\d{3})+(\.\d*)?$/.test(trimmed)
-    ? trimmed.replace(/,/g, "")
-    : trimmed;
+  if (text.trim() === "") return { kind: "cleared" };
+  if (text.includes("-")) return { kind: "unusable" };
+  // "$", spaces and apostrophes only format the amount.
+  const digits = text.replace(/[^\d.,]/g, "");
+  const amount = /^\d{1,3}(,\d{3})+(\.\d*)?$/.test(digits)
+    ? digits.replace(/,/g, "")
+    : /^\d*,\d{0,2}$/.test(digits)
+      ? digits.replace(",", ".")
+      : digits;
   if (!/^\d*\.?\d*$/.test(amount)) return { kind: "unusable" };
   const dollars = Math.ceil(Number(amount));
   return dollars > 0 && dollars <= MAX_SPEND_CAP_DOLLARS

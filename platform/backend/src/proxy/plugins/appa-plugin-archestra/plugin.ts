@@ -772,9 +772,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // accepting client text or ruling on it as an executed call.
     const unansweredNotices = new Map<string, string>();
     for (const answer of results) {
-      const notice = await cacheManager.get<string>(
-        unansweredNoticeKey({ session: governed, callId: answer.id }),
-      );
+      const notice = await readUnansweredNotice({
+        session: governed,
+        callId: answer.id,
+      });
       if (typeof notice === "string") unansweredNotices.set(answer.id, notice);
     }
     // The runtime withholds the output of a spawn that failed or of a detached
@@ -3057,6 +3058,28 @@ async function retainUnansweredNotice(params: {
   } catch (err) {
     logger.warn({ err }, "OpenAPPA could not retain a denial's reason");
   }
+}
+
+async function readUnansweredNotice(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): Promise<string | undefined> {
+  const notice = await cacheManager.get<string>(unansweredNoticeKey(params));
+  if (notice !== undefined) return notice;
+  const legacy = legacyUnansweredNoticeKey(params);
+  return legacy === null ? undefined : cacheManager.get<string>(legacy);
+}
+
+// Added 2026-11-24 for notices written by replicas that predate the tuple key.
+// Remove one notice TTL (24h) after the release that ships it.
+function legacyUnansweredNoticeKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey | null {
+  const scope = `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`;
+  return scope.split(":").length === 3
+    ? sessionScopedCacheKey(CacheKey.OpenAppaUnansweredAnnotationNotice, scope)
+    : null;
 }
 
 function unansweredNoticeKey(params: {

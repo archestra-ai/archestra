@@ -175,9 +175,10 @@ export function buildGuardrails({
     consults: traceConsults,
     timeToX,
   });
-  const firstRecordAt = Math.min(
-    ...labelChanges.map((change) => new Date(change.createdAt).getTime()),
-  );
+  // Label history arrives oldest first.
+  const firstRecordAt = labelChanges[0]
+    ? new Date(labelChanges[0].createdAt).getTime()
+    : Number.POSITIVE_INFINITY;
   const spanKeys = new Set(timeline.spans.map((span) => span.key));
   const traceYells = yells
     .map((yell): TraceYell => {

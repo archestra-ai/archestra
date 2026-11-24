@@ -59,7 +59,6 @@ import {
   type RequestCredential,
   type RequestTarget,
 } from "@/components/virtual-key-request-example";
-import { useAutoRouters } from "@/lib/auto-routing.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -106,14 +105,6 @@ export function VirtualKeyConnectionGuide({
   const isPassthrough = keyType === "passthrough";
   const isPoolOnly =
     !isPassthrough && !includeFutureProviders && explicitKeys.length === 0;
-  const { data: autoRouters = [] } = useAutoRouters({
-    enabled: isPoolOnly && !!virtualApiKeyId,
-  });
-  // A key without provider keys may reach only auto routers.
-  const keyRouter = autoRouters.find(
-    (router) =>
-      !!virtualApiKeyId && router.virtualApiKeyIds.includes(virtualApiKeyId),
-  );
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   // As the proxy resolves it: a provider the key doesn't map falls back to
   // that provider's shared primary key, if that key is usable.
@@ -260,17 +251,7 @@ export function VirtualKeyConnectionGuide({
         {virtualApiKeyId && endpoint === "model-router" && !isPassthrough && (
           <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
         )}
-        {isPoolOnly && keyRouter ? (
-          <RequestExample
-            connectionBaseUrl={connectionBaseUrl}
-            target={target}
-            keyType={keyType}
-            keyValue={keyValue}
-            routerProviders={routerProviders}
-            mappedProviderKeys={[]}
-            fixedModel={keyRouter.name}
-          />
-        ) : isPoolOnly ? (
+        {isPoolOnly ? (
           <p className="text-sm text-muted-foreground">
             Open{" "}
             <Link
@@ -280,7 +261,8 @@ export function VirtualKeyConnectionGuide({
               Model pools
             </Link>
             , select a pool assigned to this key, then open its Connect section
-            for a request example. Send the pool&apos;s name as the model.
+            for a request example. Send the name of the pool, or of an auto
+            router on this key, as the model.
           </p>
         ) : (
           <RequestExample

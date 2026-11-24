@@ -335,7 +335,7 @@ export function ProviderKeyList({
 // Parts
 // =========================================================================
 
-export function ProviderLine({
+function ProviderLine({
   provider,
   label,
   keys,
@@ -489,7 +489,7 @@ function NoModelsInfo({ label }: { label: string }) {
   );
 }
 
-function PrimaryBadge() {
+export function PrimaryBadge() {
   return (
     <span className="shrink-0 rounded bg-muted px-1.5 py-px font-semibold text-[10px] text-muted-foreground uppercase tracking-wide">
       Primary

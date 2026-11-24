@@ -2,7 +2,6 @@
 
 import type { SupportedProvider } from "@archestra/shared";
 import {
-  CheckIcon,
   ChevronDown,
   KeyRound,
   LayersIcon,
@@ -20,14 +19,13 @@ import {
 import {
   isSubscriptionKey,
   keysByProvider,
-  pickProviderKey,
   takesSeveralKeys,
   useKeyOwnerLabel,
   useModelIdsByKey,
 } from "@/components/credential-billing/provider-key-data";
 import {
   NoProviderKeys,
-  ProviderLine,
+  PrimaryBadge,
 } from "@/components/credential-billing/provider-key-list";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ProviderIcon } from "@/components/provider-icon";
@@ -60,7 +58,9 @@ import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { type ModelPool, useModelPools } from "@/lib/model-pools.query";
 import {
   isOrganizationSubscription,
+  ORGANIZATION_SUBSCRIPTIONS_HEADING,
   organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
 } from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -136,24 +136,22 @@ export function VirtualKeyAccessField({
   // What automatic access adds at request time: each provider's shared
   // primary key that still works.
   const sharedProviders = providers.filter((provider) =>
-    (grouped.get(provider) ?? []).some(
-      (key) =>
-        key.userId === null && key.isPrimary && !key.requiresReauthentication,
-    ),
+    (grouped.get(provider) ?? []).some(isSharedPrimary),
   );
 
   const keyName = (key: LlmProviderApiKeyResponse) =>
     isOrganizationSubscription(key)
       ? organizationSubscriptionName(key, catalog.enterprisePlanName)
       : key.name;
-  const modelCount = (keys: LlmProviderApiKeyResponse[]) =>
-    new Set(keys.flatMap((key) => modelIdsByKey.get(key.id) ?? [])).size;
-  const keyLine = (keys: LlmProviderApiKeyResponse[]) => {
-    const names = keys.map(keyName).join(" + ");
-    if (modelsPending) return names;
-    const count = modelCount(keys);
-    return `${names} · ${count} ${count === 1 ? "model" : "models"}`;
-  };
+  const keyOption = (key: LlmProviderApiKeyResponse): KeyOption => ({
+    key,
+    name: keyName(key),
+    owner: ownerLabel(key),
+    detail: isOrganizationSubscription(key)
+      ? `${ORGANIZATION_SUBSCRIPTIONS_HEADING} · ${organizationSubscriptionSubtitle(key)}`
+      : `${ownerLabel(key)} · ${isSubscriptionKey(key) ? "Subscription" : "Metered"}`,
+    models: modelsPending ? null : (modelIdsByKey.get(key.id)?.length ?? 0),
+  });
   const chosenKeys = (provider: SupportedProvider) => {
     const keys = grouped.get(provider) ?? [];
     return value.flatMap((mapping) =>
@@ -162,6 +160,36 @@ export function VirtualKeyAccessField({
         : [],
     );
   };
+  const chosenIds = new Set(value.map((mapping) => mapping.providerApiKeyId));
+
+  // Every key the picker can still add, grouped by provider. Keys already in
+  // the list are left out, and so is a shared primary key that automatic
+  // access already uses. A provider takes one key unless it is endpoint-local,
+  // so adding another key there replaces the one in use.
+  const pickerProviders: PickerProvider[] = providers.flatMap((provider) => {
+    const keys = grouped.get(provider) ?? [];
+    const chosen = chosenKeys(provider);
+    const automatic =
+      includeFutureProviders && chosen.length === 0
+        ? keys.find(isSharedPrimary)
+        : undefined;
+    const inUse = chosen[0] ?? automatic;
+    const replaces =
+      !takesSeveralKeys(provider) && inUse ? keyName(inUse) : undefined;
+    const options = keys
+      .filter((key) => !chosenIds.has(key.id) && key.id !== automatic?.id)
+      .map((key) => ({ ...keyOption(key), replaces }));
+    return options.length
+      ? [{ provider, label: catalog.label(provider), keys: options }]
+      : [];
+  });
+  const addKey = (provider: SupportedProvider, providerApiKeyId: string) =>
+    onChange([
+      ...(takesSeveralKeys(provider)
+        ? value
+        : value.filter((mapping) => mapping.provider !== provider)),
+      { provider, providerApiKeyId },
+    ]);
 
   const listedRouters = routers.filter((router) =>
     autoRouterIds.includes(router.id),
@@ -169,6 +197,14 @@ export function VirtualKeyAccessField({
   const listedPools = pools.filter((pool) => modelPoolIds.includes(pool.id));
   const listedProviders = providers.filter(
     (provider) => chosenKeys(provider).length > 0,
+  );
+  const listedKeys = listedProviders.flatMap((provider) =>
+    chosenKeys(provider).map((key) => ({
+      provider,
+      label: catalog.label(provider),
+      several: takesSeveralKeys(provider),
+      option: keyOption(key),
+    })),
   );
 
   const summary = [
@@ -224,7 +260,6 @@ export function VirtualKeyAccessField({
         </div>
         <AccessPicker
           id={`${id}-picker`}
-          includeFutureProviders={includeFutureProviders}
           routers={canSetAutoRouters ? routers : []}
           tiersByRouter={tiersByRouter}
           autoRouterIds={autoRouterIds}
@@ -232,24 +267,8 @@ export function VirtualKeyAccessField({
           pools={canSetModelPools ? pools : []}
           modelPoolIds={modelPoolIds}
           onModelPoolIdsChange={onModelPoolIdsChange}
-          providers={providers.map((provider) => {
-            const keys = grouped.get(provider) ?? [];
-            const chosen = chosenKeys(provider);
-            return {
-              provider,
-              label: catalog.label(provider),
-              keys: keys.map((key) => ({
-                key,
-                name: keyName(key),
-                owner: ownerLabel(key),
-              })),
-              chosen,
-              shared: sharedProviders.includes(provider),
-              keyLine,
-            };
-          })}
-          value={value}
-          onChange={onChange}
+          providers={pickerProviders}
+          onAddKey={addKey}
         />
 
         <div className="divide-y">
@@ -345,37 +364,24 @@ export function VirtualKeyAccessField({
                   </span>
                 </div>
               )}
-              {listedProviders.map((provider) => {
-                const keys = grouped.get(provider) ?? [];
-                const chosen = chosenKeys(provider);
-                const label = catalog.label(provider);
-                return (
-                  <ProviderLine
-                    key={provider}
-                    provider={provider}
-                    label={label}
-                    keys={keys}
-                    chosen={chosen}
-                    several={takesSeveralKeys(provider)}
-                    noModels={!modelsPending && !modelCount(chosen)}
-                    summary={keyLine(chosen)}
-                    modelIdsByKey={modelIdsByKey}
-                    modelsPending={modelsPending}
-                    onPick={(providerApiKeyId) =>
-                      onChange(
-                        pickProviderKey(value, provider, providerApiKeyId),
-                      )
-                    }
-                    onRemove={() =>
-                      onChange(
-                        value.filter(
-                          (mapping) => mapping.provider !== provider,
-                        ),
-                      )
-                    }
-                  />
-                );
-              })}
+              {listedKeys.map(({ provider, label, several, option }) => (
+                <ListedKeyRow
+                  key={option.key.id}
+                  provider={provider}
+                  label={label}
+                  option={option}
+                  removeLabel={
+                    several ? `Remove ${option.name}` : `Stop using ${label}`
+                  }
+                  onRemove={() =>
+                    onChange(
+                      value.filter(
+                        (mapping) => mapping.providerApiKeyId !== option.key.id,
+                      ),
+                    )
+                  }
+                />
+              ))}
               {providers.length > 0 &&
                 listedProviders.length === 0 &&
                 !includeFutureProviders && (
@@ -463,24 +469,99 @@ function KindSection({
   );
 }
 
+type KeyOption = {
+  key: LlmProviderApiKeyResponse;
+  name: string;
+  owner: string;
+  /** Owner and billing, e.g. "Organization · Metered". */
+  detail: string;
+  /** Discovered models; null while they load. */
+  models: number | null;
+};
+
 type PickerProvider = {
   provider: SupportedProvider;
   label: string;
-  keys: { key: LlmProviderApiKeyResponse; name: string; owner: string }[];
-  chosen: LlmProviderApiKeyResponse[];
-  shared: boolean;
-  keyLine: (keys: LlmProviderApiKeyResponse[]) => string;
+  /** Keys not in the list yet. `replaces` names the key a pick swaps out. */
+  keys: (KeyOption & { replaces?: string })[];
 };
 
+/** A chosen key: its provider on the left, the key and its owner on the right. */
+function ListedKeyRow({
+  provider,
+  label,
+  option,
+  removeLabel,
+  onRemove,
+}: {
+  provider: SupportedProvider;
+  label: string;
+  option: KeyOption;
+  removeLabel: string;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex min-h-9 items-center gap-2 pl-2">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5 @[480px]/provider-keys:flex-row @[480px]/provider-keys:items-center @[480px]/provider-keys:gap-2">
+        <span className="flex min-w-0 items-center gap-2 text-sm @[480px]/provider-keys:w-36 @[480px]/provider-keys:shrink-0">
+          <span aria-hidden className="shrink-0">
+            <ProviderIcon provider={provider} size={16} />
+          </span>
+          <span className="truncate">{label}</span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <KeyTitle option={option} />
+          <span className="block truncate text-xs text-muted-foreground">
+            {option.detail}
+          </span>
+        </span>
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="shrink-0 text-muted-foreground"
+        aria-label={removeLabel}
+        onClick={onRemove}
+      >
+        <X />
+      </Button>
+    </div>
+  );
+}
+
+/** The key's name, a Primary badge, and how many models it serves. */
+function KeyTitle({ option }: { option: KeyOption }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2 text-sm">
+      <span className="truncate">{option.name}</span>
+      {option.key.isPrimary && <PrimaryBadge />}
+      {option.models !== null && (
+        <span
+          className={cn(
+            "shrink-0 text-xs tabular-nums",
+            option.models
+              ? "text-muted-foreground"
+              : "text-amber-700 dark:text-amber-400",
+          )}
+        >
+          {option.models
+            ? plural(option.models, "model", "models")
+            : "no models"}
+        </span>
+      )}
+    </span>
+  );
+}
+
 /**
- * One searchable list of auto routers, model pools and providers, grouped
- * like the chat's key picker. Picking toggles and the list stays open. The
- * search also matches key names and owners: picking a provider found by one
- * of its other keys switches it to that key.
+ * One searchable list for adding access: auto routers, model pools, then each
+ * provider's keys under the provider's name, so searching "anthropic" lists
+ * every Anthropic key. Picking only adds, and anything already in the list is
+ * left out. The list stays open for the next pick.
  */
 function AccessPicker({
   id,
-  includeFutureProviders,
   routers,
   tiersByRouter,
   autoRouterIds,
@@ -489,11 +570,9 @@ function AccessPicker({
   modelPoolIds,
   onModelPoolIdsChange,
   providers,
-  value,
-  onChange,
+  onAddKey,
 }: {
   id: string;
-  includeFutureProviders: boolean;
   routers: { id: string; name: string }[];
   tiersByRouter: Map<string, RouterTiers>;
   autoRouterIds: string[];
@@ -502,72 +581,18 @@ function AccessPicker({
   modelPoolIds: string[];
   onModelPoolIdsChange: (value: string[]) => void;
   providers: PickerProvider[];
-  value: ProviderApiKeyMappings;
-  onChange: (value: ProviderApiKeyMappings) => void;
+  onAddKey: (provider: SupportedProvider, providerApiKeyId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
-  const toggle = (list: string[], itemId: string) =>
-    list.includes(itemId)
-      ? list.filter((entry) => entry !== itemId)
-      : [...list, itemId];
-
-  // A key found by the words that aren't part of the provider's own name:
-  // "anthropic research" finds Anthropic's research key, "openai" finds none.
-  const matchedKey = (entry: PickerProvider) => {
-    const own = `${entry.label} ${entry.provider}`.toLowerCase();
-    const keyTokens = tokens.filter((token) => !own.includes(token));
-    if (!keyTokens.length) return undefined;
-    return entry.keys.find(({ name, owner }) =>
-      keyTokens.every((token) =>
-        `${name} ${owner}`.toLowerCase().includes(token),
-      ),
-    );
-  };
-
-  const pickProvider = (entry: PickerProvider) => {
-    const primary = entry.keys[0]?.key;
-    if (!primary) return;
-    const matched = matchedKey(entry)?.key;
-    const listed = entry.chosen.length > 0;
-    const switchesKey =
-      !!matched && !entry.chosen.some((key) => key.id === matched.id);
-    if (listed && !switchesKey) {
-      onChange(value.filter((mapping) => mapping.provider !== entry.provider));
-    } else if (listed && takesSeveralKeys(entry.provider) && matched) {
-      onChange(pickProviderKey(value, entry.provider, matched.id));
-    } else {
-      onChange([
-        ...value.filter((mapping) => mapping.provider !== entry.provider),
-        {
-          provider: entry.provider,
-          providerApiKeyId: (matched ?? primary).id,
-        },
-      ]);
-    }
-  };
-
-  const providerDescription = (entry: PickerProvider) => {
-    const matched = matchedKey(entry);
-    if (matched && matched.key.id !== entry.keys[0]?.key.id) {
-      return `Key ${matched.name} · ${matched.owner}`;
-    }
-    if (includeFutureProviders) {
-      if (entry.chosen.length)
-        return `Uses ${entry.keyLine(entry.chosen)} instead of its primary key`;
-      return entry.shared
-        ? "Included with its primary key · pick to use another key"
-        : "Not a shared key · pick to add it";
-    }
-    const keys = entry.chosen.length
-      ? entry.chosen
-      : entry.keys[0]
-        ? [entry.keys[0].key]
-        : [];
-    const others = entry.keys.length > 1 ? ` · ${entry.keys.length} keys` : "";
-    return `${entry.keyLine(keys)}${others}`;
-  };
+  const addableRouters = routers.filter(
+    (router) => !autoRouterIds.includes(router.id),
+  );
+  const addablePools = pools.filter((pool) => !modelPoolIds.includes(pool.id));
+  const nothingLeft =
+    addableRouters.length === 0 &&
+    addablePools.length === 0 &&
+    providers.length === 0;
 
   return (
     <Popover
@@ -605,8 +630,12 @@ function AccessPicker({
             placeholder="Search providers, keys, pools and routers…"
           />
           <CommandList className="max-h-[320px]">
-            <CommandEmpty>No matches.</CommandEmpty>
-            {routers.length > 0 && (
+            <CommandEmpty>
+              {nothingLeft
+                ? "Everything is already added."
+                : "No matches. Anything already added is hidden."}
+            </CommandEmpty>
+            {addableRouters.length > 0 && (
               <CommandGroup
                 heading={
                   <GroupHeading
@@ -615,35 +644,29 @@ function AccessPicker({
                   />
                 }
               >
-                {routers.map((router) => {
-                  const on = autoRouterIds.includes(router.id);
-                  return (
-                    <CommandItem
-                      key={router.id}
-                      value={`router:${router.id}`}
-                      keywords={[router.name, "auto router", "auto routing"]}
-                      onSelect={() =>
-                        onAutoRouterIdsChange(toggle(autoRouterIds, router.id))
-                      }
-                    >
-                      <Sparkles className="size-3.5 shrink-0" aria-hidden />
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate font-mono text-sm">
-                          {router.name}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {tierLine(tiersByRouter.get(router.id))}
-                        </span>
+                {addableRouters.map((router) => (
+                  <CommandItem
+                    key={router.id}
+                    value={`router:${router.id}`}
+                    keywords={[router.name, "auto router", "auto routing"]}
+                    onSelect={() =>
+                      onAutoRouterIdsChange([...autoRouterIds, router.id])
+                    }
+                  >
+                    <Sparkles className="size-3.5 shrink-0" aria-hidden />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate font-mono text-sm">
+                        {router.name}
                       </span>
-                      <CheckIcon
-                        className={cn("size-4 shrink-0", !on && "opacity-0")}
-                      />
-                    </CommandItem>
-                  );
-                })}
+                      <span className="truncate text-xs text-muted-foreground">
+                        {tierLine(tiersByRouter.get(router.id))}
+                      </span>
+                    </span>
+                  </CommandItem>
+                ))}
               </CommandGroup>
             )}
-            {pools.length > 0 && (
+            {addablePools.length > 0 && (
               <CommandGroup
                 heading={
                   <GroupHeading
@@ -652,85 +675,68 @@ function AccessPicker({
                   />
                 }
               >
-                {pools.map((pool) => {
-                  const on = modelPoolIds.includes(pool.id);
-                  return (
-                    <CommandItem
-                      key={pool.id}
-                      value={`pool:${pool.id}`}
-                      keywords={[
-                        pool.name,
-                        "model pool",
-                        ...pool.members.flatMap((member) => [
-                          member.provider,
-                          member.modelId,
-                        ]),
-                      ]}
-                      disabled={!on && !poolAnswers(pool)}
-                      onSelect={() =>
-                        onModelPoolIdsChange(toggle(modelPoolIds, pool.id))
-                      }
-                    >
-                      <LayersIcon className="size-3.5 shrink-0" aria-hidden />
-                      <PoolSummary pool={pool} />
-                      <CheckIcon
-                        className={cn("size-4 shrink-0", !on && "opacity-0")}
-                      />
-                    </CommandItem>
-                  );
-                })}
+                {addablePools.map((pool) => (
+                  <CommandItem
+                    key={pool.id}
+                    value={`pool:${pool.id}`}
+                    keywords={[
+                      pool.name,
+                      "model pool",
+                      ...pool.members.flatMap((member) => [
+                        member.provider,
+                        member.modelId,
+                      ]),
+                    ]}
+                    disabled={!poolAnswers(pool)}
+                    onSelect={() =>
+                      onModelPoolIdsChange([...modelPoolIds, pool.id])
+                    }
+                  >
+                    <LayersIcon className="size-3.5 shrink-0" aria-hidden />
+                    <PoolSummary pool={pool} />
+                  </CommandItem>
+                ))}
               </CommandGroup>
             )}
-            {providers.length > 0 && (
+            {providers.map((entry) => (
               <CommandGroup
+                key={entry.provider}
                 heading={
-                  <GroupHeading
-                    title="Providers"
-                    hint={
-                      includeFutureProviders
-                        ? "Shared providers are already included. Pick one to use a different key."
-                        : "Apps call the provider’s models by name, on the key you choose"
-                    }
-                  />
+                  <span className="flex items-center gap-2 text-foreground">
+                    <span aria-hidden className="shrink-0">
+                      <ProviderIcon provider={entry.provider} size={14} />
+                    </span>
+                    <span>{entry.label}</span>
+                  </span>
                 }
               >
-                {providers.map((entry) => {
-                  const on =
-                    entry.chosen.length > 0 ||
-                    (includeFutureProviders && entry.shared);
-                  return (
-                    <CommandItem
-                      key={entry.provider}
-                      value={`provider:${entry.provider}`}
-                      keywords={[
-                        entry.label,
-                        entry.provider,
-                        "provider key",
-                        ...entry.keys.flatMap(({ name, owner, key }) => [
-                          name,
-                          owner,
-                          isSubscriptionKey(key) ? "subscription" : "metered",
-                        ]),
-                      ]}
-                      onSelect={() => pickProvider(entry)}
-                    >
-                      <span aria-hidden className="shrink-0">
-                        <ProviderIcon provider={entry.provider} size={16} />
+                {entry.keys.map((option) => (
+                  <CommandItem
+                    key={option.key.id}
+                    value={`key:${option.key.id}`}
+                    keywords={[
+                      entry.label,
+                      entry.provider,
+                      option.name,
+                      option.owner,
+                      isSubscriptionKey(option.key)
+                        ? "subscription"
+                        : "metered",
+                    ]}
+                    onSelect={() => onAddKey(entry.provider, option.key.id)}
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <KeyTitle option={option} />
+                      <span className="truncate text-xs text-muted-foreground">
+                        {option.replaces
+                          ? `${option.detail} · replaces ${option.replaces}`
+                          : option.detail}
                       </span>
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate">{entry.label}</span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {providerDescription(entry)}
-                        </span>
-                      </span>
-                      <CheckIcon
-                        className={cn("size-4 shrink-0", !on && "opacity-0")}
-                      />
-                    </CommandItem>
-                  );
-                })}
+                    </span>
+                  </CommandItem>
+                ))}
               </CommandGroup>
-            )}
+            ))}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -771,6 +777,11 @@ function matchesEveryWord(
     .every((word) => haystack.includes(word))
     ? 1
     : 0;
+}
+
+/** What automatic access adds at request time: a shared primary key that still works. */
+function isSharedPrimary(key: LlmProviderApiKeyResponse): boolean {
+  return key.userId === null && key.isPrimary && !key.requiresReauthentication;
 }
 
 function plural(count: number, one: string, many: string): string {

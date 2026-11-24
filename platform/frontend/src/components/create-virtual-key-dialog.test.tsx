@@ -177,6 +177,10 @@ describe("CreateVirtualKeyDialog", () => {
     await user.click(
       await screen.findByRole("option", { name: /subscription-pool/ }),
     );
+    // Picking only adds, so an added pool leaves the picker.
+    expect(
+      screen.queryByRole("option", { name: /subscription-pool/ }),
+    ).not.toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(create).toBeEnabled();
     expect(
@@ -471,14 +475,14 @@ describe("CreateVirtualKeyDialog", () => {
         name: "Add a provider, model pool or auto router",
       }),
     );
-    await user.click(await screen.findByRole("option", { name: /^OpenAI/ }));
+    await user.click(await screen.findByRole("option", { name: /^Team key/ }));
     await user.keyboard("{Escape}");
     expect(screen.getByRole("region", { name: "Providers" })).toHaveTextContent(
       "Team key",
     );
   });
 
-  it("switches a provider to the key its search finds", async () => {
+  it("lists a provider's keys under its name and swaps in the one picked", async () => {
     const user = userEvent.setup();
     renderDialog("standard", {
       parentableKeys: SEVERAL_KEYS,
@@ -490,13 +494,20 @@ describe("CreateVirtualKeyDialog", () => {
         name: "Add a provider, model pool or auto router",
       }),
     );
-    await user.keyboard("staging");
-    const option = await screen.findByRole("option", { name: /^OpenAI/ });
-    expect(option).toHaveTextContent("Key Staging key");
+    await user.keyboard("openai");
+    const openai = await screen.findByRole("group", { name: "OpenAI" });
+    // Team key is already in the list, so only the other key is offered.
     expect(
-      screen.queryByRole("option", { name: /^Zhipu/ }),
+      within(openai).queryByRole("option", { name: /^Team key/ }),
     ).not.toBeInTheDocument();
-    await user.click(option);
+    const staging = within(openai).getByRole("option", {
+      name: /^Staging key/,
+    });
+    expect(staging).toHaveTextContent("replaces Team key");
+    expect(
+      screen.queryByRole("option", { name: /^Zhipu key/ }),
+    ).not.toBeInTheDocument();
+    await user.click(staging);
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Create key" }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
@@ -525,7 +536,7 @@ describe("CreateVirtualKeyDialog", () => {
         name: "Add a provider, model pool or auto router",
       }),
     );
-    await user.click(await screen.findByRole("option", { name: /^Zhipu/ }));
+    await user.click(await screen.findByRole("option", { name: /^Zhipu key/ }));
     await user.keyboard("{Escape}");
     expect(screen.getByRole("button", { name: "Create key" })).toBeEnabled();
   });

@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
+  getRemedyChainRuling,
   getRemedyChainStatus,
   identifyRemedyChains,
   remedyChainPartIndices,
@@ -323,6 +324,28 @@ describe("identifyRemedyChains", () => {
       "c2",
       "c3",
     ]);
+  });
+});
+
+describe("getRemedyChainRuling", () => {
+  it("gives a call that did not run the latest ruling that stopped it", () => {
+    const parts = [
+      notice({ id: "c1", tool: "github__show_board", args: { id: 7 } }),
+      remedy({ id: "c2", offerId: offerFor("c1") }),
+      notice({
+        id: "c3",
+        tool: "github__show_board",
+        args: { id: 7 },
+        note: "Blocked again.",
+      }),
+    ];
+
+    const [chain] = identifyRemedyChains(parts, { getToolShortName });
+
+    // The second ruling, without the runtime's marker.
+    const ruling = getRemedyChainRuling(chain);
+    expect(ruling).toMatch(/^Blocked: github__show_board cannot run yet\./);
+    expect(ruling).toContain("Blocked again.");
   });
 });
 

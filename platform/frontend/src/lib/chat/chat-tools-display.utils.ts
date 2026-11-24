@@ -63,13 +63,28 @@ export function getToolErrorText({
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
 }): string | undefined {
-  const outputError = toolResultPart
-    ? extractMcpToolError(toolResultPart.output)?.message
-    : extractMcpToolError(part.output)?.message;
+  const source = toolResultPart ?? part;
+  if (source.errorText) return source.errorText;
+  const structured = extractMcpToolError(source.output);
+  // A stopped call is not a failure: its card reads Cancelled, not Error.
+  if (structured?.type === "cancelled") return undefined;
+  return structured?.message ?? getFlaggedErrorText(source.output);
+}
 
-  return toolResultPart
-    ? (toolResultPart.errorText ?? outputError)
-    : (part.errorText ?? outputError);
+/**
+ * Whether a tool call was stopped before it finished: the run was stopped
+ * while the call was in flight.
+ */
+export function isCancelledToolOutput(output: unknown): boolean {
+  return extractMcpToolError(output)?.type === "cancelled";
+}
+
+/**
+ * Whether a call has a request to show. A call with no arguments still sent
+ * one (`{}`); only a call whose arguments have not arrived yet has none.
+ */
+export function hasToolRequest(input: unknown): boolean {
+  return input !== undefined && input !== null;
 }
 
 export function getToolNameFromPart(part: {
@@ -91,13 +106,23 @@ export function getToolHeaderState({
   state,
   toolResultPart,
   errorText,
+  output,
+  turnActive = true,
 }: {
   state: ToolUIPart["state"] | DynamicToolUIPart["state"];
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
+  /** The call's result, when it has one. */
+  output?: unknown;
+  /** False once the call's turn has ended; a call without a result then did not finish. */
+  turnActive?: boolean;
 }) {
   if (errorText) return "output-error" as const;
+  if (isCancelledToolOutput(output)) return "output-cancelled" as const;
   if (toolResultPart) return "output-available" as const;
+  if (!turnActive && isUnfinishedToolState(state)) {
+    return "output-cancelled" as const;
+  }
   return state;
 }
 
@@ -106,17 +131,25 @@ export type CompactToolState =
   | "approval-requested"
   | "completed"
   | "error"
-  | "denied";
+  | "denied"
+  | "cancelled";
 
 export function getCompactToolState({
   part,
   toolResultPart,
+  turnActive = true,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+  /** False once the call's turn has ended; a call without a result then did not finish. */
+  turnActive?: boolean;
 }): CompactToolState {
   if (getToolErrorText({ part, toolResultPart })) {
     return "error";
+  }
+
+  if (isCancelledToolOutput(toolResultPart?.output ?? part.output)) {
+    return "cancelled";
   }
 
   // The remedy executed, but the user denied the reviewed tool call.
@@ -139,7 +172,12 @@ export function getCompactToolState({
     return "approval-requested";
   }
 
-  return "running";
+  // Nothing runs after the turn ends: the call was stopped, or its turn broke
+  // off before the result came back. An answered approval is on its way to
+  // run, so it keeps reading as running.
+  return !turnActive && isUnfinishedToolState(part.state ?? "input-available")
+    ? "cancelled"
+    : "running";
 }
 
 /**
@@ -265,3 +303,26 @@ const authErrorTextCache = new WeakMap<
   object,
   { text: string; result: boolean }
 >();
+
+/** A call that has its arguments, or is still receiving them, and no result. */
+function isUnfinishedToolState(
+  state: ToolUIPart["state"] | DynamicToolUIPart["state"],
+): boolean {
+  return state === "input-streaming" || state === "input-available";
+}
+
+/**
+ * The text of a result its tool marked as an error (`isError`), which carries
+ * no structured platform error. A reviewed call keeps its ruling instead.
+ */
+function getFlaggedErrorText(output: unknown): string | undefined {
+  if (typeof output !== "object" || output === null) return undefined;
+  const { isError, content } = output as {
+    isError?: unknown;
+    content?: unknown;
+  };
+  if (isError !== true || extractMcpHumanRuling(output)) return undefined;
+  return typeof content === "string" && content.trim()
+    ? content
+    : "The tool reported an error and returned no details.";
+}

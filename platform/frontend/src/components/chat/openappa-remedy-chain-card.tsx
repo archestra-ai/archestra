@@ -21,11 +21,13 @@ import {
   getHumanRulingDisplay,
   getToolErrorText,
   getToolHeaderState,
+  hasToolRequest,
   withParsedArguments,
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { getToolCardTitle } from "./chat-messages.utils";
 import {
+  getRemedyChainRuling,
   getRemedyChainStatus,
   type RemedyChain,
   type RemedyChainMember,
@@ -69,10 +71,9 @@ export function RemedyChainCard({
 }) {
   const status = getRemedyChainStatus(chain, { turnActive });
   const input = chain.targetArguments;
-  const hasInput =
-    typeof input === "object" &&
-    input !== null &&
-    Object.keys(input).length > 0;
+  // The call did not run: what it returned is the ruling that stopped it.
+  const ruling =
+    status.state === "denied" ? getRemedyChainRuling(chain) : undefined;
   const needsAction = chain.steps.some(
     (step) => step.part.state === "approval-requested",
   );
@@ -98,11 +99,12 @@ export function RemedyChainCard({
         isCollapsible={collapsible && (canExpandToolCalls || needsAction)}
       />
       <ToolContent>
-        {hasInput ? <ToolInput input={input} /> : null}
+        {hasToolRequest(input) ? <ToolInput input={input} /> : null}
         <RemedyGuardrailsSteps
           steps={chain.steps}
           onToolApprovalResponse={onToolApprovalResponse}
         />
+        {ruling ? <ToolOutput label="Result" output={ruling} /> : null}
       </ToolContent>
     </Tool>
   );
@@ -151,6 +153,7 @@ const CHAIN_HEADER_STATES: Record<
   completed: "output-available",
   error: "output-error",
   denied: "output-denied",
+  cancelled: "output-cancelled",
 };
 
 /** A negotiation step, collapsed by default and display-only like subagent calls. */
@@ -180,11 +183,6 @@ function RemedyStepCard({
   const output = stripAppaPrefixFromOutput(
     toolResultPart?.output ?? part.output,
   );
-  const hasInput =
-    typeof input === "object" &&
-    input !== null &&
-    Object.keys(input).length > 0;
-
   return (
     <Tool
       className="cursor-pointer"
@@ -206,7 +204,7 @@ function RemedyStepCard({
         statusLabel={humanRuling?.label}
       />
       <ToolContent>
-        {hasInput ? (
+        {hasToolRequest(input) ? (
           <ToolInput input={stripAppaPrefixFromRuling(input)} />
         ) : null}
         {output !== undefined ? (

@@ -82,6 +82,7 @@ import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
   getToolErrorText,
   getToolHeaderState,
+  hasToolRequest,
 } from "@/lib/chat/chat-tools-display.utils";
 import {
   getMessageFeedback,
@@ -144,7 +145,6 @@ import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { NoDeviceToolCard } from "./no-device-tool-card";
 import {
   isOpenAppaPolicyChange,
-  OpenAppaPolicyArguments,
   OpenAppaPolicyChange,
 } from "./openappa-policy-change";
 import { isPolicyChangeTool } from "./openappa-policy-change.utils";
@@ -746,6 +746,7 @@ export function ChatMessages({
         byToolCallId: mcpTasksByToolCallId,
         cancel: handleCancelMcpTask,
         cancelRequestedTaskIds,
+        queuedToolCallIds: session?.queuedToolCallIds,
       }}
     >
       <Conversation
@@ -2115,7 +2116,7 @@ const MessageTool = memo(
       shortName: getToolShortName(displayToolName),
       input: approvalDisplay.input,
     });
-    const hasInput = displayInput && Object.keys(displayInput).length > 0;
+    const hasInput = hasToolRequest(displayInput);
     const hasNestedToolCalls = Boolean(nestedToolCalls);
     const hasContent = Boolean(
       hasInput ||
@@ -2280,6 +2281,7 @@ const MessageTool = memo(
             state: part.state || "input-available",
             toolResultPart,
             errorText,
+            output: rawOutput,
           })}
           isCollapsible={isExpandable}
           actionButton={logsButton}
@@ -2296,10 +2298,7 @@ const MessageTool = memo(
           }
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
-          {/* Under a policy change card the arguments go last, closed. */}
-          {hasInput && !policyChange && !previewedChange ? (
-            <ToolInput input={displayInput} />
-          ) : null}
+          {hasInput ? <ToolInput input={displayInput} /> : null}
           {previewedChange ? (
             <PreviewedChangeReview
               previewed={previewedChange}
@@ -2398,21 +2397,28 @@ const MessageTool = memo(
           {!authToolBody && errorText && uiResourceUri && toolResultPart && (
             <ToolOutput label="Error" output={output} errorText={errorText} />
           )}
+          {/* A policy change's result reads as its diff. */}
           {!authToolBody && policyChange && (
-            <OpenAppaPolicyChange
-              output={rawOutput}
-              validationChange={validationChange}
-              input={part.input}
-            />
+            <>
+              <div className="px-3 pt-2">
+                <SectionLabel accent="bg-emerald-400">Result</SectionLabel>
+              </div>
+              <OpenAppaPolicyChange
+                output={rawOutput}
+                validationChange={validationChange}
+                input={part.input}
+              />
+            </>
           )}
-          {/* Show text output when NOT rendering a UI resource */}
+          {/* Show the result when NOT rendering a UI resource. The whole
+              result goes in, so its images render beside its text. */}
           {!authToolBody &&
             !uiResourceUri &&
             !policyChange &&
             toolResultPart && (
               <ToolOutput
                 label={errorText ? "Error" : "Result"}
-                output={output}
+                output={rawOutput}
                 errorText={errorText}
               />
             )}
@@ -2423,13 +2429,10 @@ const MessageTool = memo(
             Boolean(part.output) && (
               <ToolOutput
                 label={errorText ? "Error" : "Result"}
-                output={output}
+                output={rawOutput}
                 errorText={errorText}
               />
             )}
-          {hasInput && policyChange ? (
-            <OpenAppaPolicyArguments input={displayInput} />
-          ) : null}
         </ToolContent>
       </Tool>
     );
@@ -2462,12 +2465,14 @@ const getHeaderState = ({
   state,
   toolResultPart,
   errorText,
+  output,
 }: {
   state: ToolUIPart["state"] | DynamicToolUIPart["state"];
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
+  output: unknown;
 }) => {
-  return getToolHeaderState({ state, toolResultPart, errorText });
+  return getToolHeaderState({ state, toolResultPart, errorText, output });
 };
 
 /** Synthesize a tool UI part from a surfaced subagent call so the existing tool card renders it. */

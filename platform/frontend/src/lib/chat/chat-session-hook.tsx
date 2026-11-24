@@ -12,7 +12,9 @@ import {
   type McpTaskPartData,
   stripDanglingToolCalls,
   TOOL_CREATE_AGENT_SHORT_NAME,
+  TOOL_QUEUE_PART_TYPE,
   type TokenUsage,
+  type ToolQueuePartData,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai";
@@ -162,6 +164,8 @@ export default function ChatSessionHook({
     [clearElicitationFailureTimer],
   );
   const [mcpTasks, setMcpTasks] = useState<Record<string, McpTaskPartData>>({});
+  const [queuedToolCallIds, setQueuedToolCallIds] =
+    useState<ReadonlySet<string>>(NO_QUEUED_TOOL_CALLS);
   const [optimisticToolCalls, setOptimisticToolCalls] = useState<
     Array<{
       toolCallId: string;
@@ -908,6 +912,22 @@ export default function ChatSessionHook({
         }
       }
 
+      // A tool call started waiting for a free place on its server, or
+      // stopped waiting. Its circle reads "queued" in between.
+      if (customData.type === TOOL_QUEUE_PART_TYPE) {
+        const data = customData.data as ToolQueuePartData | undefined;
+        if (data?.toolCallId) {
+          const { toolCallId, queued } = data;
+          setQueuedToolCallIds((current) => {
+            if (current.has(toolCallId) === queued) return current;
+            const next = new Set(current);
+            if (queued) next.add(toolCallId);
+            else next.delete(toolCallId);
+            return next;
+          });
+        }
+      }
+
       if (customData.type === MCP_TASK_PART_TYPE) {
         const data = customData.data as McpTaskPartData | undefined;
         if (data?.taskId) {
@@ -1453,6 +1473,7 @@ export default function ChatSessionHook({
     pendingMcpElicitations,
     resolveMcpElicitation,
     mcpTasks,
+    queuedToolCallIds,
     // Computed, not stored: the page paints the SDK error before onError has
     // run (so no flag set inside onError can suppress the first frame), and
     // consumers read the session from a map refreshed an effect-cycle later.
@@ -1507,6 +1528,7 @@ export default function ChatSessionHook({
     pendingMcpElicitations,
     resolveMcpElicitation,
     mcpTasks,
+    queuedToolCallIds,
     isRecoveringState,
     isTransportStalled,
     optimisticToolCalls,
@@ -1590,3 +1612,6 @@ function getCurrentArchestraToolShortName(
     includeDefaultPrefix: true,
   });
 }
+
+/** One shared empty set, so a session with no queued call keeps its identity. */
+const NO_QUEUED_TOOL_CALLS: ReadonlySet<string> = new Set();

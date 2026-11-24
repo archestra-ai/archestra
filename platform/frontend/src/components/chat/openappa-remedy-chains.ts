@@ -209,7 +209,10 @@ export function getRemedyChainStatus(
 ): RemedyChainStatus {
   const { finalAttempt } = chain;
   if (finalAttempt) {
-    const state = getCompactToolState(finalAttempt);
+    const state = getCompactToolState({
+      ...finalAttempt,
+      turnActive: options.turnActive ?? true,
+    });
     return {
       state,
       label:
@@ -235,6 +238,19 @@ export function getRemedyChainStatus(
     return { state: "denied", label: ruling.label };
   }
   return { state: "denied", label: "Blocked" };
+}
+
+/**
+ * What a guarded call that did not run returned: the latest ruling that
+ * stopped it, as the model received it.
+ */
+export function getRemedyChainRuling(chain: RemedyChain): string | undefined {
+  const notice = chain.steps.findLast((step) => step.role === "notice");
+  const ruling = (notice?.part.input as { ruling?: unknown } | undefined)
+    ?.ruling;
+  return typeof ruling === "string" && ruling.trim()
+    ? stripAppaPrefix(ruling)
+    : undefined;
 }
 
 /** Removes the runtime's brand marker from text shown to a person. */

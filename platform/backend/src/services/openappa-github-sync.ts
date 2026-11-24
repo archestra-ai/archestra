@@ -40,6 +40,7 @@ import {
   catalogToolPrefixes,
   openappaBatteriesService,
 } from "@/openappa/batteries";
+import { batteryRootChange } from "@/openappa/battery-root-change";
 import {
   addedGrants,
   openappaDeclarations,
@@ -2610,6 +2611,8 @@ async function githubPullRequests(
                   base,
                   number,
                   ref: ref ?? null,
+                  head,
+                  branch,
                   user: pull.user ?? null,
                 }),
             }
@@ -2658,6 +2661,9 @@ async function judgeGithubPull(params: {
   number: number;
   /** The head branch: only a branch Archestra opens for a change is auto-merged. */
   ref: string | null;
+  /** The head commit, and the branch the pull request merges into. */
+  head: string;
+  branch: string;
   user: GithubPullUser | null;
 }): Promise<Judged | null> {
   const { source, token, base, number } = params;
@@ -2751,7 +2757,9 @@ async function judgeGithubPull(params: {
   const prefixes = governed.some((file) => file.prefix !== null)
     ? await catalogToolPrefixes(source.organizationId)
     : null;
-  let needsPolicyPermission = false;
+  // The files that are the policy's own matter: the policy file, the rest
+  // beside it, the validations, and a server file no server carries.
+  const policyFiles: string[] = [];
   for (const file of governed) {
     if (
       !file.prefix ||
@@ -2760,7 +2768,7 @@ async function judgeGithubPull(params: {
     ) {
       // No server carries that prefix, or the built-in tools do: the policy's
       // own matter.
-      needsPolicyPermission = true;
+      policyFiles.push(file.path);
       continue;
     }
     // The file governs every server whose tools carry its prefix, so the
@@ -2787,27 +2795,41 @@ async function judgeGithubPull(params: {
         },
       };
   }
-  if (needsPolicyPermission) {
+  if (policyFiles.length > 0) {
     const permissions = await RoleCompositionModel.getUserPermissions({
       userId,
       organizationId: source.organizationId,
     });
     if (!permissions.guardrailsPolicy?.includes("update")) {
-      const first = governed.find(
-        (file) =>
-          !file.prefix ||
-          !prefixes?.byPrefix.get(file.prefix)?.size ||
-          governsBuiltInTools(file.prefix, prefixes),
-      );
-      return {
-        governed: paths,
-        autoMergeable: false,
-        outcome: {
-          accepted: false,
-          title: "The requester may not change the policy",
-          reason: `${email} may not change ${first?.path ?? source.path}: that takes the guardrailsPolicy:update permission.`,
-        },
-      };
+      // A server's editor may change the policy file only to attach or
+      // detach a bundled battery for servers they may edit, from a server's
+      // branch, while self-service is in force.
+      const batteries =
+        policyFiles.length === 1 &&
+        policyFiles[0] === source.path &&
+        isServerRulesBranch(params.ref ?? "") &&
+        selfServiceActive(
+          await OpenAppaGithubSyncModel.find(source.organizationId),
+        )
+          ? await batteryChangeRefusal({
+              ...params,
+              userId,
+              email,
+              prefixes:
+                prefixes ?? (await catalogToolPrefixes(source.organizationId)),
+            })
+          : undefined;
+      if (batteries === null) return null;
+      if (batteries !== false)
+        return {
+          governed: paths,
+          autoMergeable: false,
+          outcome: batteries ?? {
+            accepted: false,
+            title: "The requester may not change the policy",
+            reason: `${email} may not change ${policyFiles[0] ?? source.path}: that takes the guardrailsPolicy:update permission.`,
+          },
+        };
     }
   }
   return {
@@ -2818,6 +2840,107 @@ async function judgeGithubPull(params: {
     autoMergeable: isChangeBranch(params.ref ?? ""),
     outcome: { accepted: true },
   };
+}
+
+/**
+ * Whether a member without the permission to update guardrails may make a
+ * pull request's change to the policy file: false when it only attaches or
+ * detaches bundled batteries for MCP servers they may edit, else the refusal
+ * to post. Null for a read that failed for now.
+ */
+async function batteryChangeRefusal(params: {
+  source: PolicySource;
+  base: string;
+  head: string;
+  branch: string;
+  userId: string;
+  email: string;
+  prefixes: Awaited<ReturnType<typeof catalogToolPrefixes>>;
+}): Promise<PullOutcome | false | null> {
+  const { source, base, prefixes } = params;
+  const refuse = (reason: string): PullOutcome => ({
+    accepted: false,
+    title: "The requester may not change the policy",
+    reason: `${params.email} may not change ${source.path}: ${reason}. Anything else there takes the guardrailsPolicy:update permission.`,
+  });
+  // The policy file before and after is read with a token for the
+  // repository's contents: the check's own token posts checks and reads pull
+  // requests, and GitHub refuses it the files.
+  const { token } = await resolveOpenAppaGithubAccess(source, {
+    contents: "read",
+  });
+  if (!token) return null;
+  const compared = await githubCall<{ merge_base_commit?: { sha?: string } }>({
+    token,
+    url: `${base}/compare/${encodeURIComponent(params.branch)}...${params.head}`,
+  }).catch(() => null);
+  const mergeBase = compared?.ok ? compared.body.merge_base_commit?.sha : null;
+  if (!mergeBase || !/^[a-f0-9]{40}$/.test(mergeBase)) {
+    logger.warn(
+      {
+        organizationId: source.organizationId,
+        repo: source.repo,
+        status: compared?.status,
+        message: compared && !compared.ok ? compared.message : undefined,
+      },
+      "OpenAPPA could not compare a pull request with its base branch to check a battery change; it tries again next minute",
+    );
+    return null;
+  }
+  let before: string | null;
+  let after: string | null;
+  try {
+    [before, after] = await Promise.all([
+      githubFileAt({ base, token, commit: mergeBase, path: source.path }),
+      githubFileAt({ base, token, commit: params.head, path: source.path }),
+    ]);
+  } catch (err) {
+    logger.warn(
+      { organizationId: source.organizationId, repo: source.repo, err },
+      "OpenAPPA could not read the policy file of a pull request to check a battery change; it tries again next minute",
+    );
+    return null;
+  }
+  if (before === null || after === null)
+    return refuse("it adds or removes the policy file");
+  const change = await batteryRootChange({
+    before,
+    after,
+    namespacesOf: async (name) =>
+      (
+        await openappaDeclarations.resolveInstalled({
+          organizationId: source.organizationId,
+          name,
+          packageHash: null,
+        })
+      )?.namespaces ?? null,
+  });
+  if ("refused" in change) return refuse(change.refused);
+  for (const prefix of change.prefixes) {
+    if (
+      !prefixes.byPrefix.get(prefix)?.size ||
+      governsBuiltInTools(prefix, prefixes)
+    )
+      return refuse(
+        `it changes the batteries of the tool prefix ${JSON.stringify(prefix)}, which no MCP server a member may edit carries`,
+      );
+    const refused = await ownersNotEditable({
+      organizationId: source.organizationId,
+      userId: params.userId,
+      servers: await rulesFileServers(prefix, prefixes),
+    });
+    if (refused.length > 0)
+      return refuse(
+        `changing the batteries of ${prefix} takes edit access to ${await ownersAsNamedFor(
+          {
+            organizationId: source.organizationId,
+            userId: params.userId,
+            servers: refused,
+          },
+        )} in the MCP registry`,
+      );
+  }
+  return false;
 }
 
 /**

@@ -472,16 +472,16 @@
     "searchText": "preview guardrails policy change, dry run validate proposed edits to organization policy TOML, show unified diff and changed line counts, replay saved validations pass fail, confirm unknown or unobserved MCP tools before previewing, allowUnknownTools, check rules before publishing, text replacement edits, full rewrite, expected revision"
   },
   "preview_guardrails_server_rules_change": {
-    "definitionHash": "8c0a0fd16430d63653bc893e7065cb37d8d4cbb65dcd2fb4d4c52ca8c0d0269d",
-    "searchText": "preview proposed MCP server guardrails rules file, diff, validate whole organization policy, dry run check, appa.toml include change, tool prefix rules, annotators, attention marks, tags, tool output sanitizer confined results, auto merge, expected commit, review before proposing"
+    "definitionHash": "3c4ab771ab659f014848acffc46c644f0ec5a3fde15eab50b9a39b24bd1491f8",
+    "searchText": "preview proposed MCP server guardrails rules file or battery attach detach for one or several servers, diff, validate whole organization policy, dry run check, appa.toml include change, tool prefix rules, annotators, tags, auto merge, expected commit, review before proposing"
   },
   "preview_guardrails_validation_change": {
     "definitionHash": "4739009787aaf4bc976c591f3f084c7f515629ae2669bda6752c8b1eb636b3aa",
     "searchText": "preview guardrails validation test suite change, dry run, check syntax of .appa test files, replay test cases against saved policy with live annotators, pass/fail results, add replace delete validation files, optimistic concurrency revision version"
   },
   "propose_guardrails_server_rules_change": {
-    "definitionHash": "9ebd3f61ef068360b9dc55bbbc3415c54587d7859e1e6ec63375db57d6baeb4b",
-    "searchText": "propose MCP server guardrails rules change, open pull request on policy repository, update per-server rules file, add self-service folder include to appa.toml, change summary for reviewers, Git sync after merge, pull request link, edit tool policy for one server"
+    "definitionHash": "4f84446e333082b26de20501c77cdf00c0ecb397c15aed2825bd5fa8eb568c60",
+    "searchText": "propose MCP server guardrails rules change, attach or detach battery for one or several servers in one pull request, open pull request on policy repository, update per-server rules file, self-service folder include, change summary for reviewers, auto merge, pull request link"
   },
   "publish_app": {
     "definitionHash": "510e7d578250669b1f4562fde1900077ae75ed43db61fbfe5d07456bc60e5df1",

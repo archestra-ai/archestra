@@ -304,6 +304,171 @@ export async function proposeServerRulesChange(
 }
 
 /**
+ * Check attaching or detaching one bundled battery for one MCP server, and
+ * for more servers in the same change when `others` names them: the policy
+ * file's diff, validated as Git sync will compose it after the merge. It
+ * takes edit access in the MCP registry to every server named, as their
+ * rules do, not a Guardrails permission. This saves and opens nothing.
+ */
+export async function previewServerBatteryChange(
+  params: Caller & ServerBatteryChange,
+) {
+  const change = await checkedBatteryChange(params);
+  const autoMerge = autoMergeActive(change.source);
+  return {
+    stage: "preview" as const,
+    delivery: "pull_request" as const,
+    ...change.view,
+    autoMerge,
+    instruction: !change.view.valid
+      ? "The change does not validate; tell the user why, from errors, and stop."
+      : `If this is the change the user asked for, say in one sentence what it does to agents, then call propose_guardrails_server_rules_change now with the same battery and expectedCommit and a plain summary. The user is shown this preview's diff and asked to approve that call before it runs, so do not ask them in text as well. ${autoMerge ? "Auto-merge is on: once approved, the pull request merges by itself when its checks pass." : "Once approved, the pull request opens for the user to merge."}`,
+  };
+}
+
+/**
+ * Open one pull request that attaches or detaches one battery for one MCP
+ * server, and for the other servers the change names.
+ */
+export async function proposeServerBatteryChange(
+  params: Caller & ServerBatteryChange & { summary: string },
+) {
+  const change = await checkedBatteryChange(params);
+  if (!change.view.valid)
+    throw new ApiError(400, change.view.errors.join("\n"));
+  const requester = await UserModel.getById(params.userId);
+  const [first] = change.servers;
+  const names = listedNames(change.servers.map(({ server }) => server.name));
+  const title =
+    change.servers.length > 1
+      ? `Change which servers the ${params.battery} battery governs`
+      : `${first.change === "attach" ? "Attach" : "Detach"} the ${params.battery} battery ${first.change === "attach" ? "to" : "from"} ${first.server.name}`;
+  // Each owning server once, however many of the named servers share it.
+  const owners = [
+    ...new Map(
+      change.servers
+        .flatMap(({ server }) => server.owners)
+        .map((owner) => [owner.id, owner] as const),
+    ).values(),
+  ];
+  const body = [
+    params.summary.trim(),
+    "",
+    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit ${await ownersAsNamedFor({ organizationId: params.organizationId, userId: params.userId, servers: owners })} in the MCP registry.`,
+    `This changes \`${change.source.path}\` only in which batteries govern the tools of ${names}. It applies once merged and pulled by Git sync.`,
+  ].join("\n");
+  // A server's branch: the policy check holds the change to the servers the
+  // requester may edit, every one it touches, and auto-merge takes it as it
+  // takes their rules.
+  const head = serverRulesBranch(first.server.prefix, randomUUID().slice(0, 8));
+  const opened = await openGithubPull({
+    source: change.source,
+    title,
+    message: requester ? withRequester(title, requester.email) : title,
+    body,
+    files: [{ path: change.source.path, content: change.after }],
+    head,
+  });
+  const autoMerge = autoMergeActive(change.source);
+  if (autoMerge) void checkAppaPullRequestsSoon(params.organizationId);
+  return {
+    stage: "proposed" as const,
+    delivery: "pull_request" as const,
+    ...opened,
+    repo: change.source.repo,
+    ...change.view,
+    autoMerge,
+    instruction: autoMerge
+      ? `Give the user the link. The pull request merges by itself once its ${POLICY_CHECK_NAME} check and the repository's other checks pass; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_server_rules_change_status with this server's mcpServerId, this number and wait=true; on each later call also pass the phase the last call returned as since. Tell the user each change in one short sentence, and keep calling until done is true. Then say whether the battery is in force, or what went wrong and what to do.`
+      : `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
+  };
+}
+
+type BatteryStep = "attach" | "detach";
+
+type ServerBatteryChange = {
+  catalogId: string;
+  battery: string;
+  change: BatteryStep;
+  /** More servers the same pull request attaches the battery to, or detaches it from. */
+  others?: { catalogId: string; change: BatteryStep }[];
+  expectedCommit: string;
+};
+
+/** The servers, the policy file before and after the battery change, and its check. */
+async function checkedBatteryChange(params: Caller & ServerBatteryChange) {
+  const source = await requireSource(params.organizationId);
+  const steps = [
+    { catalogId: params.catalogId, change: params.change },
+    ...(params.others ?? []),
+  ];
+  if (new Set(steps.map((step) => step.catalogId)).size !== steps.length)
+    throw new ApiError(400, "Name each MCP server once in a battery change.");
+  const folder = serverRulesFolderOf(source);
+  const servers: {
+    server: Awaited<ReturnType<typeof serverFor>>;
+    change: BatteryStep;
+  }[] = [];
+  for (const step of steps) {
+    const server = await serverFor(
+      { ...params, catalogId: step.catalogId },
+      folder,
+    );
+    if (!server.canEdit)
+      throw new ApiError(
+        403,
+        `You may change ${server.name}'s batteries only if you may edit ${server.needs(unseenServers("you"))} in the MCP registry`,
+      );
+    servers.push({ server, change: step.change });
+  }
+  if (source.sourceCommit !== params.expectedCommit)
+    throw new ApiError(
+      409,
+      "The policy repository moved on since it was read. Read the server's rules again.",
+    );
+  const root = await guardrailsPolicyService.get(params.organizationId);
+  // Each step edits what the one before left, so the pull request carries
+  // them all as one change to the file.
+  let after = root.content;
+  for (const { server, change } of servers)
+    after = await openappaBatteriesService.serverChangeContent({
+      organizationId: params.organizationId,
+      content: after,
+      batteryName: params.battery,
+      catalogId: server.id,
+      change,
+    });
+  const validation = await guardrailsPolicyService.validate(after, {
+    organizationId: params.organizationId,
+    previous: root.content,
+  });
+  const [first, ...others] = servers;
+  return {
+    servers: servers as [(typeof servers)[number], ...typeof servers],
+    source,
+    after,
+    view: {
+      mcpServer: { id: first.server.id, name: first.server.name },
+      battery: params.battery,
+      change: first.change,
+      ...(others.length > 0
+        ? {
+            others: others.map(({ server, change }) => ({
+              mcpServer: { id: server.id, name: server.name },
+              change,
+            })),
+          }
+        : {}),
+      path: source.path,
+      before: root.content,
+      after,
+      ...policyDiff({ before: root.content, after, path: source.path }),
+      ...validation,
+    },
+  };
+}
+
+/**
  * How long one status call may wait for the pull request to move on, and
  * how often it looks. The wait stays well inside the minute an MCP client
  * gives a call, GitHub's own answers included.

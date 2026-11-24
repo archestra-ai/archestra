@@ -44,8 +44,10 @@ import {
   getServerRules,
   getServerRulesChangeStatus,
   listServerRulesFiles,
+  previewServerBatteryChange,
   previewServerRulesChange,
   proposeSelfServiceInclude,
+  proposeServerBatteryChange,
   proposeServerRulesChange,
   readServerRulesFile,
   selfServiceIncludeState,
@@ -1579,6 +1581,148 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   });
 });
 
+test("a server's editor attaches a bundled battery to several of their servers in one pull request; a server they may not edit, an organization battery and a server named twice are refused", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+  makeTeamMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const docs = await makeTeam(org.id, admin.id, { name: "Docs" });
+  const pat = await makeUser({ name: "Pat" });
+  await makeTeamMember(docs.id, pat.id);
+  const entry = async (name: string, editors: boolean) => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name,
+        serverType: "remote",
+        serverUrl: `https://${name}.example.com/mcp`,
+        scope: "org",
+      },
+      {
+        organizationId: org.id,
+        initialPermissionGrants: [
+          {
+            subject: { type: "team", id: docs.id },
+            actions: editors ? ["read", "use", "update"] : ["read", "use"],
+          },
+        ],
+      },
+    );
+    await ToolModel.createToolIfNotExists({
+      name: `${name}__search`,
+      description: "search",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    return catalog;
+  };
+  const guides = await entry("guides", true);
+  const handbook = await entry("handbook", true);
+  const ledger = await entry("ledger", false);
+
+  await connectApp({ organizationId: org.id });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  await syncAppaGithubPolicy(org.id);
+
+  const change = {
+    organizationId: org.id,
+    userId: pat.id,
+    catalogId: guides.id,
+    battery: "microsoft-learn",
+    change: "attach" as const,
+    expectedCommit: FIRST,
+  };
+  const both = {
+    ...change,
+    others: [{ catalogId: handbook.id, change: "attach" as const }],
+  };
+  const preview = await previewServerBatteryChange(both);
+  expect(preview).toMatchObject({
+    stage: "preview",
+    valid: true,
+    path: "appa.toml",
+    mcpServer: { id: guides.id, name: "guides" },
+    battery: "microsoft-learn",
+    change: "attach",
+    others: [
+      { mcpServer: { id: handbook.id, name: "handbook" }, change: "attach" },
+    ],
+  });
+  // One file, both servers: the include once, and each prefix bound.
+  expect(preview.after).toContain("batteries/microsoft-learn/appa.toml");
+  expect(preview.after).toMatch(
+    /microsoft-learn = \[\s*"guides",\s*"handbook",?\s*\]/,
+  );
+  // One server alone names no others.
+  expect(await previewServerBatteryChange(change)).not.toHaveProperty("others");
+
+  // Every server named takes edit access, the others included.
+  await expect(
+    previewServerBatteryChange({
+      ...change,
+      others: [{ catalogId: ledger.id, change: "attach" }],
+    }),
+  ).rejects.toMatchObject({ statusCode: 403 });
+  await expect(
+    previewServerBatteryChange({
+      ...change,
+      others: [{ catalogId: guides.id, change: "detach" }],
+    }),
+  ).rejects.toMatchObject({ statusCode: 400 });
+  // A battery that governs the organization is an administrator's.
+  await expect(
+    previewServerBatteryChange({ ...both, battery: "jev" }),
+  ).rejects.toMatchObject({ statusCode: 403 });
+
+  const trees: Array<{ tree: Array<{ path: string; content: string }> }> = [];
+  const refs: Array<{ ref: string }> = [];
+  const pulls: Array<{ title: string; body: string }> = [];
+  server.use(
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, async ({ request }) => {
+      trees.push((await request.json()) as (typeof trees)[number]);
+      return HttpResponse.json({ sha: "4".repeat(40) });
+    }),
+    http.post(`${REPO}/git/commits`, () =>
+      HttpResponse.json({ sha: "5".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/refs`, async ({ request }) => {
+      refs.push((await request.json()) as (typeof refs)[number]);
+      return HttpResponse.json({});
+    }),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      pulls.push((await request.json()) as (typeof pulls)[number]);
+      return HttpResponse.json({
+        number: 9,
+        html_url: "https://github.com/example/policies/pull/9",
+      });
+    }),
+  );
+  const proposed = await proposeServerBatteryChange({
+    ...both,
+    summary: "Docs servers read Microsoft Learn under its rules",
+  });
+  expect(proposed).toMatchObject({ delivery: "pull_request", number: 9 });
+  // One pull request, on a server's branch, changing the policy file alone.
+  expect(pulls).toHaveLength(1);
+  expect(pulls[0]?.title).toBe(
+    "Change which servers the microsoft-learn battery governs",
+  );
+  expect(pulls[0]?.body).toContain("the tools of guides and handbook");
+  expect(trees[0]?.tree.map((file) => file.path)).toEqual(["appa.toml"]);
+  expect(trees[0]?.tree[0]?.content).toBe(preview.after);
+  expect(refs[0]?.ref).toMatch(
+    /^refs\/heads\/archestra\/openappa-server-guides-/,
+  );
+});
+
 test("MCP servers whose tools share a prefix share one rules file: a change takes edit access to each shared server, and members' personal copies follow it", async ({
   makeOrganization,
   makeUser,
@@ -3023,6 +3167,12 @@ async function serveAutoMergeRepository(params: {
   includeFromSync?: boolean;
   /** A policy change the APPA Keeper opened for the requester, as pull request 8. */
   policyChange?: boolean;
+  /**
+   * A bundled battery attached to the Payments API's tools, opened for the
+   * requester on that server's branch, as pull request 9. With `more`, the
+   * pull request changes that much more of the policy file.
+   */
+  batteryChange?: boolean | { more: string };
   /** Permissions the installation does not grant. */
   refuse?: string[];
 }) {
@@ -3192,6 +3342,55 @@ async function serveAutoMergeRepository(params: {
         },
       ],
     };
+  }
+  if (params.batteryChange) {
+    results[9] = "9a".repeat(20);
+    repo.files[results[9]] = {
+      ...(repo.files[FIRST] ?? {}),
+      "appa.toml": `${root.replace(
+        'include = ["mcp/*.toml"]',
+        'include = ["mcp/*.toml", "batteries/microsoft-learn/appa.toml"]',
+      )}\n[aliases.mcp]\nmicrosoft-learn = ["payments_api"]\n${
+        params.batteryChange === true ? "" : params.batteryChange.more
+      }`,
+    };
+    pulls[9] = {
+      ref: "archestra/openappa-server-payments_api-9c8d7e6f",
+      user: bot,
+      files: ["appa.toml"],
+      commits: [
+        {
+          sha: results[9],
+          commit: {
+            message: `Attach the microsoft-learn battery to Payments API\n\nRequested-by: ${params.requester}`,
+            verification: { verified: true, reason: "valid" },
+          },
+          author: bot,
+          committer: { login: "web-flow", type: "User" },
+        },
+      ],
+    };
+    // GitHub gives the repository's files, and a comparison of its commits,
+    // only to a token minted for its contents.
+    const contents = (request: Request) =>
+      (request.headers.get("authorization") ?? "").includes("contents");
+    const refused = () =>
+      HttpResponse.json(
+        { message: "Resource not accessible by integration" },
+        { status: 403 },
+      );
+    server.use(
+      http.get(`${REPO}/compare/:range`, ({ request }) =>
+        contents(request)
+          ? HttpResponse.json({ merge_base_commit: { sha: FIRST } })
+          : refused(),
+      ),
+      http.get(
+        ({ request }) =>
+          request.url.startsWith(`${REPO}/contents/`) && !contents(request),
+        refused,
+      ),
+    );
   }
   if (params.another)
     pulls[5] = {
@@ -3555,6 +3754,153 @@ test("a policy pull request the APPA Keeper opened for a member without the perm
     "failure",
   );
   expect(merges.map((entry) => entry.number)).not.toContain(8);
+});
+
+/** An organization with a server one member may edit and another only open. */
+async function batteryOwners(fixtures: {
+  makeOrganization: () => Promise<{ id: string }>;
+  makeUser: (user: { email: string }) => Promise<{ id: string; email: string }>;
+  makeMember: (
+    userId: string,
+    organizationId: string,
+    member: { role: "member" },
+  ) => Promise<unknown>;
+}) {
+  const org = await fixtures.makeOrganization();
+  const tag = randomUUID().slice(0, 8);
+  const editor = await fixtures.makeUser({
+    email: `editor-${tag}@example.com`,
+  });
+  await fixtures.makeMember(editor.id, org.id, { role: "member" });
+  const reader = await fixtures.makeUser({
+    email: `reader-${tag}@example.com`,
+  });
+  await fixtures.makeMember(reader.id, org.id, { role: "member" });
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    {
+      organizationId: org.id,
+      initialPermissionGrants: [
+        {
+          subject: { type: "user", id: editor.id },
+          actions: ["read", "use", "update"],
+        },
+        {
+          subject: { type: "user", id: reader.id },
+          actions: ["read", "use"],
+        },
+      ],
+    },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__refund_payment",
+    description: "refund",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  /** The battery pull request's check and whether the App merged it. */
+  const checked = async (params: {
+    requester: string;
+    batteryChange: boolean | { more: string };
+  }) => {
+    const { results, runs, merges } = await serveAutoMergeRepository({
+      organizationId: org.id,
+      ...params,
+    });
+    await updateAppaGithubSync({
+      organizationId: org.id,
+      action: "self_service_auto_merge",
+      enabled: true,
+    });
+    await checkDueAppaGithubSyncs();
+    return {
+      run: runs.find((run) => run.head_sha === results[9]) as
+        | { conclusion: string; output?: { summary?: string } }
+        | undefined,
+      merged: merges.some((entry) => entry.number === 9),
+    };
+  };
+  return { editor, reader, checked };
+}
+
+test("with self-service and auto-merge on, a battery change the APPA Keeper opened for a server's editor passes its check and merges, though they may not update guardrails", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const { editor, checked } = await batteryOwners({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  });
+  // The check reads the policy file before and after with a token for the
+  // repository's contents, which the check's own token is refused.
+  expect(
+    await checked({ requester: editor.email, batteryChange: true }),
+  ).toMatchObject({ run: { conclusion: "success" }, merged: true });
+});
+
+test("a battery change opened for a member who may not edit the server fails its check and is not merged", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const { reader, checked } = await batteryOwners({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  });
+  expect(
+    await checked({ requester: reader.email, batteryChange: true }),
+  ).toMatchObject({
+    run: {
+      conclusion: "failure",
+      output: {
+        summary: expect.stringContaining(
+          "changing the batteries of payments_api takes edit access to",
+        ),
+      },
+    },
+    merged: false,
+  });
+});
+
+test("a battery change that changes more of the policy file than which batteries govern which servers fails its check, even for the server's editor", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const { editor, checked } = await batteryOwners({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  });
+  expect(
+    await checked({
+      requester: editor.email,
+      batteryChange: {
+        more: '\n[[policy.tool]]\nname = "payments_api__refund_payment"\ndelta = {}\n',
+      },
+    }),
+  ).toMatchObject({
+    run: {
+      conclusion: "failure",
+      output: {
+        summary: expect.stringContaining(
+          "it changes more of the policy file than which batteries govern which MCP servers",
+        ),
+      },
+    },
+    merged: false,
+  });
 });
 
 test("a self-served pull request GitHub refuses to merge is logged and left for people: tried once more the next minute, then fifteen minutes later; an App that cannot merge is not asked again every minute; the Keeper's status says so at each step", async ({

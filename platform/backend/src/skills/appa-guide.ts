@@ -155,6 +155,16 @@ With Git sync, each MCP server can keep its own rules in the policy repository's
 
 Never copy a server's rules into \`appa.toml\` with \`archestra__update_guardrails_policy\` when the operator asked for that server's rules.
 
+### A server's batteries
+
+With self-service on, whoever may edit a server in the MCP registry may also attach a bundled battery to it, or detach one, without access to the organization policy: \`appa.toml\` changes only in which batteries govern that server's tools. A battery that governs every tool call in the organization stays with an administrator.
+
+Follow these steps, not the policy preview, when the request is to attach or detach a battery for servers and \`archestra__update_guardrails_policy\` is not among your tools, or the user says they may not update guardrails: a policy preview you cannot publish ends in an approval nobody can act on.
+
+1. Read the server with \`archestra__get_guardrails_server_rules\` for \`expectedCommit\`. When \`repository\` is null or \`canEdit\` is false, say why, from \`instruction\`, and stop.
+2. Preview with \`archestra__preview_guardrails_server_rules_change\`, passing \`battery\` (\`name\`, and \`change\`: attach or detach) instead of \`content\`, with \`expectedCommit\`. When the user asks for several servers at once, make it one change: read one of them, preview once and propose once for that server, and name every other server in \`battery.others\` (each \`mcpServerId\` with its \`change\`), so one pull request carries them all. Never preview or propose once per server: those pull requests change the same lines of \`appa.toml\` and conflict. Then call \`archestra__propose_guardrails_server_rules_change\` with the same \`battery\` and \`expectedCommit\` and a plain \`summary\`. Archestra asks the user to approve that call; do not ask yourself. Give the link and follow the result's \`instruction\`, as for a server's rules.
+3. An operator who may update guardrails may use \`archestra__update_guardrails_policy\` instead; with self-service on, prefer these tools for one server's batteries.
+
 ## Rules
 
 - Preserve the whole root policy, including \`[policy.deployment]\` and the \`run_command\` annotator rule, unless the operator approves a change. With \`edits\`, every line you do not name stays as it is. A saved revision replaces the complete document; it does not inherit fields from the starting policy. Never refuse or delay a change because the policy is long.

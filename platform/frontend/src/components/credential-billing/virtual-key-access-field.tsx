@@ -81,8 +81,8 @@ const TIER_LABELS = { fast: "Fast", normal: "Normal", smart: "Smart" } as const;
 /**
  * Everything a new virtual key can reach, in one place: whether it follows
  * the organization's shared providers, one picker for provider keys, model
- * pools and auto routers, and what is picked, grouped by kind with a line on
- * what each kind gives. Saves the same fields the separate pickers did.
+ * pools and auto routers, and what is picked, folded to one line per kind.
+ * Saves the same fields the separate pickers did.
  */
 export function VirtualKeyAccessField({
   providerApiKeys,
@@ -203,6 +203,34 @@ export function VirtualKeyAccessField({
     options: chosenKeys(provider).map(keyOption),
   }));
 
+  // The providers line when folded: how many, and which ones don't use their
+  // primary key.
+  const keyNotes = listedProviderRows.flatMap(({ label, options }) => {
+    if (options.length > 1) return [`${label} uses ${options.length} keys`];
+    const [only] = options;
+    return includeFutureProviders || !only.key.isPrimary
+      ? [`${label} uses ${only.name}`]
+      : [];
+  });
+  let providerSummary: string;
+  if (includeFutureProviders) {
+    providerSummary = `All shared providers · ${
+      keyNotes.length ? keyNotes.join(", ") : "each on its primary key"
+    }`;
+  } else if (providers.length === 0) {
+    providerSummary = "No provider keys yet";
+  } else if (listedProviderRows.length === 0) {
+    providerSummary = "None yet — add one above";
+  } else {
+    const rest =
+      keyNotes.length === 0
+        ? "each on its primary key"
+        : keyNotes.length === listedProviderRows.length
+          ? keyNotes.join(", ")
+          : `${keyNotes.join(", ")}, the rest on their primary key`;
+    providerSummary = `${plural(listedProviderRows.length, "provider", "providers")} · ${rest}`;
+  }
+
   const summary = [
     includeFutureProviders
       ? `all shared providers${
@@ -268,232 +296,258 @@ export function VirtualKeyAccessField({
         />
 
         <div className="divide-y rounded-md border">
-          {listedRouters.map((router) => {
-            const tierModels = tierModelsOf(tiersByRouter.get(router.id));
-            const modelCount = new Set(tierModels.map((model) => model.modelId))
-              .size;
-            return (
-              <AccessRow
-                key={router.id}
-                name={router.name}
-                icon={<Shuffle className="size-4" />}
-                title={<span className="font-mono">{router.name}</span>}
-                meta={
-                  modelCount ? (
-                    <span>{plural(modelCount, "model", "models")}</span>
-                  ) : null
-                }
-                kind="Auto router"
-                onRemove={() =>
-                  onAutoRouterIdsChange(
-                    autoRouterIds.filter((routerId) => routerId !== router.id),
-                  )
-                }
-              >
-                {tierModels.length ? (
-                  <div className="space-y-2">
-                    <DetailGrid headings={["Tier", "Provider", "Model"]}>
-                      {tierModels.map((model) => (
-                        <Fragment key={model.tier}>
-                          <span>{TIER_LABELS[model.tier]}</span>
-                          <ProviderCell
-                            provider={model.provider}
-                            label={catalog.label(model.provider)}
-                          />
+          {listedRouters.length > 0 && (
+            <AccessSection
+              title="Auto routers"
+              summary={listedRouters.map((router) => router.name).join(", ")}
+              mono
+            >
+              {listedRouters.map((router) => {
+                const tierModels = tierModelsOf(tiersByRouter.get(router.id));
+                const modelCount = new Set(
+                  tierModels.map((model) => model.modelId),
+                ).size;
+                return (
+                  <AccessRow
+                    key={router.id}
+                    name={router.name}
+                    icon={<Shuffle className="size-4" />}
+                    title={<span className="font-mono">{router.name}</span>}
+                    meta={
+                      modelCount ? (
+                        <span>{plural(modelCount, "model", "models")}</span>
+                      ) : null
+                    }
+                    onRemove={() =>
+                      onAutoRouterIdsChange(
+                        autoRouterIds.filter(
+                          (routerId) => routerId !== router.id,
+                        ),
+                      )
+                    }
+                  >
+                    {tierModels.length ? (
+                      <div className="space-y-2">
+                        <DetailGrid headings={["Tier", "Provider", "Model"]}>
+                          {tierModels.map((model) => (
+                            <Fragment key={model.tier}>
+                              <span>{TIER_LABELS[model.tier]}</span>
+                              <ProviderCell
+                                provider={model.provider}
+                                label={catalog.label(model.provider)}
+                              />
+                              <span className="truncate font-mono">
+                                {model.modelId}
+                              </span>
+                            </Fragment>
+                          ))}
+                        </DetailGrid>
+                        <p className="text-muted-foreground">
+                          {ROUTER_ENDPOINT_NOTE}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        {ROUTER_HINT} {ROUTER_ENDPOINT_NOTE}
+                      </p>
+                    )}
+                  </AccessRow>
+                );
+              })}
+            </AccessSection>
+          )}
+          {listedPools.length > 0 && (
+            <AccessSection
+              title="Model pools"
+              summary={listedPools.map((pool) => pool.name).join(", ")}
+              mono
+            >
+              {listedPools.map((pool) => {
+                const members = [...pool.members].sort(
+                  (a, b) => a.priority - b.priority,
+                );
+                const serves = poolServes(pool);
+                return (
+                  <AccessRow
+                    key={pool.id}
+                    name={pool.name}
+                    icon={<LayersIcon className="size-4" />}
+                    title={<span className="font-mono">{pool.name}</span>}
+                    meta={
+                      <>
+                        {serves.first && serves.first !== pool.name && (
                           <span className="truncate font-mono">
-                            {model.modelId}
+                            {serves.first}
+                          </span>
+                        )}
+                        {serves.otherModels > 0 && (
+                          <span>
+                            +{plural(serves.otherModels, "model", "models")}
+                          </span>
+                        )}
+                        {!poolAnswers(pool) && (
+                          <span className="text-amber-700 dark:text-amber-400">
+                            won’t answer
+                          </span>
+                        )}
+                      </>
+                    }
+                    onRemove={() =>
+                      onModelPoolIdsChange(
+                        modelPoolIds.filter((poolId) => poolId !== pool.id),
+                      )
+                    }
+                  >
+                    <DetailGrid headings={["Provider", "Serves"]}>
+                      {members.map((member) => (
+                        <Fragment key={member.id}>
+                          <ProviderCell
+                            provider={member.provider as SupportedProvider}
+                            label={catalog.label(member.provider)}
+                            off={!member.enabled}
+                          />
+                          <span
+                            className={cn(
+                              "truncate font-mono",
+                              !member.enabled &&
+                                "text-muted-foreground line-through",
+                            )}
+                          >
+                            {member.modelId}
                           </span>
                         </Fragment>
                       ))}
                     </DetailGrid>
-                    <p className="text-muted-foreground">
-                      {ROUTER_ENDPOINT_NOTE}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">
-                    {ROUTER_HINT} {ROUTER_ENDPOINT_NOTE}
-                  </p>
-                )}
-              </AccessRow>
-            );
-          })}
-          {listedPools.map((pool) => {
-            const members = [...pool.members].sort(
-              (a, b) => a.priority - b.priority,
-            );
-            const serves = poolServes(pool);
-            return (
-              <AccessRow
-                key={pool.id}
-                name={pool.name}
-                icon={<LayersIcon className="size-4" />}
-                title={<span className="font-mono">{pool.name}</span>}
-                meta={
-                  <>
-                    {serves.first && serves.first !== pool.name && (
-                      <span className="truncate font-mono">{serves.first}</span>
-                    )}
-                    {serves.otherModels > 0 && (
-                      <span>
-                        +{plural(serves.otherModels, "model", "models")}
-                      </span>
-                    )}
-                    {!poolAnswers(pool) && (
-                      <span className="text-amber-700 dark:text-amber-400">
-                        won’t answer
-                      </span>
-                    )}
-                  </>
-                }
-                kind="Model pool"
-                onRemove={() =>
-                  onModelPoolIdsChange(
-                    modelPoolIds.filter((poolId) => poolId !== pool.id),
-                  )
-                }
-              >
-                <DetailGrid headings={["Provider", "Serves"]}>
-                  {members.map((member) => (
-                    <Fragment key={member.id}>
-                      <ProviderCell
-                        provider={member.provider as SupportedProvider}
-                        label={catalog.label(member.provider)}
-                        off={!member.enabled}
-                      />
-                      <span
-                        className={cn(
-                          "truncate font-mono",
-                          !member.enabled &&
-                            "text-muted-foreground line-through",
-                        )}
-                      >
-                        {member.modelId}
-                      </span>
-                    </Fragment>
-                  ))}
-                </DetailGrid>
-              </AccessRow>
-            );
-          })}
-          {includeFutureProviders && (
-            <div className="flex items-start gap-2 px-2 py-1.5">
-              {/* Lines the icon up with the other rows', past their chevron. */}
-              <span aria-hidden className="size-4 shrink-0" />
-              <span className="flex w-8 shrink-0 justify-center pt-0.5">
-                <KeyRound
-                  className="size-4 text-muted-foreground"
-                  aria-hidden
-                />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm">All shared providers</span>
-                <span className="block text-xs text-muted-foreground">
-                  Each shared provider’s primary key. New providers join
-                  automatically; personal and subscription keys are left out.
-                </span>
-              </span>
-              <span className="mt-0.5 flex shrink-0 items-center gap-1">
-                {sharedProviders.map((provider) => (
-                  <ProviderIcon key={provider} provider={provider} size={14} />
-                ))}
-              </span>
-              <span className="mt-0.5">
-                <KindLabel>Automatic</KindLabel>
-              </span>
-              {/* Lines the label up with the other rows' remove buttons. */}
-              <span aria-hidden className="size-6 shrink-0" />
-            </div>
+                  </AccessRow>
+                );
+              })}
+            </AccessSection>
           )}
-          {listedProviderRows.map(({ provider, label, options }) => {
-            const several = options.length > 1;
-            const only = options.length === 1 ? options[0] : undefined;
-            const noModels = options.some((option) => option.models === 0);
-            return (
-              <AccessRow
-                key={provider}
-                name={label}
-                icon={<ProviderIcon provider={provider} size={16} />}
-                title={<span>{label}</span>}
-                meta={
-                  <>
-                    {only?.key.isPrimary && <PrimaryBadge />}
-                    {only ? (
-                      <span className="truncate">{only.owner}</span>
-                    ) : (
-                      <span>{plural(options.length, "key", "keys")}</span>
-                    )}
-                    {noModels && (
-                      <span className="text-amber-700 dark:text-amber-400">
-                        no models
+          <AccessSection
+            title="Providers"
+            icons={includeFutureProviders ? sharedProviders : listedProviders}
+            summary={providerSummary}
+          >
+            {(includeFutureProviders || listedProviderRows.length > 0) && (
+              <>
+                {includeFutureProviders && (
+                  <div className="flex items-start gap-2 px-2 py-1.5">
+                    {/* Lines the icon up with the other rows', past their chevron. */}
+                    <span aria-hidden className="size-4 shrink-0" />
+                    <span className="flex w-8 shrink-0 justify-center pt-0.5">
+                      <KeyRound
+                        className="size-4 text-muted-foreground"
+                        aria-hidden
+                      />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm">
+                        All shared providers
                       </span>
-                    )}
-                  </>
-                }
-                kind={includeFutureProviders ? "Key override" : "Provider key"}
-                removeLabel={`Stop using ${label}`}
-                onRemove={() =>
-                  onChange(
-                    value.filter((mapping) => mapping.provider !== provider),
-                  )
-                }
-              >
-                <DetailGrid
-                  headings={
-                    several
-                      ? ["Key", "Billing", "Models", ""]
-                      : ["Key", "Billing", "Models"]
-                  }
-                >
-                  {options.map((option) => (
-                    <Fragment key={option.key.id}>
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span className="truncate">{option.name}</span>
-                        {several && option.key.isPrimary && <PrimaryBadge />}
+                      <span className="block text-xs text-muted-foreground">
+                        Each shared provider’s primary key. New providers join
+                        automatically; personal and subscription keys are left
+                        out.
                       </span>
-                      <span className="truncate">{option.detail}</span>
-                      {option.models === null ? (
-                        <span />
-                      ) : (
-                        <ModelCount count={option.models} />
-                      )}
-                      {several && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          className="-my-1 text-muted-foreground"
-                          aria-label={`Remove ${option.name}`}
-                          onClick={() =>
-                            onChange(
-                              value.filter(
-                                (mapping) =>
-                                  mapping.providerApiKeyId !== option.key.id,
-                              ),
-                            )
-                          }
-                        >
-                          <X />
-                        </Button>
-                      )}
-                    </Fragment>
-                  ))}
-                </DetailGrid>
-              </AccessRow>
-            );
-          })}
+                    </span>
+                  </div>
+                )}
+                {listedProviderRows.map(({ provider, label, options }) => {
+                  const several = options.length > 1;
+                  const only = options.length === 1 ? options[0] : undefined;
+                  const noModels = options.some(
+                    (option) => option.models === 0,
+                  );
+                  return (
+                    <AccessRow
+                      key={provider}
+                      name={label}
+                      icon={<ProviderIcon provider={provider} size={16} />}
+                      title={<span>{label}</span>}
+                      meta={
+                        <>
+                          {only?.key.isPrimary && <PrimaryBadge />}
+                          {only ? (
+                            <span className="truncate">{only.owner}</span>
+                          ) : (
+                            <span>{plural(options.length, "key", "keys")}</span>
+                          )}
+                          {includeFutureProviders && (
+                            <span className="whitespace-nowrap">
+                              instead of primary
+                            </span>
+                          )}
+                          {noModels && (
+                            <span className="text-amber-700 dark:text-amber-400">
+                              no models
+                            </span>
+                          )}
+                        </>
+                      }
+                      removeLabel={`Stop using ${label}`}
+                      onRemove={() =>
+                        onChange(
+                          value.filter(
+                            (mapping) => mapping.provider !== provider,
+                          ),
+                        )
+                      }
+                    >
+                      <DetailGrid
+                        headings={
+                          several
+                            ? ["Key", "Billing", "Models", ""]
+                            : ["Key", "Billing", "Models"]
+                        }
+                      >
+                        {options.map((option) => (
+                          <Fragment key={option.key.id}>
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate">{option.name}</span>
+                              {several && option.key.isPrimary && (
+                                <PrimaryBadge />
+                              )}
+                            </span>
+                            <span className="truncate">{option.detail}</span>
+                            {option.models === null ? (
+                              <span />
+                            ) : (
+                              <ModelCount count={option.models} />
+                            )}
+                            {several && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                className="-my-1 text-muted-foreground"
+                                aria-label={`Remove ${option.name}`}
+                                onClick={() =>
+                                  onChange(
+                                    value.filter(
+                                      (mapping) =>
+                                        mapping.providerApiKeyId !==
+                                        option.key.id,
+                                    ),
+                                  )
+                                }
+                              >
+                                <X />
+                              </Button>
+                            )}
+                          </Fragment>
+                        ))}
+                      </DetailGrid>
+                    </AccessRow>
+                  );
+                })}
+              </>
+            )}
+          </AccessSection>
           {providers.length === 0 && !includeFutureProviders && (
             <div className="p-2">
               <NoProviderKeys />
             </div>
           )}
-          {providers.length > 0 &&
-            listedProviders.length === 0 &&
-            !includeFutureProviders && (
-              <p className="px-3 py-2.5 text-xs text-muted-foreground">
-                No providers selected — add one above.
-              </p>
-            )}
         </div>
       </section>
     </div>
@@ -555,16 +609,76 @@ const ACCESS_KINDS: { value: AccessKind; title: string }[] = [
 ];
 
 /**
+ * One kind of access, folded to a line: its name, what is in it, and a Change
+ * button that opens its rows. Done folds them away again, so the dialog stays
+ * short until someone needs the detail. A kind with nothing to change shows
+ * only its line.
+ */
+function AccessSection({
+  title,
+  summary,
+  icons = [],
+  mono = false,
+  children,
+}: {
+  title: string;
+  summary: string;
+  icons?: SupportedProvider[];
+  mono?: boolean;
+  children?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="flex min-h-12 items-center gap-2.5 py-1.5 pr-2 pl-3">
+        <span className="w-28 shrink-0 text-sm font-medium">{title}</span>
+        {icons.length > 0 && (
+          <span aria-hidden className="flex shrink-0 items-center gap-1">
+            {icons.map((provider) => (
+              <ProviderIcon key={provider} provider={provider} size={14} />
+            ))}
+          </span>
+        )}
+        <span
+          title={summary}
+          className={cn(
+            "min-w-0 flex-1 truncate text-sm text-foreground/80",
+            mono && "font-mono",
+          )}
+        >
+          {summary}
+        </span>
+        {children ? (
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label={`${open ? "Done" : "Change"} ${title.toLowerCase()}`}
+            >
+              {open ? "Done" : "Change"}
+            </Button>
+          </CollapsibleTrigger>
+        ) : null}
+      </div>
+      {children ? (
+        <CollapsibleContent>
+          <div className="px-1.5 pb-2">{children}</div>
+        </CollapsibleContent>
+      ) : null}
+    </Collapsible>
+  );
+}
+
+/**
  * One row of added access: a chevron, an icon for what it is, its name and a
- * short line, then what kind it is and a remove button. Clicking
- * the row opens the details.
+ * short line, then a remove button. Clicking the row opens the details.
  */
 function AccessRow({
   name,
   icon,
   title,
   meta,
-  kind,
   removeLabel,
   onRemove,
   children,
@@ -574,7 +688,6 @@ function AccessRow({
   icon: ReactNode;
   title: ReactNode;
   meta: ReactNode;
-  kind: string;
   removeLabel?: string;
   onRemove: () => void;
   children: ReactNode;
@@ -605,7 +718,6 @@ function AccessRow({
             </span>
           </UnstyledButton>
         </CollapsibleTrigger>
-        <KindLabel>{kind}</KindLabel>
         <Button
           type="button"
           variant="ghost"
@@ -669,15 +781,6 @@ function ProviderCell({
     >
       <ProviderIcon provider={provider} size={14} />
       <span className="truncate">{label}</span>
-    </span>
-  );
-}
-
-/** What a row is, e.g. "Model pool". */
-function KindLabel({ children }: { children: string }) {
-  return (
-    <span className="shrink-0 whitespace-nowrap px-1 text-xs text-muted-foreground">
-      {children}
     </span>
   );
 }

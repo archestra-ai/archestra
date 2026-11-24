@@ -192,6 +192,9 @@ describe("CreateVirtualKeyDialog", () => {
       screen.queryByText("Add a provider key first."),
     ).not.toBeInTheDocument();
     await user.click(
+      screen.getByRole("button", { name: "Change model pools" }),
+    );
+    await user.click(
       screen.getByRole("button", { name: "Remove subscription-pool" }),
     );
     expect(create).toBeDisabled();
@@ -298,6 +301,7 @@ describe("CreateVirtualKeyDialog", () => {
     expect(screen.getByLabelText("Name")).toHaveValue(
       "Self Admin's virtual key (2)",
     );
+    await user.click(screen.getByRole("button", { name: "Change providers" }));
     await user.click(
       screen.getByRole("button", { name: "Show OpenAI details" }),
     );
@@ -447,10 +451,17 @@ describe("CreateVirtualKeyDialog", () => {
     });
 
     const section = screen.getByRole("region", { name: "Access" });
+    // Folded, the providers line says how many and which keys they use.
+    expect(section).toHaveTextContent("2 providers · each on its primary key");
+    await user.click(screen.getByRole("button", { name: "Change providers" }));
     await user.click(
       screen.getByRole("button", { name: "Show OpenAI details" }),
     );
     expect(section).toHaveTextContent("Team key");
+    await user.click(screen.getByRole("button", { name: "Done providers" }));
+    expect(
+      screen.queryByRole("button", { name: "Show OpenAI details" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -470,6 +481,7 @@ describe("CreateVirtualKeyDialog", () => {
       initialProviderApiKeys: null,
     });
 
+    await user.click(screen.getByRole("button", { name: "Change providers" }));
     await user.click(screen.getByRole("button", { name: "Stop using OpenAI" }));
     await user.click(screen.getByRole("button", { name: "Create key" }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
@@ -513,6 +525,7 @@ describe("CreateVirtualKeyDialog", () => {
     await user.keyboard("{Escape}");
 
     // Switching keys is remove, then add the other one.
+    await user.click(screen.getByRole("button", { name: "Change providers" }));
     await user.click(screen.getByRole("button", { name: "Stop using OpenAI" }));
     await user.click(picker);
     await user.keyboard("openai");
@@ -582,6 +595,7 @@ describe("CreateVirtualKeyDialog", () => {
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("option", { name: /^Team key/ }));
     expect(picker).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: "Change providers" }));
     expect(
       screen.getByRole("button", { name: "Stop using OpenAI" }),
     ).toBeVisible();
@@ -601,7 +615,8 @@ describe("CreateVirtualKeyDialog", () => {
     });
 
     const access = screen.getByRole("region", { name: "Access" });
-    expect(access).toHaveTextContent("2 keys");
+    expect(access).toHaveTextContent(/Ollama.* uses 2 keys/);
+    await user.click(screen.getByRole("button", { name: "Change providers" }));
     await user.click(screen.getByRole("button", { name: /^Show .* details$/ }));
     await user.click(screen.getByRole("button", { name: "Remove Laptop" }));
     expect(access).not.toHaveTextContent("2 keys");
@@ -620,9 +635,7 @@ describe("CreateVirtualKeyDialog", () => {
       initialProviderApiKeys: [],
     });
 
-    expect(
-      screen.getByText("No providers selected — add one above."),
-    ).toBeVisible();
+    expect(screen.getByText("None yet — add one above")).toBeVisible();
     expect(screen.getByRole("button", { name: "Create key" })).toBeDisabled();
     await user.click(
       screen.getByRole("combobox", {

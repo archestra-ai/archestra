@@ -43,7 +43,7 @@ import { transformExternalCatalogToFormValues } from "./mcp-catalog-form.utils";
 // "mcp-apps-demo" is a pseudo-type: demo servers are marked with the
 // MCP_APPS_DEMO_CATEGORY catalog category, hidden from every other type view,
 // and revealed only by picking this type explicitly.
-type ServerType = "all" | "remote" | "local" | "mcp-apps-demo";
+type ServerType = "all" | "remote" | "local" | "desktop" | "mcp-apps-demo";
 
 // Catalog category reserved for servers that only exist to exercise the MCP
 // Apps feature. Surfaced in the UI as the "MCP Apps Demo" type, not as a
@@ -182,6 +182,7 @@ export function ArchestraCatalogTab({
               <SelectItem value="all">All types</SelectItem>
               <SelectItem value="remote">Remote</SelectItem>
               <SelectItem value="local">Local</SelectItem>
+              <SelectItem value="desktop">Desktop</SelectItem>
               <SelectItem value="mcp-apps-demo">MCP Apps Demo</SelectItem>
             </SelectContent>
           </Select>
@@ -315,16 +316,19 @@ function ServerCard({
   isInCatalog: boolean;
   userAllowedToCreateCatalogItem: boolean;
 }) {
-  // Where the server comes from: hosted remote endpoint, or a GitHub-sourced
-  // server the org hosts itself. GitHub-sourced servers are community-built
-  // unless they live in the official modelcontextprotocol org.
+  // Where the server comes from: hosted remote endpoint, a server that runs on
+  // each user's device, or a GitHub-sourced server the org hosts itself.
+  // GitHub-sourced servers are community-built unless they live in the
+  // official modelcontextprotocol org.
   const isOfficialSource = server.github_info?.owner === "modelcontextprotocol";
   const sourceBadges =
     server.server.type === "remote"
       ? ["Remote"]
-      : server.github_info && !isOfficialSource
-        ? ["Self-hosted", "Community"]
-        : ["Self-hosted"];
+      : server.server.type === "desktop"
+        ? ["Desktop"]
+        : server.github_info && !isOfficialSource
+          ? ["Self-hosted", "Community"]
+          : ["Self-hosted"];
   const docsUrl = server.homepage || server.documentation;
 
   return (

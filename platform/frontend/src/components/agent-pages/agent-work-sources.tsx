@@ -1,6 +1,10 @@
 "use client";
 
-import { MESSAGING_CHANNEL_LABELS, slackHandleFor } from "@archestra/shared";
+import {
+  CHAT_APP_CHANNEL_IDS,
+  MESSAGING_CHANNEL_LABELS,
+  slackHandleFor,
+} from "@archestra/shared";
 import {
   Hash,
   MessageSquare,
@@ -206,7 +210,7 @@ function AgentChannelsCard({
   const { data: config } = useConfig();
   // The chat apps this deployment offers, and of those the ones the
   // organization has connected: the card offers only what can work.
-  const offeredApps = CHAT_APPS.filter(
+  const offeredApps = CHAT_APP_CHANNEL_IDS.filter(
     (provider) =>
       !catalog.isHidden(provider) &&
       (provider !== "telegram" ||
@@ -377,12 +381,7 @@ function AgentChannelsCard({
   );
 }
 
-const CHAT_APPS = [
-  "slack",
-  "ms-teams",
-  "telegram",
-] as const satisfies readonly (keyof typeof MESSAGING_CHANNEL_LABELS)[];
-type ChatApp = (typeof CHAT_APPS)[number];
+type ChatApp = (typeof CHAT_APP_CHANNEL_IDS)[number];
 
 /**
  * One way in per connected chat app. A per-agent Slack bot is set up on the

@@ -18,6 +18,7 @@ import {
   RUN_ID_HEADER,
   requiresOpenAiResponsesApi,
   requiresPerplexityAgentApi,
+  settleStoppedToolCalls,
   TimeInMs,
   type TokenUsage,
   TURN_NOTICE_PART_TYPE,
@@ -136,6 +137,7 @@ import { startedUnenforced } from "@/openappa/unenforced";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
+  ActiveChatRunShutdownError,
   activeChatRunService,
 } from "@/services/active-chat-run";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
@@ -259,7 +261,6 @@ import {
   detectSandboxCommand,
   runSandboxCommandTurn,
 } from "./sandbox-command-turn";
-import { settleStoppedToolCalls } from "./stopped-tool-calls";
 import { withStreamIdleTimeout } from "./stream-idle-timeout";
 import { createToolCallRepair } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
@@ -2239,11 +2240,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     stopActiveRunPolling();
 
                     // A stopped run's in-flight tool calls keep their place in
-                    // the transcript, as calls that were stopped.
-                    const finalMessages =
-                      isAborted || chatAbortController.signal.aborted
-                        ? settleStoppedToolCalls(streamedMessages)
-                        : streamedMessages;
+                    // the transcript, as calls that were stopped. Only a stop
+                    // counts: a run that failed keeps its error as the turn's
+                    // last word, and a run this pod ends as it shuts down is
+                    // retried on another one.
+                    const stopped =
+                      (isAborted || chatAbortController.signal.aborted) &&
+                      !activeRunError &&
+                      !(
+                        chatAbortController.signal.reason instanceof
+                        ActiveChatRunShutdownError
+                      );
+                    const finalMessages = stopped
+                      ? settleStoppedToolCalls(streamedMessages)
+                      : streamedMessages;
                     const lastMessage = finalMessages.at(-1);
                     const reply =
                       lastMessage?.role === "assistant" &&

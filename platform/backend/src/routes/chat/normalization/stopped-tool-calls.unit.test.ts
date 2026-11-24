@@ -1,7 +1,7 @@
+import { settleStoppedToolCalls } from "@archestra/shared/tool-call-normalization";
 import { convertToModelMessages, type UIMessage } from "ai";
 import { describe, expect, test } from "vitest";
-import { normalizeChatMessagesForPersistence } from "./normalization/normalize-chat-messages";
-import { settleStoppedToolCalls } from "./stopped-tool-calls";
+import { normalizeChatMessagesForPersistence } from "./normalize-chat-messages";
 
 const user = {
   id: "user-1",

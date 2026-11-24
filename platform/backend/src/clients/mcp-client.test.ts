@@ -1286,8 +1286,13 @@ describe("McpClient", () => {
       mockConnect.mockImplementationOnce(async (transport) =>
         declareSkillsExtension(transport),
       );
+      // Such servers refuse the two methods in more ways than
+      // method-not-found; none of them is a reason to fail the install.
       mockListTools.mockRejectedValueOnce({ code: -32601 });
-      mockListResources.mockRejectedValueOnce({ code: -32601 });
+      mockListResources.mockRejectedValueOnce({
+        code: -32603,
+        message: "resources are not served here",
+      });
 
       expect(
         await mcpClient.connectAndGetTools({

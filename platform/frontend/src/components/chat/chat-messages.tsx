@@ -575,6 +575,9 @@ export function ChatMessages({
     [messages, optimisticToolCalls],
   );
   const isResponseInProgress = status === "streaming" || status === "submitted";
+  // The run goes on while the chat reconnects to it after a dropped stream:
+  // its calls are still running, whatever the stream's status says meanwhile.
+  const isTurnLive = isResponseInProgress || Boolean(session?.isRecovering);
   const assistantMessageCount = useMemo(
     () => messages.filter((m) => m.role === "assistant").length,
     [messages],
@@ -814,7 +817,7 @@ export function ChatMessages({
                     // Guarded calls in the turn still running read as
                     // running until they settle.
                     const turnActive =
-                      isResponseInProgress &&
+                      isTurnLive &&
                       message.role === "assistant" &&
                       idx === messages.length - 1;
                     const { groupMap, consumedIndices, remedyChainCards } =
@@ -1783,7 +1786,7 @@ export function ChatMessages({
                 toolIconMap={toolIconMap}
                 canExpandToolCalls={canExpandToolCalls}
                 onToolApprovalResponse={onToolApprovalResponse}
-                turnActive={isResponseInProgress}
+                turnActive={isTurnLive}
                 autoOpenPolicyKey={null}
                 renderAuthCard={renderCompactAuthCard}
               />

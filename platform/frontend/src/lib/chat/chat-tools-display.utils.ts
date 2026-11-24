@@ -313,7 +313,9 @@ function isUnfinishedToolState(
 
 /**
  * The text of a result its tool marked as an error (`isError`), which carries
- * no structured platform error. A reviewed call keeps its ruling instead.
+ * no structured platform error. A reviewed call keeps its ruling instead, and
+ * so does a ruling the Guardrails runtime wrote: a refusal that offers the
+ * model a way to continue is a step of the negotiation, not a failed call.
  */
 function getFlaggedErrorText(output: unknown): string | undefined {
   if (typeof output !== "object" || output === null) return undefined;
@@ -322,7 +324,11 @@ function getFlaggedErrorText(output: unknown): string | undefined {
     content?: unknown;
   };
   if (isError !== true || extractMcpHumanRuling(output)) return undefined;
-  return typeof content === "string" && content.trim()
-    ? content
-    : "The tool reported an error and returned no details.";
+  if (typeof content !== "string" || !content.trim()) {
+    return "The tool reported an error and returned no details.";
+  }
+  return content.startsWith(GUARDRAILS_RUNTIME_MARKER) ? undefined : content;
 }
+
+/** What the Guardrails runtime puts before every text it writes. */
+const GUARDRAILS_RUNTIME_MARKER = "[appa]";

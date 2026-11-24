@@ -17,9 +17,10 @@ export function withReadableHttpFailures(baseFetch?: FetchLike): FetchLike {
   return async (url, init) => {
     // The global fetch is read at call time, as the transport itself does.
     const response = await (baseFetch ?? fetch)(url, init);
-    // Only an error status has a body worth rewriting. A redirect the
-    // transport did not follow has status 0 and cannot be rebuilt.
-    if (response.status < 400) return response;
+    // Only an error status has a body worth rewriting. A response can be
+    // rebuilt for statuses 200 to 599 only: a redirect the transport did not
+    // follow has status 0, and a server can answer with a code above 599.
+    if (response.status < 400 || response.status > 599) return response;
     // Reading the body consumes it, so the response is rebuilt either way.
     const body = await response.text().catch(() => "");
     return rebuildResponse(

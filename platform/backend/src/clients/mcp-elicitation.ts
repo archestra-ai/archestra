@@ -48,9 +48,10 @@ export function withMcpElicitationCapability(
  * async context of the request, so the question arrives in the context of
  * its own call and reaches that call's handler. A question that arrives
  * outside any call's context (a stdio server, or one that uses the standalone
- * stream) goes to the oldest call still in flight on the connection. With one
- * call in flight that is exact; with several it is the call that would have
- * been running alone if calls took turns.
+ * stream) cannot be tied to a call: it goes to the oldest call still in
+ * flight on the connection. With one call in flight that is exact. With
+ * several it is a guess, so the caller lets calls share a connection only
+ * where a wrong guess stays inside one conversation.
  */
 export class McpElicitationRouter {
   private scope = new AsyncLocalStorage<ElicitationLease>();

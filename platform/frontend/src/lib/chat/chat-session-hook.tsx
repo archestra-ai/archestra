@@ -10,6 +10,7 @@ import {
   getArchestraToolShortName,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
+  settleStoppedToolCalls,
   stripDanglingToolCalls,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_QUEUE_PART_TYPE,
@@ -479,10 +480,12 @@ export default function ChatSessionHook({
       }
 
       // When the user stops mid-tool-call, the assistant message is left with a
-      // tool part that never produced output, which the UI renders as a
-      // perpetually "running" tool. Drop those dangling parts so the live view
-      // matches what the backend persists (and a reload would show). A stall
-      // recovery resets the messages and replays the run instead.
+      // tool part that never produced output. Give a call that was running
+      // the same "stopped" result the backend stores for it, and drop one
+      // still receiving its arguments, so the live view matches what the
+      // backend persists (and a reload would show), and the next turn sends
+      // the model the same history. A stall recovery resets the messages and
+      // replays the run instead.
       if (isAbort && !isStallRecoveryAbort) {
         // An explicit steering interrupt preserves queued follow-ups so the
         // normal ready-state drain can deliver the oldest one immediately.
@@ -495,7 +498,7 @@ export default function ChatSessionHook({
         // streamed text is never rolled back.
         setMessages((current) => {
           const stripped = pruneEmptyTrailingAssistantMessage(
-            stripDanglingToolCalls(current),
+            stripDanglingToolCalls(settleStoppedToolCalls(current)),
           );
           // restoreRenderableAssistantParts treats the shrink as a streaming
           // regression and would resurrect the stripped parts on the next

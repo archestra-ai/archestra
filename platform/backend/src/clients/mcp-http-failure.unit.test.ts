@@ -60,6 +60,20 @@ describe("withReadableHttpFailures", () => {
     );
   });
 
+  test("leaves a status no response can be rebuilt for as the server sent it", async () => {
+    // Node reports such a status but refuses to build a Response with it.
+    const original = Object.defineProperty(
+      new Response(HTML_PAGE, { status: 599 }),
+      "status",
+      { value: 999 },
+    );
+    const response = await fetchReturning(() => original)(
+      "https://mcp.example/mcp",
+    );
+
+    expect(response).toBe(original);
+  });
+
   test("leaves a successful response untouched, stream included", async () => {
     const original = new Response(HTML_PAGE, { status: 200 });
     const response = await fetchReturning(() => original)(

@@ -184,7 +184,45 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
     await expectNoSseRetriesAfterDisconnect(upstream);
   });
 
-  test("calls that ask the user run in parallel, and each question reaches its own call", async ({
+  test("calls that ask the user take turns on a connection every caller shares", async ({
+    makeUser,
+  }) => {
+    upstream = await startSessionServer({ elicit: true });
+    upstream.setValidToken("token-0");
+    const { agent, user } = await installOAuthServer({
+      makeUser,
+      url: upstream.url,
+      expiresAt: Date.now() + 8 * 3_600_000,
+    });
+    const questions: { handler: number; tool: number }[] = [];
+
+    // No conversation owns this connection: every caller of the install is
+    // on it, as on the MCP gateway. One caller's question must never reach
+    // another, so these calls do not overlap.
+    expect(
+      await fanOut({
+        agentId: agent.id,
+        userId: user.id,
+        count: 3,
+        elicitationHandler: (index) => async (request) => {
+          questions.push({
+            handler: index,
+            tool: Number(request.params.message),
+          });
+          return { action: "accept", content: { index } };
+        },
+      }),
+    ).toEqual([]);
+
+    expect(upstream.activity.maxToolCalls).toBe(1);
+    expect(questions).toEqual([
+      { handler: 0, tool: 0 },
+      { handler: 1, tool: 1 },
+      { handler: 2, tool: 2 },
+    ]);
+  });
+
+  test("a conversation's calls that ask the user run in parallel, and each question reaches its own call", async ({
     makeUser,
   }) => {
     const questionStarted = gate();
@@ -219,6 +257,7 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
         userId: user.id,
         count: 1,
         elicitationHandler,
+        conversationId: "conversation-1",
       }),
     ];
     try {
@@ -232,6 +271,7 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
           startIndex: 1,
           count: FAN_OUT - 1,
           elicitationHandler,
+          conversationId: "conversation-1",
         }),
       );
       await vi.waitFor(() =>
@@ -551,6 +591,8 @@ async function fanOut(params: {
   contexts?: string[];
   elicitationHandler?: (index: number) => McpElicitationHandler;
   onQueueChange?: (index: number, queued: boolean) => void;
+  /** The conversation that owns the connection, as a chat call has. */
+  conversationId?: string;
 }) {
   const results = await Promise.all(
     Array.from({ length: params.count ?? FAN_OUT }, async (_, offset) => {
@@ -573,6 +615,9 @@ async function fanOut(params: {
             : undefined,
         },
         {
+          ...(params.conversationId
+            ? { conversationId: params.conversationId }
+            : {}),
           ...(params.elicitationHandler
             ? { elicitationHandler: params.elicitationHandler(index) }
             : {}),

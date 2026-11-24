@@ -440,6 +440,19 @@ describe("a result its tool marked as an error", () => {
     );
   });
 
+  it("leaves a Guardrails refusal that offers a way to continue as a step, not a failure", () => {
+    const part = failed({
+      content:
+        '[appa] Blocked: this message cannot be read yet.\n  - archestra__execute_remedy_plan(offer_id: "0a0a")',
+      isError: true,
+    });
+
+    expect(getToolErrorText({ part, toolResultPart: null })).toBeUndefined();
+    expect(getCompactToolState({ part, toolResultPart: null })).toBe(
+      "completed",
+    );
+  });
+
   it("keeps a reviewed call on its ruling", () => {
     const part = failed({
       content: "[appa] Denied: the human reviewer refused this call.",

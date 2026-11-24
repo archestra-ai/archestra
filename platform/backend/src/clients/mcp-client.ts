@@ -1754,7 +1754,18 @@ class McpClient {
         catalogItem,
         targetMcpServerId,
       );
-      const concurrencyLimit = this.getConcurrencyLimit(transportKind);
+      // Calls that can be asked a question share the connection only when
+      // one conversation owns it. A question the server sends outside its
+      // call's response stream cannot be tied to a call, so it goes to the
+      // oldest call in flight (see McpElicitationRouter). Inside one
+      // conversation that puts the question under a sibling call. A
+      // connection with no conversation is shared by every caller of the
+      // install, as on the MCP gateway, where it would hand one caller's
+      // question to another: those calls keep taking turns.
+      const concurrencyLimit =
+        options?.elicitationHandler && !options.conversationId
+          ? 1
+          : this.getConcurrencyLimit(transportKind);
 
       return this.connectionLimiter.runWithLimit(
         connectionKey,
@@ -4606,12 +4617,18 @@ class McpClient {
           tools = await this.discoverToolsOrResourceTools(client);
         } catch (error) {
           // A Skills-only server may intentionally expose neither tools/list
-          // nor resources/list. Its declared extension is enough to keep the
-          // installation; the companion metadata pass will call skills/list.
-          // Any other failure (a rate limit, a dropped connection) is a failed
-          // discovery, not a server without tools.
+          // nor resources/list, and such servers refuse the two methods in
+          // more ways than method-not-found. Its declared extension is enough
+          // to keep the installation; the companion metadata pass will call
+          // skills/list. A rate limit or an outage is different: it says
+          // nothing about what the server offers, so it is a failed discovery
+          // (and one worth another attempt), not a server without tools.
+          const transient =
+            error instanceof StreamableHTTPError &&
+            error.code !== undefined &&
+            TRANSIENT_RESOURCE_HTTP_STATUSES.has(error.code);
           if (
-            isMethodNotFoundError(error) &&
+            !transient &&
             Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)
           ) {
             tools = [];

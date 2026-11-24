@@ -21,7 +21,6 @@
     "src/routes/chat/read-opened-app-ref.ts",
     "src/routes/chat/routes.ts",
     "src/routes/chat/sandbox-command-turn.ts",
-    "src/routes/chat/stopped-tool-calls.ts",
     "src/routes/chat/stream-idle-timeout.ts",
     "src/routes/chat/tool-ui-stream.ts",
     "src/routes/chat/ui-stream-response.ts",

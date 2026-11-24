@@ -441,7 +441,7 @@ class OpenAppaBatteriesService {
       OpenAppaEffectivePolicyModel.find(organizationId),
       guardrailsPolicyService.get(organizationId),
     ]);
-    if (stored ? stored.rootRevision !== root.revision : root.revision !== 0)
+    if (stored ? !answersRoot(stored, root) : root.revision !== 0)
       return { kind: "stale" };
     return stored && compositionView(stored).served.kind !== "root_only"
       ? { kind: "served", content: stored.content }
@@ -1192,16 +1192,7 @@ class OpenAppaBatteriesService {
   ): Promise<EffectivePolicy> {
     const root = await guardrailsPolicyService.get(organizationId);
     const effective = await OpenAppaEffectivePolicyModel.find(organizationId);
-    // Revision zero is shipped policy text and can change without a database revision.
-    if (
-      effective &&
-      effective.rootRevision === root.revision &&
-      effective.installFingerprint.startsWith(COMPOSITION_VERSION) &&
-      effective.installFingerprint.endsWith(
-        root.revision === 0 ? `:${root.contentHash}` : "",
-      )
-    )
-      return effective;
+    if (effective && answersRoot(effective, root)) return effective;
     logger.info(
       {
         organizationId,
@@ -2406,6 +2397,23 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // composed before host client coding tool aliases were supplied to saved
 // revisions (v14).
 const COMPOSITION_VERSION = "v14:";
+
+/**
+ * Whether a stored composition answers `root`. Revision zero is shipped policy
+ * text and can change without a database revision.
+ */
+function answersRoot(
+  stored: Pick<EffectivePolicy, "rootRevision" | "installFingerprint">,
+  root: Pick<GuardrailsPolicy, "revision" | "contentHash">,
+): boolean {
+  return (
+    stored.rootRevision === root.revision &&
+    stored.installFingerprint.startsWith(COMPOSITION_VERSION) &&
+    stored.installFingerprint.endsWith(
+      root.revision === 0 ? `:${root.contentHash}` : "",
+    )
+  );
+}
 
 /**
  * What a stored composition answers: the batteries it composed, the credential

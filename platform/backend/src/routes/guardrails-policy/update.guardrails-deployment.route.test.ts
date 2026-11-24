@@ -740,6 +740,42 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     });
   });
 
+  test("a composition of a shipped root the release has since changed is not checked as current", async () => {
+    await openappaBatteriesService.recompile(organizationId);
+    const observe: GuardrailsSettings = {
+      mode: "observe",
+      personApproval: "ask",
+      enforcedMarks: [],
+    };
+    expect(await lineWarnings(observe)).not.toContain(LINE_CHECK_INCOMPLETE);
+    const [stored] = await db
+      .select({
+        fingerprint: schema.openappaEffectivePoliciesTable.installFingerprint,
+      })
+      .from(schema.openappaEffectivePoliciesTable)
+      .where(
+        eq(
+          schema.openappaEffectivePoliciesTable.organizationId,
+          organizationId,
+        ),
+      );
+    await db
+      .update(schema.openappaEffectivePoliciesTable)
+      .set({
+        installFingerprint: stored.fingerprint.replace(
+          /:[0-9a-f]+$/,
+          ":shipped-before",
+        ),
+      })
+      .where(
+        eq(
+          schema.openappaEffectivePoliciesTable.organizationId,
+          organizationId,
+        ),
+      );
+    expect(await lineWarnings(observe)).toContain(LINE_CHECK_INCOMPLETE);
+  });
+
   test("a request dispatches on the settings it captured, rereading only the enforced marks on a retry", async () => {
     await GuardrailsDeploymentModel.set({
       enabled: true,

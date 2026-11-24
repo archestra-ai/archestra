@@ -234,6 +234,7 @@ impl Deployments {
         let (runtime, store) = (runtime.clone(), store.clone());
         let name = line.name();
         let (key, prepared) = (pinned.key.clone(), pinned.prepared.clone());
+        let marks = marked(line, policy).then(|| policy.guardrails.enforced_marks.clone());
         let head = tokio::task::spawn_blocking(move || -> Result<_, Fault> {
             let Some(head) = store.head(&name).map_err(storage)? else {
                 return Ok(None);
@@ -241,7 +242,11 @@ impl Deployments {
             if head.key.as_str() != &*key {
                 return Ok(None);
             }
-            pin_existing(&runtime, &name, &prepared, &head).map(Some)
+            let pin = move || pin_existing(&runtime, &name, &prepared, &head);
+            match marks {
+                Some(marks) => under_marks(&store, &marks, pin)?.transpose(),
+                None => pin().map(Some),
+            }
         })
         .await
         .map_err(panicked)??;
@@ -384,8 +389,7 @@ fn prepare(
     // A line with approvers is also composed from the enforced marks, so it is served
     // under the settings row's lock, which a settings write waits on, and only while the
     // stored marks are the ones it was composed from.
-    let marked = policy.composition.is_some()
-        && matches!(line.variant, Variant::Observe | Variant::EnforceApproved);
+    let marked = marked(line, policy);
     let published = match head {
         // The head already serves this file: pinning it advances nothing.
         Some(head) if head.key.as_str() == key => {
@@ -493,6 +497,12 @@ fn publish(
             OpenError::PolicyHeadMoved { .. } => DeploymentError::Superseded,
             error => DeploymentError::Failed(open_fault(error)),
         })
+}
+
+/// Whether `line` serves approvers composed from the enforced marks `policy` carries.
+fn marked(line: &Line, policy: &HostedPolicy) -> bool {
+    policy.composition.is_some()
+        && matches!(line.variant, Variant::Observe | Variant::EnforceApproved)
 }
 
 /// Runs `serve` holding a share lock on the Guardrails settings row, and only while its

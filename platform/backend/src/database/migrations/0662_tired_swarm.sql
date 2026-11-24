@@ -1,5 +1,5 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=The only foreign key is on a2a_task_release_receipts, which this migration creates empty, so the add-validating-constraint rule scans no existing rows; attaching it briefly locks a2a_task. Deleting a task deletes its receipts on purpose: a receipt describes its task's content and means nothing without it. The guardrails_deployment columns are nullable with no default, so adding them rewrites nothing; no existing row is read or changed.
+-- drizzle-migration-linter: reason=The only foreign key is on a2a_task_release_receipts, which this migration creates empty, so the add-validating-constraint rule scans no existing rows; attaching it briefly locks a2a_task, and it comes before the guardrails_deployment changes so a wait on a2a_task never holds that table's lock. Deleting a task deletes its receipts on purpose: a receipt describes its task's content and means nothing without it. The guardrails_deployment columns are nullable with no default, so adding them rewrites nothing; no existing row is read or changed.
 CREATE TABLE "a2a_task_release_receipts" (
 	"task_id" uuid NOT NULL,
 	"session" text NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE "chatops_delivery_receipts" (
 	CONSTRAINT "chatops_delivery_receipts_message_key_uq" UNIQUE NULLS NOT DISTINCT("provider","workspace_id","channel_id","message_id")
 );
 --> statement-breakpoint
+ALTER TABLE "a2a_task_release_receipts" ADD CONSTRAINT "a2a_task_release_receipts_task_id_a2a_task_id_fk" FOREIGN KEY ("task_id") REFERENCES "public"."a2a_task"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "guardrails_deployment" ADD COLUMN "mode" varchar(16);--> statement-breakpoint
 ALTER TABLE "guardrails_deployment" ADD COLUMN "person_approval" varchar(16);--> statement-breakpoint
-ALTER TABLE "guardrails_deployment" ADD COLUMN "enforced_marks" text[];--> statement-breakpoint
-ALTER TABLE "a2a_task_release_receipts" ADD CONSTRAINT "a2a_task_release_receipts_task_id_a2a_task_id_fk" FOREIGN KEY ("task_id") REFERENCES "public"."a2a_task"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "guardrails_deployment" ADD COLUMN "enforced_marks" text[];

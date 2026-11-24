@@ -5,6 +5,7 @@ import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsDeploymentModel, {
+  type GuardrailsDeploymentRow,
   type GuardrailsDeploymentUpdate,
 } from "@/models/guardrails-deployment";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -48,26 +49,20 @@ export async function getGuardrailsDeploymentFromSnapshot(
   // An environment variable, while set, wins over the stored setting, and a
   // new setting it pins as well.
   const overrides = config.openappa.breakTheGlassOverrides ?? {};
-  const humanApprovalMode =
-    overrides.humanApprovalMode ?? row.humanApprovalMode;
-  const mode = GuardrailsDeploymentModel.mode(row);
+  const { mode, personApproval, enforcedMarks } = canonicalOf(row);
   return {
     mode,
-    personApproval:
-      (overrides.humanApprovalMode === undefined ? row.personApproval : null) ??
-      PERSON_APPROVAL_OF[humanApprovalMode],
-    enforcedMarks: row.enforcedMarks ?? [],
+    personApproval: overrides.humanApprovalMode
+      ? PERSON_APPROVAL_OF[overrides.humanApprovalMode]
+      : personApproval,
+    enforcedMarks,
     enabled: mode !== "off",
     unsupportedClientAction: row.unsupportedClientAction,
     breakTheGlassEnabled: row.breakTheGlassEnabled,
-    humanApprovalMode,
+    humanApprovalMode: overrides.humanApprovalMode ?? row.humanApprovalMode,
     unapprovableBlockMode:
       overrides.unapprovableBlockMode ?? row.unapprovableBlockMode,
-    environmentOverrides: BREAK_THE_GLASS_VARIABLES.filter(
-      ({ setting }) => overrides[setting] !== undefined,
-    ).flatMap(({ variable, pins }) =>
-      pins.map((setting) => ({ setting, variable })),
-    ),
+    environmentOverrides: pinnedSettings(),
     annotatorModelId: row.annotatorModelId,
     annotatorLlmApiKeyId: row.annotatorLlmApiKeyId,
     featureEnabled: enterpriseTier.isOpenappaActive(),
@@ -98,7 +93,6 @@ export function breakTheGlassActiveIn(deployment: {
 export async function setGuardrailsDeployment(
   update: GuardrailsDeploymentUpdate,
   actor?: { userId: string; organizationId?: string },
-  legacy: "closest_tuple" | "as_given" = "closest_tuple",
 ) {
   if (
     update.annotatorModelId !== undefined ||
@@ -109,40 +103,57 @@ export async function setGuardrailsDeployment(
       modelId: update.annotatorModelId ?? null,
       apiKeyId: update.annotatorLlmApiKeyId ?? null,
     });
-  const stored = await GuardrailsDeploymentModel.get();
-  const written =
-    legacy === "closest_tuple" ? withClosestTuple(stored, update) : update;
-  const turnsOn =
-    written.enabled &&
-    (update.enabled === true ||
-      GuardrailsDeploymentModel.mode(stored) === "off");
-  if (turnsOn && enterpriseTier.isOpenappaActive()) {
-    const refusals = await refusedPolicies();
-    if (refusals.length > 0)
-      throw new ApiError(
-        409,
-        `Guardrails v2 was not enabled: the guardrails policy is refused, so every proxied request would fail. Fix the policy on the OpenAPPA page first. ${refusals.join(" ")}`,
-      );
-  }
-  const before = await getGuardrailsDeploymentFromSnapshot({ row: stored });
-  for (const { setting, variable } of before.environmentOverrides) {
+  const pinned = pinnedSettings();
+  for (const { setting, variable } of pinned) {
     if (update[setting] !== undefined)
       throw new ApiError(
         400,
         `${variable} sets this deployment's ${setting}. Unset it to edit this setting.`,
       );
   }
-  await GuardrailsDeploymentModel.set(written);
+  const {
+    mode: _mode,
+    personApproval: _personApproval,
+    enforcedMarks: _enforcedMarks,
+    enabled: _enabled,
+    humanApprovalMode: _humanApprovalMode,
+    unapprovableBlockMode: _unapprovableBlockMode,
+    ...independent
+  } = update;
+  // The policy check runs outside the row lock; the locked write refuses a
+  // switch-on the check did not cover.
+  const checked = turnsOn(await GuardrailsDeploymentModel.get(), update);
+  if (checked) await assertPoliciesOpen();
+  const stored = await GuardrailsDeploymentModel.save((row) => {
+    if (turnsOn(row, update) && !checked)
+      throw new ApiError(
+        409,
+        "The Guardrails settings changed during this save. Try again.",
+      );
+    const settings = intendedSettings(row, update);
+    return { ...independent, ...settings, ...legacyTuple(settings, pinned) };
+  });
+  const before = await getGuardrailsDeploymentFromSnapshot({ row: stored });
   const after = await getGuardrailsDeployment();
-  // Back on: each repository's policy is pulled now, so what merged while
-  // enforcement was off is enforced, not the commit accepted before.
+  await announceSwitch(before, after, actor?.userId);
+  return after;
+}
+
+/**
+ * Back on: each repository's policy is pulled now, so what merged while
+ * enforcement was off is enforced, not the commit accepted before. A switch
+ * changes what every running session and runtime may do, so the moment it
+ * happened must be findable in the backend log, not only in the audit log.
+ */
+async function announceSwitch(
+  before: Awaited<ReturnType<typeof getGuardrailsDeployment>>,
+  after: Awaited<ReturnType<typeof getGuardrailsDeployment>>,
+  userId: string | undefined,
+) {
   if (after.enabled && !before.enabled) await queueGitSyncs();
-  // A switch changes what every running session and runtime may do, so the
-  // moment it happened must be findable in the backend log, not only in the
-  // audit log.
   logger.info(
     {
-      userId: actor?.userId,
+      userId,
       before: deploymentSettings(before),
       after: deploymentSettings(after),
     },
@@ -150,7 +161,6 @@ export async function setGuardrailsDeployment(
       ? `Guardrails enforcement switched ${after.enabled ? "on" : "off"}`
       : "Guardrails deployment settings changed",
   );
-  return after;
 }
 
 /** Queue a pull for every organization whose policy syncs from a repository. */
@@ -251,19 +261,26 @@ export async function turnOnForFirstPolicy(params: {
     params.revision,
   );
   if (refusal) return refusal;
-  const before = await GuardrailsDeploymentModel.findByIdForAudit();
   try {
-    // Only the switch: the other legacy columns keep what was stored.
-    await setGuardrailsDeployment(
-      { mode: "enforce", enabled: true },
-      { userId, organizationId },
-      "as_given",
-    );
+    if (enterpriseTier.isOpenappaActive()) await assertPoliciesOpen();
   } catch (error) {
     if (error instanceof ApiError)
       return { enabled: false, turnedOn: false, reason: error.message };
     throw error;
   }
+  const before = await GuardrailsDeploymentModel.findByIdForAudit();
+  // Only the switch, and only while no mode was saved and it is off at the
+  // write: an administrator's save in between wins.
+  if (!(await GuardrailsDeploymentModel.turnOnIfNeverSet()))
+    return {
+      enabled: (await getGuardrailsDeployment()).active,
+      turnedOn: false,
+    };
+  await announceSwitch(
+    await getGuardrailsDeploymentFromSnapshot({ row: before }),
+    await getGuardrailsDeployment(),
+    userId,
+  );
   const actor = await UserModel.getById(userId);
   await AuditLogModel.create({
     organizationId,
@@ -321,6 +338,15 @@ async function assertAnnotatorModelSelection(params: {
     throw new ApiError(400, "The annotator model and API key must be linked");
 }
 
+async function assertPoliciesOpen() {
+  const refusals = await refusedPolicies();
+  if (refusals.length > 0)
+    throw new ApiError(
+      409,
+      `Guardrails v2 was not enabled: the guardrails policy is refused, so every proxied request would fail. Fix the policy on the OpenAPPA page first. ${refusals.join(" ")}`,
+    );
+}
+
 async function refusedPolicies(): Promise<string[]> {
   const refusals: string[] = [];
   for (const organizationId of await OrganizationModel.findAllIds()) {
@@ -369,59 +395,102 @@ const HUMAN_APPROVAL_OF: Record<PersonApproval, HumanApprovalMode> = {
   auto_everywhere: "everywhere",
 };
 
-/**
- * What a save writes: a new setting also writes its closest legacy tuple, so
- * older replicas and a rollback behave as close to it as they can; a legacy
- * edit moves a saved new setting along with it.
- */
-function withClosestTuple(
-  stored: Awaited<ReturnType<typeof GuardrailsDeploymentModel.get>>,
-  update: GuardrailsDeploymentUpdate,
-): GuardrailsDeploymentUpdate {
-  const next = { ...stored, ...update };
-  if (update.mode !== undefined || update.personApproval !== undefined)
-    return {
-      ...update,
-      ...legacyTuple(
-        GuardrailsDeploymentModel.mode(next),
-        next.personApproval ?? PERSON_APPROVAL_OF[next.humanApprovalMode],
-      ),
-    };
+type DeploymentSettings = {
+  mode: GuardrailsMode;
+  personApproval: PersonApproval;
+  enforcedMarks: string[];
+};
+
+/** The settings a row holds, without environment overrides. */
+function canonicalOf(row: GuardrailsDeploymentRow): DeploymentSettings {
   return {
-    ...update,
-    ...(update.enabled !== undefined &&
-      stored.mode !== null && {
-        mode: update.enabled
-          ? stored.mode === "off"
-            ? "enforce"
-            : stored.mode
-          : "off",
-      }),
-    ...(update.humanApprovalMode !== undefined &&
-      stored.personApproval !== null && {
-        personApproval: PERSON_APPROVAL_OF[update.humanApprovalMode],
-      }),
+    mode: GuardrailsDeploymentModel.mode(row),
+    personApproval:
+      row.personApproval ?? PERSON_APPROVAL_OF[row.humanApprovalMode],
+    enforcedMarks: row.enforcedMarks ?? [],
   };
 }
 
+/** The settings a save leaves: its legacy fields read as intent first. */
+function intendedSettings(
+  row: GuardrailsDeploymentRow,
+  update: GuardrailsDeploymentUpdate,
+): DeploymentSettings {
+  const current = canonicalOf(row);
+  const approvalFromLegacy =
+    update.humanApprovalMode && PERSON_APPROVAL_OF[update.humanApprovalMode];
+  const modeFromSwitch =
+    update.enabled === undefined
+      ? undefined
+      : update.enabled
+        ? GuardrailsDeploymentModel.mode({ ...row, enabled: true })
+        : "off";
+  const settings: DeploymentSettings = {
+    mode: update.mode ?? modeFromSwitch ?? current.mode,
+    personApproval:
+      update.personApproval ?? approvalFromLegacy ?? current.personApproval,
+    enforcedMarks: update.enforcedMarks ?? current.enforcedMarks,
+  };
+  const conflicts =
+    (update.mode !== undefined &&
+      update.enabled !== undefined &&
+      update.enabled !== (update.mode !== "off")) ||
+    (update.personApproval !== undefined &&
+      approvalFromLegacy !== undefined &&
+      update.personApproval !== approvalFromLegacy) ||
+    (update.unapprovableBlockMode !== undefined &&
+      update.unapprovableBlockMode !==
+        legacyTuple(settings, []).unapprovableBlockMode);
+  if (conflicts)
+    throw new ApiError(
+      400,
+      "The settings in this request contradict each other",
+    );
+  return settings;
+}
+
+/** Whether a save switches enforcement on, so the policy check must pass. */
+function turnsOn(
+  row: GuardrailsDeploymentRow,
+  update: GuardrailsDeploymentUpdate,
+): boolean {
+  return (
+    enterpriseTier.isOpenappaActive() &&
+    intendedSettings(row, update).mode !== "off" &&
+    (update.enabled === true || GuardrailsDeploymentModel.mode(row) === "off")
+  );
+}
+
+/**
+ * The legacy columns as a function of the settings, for older replicas and a
+ * rollback. A column an environment variable pins keeps its stored value.
+ */
 function legacyTuple(
-  mode: GuardrailsMode,
-  personApproval: PersonApproval,
-): GuardrailsDeploymentUpdate {
-  switch (mode) {
-    case "off":
-      return { enabled: false };
-    case "observe":
-      return {
-        enabled: true,
-        unapprovableBlockMode: "allow",
-        humanApprovalMode: "everywhere",
-      };
-    case "enforce":
-      return {
-        enabled: true,
-        unapprovableBlockMode: "refuse",
-        humanApprovalMode: HUMAN_APPROVAL_OF[personApproval],
-      };
-  }
+  settings: DeploymentSettings,
+  pinned: ReturnType<typeof pinnedSettings>,
+) {
+  const observe = settings.mode === "observe";
+  const isPinned = (setting: (typeof pinned)[number]["setting"]) =>
+    pinned.some((each) => each.setting === setting);
+  return {
+    enabled: settings.mode !== "off",
+    ...(!isPinned("humanApprovalMode") && {
+      humanApprovalMode: observe
+        ? ("everywhere" as const)
+        : HUMAN_APPROVAL_OF[settings.personApproval],
+    }),
+    ...(!isPinned("unapprovableBlockMode") && {
+      unapprovableBlockMode: observe ? ("allow" as const) : ("refuse" as const),
+    }),
+  };
+}
+
+/** The settings an environment variable sets, and so pins against edits. */
+function pinnedSettings() {
+  const overrides = config.openappa.breakTheGlassOverrides ?? {};
+  return BREAK_THE_GLASS_VARIABLES.filter(
+    ({ setting }) => overrides[setting] !== undefined,
+  ).flatMap(({ variable, pins }) =>
+    pins.map((setting) => ({ setting, variable })),
+  );
 }

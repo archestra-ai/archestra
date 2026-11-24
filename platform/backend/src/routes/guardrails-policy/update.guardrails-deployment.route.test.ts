@@ -142,21 +142,19 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
   });
 
-  test("administrators can let blocked calls through with a yell, and the change is audited", async () => {
+  test("administrators can let approvals through with a yell, and the change is audited", async () => {
     await set(true);
     const response = await app.inject({
       method: "PUT",
       url: "/api/guardrails-deployment",
-      payload: {
-        humanApprovalMode: "everywhere",
-        unapprovableBlockMode: "allow",
-      },
+      payload: { humanApprovalMode: "everywhere" },
     });
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
       enabled: true,
+      personApproval: "auto_everywhere",
       humanApprovalMode: "everywhere",
-      unapprovableBlockMode: "allow",
+      unapprovableBlockMode: "refuse",
     });
     await vi.waitFor(async () => {
       const rows = await db
@@ -166,13 +164,10 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       expect(rows).toContainEqual(
         expect.objectContaining({
           action: "organization.updated",
-          before: expect.objectContaining({
-            humanApprovalMode: "block",
-            unapprovableBlockMode: "refuse",
-          }),
+          before: expect.objectContaining({ humanApprovalMode: "block" }),
           after: expect.objectContaining({
+            personApproval: "auto_everywhere",
             humanApprovalMode: "everywhere",
-            unapprovableBlockMode: "allow",
           }),
         }),
       );
@@ -216,15 +211,21 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       });
       expect(refused.statusCode).toBe(400);
       expect(refused.body).toContain("Unset it to edit this setting");
-      // A setting no variable sets stays editable.
+      // A setting no variable sets stays editable, and its save leaves the
+      // pinned column as stored.
       const other = await app.inject({
         method: "PUT",
         url: "/api/guardrails-deployment",
-        payload: { unapprovableBlockMode: "allow" },
+        payload: { mode: "observe" },
       });
       expect(other.statusCode, other.body).toBe(200);
       expect(other.json()).toMatchObject({
+        mode: "observe",
         humanApprovalMode: "block",
+        unapprovableBlockMode: "allow",
+      });
+      expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+        humanApprovalMode: "everywhere",
         unapprovableBlockMode: "allow",
       });
     } finally {
@@ -259,88 +260,160 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     });
   });
 
-  test("a saved mode writes its closest legacy tuple, and a legacy edit moves the saved mode", async () => {
-    const put = (payload: Record<string, unknown>) =>
-      app.inject({ method: "PUT", url: "/api/guardrails-deployment", payload });
-    const legacy = async () => {
-      const row = await GuardrailsDeploymentModel.get();
-      return {
-        enabled: row.enabled,
-        humanApprovalMode: row.humanApprovalMode,
-        unapprovableBlockMode: row.unapprovableBlockMode,
-      };
+  const put = (payload: Record<string, unknown>) =>
+    app.inject({ method: "PUT", url: "/api/guardrails-deployment", payload });
+  const saved = async (payload: Record<string, unknown>) => {
+    const response = await put(payload);
+    expect(response.statusCode, response.body).toBe(200);
+  };
+  const stored = async () => {
+    const row = await GuardrailsDeploymentModel.get();
+    return {
+      mode: row.mode,
+      personApproval: row.personApproval,
+      enforcedMarks: row.enforcedMarks,
+      enabled: row.enabled,
+      humanApprovalMode: row.humanApprovalMode,
+      unapprovableBlockMode: row.unapprovableBlockMode,
     };
+  };
+  const read = async () =>
+    (
+      await app.inject({ method: "GET", url: "/api/guardrails-deployment" })
+    ).json();
 
-    const observe = await put({ mode: "observe", enforcedMarks: ["payments"] });
-    expect(observe.statusCode, observe.body).toBe(200);
-    expect(observe.json()).toMatchObject({
-      mode: "observe",
-      enforcedMarks: ["payments"],
+  test("a legacy switch-on from Off rebuilds the legacy columns from the saved settings", async () => {
+    await saved({ mode: "observe", personApproval: "ask" });
+    await saved({ mode: "off" });
+    expect(await stored()).toEqual({
+      mode: "off",
+      personApproval: "ask",
+      enforcedMarks: [],
+      enabled: false,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+    await saved({ enabled: true });
+    expect(await stored()).toEqual({
+      mode: "enforce",
+      personApproval: "ask",
+      enforcedMarks: [],
+      enabled: true,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+    expect(await read()).toMatchObject({
+      mode: "enforce",
+      personApproval: "ask",
       active: true,
     });
-    expect(await legacy()).toEqual({
+  });
+
+  test("Ask a legacy row derives survives Observe and back to Enforce", async () => {
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      humanApprovalMode: "block",
+    });
+    await saved({ mode: "observe", enforcedMarks: ["payments"] });
+    expect(await stored()).toEqual({
+      mode: "observe",
+      personApproval: "ask",
+      enforcedMarks: ["payments"],
       enabled: true,
       humanApprovalMode: "everywhere",
       unapprovableBlockMode: "allow",
     });
-
-    expect(
-      (
-        await put({ mode: "enforce", personApproval: "auto_unattended" })
-      ).json(),
-    ).toMatchObject({ mode: "enforce", personApproval: "auto_unattended" });
-    expect(await legacy()).toEqual({
+    await saved({ mode: "enforce" });
+    expect(await stored()).toEqual({
+      mode: "enforce",
+      personApproval: "ask",
+      enforcedMarks: ["payments"],
       enabled: true,
-      humanApprovalMode: "unattended",
+      humanApprovalMode: "block",
       unapprovableBlockMode: "refuse",
     });
-
-    expect((await put({ mode: "off" })).json()).toMatchObject({
-      mode: "off",
-      enabled: false,
-      active: false,
-    });
-    expect((await legacy()).enabled).toBe(false);
-
-    // The switch the current page still writes keeps the saved mode in step.
-    expect((await put({ enabled: true })).json()).toMatchObject({
-      mode: "enforce",
-    });
-    expect((await put({ humanApprovalMode: "block" })).json()).toMatchObject({
-      personApproval: "ask",
-    });
-    await vi.waitFor(async () => {
-      const rows = await db
-        .select()
-        .from(schema.auditLogsTable)
-        .where(eq(schema.auditLogsTable.organizationId, organizationId));
-      expect(rows).toContainEqual(
-        expect.objectContaining({
-          action: "organization.updated",
-          before: expect.objectContaining({ mode: null }),
-          after: expect.objectContaining({ mode: "observe" }),
-        }),
-      );
-    });
-    expect(
-      (await put({ enforcedMarks: ["payments", "payments"] })).statusCode,
-    ).toBe(400);
-    expect((await put({ mode: "audit" })).statusCode).toBe(400);
+    // The legacy switch turns Observe off; turned back on, it is Enforce.
+    await saved({ mode: "observe" });
+    await saved({ enabled: false });
+    expect((await stored()).mode).toBe("off");
+    await saved({ enabled: true });
+    expect((await stored()).mode).toBe("enforce");
   });
 
-  test("the approval variable wins over saved person approval and pins it against edits", async () => {
-    await GuardrailsDeploymentModel.set({
-      humanApprovalMode: "everywhere",
-      personApproval: "auto_everywhere",
-    });
-    config.openappa.breakTheGlassOverrides = { humanApprovalMode: "block" };
-    const read = await app.inject({
-      method: "GET",
-      url: "/api/guardrails-deployment",
-    });
-    expect(read.json()).toMatchObject({
+  test("person approval saved while Off is written to the legacy approval column", async () => {
+    await saved({ mode: "enforce", personApproval: "auto_everywhere" });
+    await saved({ mode: "off" });
+    expect((await stored()).humanApprovalMode).toBe("everywhere");
+    await saved({ personApproval: "ask" });
+    expect(await stored()).toMatchObject({
+      mode: "off",
       personApproval: "ask",
+      enabled: false,
       humanApprovalMode: "block",
+    });
+  });
+
+  test("concurrent saves leave the switch and the mode in step", async () => {
+    await saved({ mode: "off" });
+    const responses = await Promise.all([
+      put({ personApproval: "ask" }),
+      put({ mode: "enforce" }),
+      put({ enabled: false }),
+    ]);
+    for (const response of responses)
+      expect(response.statusCode, response.body).toBe(200);
+    const row = await stored();
+    expect(row.enabled).toBe(row.mode !== "off");
+    expect(row.unapprovableBlockMode).toBe("refuse");
+  });
+
+  test("a switch an older replica writes alone is honoured on read", async () => {
+    await saved({ mode: "observe" });
+    await GuardrailsDeploymentModel.set({ enabled: false });
+    expect(await read()).toMatchObject({ mode: "off", active: false });
+    await GuardrailsDeploymentModel.set({ enabled: true });
+    expect(await read()).toMatchObject({ mode: "observe", active: true });
+    await saved({ mode: "off" });
+    await GuardrailsDeploymentModel.set({ enabled: true });
+    expect(await read()).toMatchObject({ mode: "enforce", active: true });
+  });
+
+  test("contradicting fields in one request are refused and change nothing", async () => {
+    await saved({ mode: "enforce" });
+    const before = await stored();
+    for (const payload of [
+      { enabled: false, mode: "enforce" },
+      { enabled: true, mode: "off" },
+      { humanApprovalMode: "block", personApproval: "auto_everywhere" },
+      { unapprovableBlockMode: "allow" },
+      { mode: "observe", unapprovableBlockMode: "refuse" },
+    ])
+      expect((await put(payload)).statusCode, JSON.stringify(payload)).toBe(
+        400,
+      );
+    expect(await stored()).toEqual(before);
+  });
+
+  test("enforced marks are refused when duplicated or holding NUL", async () => {
+    for (const enforcedMarks of [
+      ["payments", "payments"],
+      ["pay\u0000ments"],
+      [""],
+    ])
+      expect((await put({ enforcedMarks })).statusCode).toBe(400);
+    expect((await put({ mode: "audit" })).statusCode).toBe(400);
+    expect((await stored()).enforcedMarks).toBeNull();
+  });
+
+  test("the approval variable wins over saved person approval, pins it, and is never written", async () => {
+    await saved({ mode: "enforce", personApproval: "ask" });
+    config.openappa.breakTheGlassOverrides = {
+      humanApprovalMode: "unattended",
+      unapprovableBlockMode: "refuse",
+    };
+    expect(await read()).toMatchObject({
+      personApproval: "auto_unattended",
+      humanApprovalMode: "unattended",
       environmentOverrides: [
         {
           setting: "humanApprovalMode",
@@ -350,17 +423,23 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           setting: "personApproval",
           variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
         },
+        {
+          setting: "unapprovableBlockMode",
+          variable: "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",
+        },
       ],
     });
-    const refused = await app.inject({
-      method: "PUT",
-      url: "/api/guardrails-deployment",
-      payload: { personApproval: "auto_unattended" },
-    });
-    expect(refused.statusCode).toBe(400);
-    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
-      personApproval: "auto_everywhere",
-      humanApprovalMode: "everywhere",
+    expect((await put({ personApproval: "auto_unattended" })).statusCode).toBe(
+      400,
+    );
+    // Observe's legacy columns would be everywhere and allow: both pinned.
+    await saved({ mode: "observe" });
+    expect(await stored()).toMatchObject({
+      mode: "observe",
+      personApproval: "ask",
+      enabled: true,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
     });
   });
 

@@ -46,7 +46,14 @@ export type PersonApproval = z.infer<typeof PersonApprovalSchema>;
 
 /** Attention marks the Observe approver never attends. */
 export const EnforcedMarksSchema = z
-  .array(z.string().trim().min(1).max(128))
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1)
+      .max(128)
+      .refine((mark) => !mark.includes("\u0000"), "A mark cannot contain NUL"),
+  )
   .max(64)
   .refine((marks) => new Set(marks).size === marks.length, "Duplicate mark");
 

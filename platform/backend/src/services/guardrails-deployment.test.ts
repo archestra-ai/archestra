@@ -178,4 +178,36 @@ describe("turnOnForFirstPolicy", () => {
       breakTheGlassEnabled: false,
     });
   });
+
+  test("an Off saved after the first-publish check wins over its write", async () => {
+    // A fresh deployment passes the check; then an administrator saves Off.
+    await setGuardrailsDeployment({ mode: "off" });
+    expect(await GuardrailsDeploymentModel.turnOnIfNeverSet()).toBe(false);
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      mode: "off",
+      enabled: false,
+    });
+    await db.delete(schema.guardrailsDeploymentTable);
+    expect(await GuardrailsDeploymentModel.turnOnIfNeverSet()).toBe(true);
+    expect(await GuardrailsDeploymentModel.turnOnIfNeverSet()).toBe(false);
+  });
+});
+
+describe("GuardrailsDeploymentModel.reset", () => {
+  test("restores the legacy defaults and clears the saved settings", async () => {
+    await setGuardrailsDeployment({
+      mode: "observe",
+      personApproval: "auto_everywhere",
+      enforcedMarks: ["payments"],
+    });
+    await db.transaction((tx) => GuardrailsDeploymentModel.reset(tx));
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      mode: null,
+      personApproval: null,
+      enforcedMarks: null,
+      enabled: false,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+  });
 });

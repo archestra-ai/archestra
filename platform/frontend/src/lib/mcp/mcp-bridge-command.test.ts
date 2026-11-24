@@ -4,10 +4,10 @@ import { bridgeCommand, UNINSTALL_COMMAND } from "./mcp-bridge-command";
 describe("bridgeCommand", () => {
   it("uses the connection base URL without its /v1", () => {
     expect(bridgeCommand("https://archestra.example.com/v1", false)).toBe(
-      "curl -fsSL -o archestra \\\n" +
+      "curl -fsSL -o archestra-cli \\\n" +
         '  "https://archestra.example.com/api/archestra-cli/$(uname -s)-$(uname -m)" \\\n' +
-        "  && chmod +x archestra \\\n" +
-        "  && ./archestra bridge start --url https://archestra.example.com",
+        "  && chmod +x archestra-cli \\\n" +
+        "  && ./archestra-cli bridge start --url https://archestra.example.com",
     );
   });
 
@@ -16,8 +16,8 @@ describe("bridgeCommand", () => {
       `$ProgressPreference = 'SilentlyContinue'; \`\n` +
         `  $arch = $env:PROCESSOR_ARCHITECTURE; \`\n` +
         `  irm "https://archestra.example.com/api/archestra-cli/windows-$arch" \`\n` +
-        `    -OutFile archestra.exe; \`\n` +
-        "  if ($?) { .\\archestra.exe bridge start --url https://archestra.example.com }",
+        `    -OutFile archestra-cli.exe; \`\n` +
+        "  if ($?) { .\\archestra-cli.exe bridge start --url https://archestra.example.com }",
     );
     // No `&&`: Windows PowerShell 5.1 does not have it.
     expect(
@@ -53,7 +53,7 @@ describe("bridgeCommand", () => {
         "AbCdEfGhIjKlMnOpQrStUv",
       ),
     ).toContain(
-      "./archestra bridge start --url https://archestra.example.com \\\n    --setup-code AbCdEfGhIjKlMnOpQrStUv",
+      "./archestra-cli bridge start --url https://archestra.example.com \\\n    --setup-code AbCdEfGhIjKlMnOpQrStUv",
     );
     expect(
       bridgeCommand(
@@ -62,7 +62,7 @@ describe("bridgeCommand", () => {
         "AbCdEfGhIjKlMnOpQrStUv",
       ),
     ).toContain(
-      ".\\archestra.exe bridge start --url https://archestra.example.com `\n    --setup-code AbCdEfGhIjKlMnOpQrStUv }",
+      ".\\archestra-cli.exe bridge start --url https://archestra.example.com `\n    --setup-code AbCdEfGhIjKlMnOpQrStUv }",
     );
   });
 

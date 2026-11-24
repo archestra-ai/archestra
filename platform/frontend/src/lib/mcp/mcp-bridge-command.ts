@@ -12,6 +12,9 @@
  *   The download URL is in double quotes on purpose: zsh (with the URL paste
  *   helper that oh-my-zsh turns on) puts a backslash before `(` in a pasted
  *   URL that is not quoted, which breaks `$(uname ...)`.
+ * - The download is `archestra-cli` (`archestra-cli.exe`), not `archestra`:
+ *   the current folder can have a folder named `archestra`, and curl or
+ *   PowerShell cannot write a file over it.
  * - Windows gets a PowerShell command. `PROCESSOR_ARCHITECTURE` (`AMD64`,
  *   `ARM64`) names the CPU. It works in Windows PowerShell 5.1, which has no
  *   `&&`: `if ($?)` runs the program only after a good download. The download
@@ -38,15 +41,15 @@ export function bridgeCommand(
       `$ProgressPreference = 'SilentlyContinue'; \`\n` +
       `  $arch = $env:PROCESSOR_ARCHITECTURE; \`\n` +
       `  irm "${download}/windows-$arch" \`\n` +
-      `    -OutFile archestra.exe; \`\n` +
-      `  if ($?) { .\\archestra.exe ${start}${setupCode ? ` \`\n    --setup-code ${setupCode}` : ""} }`
+      `    -OutFile archestra-cli.exe; \`\n` +
+      `  if ($?) { .\\archestra-cli.exe ${start}${setupCode ? ` \`\n    --setup-code ${setupCode}` : ""} }`
     );
   }
   return (
-    `curl -fsSL -o archestra \\\n` +
+    `curl -fsSL -o archestra-cli \\\n` +
     `  "${download}/$(uname -s)-$(uname -m)" \\\n` +
-    `  && chmod +x archestra \\\n` +
-    `  && ./archestra ${start}${setupCode ? ` \\\n    --setup-code ${setupCode}` : ""}`
+    `  && chmod +x archestra-cli \\\n` +
+    `  && ./archestra-cli ${start}${setupCode ? ` \\\n    --setup-code ${setupCode}` : ""}`
   );
 }
 

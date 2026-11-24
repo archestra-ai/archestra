@@ -249,6 +249,20 @@ describe("user limit usage routes", () => {
     expect(body.summary).toMatchObject({ total: 1, none: 1 });
   });
 
+  test("counts a user who spent less than a cent", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const user = await member({ makeUser, makeMember }, "Light Lou");
+    await makeInteraction(agentId, { userId: user.id, cost: "0.0027" });
+
+    const body = await list("?search=lou");
+
+    expect(body.data[0]).toMatchObject({ name: "Light Lou", spent: 0.0027 });
+    expect(body.summary).toMatchObject({ spenders: 1, spent: 0.0027 });
+  });
+
   test("pages through users", async ({ makeUser, makeMember }) => {
     for (const name of ["Ana", "Ben", "Cleo"]) {
       await member({ makeUser, makeMember }, name);

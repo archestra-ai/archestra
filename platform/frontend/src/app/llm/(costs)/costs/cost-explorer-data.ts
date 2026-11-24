@@ -329,7 +329,11 @@ export function formatCell(metric: MetricId, v: number) {
   if (v === 0) return "·";
   if (METRICS[metric].money) {
     if (v >= 1000) return formatCost(v);
-    return v >= 10 ? `$${Math.round(v)}` : `$${v.toFixed(2)}`;
+    if (v >= 10) return `$${Math.round(v)}`;
+    // Two significant digits below a cent, so sub-cent ticks stay apart.
+    return v > 0 && v < 0.01
+      ? `$${v.toFixed(Math.min(8, 1 - Math.floor(Math.log10(v))))}`
+      : `$${v.toFixed(2)}`;
   }
   return formatCompact(v);
 }

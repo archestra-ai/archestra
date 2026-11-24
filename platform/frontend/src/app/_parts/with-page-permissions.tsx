@@ -19,6 +19,7 @@ import {
 } from "@/lib/auth/auth.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
+import { POLICY_WORKSPACE_PATH } from "@/lib/openappa-policy-views";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   children,
@@ -41,7 +42,8 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   const canSeeSettings = useSettingsAreaAccess();
   // The Policy page also opens to a reader of some MCP server's rules.
   const serverRules = useServerRulesAccess();
-  const isPolicy = pathname === POLICY_PATH;
+  const isPolicy =
+    pathname === POLICY_PATH || pathname === POLICY_WORKSPACE_PATH;
 
   // No loader while the permission check is in flight. It used to render one
   // here, inside the shell and centred on the content column — a different

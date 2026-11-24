@@ -13,7 +13,7 @@ import {
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
-import { validationPolicyHref } from "@/lib/openappa-policy-views";
+import { validationHref } from "@/lib/openappa-policy-views";
 import { cn } from "@/lib/utils/tailwind";
 import {
   isPolicyPreviewTool,
@@ -356,7 +356,7 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
     detail: run.detail,
     action: {
       label: "View Validations",
-      href: validationPolicyHref(run.targetPath),
+      href: validationHref(run.targetPath),
       external: false,
     },
     local: true,

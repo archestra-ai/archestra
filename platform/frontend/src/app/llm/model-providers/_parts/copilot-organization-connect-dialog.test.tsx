@@ -611,12 +611,11 @@ describe("CopilotOrganizationConnectDialog", () => {
         /The App can only make Copilot requests, billed to my-org/,
       ),
     ).toHaveTextContent(
-      "The App can only make Copilot requests, billed to my-org. Set a spending cap in Cost Controls.",
+      "The App can only make Copilot requests, billed to my-org. Set a spending cap in Costs & Limits.",
     );
-    expect(screen.getByRole("link", { name: "Cost Controls" })).toHaveAttribute(
-      "href",
-      "/llm/limits",
-    );
+    expect(
+      screen.getByRole("link", { name: "Costs & Limits" }),
+    ).toHaveAttribute("href", "/llm/costs");
     await user.click(
       screen.getByRole("button", { name: /Use an App I already have/ }),
     );

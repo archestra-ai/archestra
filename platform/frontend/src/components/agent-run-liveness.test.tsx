@@ -18,7 +18,6 @@ describe("AgentRunLiveness", () => {
       />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Waiting for input");
     expect(screen.getByRole("status")).toHaveTextContent(
       "Hard deadline unavailable",
     );
@@ -84,7 +83,7 @@ describe("AgentRunLiveness", () => {
     );
   });
 
-  it("prioritizes an explicit input-required state", () => {
+  it("stays calm while the run waits for input: the header already says so", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-09-03T12:00:00.000Z");
 
@@ -97,10 +96,12 @@ describe("AgentRunLiveness", () => {
       />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Waiting for input");
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "The agent reported that it needs a response to continue.",
-    );
+    const status = screen.getByRole("status");
+    // No second "Waiting for input", and a quiet model is no alert here.
+    expect(status).not.toHaveTextContent("Waiting for input");
+    expect(status).not.toHaveTextContent("No model activity");
+    expect(status).toHaveTextContent("Model active 2h ago");
+    expect(status).toHaveTextContent("Hard stop in");
   });
 
   it("makes overdue cleanup explicit when the runtime is still open", () => {

@@ -56,7 +56,7 @@ describe("accountWaysMeaning", () => {
     const both = { subscription: true, provider: true };
     const companyOnly = { subscription: false, provider: true };
     expect(accountWaysMeaning(both)).toBe(
-      "Each person chooses between their own subscription and a company API key.",
+      "Each person who runs this agent chooses their own subscription or a company API key on the agent's page.",
     );
     expect(accountWaysMeaning(companyOnly)).toBe("Locked to a company API key");
     expect(accountWaysMeaning({ subscription: true, provider: false })).toBe(
@@ -73,7 +73,7 @@ describe("accountWaysMeaning", () => {
       provider,
     });
     expect(accountWaysMeaning(ways(true, true), "agent")).toBe(
-      "Each agent chooses between personal subscriptions and a company API key.",
+      "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, a company API key, or both.",
     );
     // Only the sentence for both differs from an agent's own settings.
     for (const one of [

@@ -541,6 +541,130 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/agent-runtime/claude-code/account",
+    {
+      schema: {
+        operationId: RouteId.GetMyClaudeCodeAccount,
+        tags: ["Agents"],
+        response: constructResponseSchema(ClaudeCodeAccountSchema),
+      },
+    },
+    async (request) =>
+      claudeCodeAccountManager.status({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      }),
+  );
+
+  fastify.post(
+    "/api/agent-runtime/claude-code/account",
+    {
+      schema: {
+        operationId: RouteId.StartMyClaudeCodeSignIn,
+        body: z
+          .object({
+            vaultReference: z.string().trim().min(1).max(2048).optional(),
+          })
+          .nullish(),
+        tags: ["Agents"],
+        response: constructResponseSchema(ClaudeCodeAccountSchema),
+      },
+    },
+    async (request) => {
+      const owner = {
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      };
+      const before = await claudeCodeAccountManager.status({
+        ...owner,
+        inspectFlow: false,
+      });
+      const after = await claudeCodeAccountManager.start({
+        ...owner,
+        ...request.body,
+      });
+      request.auditBefore = {
+        claudeCodeAccount: {
+          state: before.state,
+          flowId: before.flowId ?? null,
+        },
+      };
+      request.auditAfter = {
+        claudeCodeAccount: { state: after.state, flowId: after.flowId ?? null },
+      };
+      return after;
+    },
+  );
+
+  fastify.post(
+    "/api/agent-runtime/claude-code/account/complete",
+    {
+      schema: {
+        operationId: RouteId.CompleteMyClaudeCodeSignIn,
+        tags: ["Agents"],
+        body: z.object({
+          flowId: z.string().uuid(),
+          code: z.string().trim().min(1).max(4096).optional(),
+        }),
+        response: constructResponseSchema(ClaudeCodeAccountSchema),
+      },
+    },
+    async (request) => {
+      const result = await claudeCodeAccountManager.complete({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        ...request.body,
+      });
+      if (result.state === "connected") {
+        request.auditBefore = { claudeCodeAccount: { state: "connecting" } };
+        request.auditAfter = { claudeCodeAccount: { state: "connected" } };
+      } else if (request.body.code) {
+        request.auditBefore = {
+          claudeCodeAccount: { authorizationSubmitted: false },
+        };
+        request.auditAfter = {
+          claudeCodeAccount: { authorizationSubmitted: true },
+        };
+      } else {
+        request.auditSkip = true;
+      }
+      return result;
+    },
+  );
+
+  fastify.delete(
+    "/api/agent-runtime/claude-code/account",
+    {
+      schema: {
+        operationId: RouteId.DisconnectMyClaudeCodeAccount,
+        tags: ["Agents"],
+        response: constructResponseSchema(ClaudeCodeAccountSchema),
+      },
+    },
+    async (request) => {
+      const owner = {
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      };
+      const before = await claudeCodeAccountManager.status({
+        ...owner,
+        inspectFlow: false,
+      });
+      const after = await claudeCodeAccountManager.disconnect(owner);
+      request.auditBefore = {
+        claudeCodeAccount: {
+          state: before.state,
+          flowId: before.flowId ?? null,
+        },
+      };
+      request.auditAfter = {
+        claudeCodeAccount: { state: after.state, flowId: after.flowId ?? null },
+      };
+      return after;
+    },
+  );
+
+  fastify.get(
     "/api/agents/:id/runtime/claude-code/models",
     {
       schema: {

@@ -12,12 +12,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils/tailwind";
 
 export function ConfigurationRow({
   id,
   value,
   title,
   summary,
+  wrapSummary = false,
   description,
   attention,
   children,
@@ -26,6 +28,7 @@ export function ConfigurationRow({
   value: string;
   title: string;
   summary: string;
+  wrapSummary?: boolean;
   description?: string;
   attention?: string;
   children: ReactNode;
@@ -66,7 +69,12 @@ export function ConfigurationRow({
               </span>
             )}
           </span>
-          <span className="min-w-0 truncate text-sm font-normal text-muted-foreground sm:ml-auto sm:max-w-[45%] sm:text-right">
+          <span
+            className={cn(
+              "min-w-0 text-sm font-normal text-muted-foreground sm:ml-auto sm:max-w-[45%] sm:text-right",
+              wrapSummary ? "break-all" : "truncate",
+            )}
+          >
             {summary}
           </span>
         </span>

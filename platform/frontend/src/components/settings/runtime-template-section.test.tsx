@@ -183,7 +183,7 @@ const openAccounts = async (
     await screen.findByRole("button", { name: `Actions for ${name}` }),
   );
   await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-  const dialog = screen.getByRole("dialog", { name: `Edit ${name}` });
+  const dialog = screen.getByRole("dialog", { name: `Edit ${name} runtime` });
   await user.click(
     within(dialog).getByRole("button", { name: /^Accounts that can run it/ }),
   );
@@ -226,7 +226,9 @@ describe("RuntimeTemplateSection", () => {
       await screen.findByRole("button", { name: "Actions for Claude Code" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit Claude Code" });
+    const dialog = screen.getByRole("dialog", {
+      name: "Edit Claude Code runtime",
+    });
     await user.click(
       within(dialog).getByRole("button", { name: /^Accounts that can run it/ }),
     );
@@ -586,7 +588,9 @@ describe("RuntimeTemplateSection", () => {
       await pick(user, connectionField(dialog), /Company Anthropic/);
       await pick(user, modelField(dialog), /Claude Sonnet/);
       expect(
-        within(dialog).getByText("Every agent uses this connection and model."),
+        within(dialog).getByText(
+          "Every agent on this runtime uses this connection and model.",
+        ),
       ).toBeVisible();
       await saveRuntime(user, dialog);
       expect(settings.builtIns["claude-code"]?.settings).toMatchObject({
@@ -719,6 +723,43 @@ describe("RuntimeTemplateSection", () => {
       expect(settings.templates[0].runtime.claudeCode).toEqual({
         authentication: "provider",
       });
+    });
+
+    it("shows the complete container image string in the Container summary without truncating registry segments", async () => {
+      const fullImage =
+        "registry.example.com/platform/agents/claude-code:1.4.0";
+      settings.templates = [
+        {
+          id: "00000000-0000-4000-8000-000000000003",
+          name: "Platform Claude",
+          description: "Development",
+          icon: null,
+          hidden: false,
+          position: 0,
+          locked: false,
+          runtime: {
+            ...buildCustomAgentRuntime({ image: fullImage }),
+            command: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            privileged: false,
+          },
+        },
+      ];
+      const user = userEvent.setup();
+      mount();
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Actions for Platform Claude",
+        }),
+      );
+      await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
+      const dialog = screen.getByRole("dialog", {
+        name: "Edit Platform Claude runtime",
+      });
+      expect(
+        within(dialog).getByRole("button", { name: /^Container/ }),
+      ).toHaveTextContent(`${fullImage}, archestra-claude-code`);
     });
   });
 });

@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
+  buildAgentCatalogRuntime,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -62,6 +63,92 @@ describe("agent routes", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("lists an Agent Runtime agent on each person's subscription by the subscription's provider", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const claude = buildAgentCatalogRuntime({
+      id: "claude-code",
+      image: config.agentRuntime.catalogImages["claude-code"],
+    });
+    const onSubscription = await makeAgent({
+      name: "Claude on subscriptions",
+      organizationId,
+      agentType: "agent",
+      runtime: { ...claude, claudeCode: { authentication: "subscription" } },
+    });
+    // Moved from a company key to subscriptions alone: the key it still
+    // stores is not what its runs use.
+    const companyKey = await makeLlmProviderApiKey(organizationId, null, {
+      name: "Company OpenAI",
+      provider: "openai",
+    });
+    const codexModel = await ModelModel.create({
+      externalId: "openai/gpt-5.4",
+      provider: "openai",
+      modelId: "gpt-5.4",
+      inputModalities: null,
+      outputModalities: null,
+    });
+    const lockedToSubscriptions = await makeAgent({
+      name: "Codex on subscriptions",
+      organizationId,
+      agentType: "agent",
+      llmApiKeyId: companyKey.id,
+      modelId: codexModel.id,
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "codex",
+          image: config.agentRuntime.catalogImages.codex,
+        }),
+        accountLock: "subscription",
+      },
+    });
+    const onCompanyKey = await makeAgent({
+      name: "Codex on the company key",
+      organizationId,
+      agentType: "agent",
+      llmApiKeyId: companyKey.id,
+      modelId: codexModel.id,
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "codex",
+          image: config.agentRuntime.catalogImages.codex,
+        }),
+        accountLock: "key",
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents?ids=${[onSubscription.id, lockedToSubscriptions.id, onCompanyKey.id].join(",")}`,
+    });
+    expect(response.statusCode).toBe(200);
+    const listed = new Map(
+      response
+        .json()
+        .data.map((agent: { id: string }) => [agent.id, agent] as const),
+    );
+    expect(listed.get(onSubscription.id)).toMatchObject({
+      resolvedLlmProvider: "anthropic",
+      resolvedLlmProviderKeyName: null,
+      resolvedLlmPersonalSubscription: true,
+    });
+    expect(listed.get(lockedToSubscriptions.id)).toMatchObject({
+      resolvedLlmProvider: "openai",
+      resolvedLlmProviderKeyName: null,
+      resolvedLlmModelName: "gpt-5.4",
+      resolvedLlmPersonalSubscription: true,
+    });
+    expect(listed.get(onCompanyKey.id)).toMatchObject({
+      resolvedLlmProvider: "openai",
+      resolvedLlmProviderKeyName: "Company OpenAI",
+    });
+    expect(listed.get(onCompanyKey.id)).not.toHaveProperty(
+      "resolvedLlmPersonalSubscription",
+    );
   });
 
   test("lists configured provider names and filters before pagination", async ({

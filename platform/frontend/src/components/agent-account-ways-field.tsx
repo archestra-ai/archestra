@@ -251,8 +251,8 @@ export function AgentAccountWays({
 
 /**
  * Who chooses while both ways are open. On an agent each person chooses for
- * their own runs. On a runtime's settings each agent does: the runtime leaves
- * the accounts to whoever builds an agent on it.
+ * their own runs, on the agent's page. On a runtime's settings the people
+ * who create or edit an agent on it choose what that agent allows.
  */
 export type AccountChooser = "person" | "agent";
 
@@ -263,8 +263,8 @@ export function accountWaysMeaning(
 ): string {
   return ways.subscription && ways.provider
     ? chooser === "agent"
-      ? "Each agent chooses between personal subscriptions and a company API key."
-      : "Each person chooses between their own subscription and a company API key."
+      ? "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, a company API key, or both."
+      : "Each person who runs this agent chooses their own subscription or a company API key on the agent's page."
     : ways.subscription
       ? "Locked to each user's personal subscription"
       : ways.provider

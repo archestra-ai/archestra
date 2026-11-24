@@ -1,7 +1,13 @@
 "use client";
 
-import { E2eTestId, SUBSCRIPTION_CREDENTIALS } from "@archestra/shared";
+import {
+  E2eTestId,
+  type Permissions,
+  SUBSCRIPTION_CREDENTIALS,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { CheckCircle2, TriangleAlert, Unplug } from "lucide-react";
+import type { ReactNode } from "react";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
 import { Button } from "@/components/ui/button";
@@ -21,6 +27,7 @@ import type { SubscriptionOffer } from "./subscription-offers";
  */
 export function SubscriptionProviderCards({
   offers,
+  leadingCards,
   isLoading,
   currentUserId,
   onConnect,
@@ -29,6 +36,8 @@ export function SubscriptionProviderCards({
   disconnectBlockedReason,
 }: {
   offers: SubscriptionOffer[];
+  /** Additional personal subscription cards rendered before registry offers. */
+  leadingCards?: ReactNode;
   /** The viewer's keys have not arrived yet, so no status can be stated. */
   isLoading: boolean;
   /** Session user, to recognize the viewer's own credential on a card. */
@@ -41,42 +50,234 @@ export function SubscriptionProviderCards({
     credential: LlmProviderApiKeyResponse,
   ) => string | null;
 }) {
-  if (offers.length === 0) return null;
+  if (offers.length === 0 && !leadingCards) return null;
 
   return (
-    <section
-      className="space-y-3"
-      aria-labelledby="personal-subscriptions-heading"
-      data-testid={E2eTestId.SubscriptionProviderCards}
+    <SubscriptionCardsSection
+      id="personal-subscriptions-heading"
+      heading="Personal subscriptions"
+      description="Sign in with a vendor account to use a subscription you already pay for — no API key needed. Each person connects their own account."
+      testId={E2eTestId.SubscriptionProviderCards}
     >
+      {leadingCards}
+      {offers.map((offer) => (
+        <PersonalSubscriptionCard
+          key={offer.kind}
+          offer={offer}
+          isLoading={isLoading}
+          currentUserId={currentUserId}
+          onConnect={onConnect}
+          onManage={onManage}
+          onDisconnect={onDisconnect}
+          disconnectBlockedReason={disconnectBlockedReason}
+        />
+      ))}
+    </SubscriptionCardsSection>
+  );
+}
+
+/** A heading, its explanation, and the shared card grid. */
+function SubscriptionCardsSection({
+  id,
+  heading,
+  description,
+  testId,
+  children,
+}: {
+  id: string;
+  heading: string;
+  description: string;
+  testId?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-3" aria-labelledby={id} data-testid={testId}>
       <div className="space-y-1">
-        <h2 id="personal-subscriptions-heading" className="text-sm font-medium">
-          Personal subscriptions
+        <h2 id={id} className="text-sm font-medium">
+          {heading}
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Sign in with a vendor account to use a subscription you already pay
-          for — no API key needed. Each person connects their own account.
-        </p>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {offers.map((offer) => (
-          <SubscriptionProviderCard
-            key={offer.kind}
-            offer={offer}
-            isLoading={isLoading}
-            currentUserId={currentUserId}
-            onConnect={onConnect}
-            onManage={onManage}
-            onDisconnect={onDisconnect}
-            disconnectBlockedReason={disconnectBlockedReason}
-          />
-        ))}
+        {children}
       </div>
     </section>
   );
 }
 
-function SubscriptionProviderCard({
+export type SubscriptionCardStatus =
+  | "connected"
+  | "reconnect"
+  | "not-connected"
+  | "error";
+
+/**
+ * One subscription card: brand and name, what the subscription is, its status,
+ * and the actions that apply to it.
+ */
+export function SubscriptionCard({
+  testId,
+  kind,
+  provider,
+  name,
+  description,
+  notice,
+  isLoading,
+  status,
+  onConnect,
+  onRetry,
+  connectPermissions,
+  connectAction,
+  manage,
+  disconnect,
+}: {
+  testId?: string;
+  kind?: SubscriptionOffer["kind"] | null;
+  provider: SupportedProvider;
+  name: string;
+  description?: string;
+  /** Optional inline notice shown below the description (or as the card body). */
+  notice?: ReactNode;
+  isLoading: boolean;
+  status: SubscriptionCardStatus;
+  /** Connect when not connected, Reconnect when the credential was refused. */
+  onConnect?: () => void;
+  /** Retries checking connection status when `status === "error"`. */
+  onRetry?: () => void;
+  /** Gates connecting; omitted, connecting is self-service. */
+  connectPermissions?: Permissions;
+  /**
+   * Connects on the card itself (a sign-in flow, say) in place of the Connect
+   * button, on its own line under the status.
+   */
+  connectAction?: ReactNode;
+  manage?: {
+    onClick: () => void;
+    permissions?: Permissions;
+    permissionScope?: string;
+  };
+  disconnect?: {
+    onClick: () => void;
+    permissions: Permissions;
+    permissionScope?: string;
+    blockedReason: string | null;
+  };
+}) {
+  return (
+    <Card className="gap-3 px-4 py-4" data-testid={testId}>
+      <div className="flex min-w-0 items-center gap-2">
+        <SubscriptionBrandIcon kind={kind} provider={provider} size={20} />
+        <span className="min-w-0 truncate font-medium" title={name}>
+          {name}
+        </span>
+      </div>
+      {description && (
+        <p className="text-sm text-muted-foreground">{description}</p>
+      )}
+      {notice}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
+        {isLoading ? (
+          <Skeleton className="h-4 w-24" />
+        ) : status === "error" ? (
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
+            <span>Could not check connection</span>
+          </span>
+        ) : status !== "not-connected" ? (
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            {status === "reconnect" ? (
+              <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+            )}
+            <span>
+              {status === "reconnect" ? "Reconnect required" : "Connected"}
+            </span>
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">Not connected</span>
+        )}
+        {isLoading ? (
+          <Skeleton className="h-8 w-20" />
+        ) : status === "error" ? (
+          onRetry ? (
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              <span>Retry</span>
+            </Button>
+          ) : null
+        ) : status !== "not-connected" ? (
+          <div className="flex shrink-0 items-center gap-1">
+            {status === "reconnect" || !manage ? (
+              onConnect ? (
+                <Button variant="outline" size="sm" onClick={onConnect}>
+                  <span>Reconnect</span>
+                </Button>
+              ) : null
+            ) : (
+              <PermissionButton
+                permissions={
+                  manage.permissions ?? { llmProviderApiKey: ["update"] }
+                }
+                permissionScope={manage.permissionScope}
+                variant="outline"
+                size="sm"
+                onClick={manage.onClick}
+              >
+                <span>Manage</span>
+              </PermissionButton>
+            )}
+            {/* Icon-only: the card is narrow enough at four across that a
+                second worded button would be clipped. */}
+            {disconnect && (
+              <PermissionButton
+                permissions={disconnect.permissions}
+                permissionScope={disconnect.permissionScope}
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Disconnect"
+                className="text-destructive hover:text-destructive"
+                disabled={disconnect.blockedReason !== null}
+                tooltip={disconnect.blockedReason ?? "Disconnect"}
+                onClick={disconnect.onClick}
+              >
+                <Unplug className="h-4 w-4" />
+              </PermissionButton>
+            )}
+          </div>
+        ) : connectAction ? (
+          <div className="basis-full">{connectAction}</div>
+        ) : onConnect ? (
+          <ConnectButton onClick={onConnect} permissions={connectPermissions} />
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+function ConnectButton({
+  onClick,
+  permissions,
+}: {
+  onClick: (() => void) | undefined;
+  permissions: Permissions | undefined;
+}) {
+  return permissions ? (
+    <PermissionButton
+      permissions={permissions}
+      variant="outline"
+      size="sm"
+      onClick={onClick}
+    >
+      <span>Connect</span>
+    </PermissionButton>
+  ) : (
+    <Button variant="outline" size="sm" onClick={onClick}>
+      <span>Connect</span>
+    </Button>
+  );
+}
+
+function PersonalSubscriptionCard({
   offer,
   isLoading,
   currentUserId,

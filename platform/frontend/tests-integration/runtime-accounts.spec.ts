@@ -65,12 +65,14 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   ).toBeChecked();
   await expect(
     dialog.getByText(
-      "Each agent chooses between personal subscriptions and a company API key.",
+      "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, a company API key, or both.",
     ),
   ).toBeVisible();
-  // Its connection and model are optional: left empty, each agent picks.
+  // Its connection and model are optional: left empty, each agent sets its own.
   await expect(
-    dialog.getByText("Each agent picks its connection and model."),
+    dialog.getByText(
+      "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.",
+    ),
   ).toBeVisible();
   await expect(accounts.getByRole("button", { name: /^Model/ })).toBeDisabled();
 
@@ -86,7 +88,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   ).toBeVisible();
   await expect(
     dialog.getByText(
-      "Every agent uses this connection. Each agent picks its model.",
+      "Every agent on this runtime uses this connection. Set the model in each agent's settings, or set it here.",
     ),
   ).toBeVisible();
   const fixed = savedBody();
@@ -111,7 +113,9 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Clear connection" }).click();
   await expect(
-    dialog.getByText("Each agent picks its connection and model."),
+    dialog.getByText(
+      "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.",
+    ),
   ).toBeVisible();
   const cleared = savedBody();
   await dialog.getByRole("button", { name: "Save runtime" }).click();
@@ -246,7 +250,7 @@ test("a runtime that fixes a connection and model shows both fields disabled, wi
 async function openAccounts(page: Page, name: string): Promise<Locator> {
   await page.getByRole("button", { name: `Actions for ${name}` }).click();
   await page.getByRole("menuitem", { name: "Edit runtime" }).click();
-  const dialog = page.getByRole("dialog", { name: `Edit ${name}` });
+  const dialog = page.getByRole("dialog", { name: `Edit ${name} runtime` });
   await dialog
     .getByRole("button", { name: /^Accounts that can run it/ })
     .click();

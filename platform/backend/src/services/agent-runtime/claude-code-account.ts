@@ -24,9 +24,9 @@ import { claudeCodeOAuth } from "./claude-code-oauth";
  * credentials. The flow ID fences asynchronous completion across replicas. */
 class ClaudeCodeAccountManager {
   async status(
-    params: AccountOwner & { inspectFlow?: boolean },
+    params: AccountSubject & { inspectFlow?: boolean },
   ): Promise<ClaudeCodeAccountStatus> {
-    const owner = await this.placement(params);
+    const owner = await this.resolveOwner(params);
     const account = await ClaudeCodeAccountModel.find(owner);
     const flow = await ClaudeCodeAccountModel.flow(owner);
     const base = { requiresVaultReference: isByosEnabled() };
@@ -58,9 +58,9 @@ class ClaudeCodeAccountManager {
   }
 
   async start(
-    params: AccountOwner & { vaultReference?: string },
+    params: AccountSubject & { vaultReference?: string },
   ): Promise<ClaudeCodeAccountStatus> {
-    const owner = await this.placement(params);
+    const owner = await this.resolveOwner(params);
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -104,9 +104,9 @@ class ClaudeCodeAccountManager {
   }
 
   async complete(
-    params: AccountOwner & { flowId: string; code?: string },
+    params: AccountSubject & { flowId: string; code?: string },
   ): Promise<ClaudeCodeAccountStatus> {
-    const owner = await this.placement(params);
+    const owner = await this.resolveOwner(params);
     const flow = await ClaudeCodeAccountModel.flow(owner);
     if (
       !flow ||
@@ -214,8 +214,8 @@ class ClaudeCodeAccountManager {
     };
   }
 
-  async disconnect(params: AccountOwner): Promise<ClaudeCodeAccountStatus> {
-    const owner = await this.placement(params);
+  async disconnect(params: AccountSubject): Promise<ClaudeCodeAccountStatus> {
+    const owner = await this.resolveOwner(params);
     // Delete the connection first: neither a cached secret nor a late flow may
     // authorize a new run. Existing runs keep their already-issued credential.
     const { account } = await ClaudeCodeAccountModel.delete(owner);
@@ -300,6 +300,14 @@ class ClaudeCodeAccountManager {
     return this.readToken(account.secretId);
   }
 
+  private async resolveOwner(params: AccountSubject) {
+    if ("runtime" in params) return this.placement(params);
+    return {
+      organizationId: params.organizationId,
+      userId: params.userId,
+    };
+  }
+
   private async placement(params: AccountOwner) {
     if (params.runtime.command?.[0] !== "archestra-claude-code")
       throw new ApiError(
@@ -355,6 +363,8 @@ class ClaudeCodeAccountManager {
 export const claudeCodeAccountManager = new ClaudeCodeAccountManager();
 
 type AccountOwner = { runtime: ResolvedAgentRuntime; userId: string };
+type UserAccountOwner = { organizationId: string; userId: string };
+type AccountSubject = AccountOwner | UserAccountOwner;
 const TokenSchema = z
   .string()
   .min(32)

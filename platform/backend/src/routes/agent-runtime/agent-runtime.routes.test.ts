@@ -290,6 +290,114 @@ describe("Agent Runtime routes", () => {
     expect(JSON.stringify(audits)).not.toContain("sk-ant-oat");
   });
 
+  test("manages the caller's personal Claude Code subscription without an agent and shares it with Claude Code agents", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    oauthServer.use(
+      http.post("https://platform.claude.com/v1/oauth/token", () =>
+        HttpResponse.json({
+          access_token: `sk-ant-oat01-${"example".repeat(8)}`,
+          token_type: "Bearer",
+          expires_in: 3600,
+          scope: "user:inference",
+        }),
+      ),
+    );
+    const url = "/api/agent-runtime/claude-code/account";
+    expect((await app.inject({ method: "GET", url })).json()).toMatchObject({
+      state: "disconnected",
+    });
+
+    const started = await app.inject({ method: "POST", url });
+    expect(started.statusCode, started.body).toBe(200);
+    const { flowId } = started.json();
+    expect(started.json().state).toBe("awaiting_code");
+    const state = new URL(started.json().authorizationUrl).searchParams.get(
+      "state",
+    );
+
+    const completed = await app.inject({
+      method: "POST",
+      url: `${url}/complete`,
+      payload: { flowId, code: `never-record-personal-code#${state}` },
+    });
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(completed.json()).toMatchObject({ state: "connected" });
+    expect((await app.inject({ method: "GET", url })).json()).toMatchObject({
+      state: "connected",
+    });
+
+    // A Claude Code agent created afterward immediately inherits the connection.
+    assert(agent.runtime);
+    const claudeAgent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      runtime: {
+        ...agent.runtime,
+        command: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic",
+        credentials: [],
+        claudeCode: { authentication: "subscription" },
+      },
+    });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${claudeAgent.id}/runtime/claude-code/account`,
+        })
+      ).json(),
+    ).toMatchObject({ state: "connected" });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${claudeAgent.id}/runtime/preflight`,
+        })
+      ).json(),
+    ).toMatchObject({ ready: true, configured: ["CLAUDE_CODE_ACCOUNT"] });
+
+    // Other users never see the caller's personal subscription.
+    const owner = user;
+    user = await makeUser();
+    await makeMember(user.id, organizationId);
+    expect((await app.inject({ method: "GET", url })).json()).toMatchObject({
+      state: "disconnected",
+    });
+
+    user = owner;
+    const disconnected = await app.inject({ method: "DELETE", url });
+    expect(disconnected.statusCode, disconnected.body).toBe(200);
+    expect(disconnected.json()).toMatchObject({ state: "disconnected" });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${claudeAgent.id}/runtime/claude-code/account`,
+        })
+      ).json(),
+    ).toMatchObject({ state: "disconnected" });
+
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.organizationId, organizationId),
+          eq(schema.auditLogsTable.action, "credential.updated"),
+        ),
+      );
+    expect(audits).toHaveLength(3);
+    for (const audit of audits) {
+      expect(audit.before).not.toEqual(audit.after);
+    }
+    expect(JSON.stringify(audits)).not.toContain("never-record-personal-code");
+    expect(JSON.stringify(audits)).not.toContain("sk-ant-oat");
+  });
+
   test("does not expose another organization or private Agent's native account", async ({
     makeAgent,
     makeUser,

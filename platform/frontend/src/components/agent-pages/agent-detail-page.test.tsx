@@ -71,6 +71,11 @@ vi.mock("@/lib/agent-runtime.query", () => ({
   useAgentRuns: () => ({ data: [{ id: "run-1" }], isError: false }),
   useAgentRuntimePreflight: () => ({ data: preflight }),
 }));
+// The account says whether a company option is open beside a sign-in.
+vi.mock("@/lib/agent-runtime-account.query", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useAgentRuntimeAccount: () => ({ data: undefined }),
+}));
 vi.mock("./agent-runs", () => ({
   AgentRuns: () => <div>run history</div>,
 }));

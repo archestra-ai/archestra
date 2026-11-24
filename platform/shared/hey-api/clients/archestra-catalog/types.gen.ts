@@ -131,6 +131,11 @@ export type ArchestraMcpServerManifest = {
         type: 'remote';
         url: string;
         docs_url: string | null;
+    } | {
+        type: 'desktop';
+        command: string;
+        args?: Array<string>;
+        docs_url?: string | null;
     };
 };
 
@@ -154,6 +159,10 @@ export type SearchMcpServerCatalogData = {
          * Filter by whether the server is confirmed to work in Archestra
          */
         worksInArchestra?: boolean;
+        /**
+         * Include servers that run on each user's device (server type 'desktop'). Left out by default, because Archestra versions before desktop MCP servers cannot add them
+         */
+        includeDesktop?: boolean;
         /**
          * Sort results by field ('quality' is a deprecated alias of 'stars', kept for older Archestra clients)
          */

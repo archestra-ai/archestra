@@ -71,8 +71,7 @@ function AccountShell({ children }: { children: React.ReactNode }) {
     null,
   );
   // No Credentials tab for a reader who uses Settings → Credentials, or who
-  // has nothing to show here (no credential:read, no Claude Code agent); its
-  // page forwards them.
+  // lacks `credential:read`; its page forwards them.
   const { hasTab: hasCredentialsTab } = useAccountCredentialsAccess();
   const tabs = accountSections.filter(
     (section) =>

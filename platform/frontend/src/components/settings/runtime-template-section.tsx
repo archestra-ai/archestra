@@ -179,8 +179,7 @@ export function RuntimeTemplateSection({
       id,
       name: AGENT_CATALOG_NAMES[id],
       description:
-        builtIns.find((item) => item.id === id)?.summary ??
-        "Maintained runtime",
+        builtIns.find((item) => item.id === id)?.summary ?? "Built-in runtime",
       image: images[id],
       icon: null,
       hidden: state.popularAgentOverrides?.[id]?.hidden ?? false,
@@ -672,7 +671,9 @@ function RuntimeTemplateDialog({
             <DialogHeader>
               <div className="flex items-center gap-2">
                 <DialogTitle>
-                  {template ? `Edit ${template.name}` : "Add custom runtime"}
+                  {template
+                    ? runtimeEditTitle(template.name)
+                    : "Add custom runtime"}
                 </DialogTitle>
                 <RuntimeKindLabel builtIn={false} />
               </div>
@@ -774,6 +775,7 @@ function RuntimeTemplateDialog({
                         title="Container"
                         description="The image each run starts from."
                         summary={containerSummary(field.value)}
+                        wrapSummary
                         attention={imageAttention}
                       >
                         <div className="space-y-2">
@@ -945,7 +947,7 @@ function BuiltInRuntimeDialog({
       >
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <DialogTitle>Edit {name}</DialogTitle>
+            <DialogTitle>{runtimeEditTitle(name)}</DialogTitle>
             <RuntimeKindLabel builtIn />
           </div>
           <DialogDescription>Defaults for new {name} agents.</DialogDescription>
@@ -959,13 +961,18 @@ function BuiltInRuntimeDialog({
               id={`${rowId}-container`}
               value="container"
               title="Container"
-              description="The maintained image and client."
+              description="The built-in image and client."
               summary={containerSummary(runtime)}
+              wrapSummary
             >
-              <FieldDescription>
-                {name} runs the image {image}, kept up to date with each
-                release.
-              </FieldDescription>
+              <div className="space-y-1.5">
+                <code className="block break-all rounded-md border bg-muted/50 px-3 py-2 font-mono text-xs">
+                  {image}
+                </code>
+                <FieldDescription>
+                  {name} keeps this image up to date with each release.
+                </FieldDescription>
+              </div>
             </ConfigurationRow>
             <RuntimeAccountsRow
               id={`${rowId}-accounts`}
@@ -1178,8 +1185,14 @@ function FooterLock({
   );
 }
 
+function runtimeEditTitle(name: string): string {
+  return /\bruntime$/i.test(name.trim())
+    ? `Edit ${name}`
+    : `Edit ${name} runtime`;
+}
+
 function containerSummary(value: AgentRuntimeConfig): string {
-  const image = value.image.trim().split("/").slice(-2).join("/");
+  const image = value.image.trim();
   if (!image) return "No image set";
   return value.command?.length ? `${image}, ${value.command[0]}` : image;
 }

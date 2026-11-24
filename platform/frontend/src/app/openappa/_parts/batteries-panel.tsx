@@ -1,19 +1,23 @@
 "use client";
 
+import { isBuiltInCatalogId, type Permissions } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   BatteryCharging,
   ExternalLink,
+  FileCode,
   KeyRound,
   Loader2,
   Pencil,
   Plus,
   RefreshCw,
   TriangleAlert,
+  Undo2,
   Unlink,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { AgentNameCell } from "@/components/agent-name-cell";
@@ -81,7 +85,11 @@ import {
   useRemoveBatteryInclude,
   useSetCredentialBinding,
 } from "@/lib/openappa-batteries.query";
-import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import type { OpenAppaBatteryChange } from "@/lib/openappa-chat-prompts";
+import {
+  useAppaGithubSync,
+  useAppaSelfService,
+} from "@/lib/openappa-github-sync.query";
 import {
   type RuntimeCredentialDefinition,
   useCanUseEveryCredential,
@@ -93,6 +101,7 @@ import {
   batteryCredentials,
 } from "./battery-credentials";
 import { BatteryIcon, type CatalogEntry } from "./battery-icon";
+import { BatterySourceDialog } from "./battery-source-dialog";
 import {
   BATTERY_STATUS_GROUPS,
   BATTERY_TABLE_STATUS,
@@ -105,7 +114,12 @@ import {
   GithubManagedPolicyNotice,
   githubPolicyFileUrl,
 } from "./github-managed-policy-notice";
+import {
+  OpenAppaChatButton,
+  useOpenAppaChatLaunch,
+} from "./openappa-chat-button";
 import { batteryStatusBadge } from "./policy-decorations";
+import { policyLineHref } from "./policy-line-href";
 
 const STATUS_OPTIONS = [
   { value: DEFAULT_FILTER_ALL, label: "All statuses" },
@@ -138,8 +152,16 @@ export function BatteryEditDialog({
   name: string;
   onClose: () => void;
 }) {
-  const { declarations, batteries, catalog, servers, canManage, canBind } =
-    useBatteryData();
+  const {
+    declarations,
+    batteries,
+    catalog,
+    servers,
+    canManage,
+    canBind,
+    selfService,
+    editable,
+  } = useBatteryData();
   const policy = declarations.data;
   const summary = batteries.data?.find((battery) => battery.name === name);
   if (!policy || !summary) return null;
@@ -166,12 +188,35 @@ export function BatteryEditDialog({
           : ""
       }
       status={included ? enforcedStatus(policy, included) : null}
-      writable={canManage === true && !policy.managedInGithub}
+      changes={batteryChanges({
+        canManage,
+        managedInGithub: policy.managedInGithub,
+        selfService,
+      })}
+      editable={editable}
       bindable={canBind}
       managedInGithub={policy.managedInGithub}
       onClose={onClose}
     />
   );
+}
+
+/**
+ * How this reader changes a battery: by writing the policy directly, by asking
+ * the configuration agent for a pull request while Git sync owns the policy,
+ * as a server's editor through the agent while MCP Guardrails Self-Service is
+ * on (attach and detach, for the servers they may edit), or not at all.
+ */
+type BatteryChanges = "direct" | "agent" | "owner" | "none";
+
+function batteryChanges(params: {
+  canManage: boolean | undefined;
+  managedInGithub: boolean;
+  selfService: boolean;
+}): BatteryChanges {
+  if (params.canManage === true)
+    return params.managedInGithub ? "agent" : "direct";
+  return params.managedInGithub && params.selfService ? "owner" : "none";
 }
 
 /** What the batteries, and one battery's dialog, are drawn from. */
@@ -200,12 +245,41 @@ function useBatteryData() {
   // package may carry such code, so both take Can use on every credential too.
   const { data: canUseEveryCredential } = useCanUseEveryCredential();
   const canBind = canManage === true && canUseEveryCredential === true;
-  return { declarations, batteries, catalog, servers, canManage, canBind };
+  // A server's editor attaches and detaches its batteries through the agent
+  // while self-service is on, as they change its rules.
+  const selfService = useAppaSelfService(canManage === false).data?.enabled;
+  const editable = new Set(
+    (catalog.data ?? [])
+      .filter(
+        (entry) =>
+          !isBuiltInCatalogId(entry.id) &&
+          (entry.effectiveActions?.includes("update") ?? false),
+      )
+      .map((entry) => entry.id),
+  );
+  return {
+    declarations,
+    batteries,
+    catalog,
+    servers,
+    canManage,
+    canBind,
+    selfService: selfService === true,
+    editable,
+  };
 }
 
 export function BatteriesPanel() {
-  const { declarations, batteries, catalog, servers, canManage, canBind } =
-    useBatteryData();
+  const {
+    declarations,
+    batteries,
+    catalog,
+    servers,
+    canManage,
+    canBind,
+    selfService,
+    editable,
+  } = useBatteryData();
   // Filters and page live in the URL, so a reload or a shared link keeps them.
   const {
     searchParams,
@@ -255,9 +329,9 @@ export function BatteriesPanel() {
   const included = policy.batteries;
   const statusOf = (entry: PolicyBattery) => enforcedStatus(policy, entry);
   // The repository owns the text while it syncs: an edit here would be undone
-  // by the next pull, so the panel only reads it. Bindings live beside the
-  // text, so they stay open.
-  const writable = canManage === true && !managedInGithub;
+  // by the next pull, so each change goes to the configuration agent, which
+  // opens a pull request. Bindings live beside the text, so they stay open.
+  const changes = batteryChanges({ canManage, managedInGithub, selfService });
   const bindable = canBind === true;
   // Unknown while the catalog loads; only a loaded catalog can say a server is gone.
   const catalogName = (catalogId: string) =>
@@ -318,7 +392,7 @@ export function BatteriesPanel() {
       ),
     },
     // A read-only reader opens a battery by clicking its row: no action is left.
-    ...(writable
+    ...(changes === "direct" || changes === "agent"
       ? [
           {
             id: "actions",
@@ -327,6 +401,7 @@ export function BatteriesPanel() {
             cell: ({ row }: { row: { original: BatteryTableRow } }) => (
               <BatteryRowActions
                 row={row.original}
+                changes={changes}
                 onEdit={() => setEditing(row.original.name)}
                 onRemove={() => setRemoving(row.original.name)}
               />
@@ -339,16 +414,17 @@ export function BatteriesPanel() {
     <section aria-label="OpenAPPA batteries" className="space-y-4">
       {/* A healthy sync is a chip in the toolbar; only what asks for something takes a row. */}
       {managedInGithub && <GithubManagedPolicyNotice hideHealthy />}
-      {writable && servers.data?.length === 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <span>
-            There is no installed MCP server to attach a battery to yet.
-          </span>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/mcp/registry">Browse MCP servers</Link>
-          </Button>
-        </div>
-      )}
+      {(changes === "direct" || changes === "agent") &&
+        servers.data?.length === 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              There is no installed MCP server to attach a battery to yet.
+            </span>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/mcp/registry">Browse MCP servers</Link>
+            </Button>
+          </div>
+        )}
       <CollectionFilters>
         {/* What the page has to say beside its filters stays on their row. */}
         <div className="flex items-center gap-2">
@@ -426,7 +502,8 @@ export function BatteriesPanel() {
           })}
           catalogName={catalogName}
           status={editingRow.included ? statusOf(editingRow.included) : null}
-          writable={writable}
+          changes={changes}
+          editable={editable}
           bindable={bindable}
           managedInGithub={managedInGithub}
           onClose={() => {
@@ -503,7 +580,9 @@ function RowBatteryIcon({
 
 /**
  * Everything one battery lets you change, in one place: where it applies and
- * which keys its helpers read. Each action writes directly to the policy.
+ * which keys its helpers read, with a link to its source once the policy
+ * includes it. Each change writes directly to the policy, or, while Git sync
+ * owns it, opens the configuration agent on that change.
  */
 function BatteryDialog({
   row,
@@ -512,7 +591,8 @@ function BatteryDialog({
   credentials,
   catalogName,
   status,
-  writable,
+  changes,
+  editable,
   bindable,
   managedInGithub,
   onClose,
@@ -524,20 +604,71 @@ function BatteryDialog({
   catalogName: (catalogId: string) => string;
   /** How the enforced composition holds it; null when it is not included. */
   status: EnforcedStatus | null;
-  writable: boolean;
+  changes: BatteryChanges;
+  /** The catalogs the reader may edit, whose batteries an owner may change. */
+  editable: ReadonlySet<string>;
   bindable: boolean;
   managedInGithub: boolean;
   onClose: () => void;
 }) {
   const { summary, included } = row;
+  const router = useRouter();
   const create = useCreateBatteryInstall();
   const bind = useSetCredentialBinding();
   const detach = useDeleteBatteryInstall();
   const remove = useRemoveBatteryInclude();
   const pending =
     create.isPending || bind.isPending || detach.isPending || remove.isPending;
+  const writable = changes === "direct";
+  const battery = launchBattery(row);
   const organizationWide =
     (included?.scope ?? summary?.scope) === "organization";
+  // Under Git sync the dialog's changes wait for Save, which asks the
+  // configuration agent for all of them at once: one proposal to approve,
+  // one pull request. A server's editor changes only servers, never the
+  // organization's batteries, and only a bundled battery: an uploaded
+  // package stays with who may update guardrails.
+  const staging =
+    changes === "agent" ||
+    (changes === "owner" &&
+      !organizationWide &&
+      editable.size > 0 &&
+      (included?.source ?? summary?.source) !== "upload");
+  const [staged, setStaged] = useState<StagedChanges>(NOTHING_STAGED);
+  const stagedChanges = stagedBatteryChanges(staged, battery);
+  const saveLaunch = useOpenAppaChatLaunch({
+    subject: {
+      kind: "batteryChanges",
+      changes: stagedChanges,
+      serverEditor: changes === "owner",
+    },
+    permissions: agentPermissions(changes),
+    enabled: staging,
+  });
+  const reload = useReloadMcpServerTools();
+  const [saving, setSaving] = useState(false);
+  // The server whose tools Save could not sync, by name.
+  const [syncFailed, setSyncFailed] = useState<string | null>(null);
+  const save = async () => {
+    const href = saveLaunch.href;
+    if (!href) return;
+    setSaving(true);
+    setSyncFailed(null);
+    // A server whose tools were never synced has no prefix to point the
+    // battery at: its tools are synced first.
+    for (const { entry, syncFrom } of staged.attach) {
+      if (!syncFrom) continue;
+      try {
+        await reload.mutateAsync(syncFrom);
+      } catch {
+        // The staged changes stay, for another try or an Undo.
+        setSyncFailed(entry.name);
+        setSaving(false);
+        return;
+      }
+    }
+    router.push(href);
+  };
   const badge = status ? batteryStatusBadge(status) : null;
   const installs = summary?.installs ?? [];
   const servers = included?.servers ?? [];
@@ -546,6 +677,15 @@ function BatteryDialog({
       .map((server) => server.catalogId)
       .filter((id): id is string => id !== null),
   );
+  // Inspecting a battery: its file on the Policy page, once the policy includes it.
+  const viewSource = included ? (
+    <Button asChild variant="link" size="sm" className="h-auto p-0">
+      <Link href={policyLineHref({ entry: included.entry, line: null })}>
+        <FileCode className="size-3.5" />
+        <span>View source</span>
+      </Link>
+    </Button>
+  ) : null;
   return (
     <StandardDialog
       open
@@ -569,10 +709,31 @@ function BatteryDialog({
       // it is too, at every width.
       headerClassName="text-left"
       bodyClassName="space-y-6"
-      footer={<DialogCancelButton>Close</DialogCancelButton>}
+      isDirty={stagedChanges.length > 0}
+      footer={
+        staging ? (
+          <>
+            <DialogCancelButton />
+            <PermissionButton
+              type="button"
+              permissions={saveLaunch.permissions}
+              disabled={
+                stagedChanges.length === 0 || !saveLaunch.href || saving
+              }
+              onClick={() => void save()}
+            >
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              <span>Save</span>
+            </PermissionButton>
+          </>
+        ) : (
+          <DialogCancelButton>Close</DialogCancelButton>
+        )
+      }
     >
+      {summary && !included && <BatteryPreviewSection summary={summary} />}
       {organizationWide ? (
-        <DialogSection title="Scope">
+        <DialogSection title="Scope" action={viewSource}>
           <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
             <div className="space-y-0.5">
               <Label htmlFor={`battery-include-${row.name}`}>
@@ -582,18 +743,34 @@ function BatteryDialog({
                 Its rules check every tool call in the organization.
               </p>
             </div>
-            <Switch
-              id={`battery-include-${row.name}`}
-              checked={included !== null}
-              disabled={!writable || !summary || pending}
-              onCheckedChange={(enabled) =>
-                enabled
-                  ? create.mutate({ batteryName: row.name })
-                  : remove.mutate(row.name)
-              }
-            />
+            {staging ? (
+              // The switch shows the change Save asks for; the pull request
+              // makes it.
+              <Switch
+                id={`battery-include-${row.name}`}
+                checked={staged.include ?? included !== null}
+                disabled={!summary || saving}
+                onCheckedChange={(enabled) =>
+                  setStaged((current) => ({
+                    ...current,
+                    include: enabled === (included !== null) ? null : enabled,
+                  }))
+                }
+              />
+            ) : (
+              <Switch
+                id={`battery-include-${row.name}`}
+                checked={included !== null}
+                disabled={!writable || !summary || pending}
+                onCheckedChange={(enabled) =>
+                  enabled
+                    ? create.mutate({ batteryName: row.name })
+                    : remove.mutate(row.name)
+                }
+              />
+            )}
           </div>
-          {managedInGithub && (
+          {managedInGithub && (changes === "none" || changes === "owner") && (
             <p className="text-xs text-muted-foreground">
               <span>
                 The policy repository decides which batteries are included. Add
@@ -621,8 +798,9 @@ function BatteryDialog({
               ? "Its rules check tool calls on these servers. Detaching the last one also removes the battery from the policy."
               : "Its rules check tool calls on these servers."
           }
+          action={viewSource}
         >
-          {servers.length === 0 ? (
+          {servers.length === 0 && staged.attach.length === 0 ? (
             <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
               Not attached to a server yet.
             </p>
@@ -637,6 +815,11 @@ function BatteryDialog({
                   server.catalogId === null
                     ? "Removed server"
                     : catalogName(server.catalogId);
+                const detachLabel = `Detach ${row.name} from ${name}`;
+                const serverId = server.catalogId;
+                const detaching =
+                  serverId !== null &&
+                  staged.detach.some(({ id }) => id === serverId);
                 return (
                   <ServerRow
                     key={server.target}
@@ -645,39 +828,135 @@ function BatteryDialog({
                       null
                     }
                     name={name}
-                    detail={`${server.target}__*`}
+                    detail={
+                      detaching
+                        ? "Detached when you save"
+                        : `${server.target}__*`
+                    }
                     action={
-                      writable && install !== null && server.catalogId ? (
+                      writable && install !== null && serverId ? (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           disabled={pending}
-                          aria-label={`Detach ${row.name} from ${name}`}
+                          aria-label={detachLabel}
                           onClick={() => detach.mutate(install.id)}
                         >
                           <Unlink className="size-4" />
                           <span>Detach</span>
                         </Button>
+                      ) : staging &&
+                        serverId &&
+                        (changes === "agent" || editable.has(serverId)) ? (
+                        detaching ? (
+                          <UndoButton
+                            label={`Keep ${row.name} on ${name}`}
+                            disabled={saving}
+                            onClick={() =>
+                              setStaged((current) => ({
+                                ...current,
+                                detach: current.detach.filter(
+                                  ({ id }) => id !== serverId,
+                                ),
+                              }))
+                            }
+                          />
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={saving}
+                            aria-label={detachLabel}
+                            onClick={() =>
+                              setStaged((current) => ({
+                                ...current,
+                                detach: [
+                                  ...current.detach,
+                                  {
+                                    id: serverId,
+                                    name,
+                                    toolPrefix: server.target,
+                                  },
+                                ],
+                              }))
+                            }
+                          >
+                            <Unlink className="size-4" />
+                            <span>Detach</span>
+                          </Button>
+                        )
                       ) : null
                     }
                   />
                 );
               })}
+              {staged.attach.map(({ entry }) => (
+                <ServerRow
+                  key={entry.id}
+                  catalogEntry={entry}
+                  name={entry.name}
+                  detail="Attached when you save"
+                  action={
+                    <UndoButton
+                      label={`Do not attach ${row.name} to ${entry.name}`}
+                      disabled={saving}
+                      onClick={() =>
+                        setStaged((current) => ({
+                          ...current,
+                          attach: current.attach.filter(
+                            (attach) => attach.entry.id !== entry.id,
+                          ),
+                        }))
+                      }
+                    />
+                  }
+                />
+              ))}
             </ul>
           )}
-          {writable && summary && (
+          {syncFailed !== null && (
+            <p role="alert" className="text-sm text-destructive">
+              Could not sync the tools of {syncFailed}, so nothing was saved.
+              Check the server's connection and save again, or undo that server.
+            </p>
+          )}
+          {summary && (writable || staging) && (
             <AttachServerPicker
               batteryName={summary.name}
-              catalog={catalog}
+              // A server's editor attaches to the servers they may edit.
+              catalog={
+                changes === "owner"
+                  ? catalog.filter((entry) => editable.has(entry.id))
+                  : catalog
+              }
               installedCatalogIds={installedCatalogIds}
-              taken={governed}
-              pending={pending}
-              onAttach={(catalogId, onSuccess) =>
-                create.mutate(
-                  { batteryName: row.name, catalogId },
-                  { onSuccess },
-                )
+              taken={
+                new Set([
+                  ...governed,
+                  ...staged.attach.map(({ entry }) => entry.id),
+                ])
+              }
+              pending={pending || saving}
+              attach={
+                writable
+                  ? {
+                      kind: "direct",
+                      onAttach: (catalogId, onSuccess) =>
+                        create.mutate(
+                          { batteryName: row.name, catalogId },
+                          { onSuccess },
+                        ),
+                    }
+                  : {
+                      kind: "staged",
+                      onStage: (entry, syncFrom) =>
+                        setStaged((current) => ({
+                          ...current,
+                          attach: [...current.attach, { entry, syncFrom }],
+                        })),
+                    }
               }
             />
           )}
@@ -692,11 +971,100 @@ function BatteryDialog({
           }
           bindable={bindable}
           managedInGithub={managedInGithub}
+          agentBattery={changes === "agent" ? battery : null}
           pending={pending}
         />
       )}
     </StandardDialog>
   );
+}
+
+/**
+ * A look at a battery the policy does not include yet: where it applies, the
+ * namespaces and annotators its rules use and the keys its helpers read, with
+ * its source a click away in a dialog of its own.
+ */
+function BatteryPreviewSection({ summary }: { summary: BatterySummary }) {
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const names = (values: string[]) =>
+    values.length === 0 ? (
+      <span className="text-muted-foreground">None</span>
+    ) : (
+      <span className="font-mono text-xs">{values.join(", ")}</span>
+    );
+  const facts: [string, ReactNode][] = [
+    [
+      "Applies to",
+      <span key="scope">
+        {summary.scope === "organization"
+          ? "Every tool call in the organization"
+          : "Tool calls on the servers it is attached to"}
+      </span>,
+    ],
+    ["Namespaces", names(summary.namespaces)],
+    ["Annotators", names(summary.annotators)],
+    ["Credentials", names(summary.credentials)],
+  ];
+  return (
+    <DialogSection
+      title="What it checks"
+      action={
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className="h-auto p-0"
+          onClick={() => setSourceOpen(true)}
+        >
+          <FileCode className="size-3.5" />
+          <span>Preview source</span>
+        </Button>
+      }
+    >
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-md border px-3 py-2.5 text-sm">
+        {facts.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 break-words">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {sourceOpen && (
+        <BatterySourceDialog
+          name={summary.name}
+          onClose={() => setSourceOpen(false)}
+        />
+      )}
+    </DialogSection>
+  );
+}
+
+/**
+ * A battery as a change names it. A battery the policy does not include yet
+ * has no entry of its own, so it gets the one an include would spell: the
+ * same spelling the backend gives a bundled battery or an uploaded package.
+ */
+function launchBattery(row: BatteryTableRow) {
+  const hash =
+    row.summary?.source === "upload" ? row.summary.contentHash : null;
+  return {
+    name: row.name,
+    entry:
+      row.included?.entry ??
+      (hash
+        ? `batteries/${row.name}@sha256-${hash}/appa.toml`
+        : `batteries/${row.name}/appa.toml`),
+    namespaces: row.summary?.namespaces ?? [],
+  };
+}
+
+/**
+ * What a chat launch for a battery change takes: the permission to update
+ * guardrails for a manager, none beyond reading for a server's editor, whose
+ * edit access to the server the agent and the policy check hold them to.
+ */
+function agentPermissions(changes: BatteryChanges): Permissions {
+  return changes === "owner" ? {} : { guardrailsPolicy: ["update"] };
 }
 
 /** One server in the battery's list and the tools it governs. */
@@ -738,25 +1106,46 @@ function ServerRow({
   );
 }
 
-/** Pick an installed server the battery does not govern yet and add it to the list. */
+/**
+ * Pick an installed server the battery does not govern yet and add it to the
+ * list, or, while Git sync owns the policy, stage it for the dialog's Save.
+ * A server whose tools were never synced has them synced on the way: at
+ * once here, or on Save for a staged one.
+ */
 function AttachServerPicker({
   batteryName,
   catalog,
   installedCatalogIds,
   taken,
   pending,
-  onAttach,
+  attach: action,
 }: {
   batteryName: string;
   catalog: CatalogEntry[];
   installedCatalogIds: Set<string> | null;
   taken: Set<string>;
   pending: boolean;
-  onAttach: (catalogId: string, onSuccess: () => void) => void;
+  attach:
+    | {
+        kind: "direct";
+        onAttach: (catalogId: string, onSuccess: () => void) => void;
+      }
+    | {
+        kind: "staged";
+        /** The server, and the install whose tools Save syncs first, if any. */
+        onStage: (entry: CatalogEntry, syncFrom: SyncTarget | null) => void;
+      };
 }) {
+  const client = useQueryClient();
   const [catalogId, setCatalogId] = useState("");
   const readiness = useBatteryMatches(catalogId, catalogId !== "");
   const attach = readiness.data?.attach ?? null;
+  const syncTarget = useSyncTarget(catalogId);
+  const canSync =
+    useHasPermissions({ mcpServerInstallation: ["create"] }).data === true;
+  const reload = useReloadMcpServerTools();
+  // The server whose sync on Attach failed: it shows why it cannot attach.
+  const [syncFailed, setSyncFailed] = useState("");
   const options = catalog.filter(
     (entry) =>
       (installedCatalogIds === null || installedCatalogIds.has(entry.id)) &&
@@ -778,6 +1167,40 @@ function AttachServerPicker({
       </p>
     );
   const id = `battery-server-${batteryName}`;
+  const picked = options.find((entry) => entry.id === catalogId) ?? null;
+  // Unsynced tools are synced on Attach, by whoever may sync them.
+  const syncs =
+    attach === "unsynced" &&
+    canSync &&
+    syncTarget !== null &&
+    syncFailed !== catalogId;
+  const ready =
+    !pending &&
+    !reload.isPending &&
+    picked !== null &&
+    (attach === "ready" || syncs);
+  const busy = (catalogId !== "" && readiness.isFetching) || reload.isPending;
+  const onAttach = async () => {
+    if (!picked) return;
+    const reset = () => setCatalogId("");
+    if (action.kind === "staged") {
+      action.onStage(picked, syncs ? syncTarget : null);
+      reset();
+      return;
+    }
+    if (syncs && syncTarget) {
+      try {
+        await reload.mutateAsync(syncTarget);
+      } catch {
+        setSyncFailed(picked.id);
+        return;
+      }
+      await client.invalidateQueries({
+        queryKey: batteryMatchesQueryKey(picked.id),
+      });
+    }
+    action.onAttach(picked.id, reset);
+  };
   return (
     <div className="space-y-2">
       <div className="space-y-0.5">
@@ -805,12 +1228,10 @@ function AttachServerPicker({
         <Button
           type="button"
           variant="outline"
-          disabled={pending || !catalogId || attach !== "ready"}
-          onClick={() => {
-            onAttach(catalogId, () => setCatalogId(""));
-          }}
+          disabled={!ready}
+          onClick={() => void onAttach()}
         >
-          {catalogId && readiness.isFetching ? (
+          {busy ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Plus className="size-4" />
@@ -818,12 +1239,16 @@ function AttachServerPicker({
           <span>Attach</span>
         </Button>
       </div>
-      {attach !== null && attach !== "ready" && (
+      {attach !== null && attach !== "ready" && !syncs && (
         <p
           role="note"
           className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
         >
-          <span>{ATTACH_NOTES[attach]}</span>
+          <span>
+            {syncFailed === catalogId
+              ? "Could not sync this server's tools, so the battery has no tools to attach to yet. Check the server's connection, then sync again."
+              : ATTACH_NOTES[attach]}
+          </span>
           {attach === "unsynced" && <SyncToolsButton catalogId={catalogId} />}
         </p>
       )}
@@ -842,6 +1267,31 @@ function AttachServerPicker({
         </p>
       )}
     </div>
+  );
+}
+
+/** Undo a change the dialog staged for Save. */
+function UndoButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      disabled={disabled}
+      aria-label={label}
+      onClick={onClick}
+    >
+      <Undo2 className="size-4" />
+      <span>Undo</span>
+    </Button>
   );
 }
 
@@ -870,6 +1320,7 @@ function CredentialsSection({
   onChange,
   bindable,
   managedInGithub,
+  agentBattery,
   pending,
 }: {
   batteryName: string;
@@ -877,6 +1328,8 @@ function CredentialsSection({
   onChange: (variable: string, key: string) => void;
   bindable: boolean;
   managedInGithub: boolean;
+  /** The battery, when a policy line's removal goes to the configuration agent. */
+  agentBattery: OpenAppaBatteryChange["battery"] | null;
   pending: boolean;
 }) {
   const { data: canRead } = useHasPermissions({ credential: ["read"] });
@@ -931,6 +1384,7 @@ function CredentialsSection({
             options={options}
             listed={available.isSuccess}
             managedInGithub={managedInGithub}
+            agentBattery={agentBattery}
             disabled={!bindable || pending || credential.source === "policy"}
             onChange={(key) => onChange(credential.variable, key)}
           />
@@ -947,6 +1401,7 @@ function CredentialRow({
   options,
   listed,
   managedInGithub,
+  agentBattery,
   disabled,
   onChange,
 }: {
@@ -957,6 +1412,7 @@ function CredentialRow({
   /** The organization's credentials loaded, so a key missing from them is gone. */
   listed: boolean;
   managedInGithub: boolean;
+  agentBattery: OpenAppaBatteryChange["battery"] | null;
   disabled: boolean;
   onChange: (key: string) => void;
 }) {
@@ -1043,6 +1499,24 @@ function CredentialRow({
               here.
             </span>
             <span> </span>
+            {agentBattery && (
+              <>
+                <OpenAppaChatButton
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  permissions={{ guardrailsPolicy: ["update"] }}
+                  batteryChange={{
+                    promptKey: "removeCredentialLine",
+                    battery: agentBattery,
+                    variable: credential.variable,
+                  }}
+                >
+                  <span>Remove it by pull request</span>
+                </OpenAppaChatButton>
+                <span> </span>
+              </>
+            )}
             <PolicyFileLink />
           </p>
         ) : (
@@ -1106,15 +1580,45 @@ function CredentialOptionLabel({
   );
 }
 
+/**
+ * Edit, and Remove from policy for an included battery: a confirmation that
+ * writes the policy, or, while Git sync owns it, the configuration agent.
+ */
 function BatteryRowActions({
   row,
+  changes,
   onEdit,
   onRemove,
 }: {
   row: BatteryTableRow;
+  changes: BatteryChanges;
   onEdit: () => void;
   onRemove: () => void;
 }) {
+  const removeLaunch = useOpenAppaChatLaunch({
+    subject: {
+      kind: "battery",
+      change: { promptKey: "removeBattery", battery: launchBattery(row) },
+    },
+    permissions: { guardrailsPolicy: ["update"] },
+    enabled: changes === "agent" && row.included !== null,
+  });
+  const remove =
+    changes === "agent"
+      ? {
+          icon: <Unlink className="size-4" />,
+          label: "Remove from policy",
+          href: removeLaunch.href ?? undefined,
+          disabled: !removeLaunch.href,
+          permissions: removeLaunch.permissions,
+          variant: "destructive" as const,
+        }
+      : {
+          icon: <Unlink className="size-4" />,
+          label: "Remove from policy",
+          onClick: onRemove,
+          variant: "destructive" as const,
+        };
   return (
     <RowClickShield>
       <TableRowActions
@@ -1125,19 +1629,10 @@ function BatteryRowActions({
             label: "Edit",
             onClick: onEdit,
           },
+          // One more action stays in the row: a menu holding one item hides
+          // it and saves no width.
+          ...(row.included ? [remove] : []),
         ]}
-        dropdownActions={
-          row.included
-            ? [
-                {
-                  icon: <Unlink className="size-4" />,
-                  label: "Remove from policy",
-                  onClick: onRemove,
-                  variant: "destructive" as const,
-                },
-              ]
-            : []
-        }
       />
     </RowClickShield>
   );
@@ -1177,44 +1672,33 @@ function RemoveBatteryDialog({
 
 /**
  * Re-discover the tools of the picked server, which is what gives an alias a
- * target. The reload endpoint takes an install, not the catalog entry: the
- * newest install of the entry stands for it, and without one there is
- * nothing to sync from.
+ * target. Shown where Attach cannot sync them itself: without the permission
+ * to, or without a connection to sync from.
  */
 function SyncToolsButton({ catalogId }: { catalogId: string }) {
   const client = useQueryClient();
-  // Only this entry's installs, without agents.
-  const servers = useMcpServers({ includeAssignedAgents: false, catalogId });
+  const target = useSyncTarget(catalogId);
   const reload = useReloadMcpServerTools();
-  const target = (servers.data ?? [])
-    .filter((server) => server.catalogId === catalogId)
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )[0];
   return (
     <PermissionButton
       permissions={{ mcpServerInstallation: ["create"] }}
       type="button"
       variant="outline"
       size="sm"
-      disabled={reload.isPending || target === undefined}
+      disabled={reload.isPending || target === null}
       tooltip={
-        target === undefined
+        target === null
           ? "Connect this server first: syncing tools needs a live connection"
           : undefined
       }
       onClick={() =>
         target &&
-        reload.mutate(
-          { id: target.id, name: target.name, catalogId },
-          {
-            onSuccess: () =>
-              client.invalidateQueries({
-                queryKey: batteryMatchesQueryKey(catalogId),
-              }),
-          },
-        )
+        reload.mutate(target, {
+          onSuccess: () =>
+            client.invalidateQueries({
+              queryKey: batteryMatchesQueryKey(catalogId),
+            }),
+        })
       }
     >
       {reload.isPending ? (
@@ -1225,4 +1709,66 @@ function SyncToolsButton({ catalogId }: { catalogId: string }) {
       <span>Sync tools</span>
     </PermissionButton>
   );
+}
+
+/** The install a catalog entry's tools are synced from. */
+type SyncTarget = { id: string; name: string; catalogId: string };
+
+/**
+ * The install that stands for a catalog entry when its tools are synced: the
+ * reload endpoint takes an install, not the entry, so the newest one stands
+ * for it. Null without one, or before an entry is picked.
+ */
+function useSyncTarget(catalogId: string): SyncTarget | null {
+  // Only this entry's installs, without agents.
+  const servers = useMcpServers({
+    includeAssignedAgents: false,
+    catalogId,
+    enabled: catalogId !== "",
+  });
+  if (!catalogId) return null;
+  const newest = (servers.data ?? [])
+    .filter((server) => server.catalogId === catalogId)
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )[0];
+  return newest ? { id: newest.id, name: newest.name, catalogId } : null;
+}
+
+/** What a battery's dialog holds for Save while Git sync owns the policy. */
+type StagedChanges = {
+  attach: { entry: CatalogEntry; syncFrom: SyncTarget | null }[];
+  detach: { id: string; name: string; toolPrefix: string }[];
+  /** The Include switch's new state, or null when it is left as it is. */
+  include: boolean | null;
+};
+
+const NOTHING_STAGED: StagedChanges = { attach: [], detach: [], include: null };
+
+/** The staged changes as the configuration agent is asked for them. */
+function stagedBatteryChanges(
+  staged: StagedChanges,
+  battery: OpenAppaBatteryChange["battery"],
+): OpenAppaBatteryChange[] {
+  return [
+    ...(staged.include === null
+      ? []
+      : [
+          {
+            promptKey: staged.include ? "includeBattery" : "removeBattery",
+            battery,
+          } as const,
+        ]),
+    ...staged.attach.map(({ entry }) => ({
+      promptKey: "attachBattery" as const,
+      battery,
+      server: { id: entry.id, name: entry.name },
+    })),
+    ...staged.detach.map((server) => ({
+      promptKey: "detachBattery" as const,
+      battery,
+      server,
+    })),
+  ];
 }

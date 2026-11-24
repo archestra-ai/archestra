@@ -380,6 +380,31 @@ class OpenAppaBatteriesService {
     };
   }
 
+  /**
+   * The policy text a battery adds once the policy includes it, for one the
+   * organization can include: a look at it before any install. It is the text
+   * an include shows once every credential the battery reads is bound.
+   */
+  async availableSource(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<BatteryPolicySource> {
+    const { organizationId, name } = params;
+    const found = (await this.availableBatteries(organizationId)).get(name);
+    if (!found) throw new ApiError(404, `No battery is named ${name}`);
+    return {
+      entry:
+        found.contentHash === null
+          ? bundledEntry(name)
+          : uploadedEntry({ name, contentHash: found.contentHash }),
+      name,
+      kind: "battery",
+      content: deployedSource(
+        prospectiveDeployment(found.package, sandboxRuntimeService.isEnabled),
+      ),
+    };
+  }
+
   /** The policy the runtime opens for this organization, recomposed when it moved. */
   async getEffectivePolicy(organizationId: string): Promise<EffectivePolicy> {
     const inFlight = this.reading.get(organizationId);

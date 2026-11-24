@@ -11,9 +11,12 @@ import type { ButtonProps } from "@/components/ui/button";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useChatAgentBootstrap } from "@/lib/agent.query";
 import {
+  type OpenAppaBatteryChange,
   type OpenAppaLaunchPromptKey,
   type OpenAppaLaunchTarget,
   openAppaYellInvestigationPrompt,
+  resolveOpenAppaBatteryChangesPrompt,
+  resolveOpenAppaBatteryPrompt,
   resolveOpenAppaLaunchPrompt,
 } from "@/lib/openappa-chat-prompts";
 import { openAppaChatHref } from "@/lib/openappa-routes";
@@ -25,12 +28,22 @@ export type OpenAppaChatSubject =
       target?: OpenAppaLaunchTarget;
     }
   | { kind: "yell"; yellId: string }
+  /** One battery change, which the agent opens as a pull request. */
+  | { kind: "battery"; change: OpenAppaBatteryChange }
+  /** The changes a battery's dialog saves together, asked for as one. */
+  | {
+      kind: "batteryChanges";
+      changes: OpenAppaBatteryChange[];
+      /** Asked by a server's editor who may not update guardrails. */
+      serverEditor?: boolean;
+    }
   /** Sends nothing: the chat opens on the agent's suggested prompts. */
   | { kind: "suggestedPrompts" };
 
 export function OpenAppaChatButton({
   promptKey,
   target,
+  batteryChange,
   children,
   permissions,
   ...props
@@ -39,15 +52,19 @@ export function OpenAppaChatButton({
   /** Omit to open the chat on the agent's suggested prompts. */
   promptKey?: OpenAppaLaunchPromptKey;
   target?: OpenAppaLaunchTarget;
+  /** Ask for one battery change instead of a keyed prompt. */
+  batteryChange?: OpenAppaBatteryChange;
 }) {
   const {
     agents,
     href,
     permissions: launchPermissions,
   } = useOpenAppaChatLaunch({
-    subject: promptKey
-      ? { kind: "prompt", promptKey, target }
-      : { kind: "suggestedPrompts" },
+    subject: batteryChange
+      ? { kind: "battery", change: batteryChange }
+      : promptKey
+        ? { kind: "prompt", promptKey, target }
+        : { kind: "suggestedPrompts" },
     permissions,
   });
   const canLaunch = !!href;
@@ -76,11 +93,14 @@ export function OpenAppaChatButton({
 export function useOpenAppaChatLaunch({
   subject,
   permissions,
+  enabled = true,
 }: {
   subject: OpenAppaChatSubject;
   permissions?: Permissions;
+  /** False skips looking up the agent, for a caller that may not launch. */
+  enabled?: boolean;
 }) {
-  const agents = useChatAgentBootstrap();
+  const agents = useChatAgentBootstrap(enabled);
   const agent = agents.data?.find(
     (candidate) =>
       candidate.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
@@ -90,8 +110,18 @@ export function useOpenAppaChatLaunch({
       ? openAppaYellInvestigationPrompt(subject.yellId)
       : subject.kind === "prompt"
         ? resolveOpenAppaLaunchPrompt(subject.promptKey, subject.target)
-        : undefined;
+        : subject.kind === "battery"
+          ? resolveOpenAppaBatteryPrompt(subject.change)
+          : subject.kind === "batteryChanges"
+            ? resolveOpenAppaBatteryChangesPrompt(subject.changes, {
+                serverEditor: subject.serverEditor,
+              })
+            : undefined;
   const target = subject.kind === "prompt" ? subject.target : undefined;
+  const batteryServer =
+    (subject.kind === "battery" && "server" in subject.change) ||
+    (subject.kind === "batteryChanges" &&
+      subject.changes.some((change) => "server" in change));
 
   const launchPermissions: Permissions = {
     ...permissions,
@@ -104,7 +134,9 @@ export function useOpenAppaChatLaunch({
       ...new Set<Action>(["read", ...(permissions?.guardrailsPolicy ?? [])]),
     ],
     ...(target?.kind === "mcp_gateway" ? { mcpGateway: ["read"] } : {}),
-    ...(target?.kind === "mcp_server" ? { mcpRegistry: ["read"] } : {}),
+    ...(target?.kind === "mcp_server" || batteryServer
+      ? { mcpRegistry: ["read"] }
+      : {}),
     ...(subject.kind === "yell" ? { guardrailsLog: ["read"] } : {}),
   };
 

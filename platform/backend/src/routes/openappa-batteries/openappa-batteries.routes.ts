@@ -82,6 +82,22 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       ),
   );
   app.get(
+    "/api/openappa/batteries/:name/source",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaBatterySource,
+        tags: ["OpenAPPA"],
+        params: PackageNameParamsSchema,
+        response: constructResponseSchema(BatteryPolicySourceSchema),
+      },
+    },
+    async (request) =>
+      openappaBatteriesService.availableSource({
+        organizationId: request.organizationId,
+        name: request.params.name,
+      }),
+  );
+  app.get(
     "/api/openappa/effective-policy",
     {
       schema: {

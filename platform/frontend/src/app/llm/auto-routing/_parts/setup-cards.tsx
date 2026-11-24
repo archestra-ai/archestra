@@ -214,7 +214,7 @@ function usageText({
   const keysCanCall =
     keyCount === 0
       ? ""
-      : ` ${keyCount === 1 ? "1 virtual key" : `${keyCount} virtual keys`} can call it.`;
+      : ` ${keyCount === 1 ? "1 virtual key has" : `${keyCount} virtual keys have`} it.`;
   if (usage.organizationDefault) {
     const base = `${label} is the organization default: every chat and agent without a model of its own runs on it.`;
     return usage.agentCount > 0

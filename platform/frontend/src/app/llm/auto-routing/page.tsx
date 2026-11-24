@@ -134,7 +134,10 @@ export default function AutoRoutersPage() {
   ];
 
   const { data: autoRoutingState } = useAutoRoutingState();
-  const organizationOff = autoRoutingState?.enabled === false;
+  const organizationOff =
+    routers.length > 0
+      ? !routers[0].enabled
+      : autoRoutingState?.enabled === false;
   const offNotice = organizationOff && (
     <InlineNotice variant="neutral">
       <span className="font-medium">Auto routing is off</span>

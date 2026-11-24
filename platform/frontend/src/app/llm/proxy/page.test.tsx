@@ -82,6 +82,7 @@ const POOL = {
 const ROUTER = {
   id: "router-1",
   name: "auto",
+  enabled: true,
   virtualApiKeyIds: [],
   tiers: {
     fast: { provider: "gemini", modelId: "flash" },

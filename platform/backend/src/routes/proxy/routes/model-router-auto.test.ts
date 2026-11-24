@@ -1022,6 +1022,7 @@ describe("Model Router auto model", () => {
       });
 
       expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamModels).toEqual([gpt6.modelId]);
       expect(await listsAuto(org)).toBe(true);
     });
 

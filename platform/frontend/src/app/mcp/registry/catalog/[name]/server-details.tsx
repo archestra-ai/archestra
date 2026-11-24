@@ -157,7 +157,21 @@ export function ServerDetails({
               {server.programming_language && (
                 <Fact label="Language">{server.programming_language}</Fact>
               )}
-              {runtime.type === "local" ? (
+              {runtime.type === "remote" ? (
+                <>
+                  <Fact label="Endpoint">
+                    <ExternalLink href={runtime.url}>
+                      {runtime.url}
+                    </ExternalLink>
+                  </Fact>
+                  {runtime.docs_url && (
+                    <ExternalLink href={runtime.docs_url}>
+                      Connection documentation
+                    </ExternalLink>
+                  )}
+                </>
+              ) : (
+                // A self-hosted server, or one that runs on each user's device.
                 <>
                   <Fact label="Command">
                     <code className="break-all font-mono">
@@ -170,19 +184,6 @@ export function ServerDetails({
                         {runtime.args.join(" ")}
                       </code>
                     </Fact>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Fact label="Endpoint">
-                    <ExternalLink href={runtime.url}>
-                      {runtime.url}
-                    </ExternalLink>
-                  </Fact>
-                  {runtime.docs_url && (
-                    <ExternalLink href={runtime.docs_url}>
-                      Connection documentation
-                    </ExternalLink>
                   )}
                 </>
               )}

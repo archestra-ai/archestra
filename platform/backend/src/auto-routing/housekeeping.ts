@@ -1,6 +1,5 @@
 import { OPENCODE_AGENT_HEADER } from "@archestra/shared/consts";
 import { isClaudeClientAgentId } from "@archestra/shared/interactions/client";
-import type { ModelRouterEndpoint } from "@/routes/proxy/model-router-access";
 import {
   detectClaudeClientId,
   detectGrokClientId,
@@ -10,6 +9,8 @@ import {
 import { getHeaderValue } from "@/routes/proxy/utils/headers/meta-header";
 import { detectOpenCodeFamilyTurn } from "@/routes/proxy/utils/headers/session-metadata";
 import { asRecord } from "@/utils/as-record";
+
+type AutoRoutingEndpoint = "chat_completions" | "responses";
 
 type AutoRoutingHousekeepingReason =
   | "opencode_title"
@@ -38,7 +39,7 @@ type AutoRoutingHousekeepingReason =
  * Inspects structured protocol fields only and never serializes the body.
  */
 export function classifyAutoRoutingHousekeeping(params: {
-  endpoint: ModelRouterEndpoint;
+  endpoint: AutoRoutingEndpoint;
   headers: Record<string, string | string[] | undefined>;
   body: unknown;
   client: string | null;
@@ -177,7 +178,7 @@ const TOP_LEVEL_CACHE_CONTROL_FIELDS = [
 ] as const;
 
 function conversationItems(
-  endpoint: ModelRouterEndpoint,
+  endpoint: AutoRoutingEndpoint,
   body: Record<string, unknown> | undefined,
 ): unknown {
   if (!body) return undefined;

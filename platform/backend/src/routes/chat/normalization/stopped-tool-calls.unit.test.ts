@@ -111,6 +111,34 @@ describe("settleStoppedToolCalls", () => {
     ).toEqual(["user"]);
   });
 
+  test("a call the user approved and then stopped does not ask for approval again after a reload", () => {
+    const approved = {
+      ...runningCall,
+      state: "approval-responded",
+      approval: { id: "approval-1", approved: true },
+    };
+    const waiting = {
+      ...runningCall,
+      toolCallId: "call-2",
+      state: "approval-requested",
+      approval: { id: "approval-2" },
+    };
+
+    const [, assistant] = settleStoppedToolCalls([
+      user,
+      assistantWith([approved, waiting]),
+    ]);
+
+    // It had started, so it is a stopped call. Left as it was, the stored
+    // turn kept the approval prompt of a call that already ran in part.
+    expect(assistant.parts[0]).toMatchObject({
+      state: "output-available",
+      output: { _meta: { archestraError: { type: "cancelled" } } },
+    });
+    // One still waiting for its answer never ran, and keeps its prompt.
+    expect(assistant.parts[1]).toBe(waiting);
+  });
+
   test("a call still receiving its arguments is left alone: it never ran", () => {
     const streaming = { ...runningCall, state: "input-streaming" };
     const messages = [user, assistantWith([streaming])];

@@ -452,6 +452,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Track if we created a new secret (for cleanup on failure)
       let createdSecretId: string | undefined;
+      // The tools the connection check listed, for the install to use.
+      let validatedTools:
+        | Awaited<ReturnType<typeof McpServerModel.validateConnection>>["tools"]
+        | undefined;
 
       // Fetch catalog item FIRST to determine server type
       let catalogItem = null;
@@ -745,12 +749,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // install discovery below, so probing here would hit the server
         // without an Authorization header and fail the install.
         if (secretId && !catalogItem.enterpriseManagedConfig) {
-          const { isValid, errorMessage } =
+          const { isValid, errorMessage, tools } =
             await McpServerModel.validateConnection(
               serverData.name,
               serverData.catalogId ?? undefined,
               secretId,
             );
+          validatedTools = tools;
 
           if (!isValid) {
             // Clean up the secret we just created if validation fails
@@ -1233,6 +1238,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           allowCurrentUserTokenFallback:
             mcpServer.scope === "personal" ||
             catalogItem.enterpriseManagedConfig !== null,
+          // The connection check above already listed them with this secret.
+          discoveredTools: validatedTools,
         });
 
         // Persist tools in the database, named by the catalog item.
@@ -3364,6 +3371,11 @@ async function connectAndGetToolsForInstallation(params: {
   secretId?: string;
   userId: string;
   allowCurrentUserTokenFallback: boolean;
+  /**
+   * Tools a connection with the same secret listed a moment ago. With them
+   * the install does not connect again for the list.
+   */
+  discoveredTools?: Awaited<ReturnType<typeof mcpClient.connectAndGetTools>>;
 }) {
   const { catalogItem } = params;
   if (!catalogItem) {
@@ -3397,13 +3409,15 @@ async function connectAndGetToolsForInstallation(params: {
   }
 
   try {
-    const tools = await mcpClient.connectAndGetTools({
-      catalogItem,
-      mcpServerId: params.mcpServerId,
-      secrets,
-      secretId: params.secretId,
-      enterpriseTransportCredential: installDiscoveryCredential,
-    });
+    const tools =
+      params.discoveredTools ??
+      (await mcpClient.connectAndGetTools({
+        catalogItem,
+        mcpServerId: params.mcpServerId,
+        secrets,
+        secretId: params.secretId,
+        enterpriseTransportCredential: installDiscoveryCredential,
+      }));
     await refreshMcpSkillMetadata({
       catalogId: catalogItem.id,
       mcpServerId: params.mcpServerId,

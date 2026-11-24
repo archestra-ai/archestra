@@ -824,6 +824,9 @@ describe("mcp server inspect route", () => {
     expect(install.statusCode, install.body).toBe(200);
     const serverId = install.json().id;
     expect(install.json().secretId).toBe(initialSecret.id);
+    // One connection lists the tools for both the connection check and the
+    // install: a second one only counts against a server that limits requests.
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
 
     const rotatedSecret = await secretManager().createSecret(
       { access_token: "fake-rotated-token" },
@@ -931,7 +934,8 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    // The connection check lists the tools; the install uses that list.
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       catalogItem: expect.objectContaining({ id: catalog.id }),
       secrets: {
@@ -1000,7 +1004,8 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    // The connection check lists the tools; the install uses that list.
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       catalogItem: expect.objectContaining({ id: catalog.id }),
       secrets: {
@@ -1061,7 +1066,8 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    // The connection check lists the tools; the install uses that list.
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       catalogItem: expect.objectContaining({ id: catalog.id }),
       secrets: {

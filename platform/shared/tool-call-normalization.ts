@@ -70,7 +70,7 @@ function collectCompletedToolCallIds<
  * and a turn that held nothing else is gone with it. With this result the
  * call stays in the transcript, its card reads Cancelled, and the model's
  * next turn sees that the call did not finish. A call still receiving its
- * arguments is left alone: it never ran.
+ * arguments, or still waiting for its approval, is left alone: it never ran.
  *
  * Only the last message is touched, and only when it is the assistant's: that
  * is the turn the run was writing. The backend applies this before it stores
@@ -231,14 +231,23 @@ function stoppedToolOutput(): {
   };
 }
 
-/** A tool call that has its arguments and no result yet. */
-function isRunningToolPart(
-  part: unknown,
-): part is { type: string; state: "input-available" } {
+/**
+ * A tool call that was running: it has its arguments and no result yet, or
+ * the user approved it and it had started. A call still waiting for its
+ * approval, or one the user declined, never ran.
+ */
+function isRunningToolPart(part: unknown): part is { type: string } {
   if (typeof part !== "object" || part === null) return false;
-  const { type, state } = part as { type?: unknown; state?: unknown };
+  const { type, state, approval } = part as {
+    type?: unknown;
+    state?: unknown;
+    approval?: { approved?: unknown };
+  };
+  const running =
+    state === "input-available" ||
+    (state === "approval-responded" && approval?.approved === true);
   return (
-    state === "input-available" &&
+    running &&
     typeof type === "string" &&
     (type === "dynamic-tool" ||
       (type.startsWith("tool-") && type !== "tool-result"))

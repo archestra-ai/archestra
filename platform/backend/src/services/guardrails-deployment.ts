@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { GuardrailsSettings, LineRefusal } from "@archestra/openappa-rs";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
@@ -78,8 +79,28 @@ export async function getGuardrailsDeploymentFromSnapshot(
  * The settings a dispatch carries to the runtime, which picks from them the line
  * a session opening now follows.
  */
+const requestDispatchSettings = new AsyncLocalStorage<{
+  settings?: GuardrailsSettings;
+}>();
+
+/** Isolate one proxy request's captured dispatch settings from other requests. */
+export function withGuardrailsRequest<T>(run: () => Promise<T>): Promise<T> {
+  return requestDispatchSettings.run({}, run);
+}
+
+/** The rest of this request dispatches on the settings snapshot it already read. */
+export function captureGuardrailsDispatchSettings(
+  deployment: Parameters<typeof dispatchSettingsOf>[0],
+): void {
+  const scope = requestDispatchSettings.getStore();
+  if (scope) scope.settings = dispatchSettingsOf(deployment);
+}
+
 export async function guardrailsDispatchSettings(): Promise<GuardrailsSettings> {
-  return dispatchSettingsOf(await getGuardrailsDeployment());
+  return (
+    requestDispatchSettings.getStore()?.settings ??
+    dispatchSettingsOf(await getGuardrailsDeployment())
+  );
 }
 
 /**

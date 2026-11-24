@@ -152,7 +152,11 @@ import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { configCache } from "@/services/config-cache";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
-import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
+import {
+  captureGuardrailsDispatchSettings,
+  getGuardrailsDeploymentFromSnapshot,
+  withGuardrailsRequest,
+} from "@/services/guardrails-deployment";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
 import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
@@ -562,14 +566,16 @@ export async function handleLLMProxy<
     stream: asRecord(body)?.stream === true,
   });
   try {
-    return await handleObservedLLMProxy({
-      body,
-      request,
-      reply,
-      provider,
-      telemetry,
-      converseTranslation: options?.converseTranslation,
-    });
+    return await withGuardrailsRequest(() =>
+      handleObservedLLMProxy({
+        body,
+        request,
+        reply,
+        provider,
+        telemetry,
+        converseTranslation: options?.converseTranslation,
+      }),
+    );
   } catch (error) {
     telemetry.fail(classifyProxyFailure(error));
     throw error;
@@ -1532,13 +1538,15 @@ async function handleObservedLLMProxy<
       );
     }
   };
+  const guardrails = await getGuardrailsDeploymentFromSnapshot({
+    row: requestContext.guardrails,
+  });
   const {
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
     unsupportedClientAction,
-  } = await getGuardrailsDeploymentFromSnapshot({
-    row: requestContext.guardrails,
-  });
+  } = guardrails;
+  captureGuardrailsDispatchSettings(guardrails);
   // Enforcement is off, but OpenAPPA records what it must know when enforcement
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.

@@ -172,6 +172,17 @@ export function refusalGuidance(action: RefusalAction): string {
   }
 }
 
+/**
+ * What the host adds to output the runtime withheld from a call that already
+ * ran: a check it could not finish says so, and never asks for the call
+ * again, which would repeat what it did.
+ */
+export function withheldOutputGuidance(action: RefusalAction): string {
+  return action.kind === "refuse_unjudged"
+    ? UNJUDGED_OUTPUT_GUIDANCE[action.retry]
+    : "";
+}
+
 // ===
 
 const DenyReceiptSchema = z.object({
@@ -186,6 +197,13 @@ const UNJUDGED_CALL_GUIDANCE: Record<RetryHint, string> = {
     "\n\n[appa] Make the same call again later; the check may complete then. If it fails the same way again, stop and tell the user that Guardrails could not check this call.",
   after_repair:
     "\n\n[appa] Retrying will not help until an administrator fixes the Guardrails setup. Stop and tell the user that Guardrails could not check this call.",
+};
+
+const UNJUDGED_OUTPUT_GUIDANCE: Record<RetryHint, string> = {
+  later:
+    "\n\n[appa] The call already ran, but Guardrails could not finish checking its output, so the output is withheld. Do not make the call again: it would run again. Tell the user that Guardrails could not check this output yet.",
+  after_repair:
+    "\n\n[appa] The call already ran, but Guardrails cannot check its output until an administrator fixes the Guardrails setup, so the output is withheld. Do not make the call again: it would run again. Tell the user that Guardrails could not check this output.",
 };
 
 function isRemedy(outcome: OutcomeKind): outcome is Remedy {

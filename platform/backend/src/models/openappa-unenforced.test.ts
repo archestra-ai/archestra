@@ -215,3 +215,54 @@ describe("legacy records exempt nothing", () => {
     ).toEqual({ sessions: 0, calls: 0 });
   });
 });
+
+describe("OpenAppaUnenforcedModel.recordCalls", () => {
+  test("replaces a colliding waived row and leaves an observed call as it is", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await db.insert(schema.openappaUnenforcedCallsTable).values([
+      {
+        organizationId: org.id,
+        sessionId: "lead",
+        toolCallId: "waived-call",
+        reason: "waived",
+      },
+      {
+        organizationId: org.id,
+        sessionId: "lead",
+        toolCallId: "spawn",
+        reason: "child",
+        childNativeId: "worker",
+      },
+    ]);
+    await OpenAppaUnenforcedModel.recordCalls({
+      organizationId: org.id,
+      sessionId: "lead",
+      toolCallIds: ["made-call"],
+      reason: "made",
+    });
+
+    const recorded = await OpenAppaUnenforcedModel.recordCalls({
+      organizationId: org.id,
+      sessionId: "lead",
+      toolCallIds: ["waived-call", "spawn", "made-call"],
+      reason: "made",
+    });
+
+    expect(recorded).toEqual(["waived-call"]);
+    const found = await OpenAppaUnenforcedModel.findCalls({
+      organizationId: org.id,
+      sessionIds: ["lead"],
+      toolCallIds: ["waived-call", "spawn", "made-call"],
+    });
+    expect(found).toHaveLength(3);
+    expect(found).toEqual(
+      expect.arrayContaining([
+        { toolCallId: "waived-call", reason: "made", childNativeId: null },
+        { toolCallId: "spawn", reason: "child", childNativeId: "worker" },
+        { toolCallId: "made-call", reason: "made", childNativeId: null },
+      ]),
+    );
+  });
+});

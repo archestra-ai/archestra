@@ -7,6 +7,7 @@ import {
   refusalAction,
   refusalGuidance,
   statedRefusalOutcome,
+  withheldOutputGuidance,
 } from "./refusal-outcome";
 
 describe("statedRefusalOutcome", () => {
@@ -284,5 +285,31 @@ describe("refusalGuidance", () => {
     expect(afterRepair).not.toBe("");
     expect(later).not.toBe(afterRepair);
     expect(later).not.toBe(NO_REMEDY_PLAN_HINT);
+  });
+});
+
+describe("withheldOutputGuidance", () => {
+  test("speaks only for output the runtime could not judge, in words of its own", () => {
+    for (const action of [
+      { kind: "offer_remedies" },
+      { kind: "refuse", why: "hard_block" },
+      { kind: "refuse", why: "integrity" },
+      { kind: "refuse", why: "unstated" },
+    ] as const)
+      expect(withheldOutputGuidance(action)).toBe("");
+    for (const retry of ["later", "after_repair"] as const) {
+      const action = { kind: "refuse_unjudged", retry } as const;
+      expect(withheldOutputGuidance(action)).not.toBe("");
+      // A call that already ran is never told to make the call again.
+      expect(withheldOutputGuidance(action)).not.toBe(refusalGuidance(action));
+    }
+    expect(
+      withheldOutputGuidance({ kind: "refuse_unjudged", retry: "later" }),
+    ).not.toBe(
+      withheldOutputGuidance({
+        kind: "refuse_unjudged",
+        retry: "after_repair",
+      }),
+    );
   });
 });

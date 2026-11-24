@@ -9,7 +9,6 @@ import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
   ExemptCallReason,
-  UnenforcedCallReason,
   UnenforcedSessionReason,
 } from "@/types/openappa-unenforced";
 
@@ -104,7 +103,7 @@ export async function recordUnenforcedCalls(params: {
   organizationId: string;
   sessionId: string;
   toolCallIds: readonly string[];
-  reason: UnenforcedCallReason;
+  reason: ExemptCallReason;
   childNativeId?: string;
 }): Promise<void> {
   const fresh = unrecordedCallIds(params);

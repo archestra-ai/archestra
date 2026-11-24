@@ -28,7 +28,7 @@ import { recoverDiagnosticTurn } from "./diagnostic-recovery";
 import { enterOpenappaEncryptedChat } from "./encrypted-chat";
 import { OpenappaRefusal, OpenappaRootOnlyError } from "./failure";
 import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
-import { refusalGuidance } from "./refusal-outcome";
+import { refusalGuidance, withheldOutputGuidance } from "./refusal-outcome";
 import {
   addressRuntimeChild,
   admitPeerMessage,
@@ -2000,7 +2000,7 @@ describe("APPA feature boundary", () => {
   test.each([
     "later",
     "after_repair",
-  ] as const)("a result the runtime withheld, unable to judge it, says when to ask again (%s)", async (retry) => {
+  ] as const)("a result the runtime withheld, unable to judge it, says so without asking for the call again (%s)", async (retry) => {
     const withheld = "[appa] Tool output withheld.";
     native.dispatchHook.mockImplementation(async (raw: string) =>
       JSON.stringify(
@@ -2026,7 +2026,8 @@ describe("APPA feature boundary", () => {
     });
 
     expect(result.toolResultUpdates.call).toMatchObject({
-      content: withheld + refusalGuidance({ kind: "refuse_unjudged", retry }),
+      content:
+        withheld + withheldOutputGuidance({ kind: "refuse_unjudged", retry }),
       refused: true,
     });
   });

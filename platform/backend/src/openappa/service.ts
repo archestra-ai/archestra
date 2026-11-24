@@ -82,11 +82,13 @@ import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import {
   NoRefusalOutcomeFields,
+  type RefusalAction,
   type RefusalOutcome,
   RefusalOutcomeFields,
   refusalAction,
   refusalGuidance,
   statedRefusalOutcome,
+  withheldOutputGuidance,
 } from "./refusal-outcome";
 import { policyView } from "./result-view";
 import { toolCallArgumentsText } from "./tool-call-arguments";
@@ -1106,8 +1108,9 @@ async function approveToolResult(params: {
     reason === "unknown_control_call" &&
     (decision.decision === "mcp_result" ||
       decision.decision === "replace_output");
+  const unjudged = unjudgedAction(outcome);
   return {
-    content: content + unjudgedGuidance(outcome),
+    content: unjudged ? content + withheldOutputGuidance(unjudged) : content,
     outputSource,
     ...((!unknownControl || outcome?.kind === "hard_block") &&
     (decision.decision === "block" ||
@@ -2002,27 +2005,34 @@ function runtimeToolResult(decision: NativeDecision): CallToolResult {
           isError: false,
           content: [{ type: "text", text: decision.approved_output ?? "" }],
         });
-  const guidance = unjudgedGuidance(refusalOutcomeOf(decision));
-  return guidance
+  // The control gate refused the remedy before it ran, so it may be asked
+  // for again.
+  const unjudged = unjudgedAction(refusalOutcomeOf(decision));
+  return unjudged
     ? {
         ...result,
-        content: [...result.content, { type: "text", text: guidance.trim() }],
+        content: [
+          ...result.content,
+          { type: "text", text: refusalGuidance(unjudged).trim() },
+        ],
       }
     : result;
 }
 
 /**
- * Whether to ask again, for an operation the runtime could not judge. A
- * ruling's own guidance is the caller's to render.
+ * The action on an operation the runtime could not judge. A ruling's own
+ * guidance is the caller's to render.
  */
-function unjudgedGuidance(outcome: RefusalOutcome | undefined): string {
-  if (outcome === undefined) return "";
+function unjudgedAction(
+  outcome: RefusalOutcome | undefined,
+): Extract<RefusalAction, { kind: "refuse_unjudged" }> | undefined {
+  if (outcome === undefined) return undefined;
   const action = refusalAction({
     outcome,
     offers: undefined,
     review: undefined,
   });
-  return action.kind === "refuse_unjudged" ? refusalGuidance(action) : "";
+  return action.kind === "refuse_unjudged" ? action : undefined;
 }
 
 /** How a delegation call's child may return, when the platform declares it. */

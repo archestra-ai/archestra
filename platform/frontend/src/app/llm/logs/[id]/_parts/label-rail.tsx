@@ -143,6 +143,15 @@ export function LabelLegend({
 }
 
 /**
+ * Whether the row's label was recorded at the row: a change on its edges. Any
+ * other row only carries the last recorded label forward, which says nothing
+ * of how that row ran.
+ */
+export function labelRecordedAt(gutter: Pick<GutterProps, "nodes">): boolean {
+  return Boolean(gutter.nodes?.top.length || gutter.nodes?.bottom.length);
+}
+
+/**
  * The row's label rail: 3px trust lane and 3px audience lane, inset 3px so a
  * change marker can centre on them and the selection's edge shows beside
  * them, with a 16px hover/tap target for its tooltip.
@@ -155,6 +164,7 @@ export function LabelRail({
   onSelectRow,
 }: GutterProps & { onSelectRow: () => void }) {
   const [open, setOpen] = useState(false);
+  const recorded = labelRecordedAt({ nodes });
   return (
     <>
       {/* Inset 3px so a marker can centre on the lanes without the list's
@@ -195,7 +205,11 @@ export function LabelRail({
           />
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-xs text-left">
-          <p className="mb-1 font-medium">Session label at this row</p>
+          <p className="mb-1 font-medium">
+            {recorded
+              ? "Session label at this row"
+              : "Last recorded session label"}
+          </p>
           <LaneLine
             glyph={<LaneGlyph highlight="trust" label={label} />}
             name="Trust"

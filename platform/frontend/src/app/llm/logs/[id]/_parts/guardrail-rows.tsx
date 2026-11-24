@@ -21,7 +21,12 @@ import {
   trustTone,
 } from "./guardrails";
 import { DecisionIcon, DecisionTerm, RoleTerm } from "./guardrails-context";
-import { LabelChangeNote, LabelLegend, LabelRail } from "./label-rail";
+import {
+  LabelChangeNote,
+  LabelLegend,
+  LabelRail,
+  labelRecordedAt,
+} from "./label-rail";
 import type { TimelineSpan } from "./session-timeline";
 import { GRIDS, type Layout, WIDE_ONLY } from "./waterfall-grid";
 import { YellStepper } from "./yell-markers";
@@ -275,7 +280,11 @@ export function gutterWords(
   note: LabelChange[] | null,
 ): string {
   if (!gutter) return "";
-  const here = `, label ${trustTone(gutter.label.trust).label} ${audienceTone(gutter.label.audience).label}`;
+  const label = `${trustTone(gutter.label.trust).label} ${audienceTone(gutter.label.audience).label}`;
+  const here =
+    labelRecordedAt(gutter) || note?.length
+      ? `, label ${label}`
+      : `, last recorded session label ${label}`;
   return note && note.length > 0
     ? `${here}, changed the label: ${note.map(changeWords).join("; ")}`
     : here;

@@ -2,7 +2,6 @@ import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   ExemptCallReason,
-  UnenforcedCallReason,
   UnenforcedSessionReason,
 } from "@/types/openappa-unenforced";
 
@@ -104,12 +103,15 @@ class OpenAppaUnenforcedModel {
       );
   }
 
-  /** Returns the ids it recorded now; an id recorded before is left as it is. */
+  /**
+   * Returns the ids it recorded now. An id observed before is left as it is;
+   * an earlier release's `waived` row for it is replaced.
+   */
   static async recordCalls(params: {
     organizationId: string;
     sessionId: string;
     toolCallIds: readonly string[];
-    reason: UnenforcedCallReason;
+    reason: ExemptCallReason;
     childNativeId?: string;
   }): Promise<string[]> {
     if (params.toolCallIds.length === 0) return [];
@@ -124,7 +126,15 @@ class OpenAppaUnenforcedModel {
           childNativeId: params.childNativeId ?? null,
         })),
       )
-      .onConflictDoNothing()
+      .onConflictDoUpdate({
+        target: [calls.organizationId, calls.sessionId, calls.toolCallId],
+        set: {
+          reason: params.reason,
+          childNativeId: params.childNativeId ?? null,
+          createdAt: sql`now()`,
+        },
+        setWhere: eq(calls.reason, "waived"),
+      })
       .returning({ toolCallId: calls.toolCallId });
     return inserted.map((row) => row.toolCallId);
   }

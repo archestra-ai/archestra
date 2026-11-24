@@ -7661,12 +7661,22 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test.for<RefusalOutcome>([
-    { kind: "hard_block" },
-    { kind: "integrity" },
-  ])("files no missing-remedy-tools report for a $kind denial, which no remedy lifts", async (outcome, {
-    makeOrganization,
-  }) => {
+  // A client that declares ordinary tools but no notice tool is asked once to
+  // resend for the remedy tools, then reported. Neither helps a ruling no
+  // remedy lifts, nor a cancelled call's replayed receipt, which states nothing.
+  test.for<{
+    name: string;
+    offers: string[] | undefined;
+    outcome?: RefusalOutcome;
+  }>([
+    { name: "a hard block", offers: [], outcome: { kind: "hard_block" } },
+    { name: "an integrity fault", offers: [], outcome: { kind: "integrity" } },
+    { name: "a replayed cancellation", offers: undefined },
+  ])("asks no resend and files no missing-remedy-tools report for $name", async ({
+    name,
+    offers,
+    outcome,
+  }, { makeOrganization }) => {
     config.openappa.enabled = true;
     config.openappa.yellEnabled = true;
     const organizationId = (await makeOrganization()).id;
@@ -7683,28 +7693,33 @@ describe("rendering runtime text for this client", () => {
     ).request = {
       tools: undefined,
       customTools: new Set(),
-      declaredTools: [],
+      declaredTools: [{ name: "exec" }],
     };
+    const feedback = "[appa] Refused: nothing lifts this";
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
       .mockImplementation(async () => [
         {
           kind: "deny" as const,
-          feedback: "[appa] Refused: nothing lifts this",
+          feedback,
           recorded: true as const,
-          offers: [],
-          outcome,
+          offers,
+          ...(outcome ? { outcome } : {}),
         },
       ]);
     try {
       await plugin.onSessionInit(context);
-      for (let attempt = 0; attempt < 2; attempt++)
-        expect(
-          await plugin.onToolCalls({
-            ...context,
-            toolCalls: [{ id: "call", name: "exec", arguments: {} }],
-          }),
-        ).toMatchObject({ decision: "refuse" });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const refused = await plugin.onToolCalls({
+          ...context,
+          toolCalls: [{ id: "call", name: "exec", arguments: {} }],
+        });
+        expect(refused).toMatchObject({ decision: "refuse" });
+        if (name === "a replayed cancellation")
+          expect(refused).toMatchObject({
+            refusal: { contentMessage: feedback },
+          });
+      }
       expect(
         (
           await OpenAppaYellModel.list({

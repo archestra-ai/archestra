@@ -2116,13 +2116,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const unjudged =
         decision.proxyNotice === true || action?.kind === "refuse_unjudged";
       const noPlan = action?.kind === "refuse" && action.why !== "unstated";
+      // A ruling that states nothing, such as a cancelled call's replayed
+      // receipt, goes to the model as it is: no remedy can reopen it.
+      const unstated = action?.kind === "refuse" && action.why === "unstated";
       // Only a ruling with remedies is worth carrying on a stand-in call or
       // loading the remedy tools for.
       const offersRemedies = action?.kind === "offer_remedies";
       // Raw transcript access is a host boundary, with no policy remedy.
       // Loading gateway tools cannot change it and must not cause a retry.
       const transcriptRefusal = blockedTranscriptCalls.has(call.id);
-      const needsRemedyTools = !unjudged && !transcriptRefusal;
+      const needsRemedyTools = !unjudged && !unstated && !transcriptRefusal;
+      // Asking for a resend, and blaming the client when one does not help,
+      // is worth it only for remedies, or for a denial with no ruling to say.
+      const recoversRemedyTools =
+        needsRemedyTools && (action === undefined || offersRemedies);
       const ruling =
         decision.feedback +
         clarification +
@@ -2178,16 +2185,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         let transient: boolean;
         try {
           transient =
-            needsRemedyTools &&
-            !noPlan &&
+            recoversRemedyTools &&
             !binding.request.defersTools &&
             binding.request.declaredTools.length > 0 &&
             !(await this.remedyToolsMissingBefore(session));
           // A client that defers tools has not failed to receive remedies: it
           // has not loaded the tools yet.
           if (
-            needsRemedyTools &&
-            !noPlan &&
+            recoversRemedyTools &&
             !transient &&
             !binding.request.defersTools
           ) {

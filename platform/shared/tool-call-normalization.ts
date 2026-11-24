@@ -92,6 +92,46 @@ export function settleStoppedToolCalls<
   return [...messages.slice(0, -1), { ...last, parts }];
 }
 
+/**
+ * Type of the part that records that the user stopped the turn it is in. A
+ * `data-*` part: stored with the turn and never sent to the model. The chat
+ * reads it to tell work the stop interrupted from work that had ended by
+ * itself, where no call was in flight to carry the stop: a call Guardrails
+ * was still negotiating reads as cancelled, not as blocked.
+ */
+export const TURN_STOPPED_PART_TYPE = "data-turn-stopped";
+
+/**
+ * Records on the turn the run was writing that the user stopped it. The
+ * backend applies this to the turn it stores and the chat to its own copy,
+ * like {@link settleStoppedToolCalls}.
+ */
+export function markTurnStopped<
+  TMessage extends { role: string; parts?: readonly unknown[] },
+>(messages: TMessage[]): TMessage[] {
+  const last = messages.at(-1);
+  if (
+    last?.role !== "assistant" ||
+    !last.parts?.length ||
+    last.parts.some(isTurnStoppedPart)
+  ) {
+    return messages;
+  }
+  return [
+    ...messages.slice(0, -1),
+    { ...last, parts: [...last.parts, { type: TURN_STOPPED_PART_TYPE }] },
+  ];
+}
+
+/** Whether a message part is the mark {@link markTurnStopped} leaves. */
+export function isTurnStoppedPart(part: unknown): boolean {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    (part as { type?: unknown }).type === TURN_STOPPED_PART_TYPE
+  );
+}
+
 // Anthropic (and other providers) require every `tool_use` block's `input` to be
 // a JSON object. A model can stream malformed tool-argument JSON that the AI SDK
 // fails to parse, leaving the persisted tool-call part with a non-object `input`

@@ -1,5 +1,6 @@
 import {
   type ArchestraToolShortName,
+  isTurnStoppedPart,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -42,6 +43,11 @@ export type RemedyChain = {
   steps: RemedyChainMember[];
   /** The released attempt, once the model retried and the call ran. */
   finalAttempt: RemedyChainMember | null;
+  /**
+   * The user stopped the turn while this call was still being negotiated:
+   * the call did not run because of the stop, not because Guardrails held it.
+   */
+  stopped?: boolean;
 };
 
 export type RemedyChainStatus = {
@@ -192,8 +198,20 @@ export function identifyRemedyChains(
     if (chain) chain.finalAttempt = member("attempt");
   }
 
+  // A stop interrupts the work the turn was doing last. A guarded call that
+  // is the last thing in a stopped turn was still on its way; one the model
+  // had moved on from was held, and stays blocked.
+  const lastActivityIndex = parts.some(isTurnStoppedPart)
+    ? parts.findLastIndex(isActivityPart)
+    : -1;
+
   return chains.map(
-    ({ offerIds: _offerIds, noticeStep: _noticeStep, ...chain }) => chain,
+    ({ offerIds: _offerIds, noticeStep: _noticeStep, ...chain }) =>
+      isOpen(chain) &&
+      lastActivityIndex >= 0 &&
+      Math.max(...remedyChainPartIndices(chain)) === lastActivityIndex
+        ? { ...chain, stopped: true }
+        : chain,
   );
 }
 
@@ -237,6 +255,7 @@ export function getRemedyChainStatus(
   if (ruling?.ruling === "deny") {
     return { state: "denied", label: ruling.label };
   }
+  if (chain.stopped) return { state: "cancelled" };
   return { state: "denied", label: "Blocked" };
 }
 
@@ -304,6 +323,20 @@ function isToolPart(part: unknown): part is ToolPart {
     "type" in part &&
     typeof part.type === "string" &&
     (part.type.startsWith("tool-") || part.type === "dynamic-tool")
+  );
+}
+
+/** A part that shows the turn doing something: a tool call or written text. */
+function isActivityPart(part: unknown): boolean {
+  if (isToolPart(part)) return true;
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    part.type === "text" &&
+    "text" in part &&
+    typeof part.text === "string" &&
+    part.text.trim().length > 0
   );
 }
 

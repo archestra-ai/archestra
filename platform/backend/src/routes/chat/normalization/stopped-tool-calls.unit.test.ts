@@ -1,4 +1,8 @@
-import { settleStoppedToolCalls } from "@archestra/shared/tool-call-normalization";
+import {
+  isTurnStoppedPart,
+  markTurnStopped,
+  settleStoppedToolCalls,
+} from "@archestra/shared/tool-call-normalization";
 import { convertToModelMessages, type UIMessage } from "ai";
 import { describe, expect, test } from "vitest";
 import { normalizeChatMessagesForPersistence } from "./normalize-chat-messages";
@@ -72,6 +76,39 @@ describe("settleStoppedToolCalls", () => {
       "stopped before this call finished",
     );
     expect(replayed.map((m) => m.role)).toEqual(["user", "assistant", "tool"]);
+  });
+
+  test("a turn stopped between two calls keeps the mark that it was stopped", async () => {
+    const finished = {
+      ...runningCall,
+      state: "output-available",
+      output: { content: "done" },
+    };
+    const messages = [user, assistantWith([{ type: "step-start" }, finished])];
+
+    const [, stored] = normalizeChatMessagesForPersistence(
+      markTurnStopped(settleStoppedToolCalls(messages)),
+    );
+
+    // No call was in flight to carry the stop, so the mark is what tells a
+    // reloaded chat that the turn did not end by itself.
+    expect(stored.parts?.some(isTurnStoppedPart)).toBe(true);
+    // The model never sees the mark.
+    expect(
+      JSON.stringify(
+        await convertToModelMessages([user, stored] as unknown as UIMessage[]),
+      ),
+    ).not.toContain("data-turn-stopped");
+  });
+
+  test("a turn that holds nothing but the mark is not stored", () => {
+    const messages = [user, assistantWith([{ type: "step-start" }])];
+
+    expect(
+      normalizeChatMessagesForPersistence(markTurnStopped(messages)).map(
+        (m) => m.role,
+      ),
+    ).toEqual(["user"]);
   });
 
   test("a call still receiving its arguments is left alone: it never ran", () => {

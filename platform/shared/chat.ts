@@ -362,6 +362,9 @@ export interface ToolQueuePartData {
 // `data-tool-ui-start` is deliberately absent — the UI renders it as an MCP app.
 const NON_RENDERABLE_ASSISTANT_PART_TYPES: ReadonlySet<string> = new Set([
   "step-start",
+  // The mark a stopped turn carries (TURN_STOPPED_PART_TYPE): it renders
+  // nothing by itself.
+  "data-turn-stopped",
   "data-token-usage",
   "data-heartbeat",
   "data-context-window-estimate",

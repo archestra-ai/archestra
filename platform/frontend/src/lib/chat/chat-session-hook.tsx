@@ -10,6 +10,7 @@ import {
   getArchestraToolShortName,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
+  markTurnStopped,
   settleStoppedToolCalls,
   stripDanglingToolCalls,
   TOOL_CREATE_AGENT_SHORT_NAME,
@@ -497,9 +498,7 @@ export default function ChatSessionHook({
         // callback's (throttled, possibly stale) closure, so the most recently
         // streamed text is never rolled back.
         setMessages((current) => {
-          const stripped = pruneEmptyTrailingAssistantMessage(
-            stripDanglingToolCalls(settleStoppedToolCalls(current)),
-          );
+          const stripped = settleStoppedTurn(current);
           // restoreRenderableAssistantParts treats the shrink as a streaming
           // regression and would resurrect the stripped parts on the next
           // render; sync the ref so that comparison sees no regression.
@@ -1362,19 +1361,29 @@ export default function ChatSessionHook({
 
       stopInFlightRef.current = true;
       setIsStopping(true);
-      const finishStop = async () => {
+      const finishStop = async (result: unknown) => {
         const latestUserMessageId = latestMessagesRef.current.findLast(
           (message) => message.role === "user",
         )?.id;
         const responseStillInFlight =
           latestStatusRef.current === "submitted" ||
           latestStatusRef.current === "streaming";
-        if (
-          responseStillInFlight &&
-          latestUserMessageId === activeUserMessageId
-        ) {
+        const sameTurn = latestUserMessageId === activeUserMessageId;
+        if (responseStillInFlight && sameTurn) {
           await stop();
           transport.abortReconnect();
+        } else if (
+          sameTurn &&
+          (result as { stopped?: boolean } | undefined)?.stopped
+        ) {
+          // The server ended the stream before its answer to the stop came
+          // back, so the stream finished as any other does and nothing above
+          // marked the turn. Give it the state the backend stored for it.
+          setMessages((current) => {
+            const settled = settleStoppedTurn(current);
+            previousMessagesRef.current = settled;
+            return settled;
+          });
         }
         stopInFlightRef.current = false;
         setIsStopping(false);
@@ -1384,7 +1393,13 @@ export default function ChatSessionHook({
         setIsStopping(false);
       });
     },
-    [stop, transport, conversationId, contextCompaction.isCompacting],
+    [
+      stop,
+      transport,
+      conversationId,
+      contextCompaction.isCompacting,
+      setMessages,
+    ],
   );
   const sendOrQueueText = useCallback(
     (text: string) => {
@@ -1614,6 +1629,17 @@ function getCurrentArchestraToolShortName(
     fullWhiteLabeling: appConfig.enterpriseFeatures.fullWhiteLabeling,
     includeDefaultPrefix: true,
   });
+}
+
+/**
+ * The state a turn has once the user stopped it, the same the backend stores:
+ * a call that was running has its "stopped" result, the turn carries the mark
+ * that it was stopped, and a call still receiving its arguments is gone.
+ */
+function settleStoppedTurn(messages: UIMessage[]): UIMessage[] {
+  return pruneEmptyTrailingAssistantMessage(
+    stripDanglingToolCalls(markTurnStopped(settleStoppedToolCalls(messages))),
+  );
 }
 
 /** One shared empty set, so a session with no queued call keeps its identity. */

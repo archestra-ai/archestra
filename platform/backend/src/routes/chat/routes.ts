@@ -13,6 +13,7 @@ import {
   isGeminiImageGenerationModel,
   isModelSelectionComplete,
   isThinkingEffortSelfHostedProvider,
+  markTurnStopped,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   RouteId,
   RUN_ID_HEADER,
@@ -2252,7 +2253,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         ActiveChatRunShutdownError
                       );
                     const finalMessages = stopped
-                      ? settleStoppedToolCalls(streamedMessages)
+                      ? markTurnStopped(
+                          settleStoppedToolCalls(streamedMessages),
+                        )
                       : streamedMessages;
                     const lastMessage = finalMessages.at(-1);
                     const reply =

@@ -70,9 +70,14 @@ export function RemedyChainCard({
 }) {
   const status = getRemedyChainStatus(chain, { turnActive });
   const input = chain.targetArguments;
-  // The call did not run: what it returned is the ruling that stopped it.
+  // The call did not run: what it returned is the ruling that held it, or,
+  // when the turn was stopped while it was still being negotiated, nothing.
   const ruling =
-    status.state === "denied" ? getRemedyChainRuling(chain) : undefined;
+    status.state === "denied"
+      ? getRemedyChainRuling(chain)
+      : status.state === "cancelled"
+        ? "The run was stopped before this call ran."
+        : undefined;
   const needsAction = chain.steps.some(
     (step) => step.part.state === "approval-requested",
   );

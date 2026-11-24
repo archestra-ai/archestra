@@ -1,7 +1,6 @@
 import { assess, plan as fitPlan } from "@archestra/router-rs";
 import { z } from "zod";
 import logger from "@/logging";
-import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingUsageModel from "@/models/routing-usage";
 import type { AutoRouter, RoutingPlan } from "@/types/auto-routing";
@@ -116,7 +115,7 @@ type Holdout =
   | { status: "ok"; predictions: (number | null)[] }
   | { status: "no_holdout" | "failed" };
 
-type FitRouter = Pick<AutoRouter, "id" | "organizationId" | "usesPastSessions">;
+type FitRouter = Pick<AutoRouter, "id">;
 
 /** Per router, least recently used first. */
 const bases = new Map<
@@ -204,24 +203,20 @@ async function cachedBasis(
   return entry.basis;
 }
 
-/** What a basis was built from: the plan, the router's usage since `usageSince`, and the latest backfill it reads. */
+/** What a basis was built from: the plan and the router's usage since `usageSince`. */
 async function basisIdentity(
   router: FitRouter,
   active: RoutingPlan,
   usageSince: Date,
 ): Promise<string> {
-  const [usageAt, backfill] = await Promise.all([
-    RoutingUsageModel.findLatestCreatedAt(router.id, usageSince),
-    router.usesPastSessions
-      ? RoutingBackfillModel.findLatest(router.organizationId)
-      : null,
-  ]);
+  const usageAt = await RoutingUsageModel.findLatestCreatedAt(
+    router.id,
+    usageSince,
+  );
   return JSON.stringify([
     active.id,
     active.scorerVersionId,
     usageAt?.getTime() ?? null,
-    backfill?.id ?? null,
-    backfill?.updatedAt.getTime() ?? null,
   ]);
 }
 
@@ -231,7 +226,7 @@ async function buildBasis(
   tiers: RouterTierSet,
 ): Promise<Basis> {
   const history = await readFitHistory({
-    router,
+    routerId: router.id,
     scorerVersionId: active.scorerVersionId,
     inputWatermark: active.inputWatermark,
     longContextThreshold: tiers.long_context_threshold,

@@ -20,7 +20,6 @@ const reads = (routerId: string) =>
       url: `/api/auto-routing/routers/${routerId}/simulate`,
       payload: { budgetUsdPerDay: 50, volumeMultiplier: 2 },
     },
-    { method: "GET", url: "/api/auto-routing/backfill" },
     { method: "GET", url: `/api/auto-routing/routers/${routerId}/diagnostics` },
   ] as const;
 const writes = (routerId: string) =>
@@ -41,18 +40,6 @@ const writes = (routerId: string) =>
       url: `/api/auto-routing/routers/${routerId}/preview`,
       payload: { text: "Fix a typo" },
     },
-    { method: "POST", url: "/api/auto-routing/backfill/scan" },
-    {
-      method: "POST",
-      url: "/api/auto-routing/backfill/score",
-      payload: {
-        backfillId: "00000000-0000-4000-8000-000000000001",
-        scorerVersionId: "00000000-0000-4000-8000-000000000002",
-        maxSessions: 10,
-        maxCostUsd: 1,
-      },
-    },
-    { method: "DELETE", url: "/api/auto-routing/backfill" },
     { method: "DELETE", url: `/api/auto-routing/routers/${routerId}` },
   ] as const;
 
@@ -89,7 +76,7 @@ describe("auto routing API access", () => {
     return token;
   }
 
-  test("a member reads but cannot change routers, re-plan, preview or backfill", async () => {
+  test("a member reads but cannot change routers, re-plan or preview", async () => {
     const authorization = await tokenFor("member");
 
     for (const request of reads(routerId)) {
@@ -131,9 +118,8 @@ describe("auto routing API access", () => {
 
   test("an admin passes the permission check on every write", async () => {
     const authorization = await tokenFor("admin");
-    // Preview gets past the gate and stops at the missing scorer key; scoring
-    // refuses an offer nobody made, and the cancel stops the scan.
-    const expected = [200, 200, 200, 400, 200, 409, 200, 200];
+    // Preview gets past the gate and stops at the missing scorer key.
+    const expected = [200, 200, 200, 400, 200];
 
     const statuses = [];
     for (const request of writes(routerId)) {

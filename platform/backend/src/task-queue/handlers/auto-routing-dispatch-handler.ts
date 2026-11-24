@@ -1,10 +1,6 @@
-import { activeSourceVersion } from "@/auto-routing/signals";
 import logger from "@/logging";
 import AutoRoutingDispatchModel from "@/models/auto-routing-dispatch";
-import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingDecisionModel from "@/models/routing-decision";
-import RoutingHistoryModel from "@/models/routing-history";
-import { HISTORY_MS } from "@/models/routing-usage";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INITIAL_PURGE_RETRY_MS = 5 * 60 * 1000;
@@ -12,9 +8,8 @@ const MAX_PURGE_RETRY_MS = 60 * 60 * 1000;
 
 /**
  * Enqueues a fit for every auto router whose plan is due — settings changed
- * since its last fit outcome, or no outcome for a day — resumes a backfill
- * whose worker died, and purges expired routing history once a day per
- * process. Failed purges back off independently of the minute dispatch tick.
+ * since its last fit outcome, or no outcome for a day — and purges expired
+ * routing history once a day per process. Failed purges back off independently of the minute dispatch tick.
  * @public — exported for isolated scheduler tests
  */
 export class AutoRoutingDispatcher {
@@ -31,9 +26,6 @@ export class AutoRoutingDispatcher {
     const due = await AutoRoutingDispatchModel.findDueRouters(
       new Date(now.getTime() - DAY_MS),
     );
-    if (await RoutingBackfillModel.hasClaimable()) {
-      await AutoRoutingDispatchModel.enqueueBackfillRun();
-    }
     const enqueued = await AutoRoutingDispatchModel.enqueueFits(due);
     if (enqueued > 0) {
       logger.info(
@@ -49,13 +41,7 @@ export class AutoRoutingDispatcher {
     const completedAt = () => now.getTime() + this.monotonicNow() - startedAt;
     this.purgeInFlight = true;
     try {
-      const purged = {
-        ...(await RoutingDecisionModel.purgeExpired(now)),
-        past: await RoutingHistoryModel.purgeExpired({
-          windowStart: new Date(now.getTime() - HISTORY_MS),
-          keepScorerVersionId: (await activeSourceVersion()).id,
-        }),
-      };
+      const purged = await RoutingDecisionModel.purgeExpired(now);
       this.nextPurgeAt = completedAt() + DAY_MS;
       this.purgeRetryMs = INITIAL_PURGE_RETRY_MS;
       logger.info(purged, "[AutoRouting] Purged expired routing history");

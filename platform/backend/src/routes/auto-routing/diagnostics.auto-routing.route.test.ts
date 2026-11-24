@@ -271,8 +271,6 @@ describe("GET /api/auto-routing/routers/:id/diagnostics", () => {
   test("refuses runs beyond the process-wide limit", async () => {
     const routers = Array.from({ length: 5 }, () => ({
       id: crypto.randomUUID(),
-      organizationId: crypto.randomUUID(),
-      usesPastSessions: false,
     }));
 
     const results = await Promise.allSettled(

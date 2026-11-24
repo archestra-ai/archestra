@@ -1,17 +1,14 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
-import { runBackfill } from "@/auto-routing/backfill";
-import AgentModel from "@/models/agent";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import resourcePermissionRoutes from "@/routes/resource-permission/resource-permission.routes";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting } from "@/test/auto-routing";
+import { autoRouterId, configureAutoRouting } from "@/test/auto-routing";
 import { useMswServer } from "@/test/msw";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
 
 const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const routes: FastifyPluginAsyncZod = async (fastify) => {
   await fastify.register(autoRoutingRoutes);
@@ -48,23 +45,7 @@ describe("the session scorer and a Jev key's grants", () => {
 
   test("a key with the create dialog's default grants leaves scoring blocked until it is shared organization-wide", async ({
     makeSecret,
-    makeInteraction,
   }) => {
-    const profileId = (await AgentModel.getOrgLlmProxy(ctx.organizationId)).id;
-    for (const i of [0, 1]) {
-      await makeInteraction(profileId, {
-        sessionId: `session-${i}`,
-        sessionSource: "header",
-        source: "api",
-        request: {
-          model: "gpt-4o",
-          messages: [{ role: "user", content: `Task number ${i}` }],
-        },
-        createdAt: new Date(Date.now() - (2 + i) * DAY_MS),
-        inputTokens: 1_000,
-        outputTokens: 200,
-      });
-    }
     // What POST /api/llm-provider-api-keys writes for `shared: true, initialGrants: []`.
     const secret = await makeSecret({ secret: { apiKey: "sk-jev" } });
     const key = await LlmProviderApiKeyModel.create(
@@ -85,32 +66,17 @@ describe("the session scorer and a Jev key's grants", () => {
       (
         await inject({ method: "GET", url: "/api/auto-routing/routers" })
       ).json()[0].status.scorer;
-    const score = async () => {
-      const { scoreOffer } = (
-        await inject({ method: "GET", url: "/api/auto-routing/backfill" })
-      ).json();
-      return inject({
+    const routerId = await autoRouterId(ctx.organizationId);
+    const score = () =>
+      inject({
         method: "POST",
-        url: "/api/auto-routing/backfill/score",
-        payload: {
-          backfillId: scoreOffer.backfillId,
-          scorerVersionId: scoreOffer.scorerVersionId,
-          maxSessions: 2,
-          maxCostUsd: 1,
-        },
+        url: `/api/auto-routing/routers/${routerId}/preview`,
+        payload: { text: "Refactor the billing module" },
       });
-    };
-    await inject({ method: "POST", url: "/api/auto-routing/backfill/scan" });
-    await runBackfill();
 
     expect(await scorer()).toBe("no_jev_key");
     const refused = await score();
     expect(refused.statusCode, refused.body).toBe(400);
-    await runBackfill();
-    const { backfill } = (
-      await inject({ method: "GET", url: "/api/auto-routing/backfill" })
-    ).json();
-    expect(backfill).toMatchObject({ status: "scanned", spentCostUsd: 0 });
     expect(jevCalls).toBe(0);
 
     const url = `/api/resource-permissions/llmProviderApiKey/${key.id}`;
@@ -132,10 +98,9 @@ describe("the session scorer and a Jev key's grants", () => {
     expect(granted.statusCode, granted.body).toBe(200);
 
     expect(await scorer()).toBe("ready");
-    const started = await score();
-    expect(started.statusCode, started.body).toBe(200);
-    await runBackfill();
-    expect(jevCalls).toBe(2);
+    const scored = await score();
+    expect(scored.statusCode, scored.body).toBe(200);
+    expect(jevCalls).toBe(1);
   });
 });
 

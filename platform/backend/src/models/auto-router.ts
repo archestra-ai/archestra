@@ -58,21 +58,6 @@ class AutoRouterModel {
     return load(eq(routers.organizationId, organizationId));
   }
 
-  /** The router that learns from the organization's scored past sessions, if it still exists. */
-  static async findPastSessionsRouter(
-    organizationId: string,
-    tx?: Transaction,
-  ): Promise<AutoRouter | null> {
-    const [router] = await load(
-      and(
-        eq(routers.organizationId, organizationId),
-        eq(routers.usesPastSessions, true),
-      ),
-      tx,
-    );
-    return router ?? null;
-  }
-
   /**
    * Creates the router at generation 1, so its first fit is due. `validate`
    * sees it inside the transaction and throws to abort.
@@ -176,24 +161,6 @@ class AutoRouterModel {
         );
       return true;
     });
-  }
-
-  /**
-   * Requests a re-plan inside `tx`, under the plan lock, so the bump commits
-   * with whatever made it necessary. The new generation; null when the router
-   * is gone.
-   */
-  static async bumpGeneration(
-    routerId: string,
-    tx: Transaction,
-  ): Promise<number | null> {
-    await lockRoutingPlan(tx, routerId);
-    const [row] = await tx
-      .update(routers)
-      .set({ generation: sql`${routers.generation} + 1` })
-      .where(eq(routers.id, routerId))
-      .returning({ generation: routers.generation });
-    return row?.generation ?? null;
   }
 
   /**
@@ -353,7 +320,6 @@ async function load(
       scorerVersionId: routers.scorerVersionId,
       generation: routers.generation,
       plannedGeneration: routers.plannedGeneration,
-      usesPastSessions: routers.usesPastSessions,
     })
     .from(routers)
     .innerJoin(organizations, eq(organizations.id, routers.organizationId))

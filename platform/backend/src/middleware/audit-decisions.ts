@@ -1267,23 +1267,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "system-written immutable scorer specs",
   },
-  routingBackfillsTable: {
-    audited: false,
-    reason:
-      "background job state; the row records who started it, and the worker's progress writes are not admin actions",
-  },
-  routingHistorySessionsTable: {
-    audited: false,
-    reason: "worker-written scalars of past sessions found by a backfill scan",
-  },
-  routingHistoryUsageTable: {
-    audited: false,
-    reason: "worker-written usage copied from past interactions",
-  },
-  routingHistoryScoresTable: {
-    audited: false,
-    reason: "worker-written scorer readings of past sessions",
-  },
   toolSearchTextsTable: {
     audited: false,
     reason: "worker-written search vocabulary derived from tool definitions",

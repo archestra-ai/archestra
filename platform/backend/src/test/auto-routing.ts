@@ -170,16 +170,8 @@ export async function publishFittedPlan(params: {
   return published.plan;
 }
 
-/**
- * The organization's router named `name`, made on first use with no tiers.
- * The first one, `auto`, learns from past sessions like the one that existed
- * before an organization could have several.
- */
-export async function ensureAutoRouter(
-  organizationId: string,
-  name = "auto",
-  options: { usesPastSessions?: boolean } = {},
-) {
+/** The organization's router named `name`, made on first use with no tiers. */
+export async function ensureAutoRouter(organizationId: string, name = "auto") {
   const existing = await AutoRouterModel.findByName(organizationId, name);
   if (existing) return existing;
   const [row] = await db
@@ -189,7 +181,6 @@ export async function ensureAutoRouter(
       name,
       scorerModel: DEFAULT_SCORER_MODEL,
       generation: 1,
-      usesPastSessions: options.usesPastSessions ?? name === "auto",
     })
     .returning({ id: schema.autoRoutersTable.id });
   const router = await AutoRouterModel.find(row.id);
@@ -201,9 +192,8 @@ export async function ensureAutoRouter(
 export async function configureAutoRouter(
   organizationId: string,
   name = "auto",
-  options: { usesPastSessions?: boolean } = {},
 ) {
-  const router = await ensureAutoRouter(organizationId, name, options);
+  const router = await ensureAutoRouter(organizationId, name);
   const trio = await makePricedTrio();
   await setAutoRoutingTiers(
     organizationId,

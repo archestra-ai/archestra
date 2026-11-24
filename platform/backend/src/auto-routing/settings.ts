@@ -26,7 +26,6 @@ import type {
   CreateAutoRouterBody,
   UpdateAutoRouterBody,
 } from "@/types/auto-routing-api";
-import { scanOnFirstEnable } from "./backfill";
 import {
   type FitSessions,
   fitInputsUnchanged,
@@ -78,9 +77,8 @@ export async function getAutoRoutingState(
 }
 
 /**
- * Turns every router of the organization on or off. Turning it on scans the
- * organization's past sessions once for the router that learns from them; the
- * dispatcher fits each configured router within a minute.
+ * Turns every router of the organization on or off; the dispatcher fits each
+ * configured router within a minute.
  */
 export async function setAutoRoutingEnabled(
   organizationId: string,
@@ -89,8 +87,6 @@ export async function setAutoRoutingEnabled(
   await OrganizationModel.patch(organizationId, {
     autoRoutingEnabled: enabled,
   });
-  if (enabled && (await AutoRouterModel.findPastSessionsRouter(organizationId)))
-    await scanOnFirstEnable(organizationId);
   return getAutoRoutingState(organizationId);
 }
 
@@ -109,7 +105,7 @@ export async function getAutoRouter(
   return describeOne(await loadAutoRouter(organizationId, routerId));
 }
 
-/** Creates a complete router, which starts cold: it learns from its own sessions only. */
+/** Creates a complete router; it routes on its normal tier until its first plan. */
 export async function createAutoRouter(
   organizationId: string,
   body: CreateAutoRouterBody,
@@ -508,7 +504,7 @@ async function describe(
     fitted?.scorerVersionId === scorerVersion.id
       ? fitted
       : await readFitWindow({
-          router,
+          routerId: router.id,
           scorerVersionId: scorerVersion.id,
           inputWatermark: new Date(),
         });
@@ -524,7 +520,6 @@ async function describe(
       apiKeyId: router.scorerApiKeyId,
       model: router.scorerModel,
     },
-    usesPastSessions: router.usesPastSessions,
     virtualApiKeyIds: context.virtualApiKeyIds.get(router.id) ?? [],
     usage: {
       agentCount: context.agentCounts.get(router.id) ?? 0,

@@ -1,4 +1,3 @@
-import { runBackfill } from "@/auto-routing/backfill";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { threadStates } from "@/openappa/thread-state";
 import { deleteExpiredUnenforcedRecords } from "@/openappa/unenforced";
@@ -161,7 +160,4 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     autoRoutingDispatcher.dispatch(),
   );
   taskQueueService.registerHandler("auto_routing_fit", handleAutoRoutingFit);
-  taskQueueService.registerHandler("auto_routing_backfill", () =>
-    runBackfill(),
-  );
 }

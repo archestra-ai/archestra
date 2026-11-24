@@ -1,15 +1,8 @@
-import {
-  AUTO_ROUTING_BACKFILL_MAX_COST_USD,
-  AUTO_ROUTING_BACKFILL_SCORER_CALLS,
-  SupportedProvidersSchema,
-} from "@archestra/shared";
+import { SupportedProvidersSchema } from "@archestra/shared";
 import { z } from "zod";
 import {
   AutoRoutingBudgetPresetSchema,
   RouterDocumentSchema,
-  RoutingBackfillBreakdownSchema,
-  RoutingBackfillPhaseSchema,
-  RoutingBackfillStatusSchema,
   RoutingDecisionReasonSchema,
   RoutingPlanRecordSchema,
   RoutingPlanStatusSchema,
@@ -34,7 +27,7 @@ const AutoRoutingTierModelSchema = z.object({
   modelId: z.string(),
 });
 
-/** Whether the session scorer can score sessions, live or past, or why not. */
+/** Whether the session scorer can score sessions, or why not. */
 export const AutoRoutingScorerStateSchema = z.enum(["ready", "no_jev_key"]);
 export type AutoRoutingScorerState = z.infer<
   typeof AutoRoutingScorerStateSchema
@@ -81,8 +74,6 @@ export const AutoRouterResponseSchema = z.object({
     apiKeyId: z.string().uuid().nullable(),
     model: z.string(),
   }),
-  /** Also learns from the organization's scored past sessions; only its first router does. */
-  usesPastSessions: z.boolean(),
   /** Virtual keys that may call the router by name; set from each key. */
   virtualApiKeyIds: z.array(z.string().uuid()),
   /** Where the router is picked: agents set to it, and whether the organization default is. */
@@ -452,104 +443,4 @@ export const AutoRoutingPreviewResponseSchema = z.object({
 });
 export type AutoRoutingPreviewResponse = z.infer<
   typeof AutoRoutingPreviewResponseSchema
->;
-
-/** Most past sessions one backfill scores. */
-export const AUTO_ROUTING_BACKFILL_MAX_SESSIONS = 5000;
-
-/** Starts scoring what `scoreOffer` named; refused with a 409 once it names something else. */
-export const AutoRoutingScoreBackfillBodySchema = z.strictObject({
-  backfillId: z.string().uuid(),
-  scorerVersionId: z.string().uuid(),
-  maxSessions: z
-    .number()
-    .int()
-    .min(1)
-    .max(AUTO_ROUTING_BACKFILL_MAX_SESSIONS)
-    .default(3000),
-  maxCostUsd: z
-    .number()
-    .positive()
-    .max(AUTO_ROUTING_BACKFILL_MAX_COST_USD)
-    .describe(
-      `Spending limit for the scorer calls in USD; may be exceeded by at most ${AUTO_ROUTING_BACKFILL_SCORER_CALLS} × the per-call cost of the calls in flight`,
-    ),
-});
-export type AutoRoutingScoreBackfillBody = z.infer<
-  typeof AutoRoutingScoreBackfillBodySchema
->;
-
-export const AutoRoutingBackfillResponseSchema = z.object({
-  /** The organization's newest backfill. */
-  backfill: z
-    .object({
-      id: z.string().uuid(),
-      status: RoutingBackfillStatusSchema,
-      phase: RoutingBackfillPhaseSchema,
-      windowStart: z.date(),
-      cutoff: z.date(),
-      /** Past sessions eligible for history, counted when the scan finished. */
-      eligibleSessions: z.number().int().nonnegative(),
-      eligibleTokens: z.number().nonnegative(),
-      breakdown: RoutingBackfillBreakdownSchema,
-      /** Whether it scores with the running scorer version; null before scoring starts. */
-      scorerCurrent: z.boolean().nullable(),
-      maxSessions: z.number().int().nullable(),
-      maxCostUsd: z.number().nullable(),
-      spentCostUsd: z.number(),
-      progress: z
-        .object({
-          sample: z.number().int(),
-          scored: z.number().int(),
-          noText: z.number().int(),
-          failed: z.number().int(),
-        })
-        .nullable(),
-      error: z.string().nullable(),
-      completedAt: z.date().nullable(),
-      /** The fit its completion requested has no outcome yet and will run. */
-      awaitingFit: z.boolean(),
-      /** Why the fit its completion requested will not run while settings stay as they are. */
-      fitBlockedReason: z.string().nullable(),
-    })
-    .nullable(),
-  /** What scoring the latest scan with the running scorer version would take; null when nothing is left to score. */
-  scoreOffer: z
-    .object({
-      /** The scan and scorer version scoring would use; a score request names both. */
-      backfillId: z.string().uuid(),
-      scorerVersionId: z.string().uuid(),
-      /** That scan's window, which scoring reads. */
-      windowStart: z.date(),
-      cutoff: z.date(),
-      sessions: z.number().int().positive(),
-      remaining: z.number().int().positive(),
-      estimatedCostUsd: z.number(),
-      suggestedMaxCostUsd: z.number(),
-      /** The sessions were scored before by another scorer version. */
-      rescore: z.boolean(),
-    })
-    .nullable(),
-  /** The organization's newest backfills, newest first: what scanning and scoring did. */
-  history: z.array(
-    z.object({
-      id: z.string().uuid(),
-      status: RoutingBackfillStatusSchema,
-      phase: RoutingBackfillPhaseSchema,
-      createdAt: z.date(),
-      completedAt: z.date().nullable(),
-      /** Who started it; null when it started on its own or the user is gone. */
-      startedByName: z.string().nullable(),
-      /** Past sessions the scan found in its window. */
-      foundSessions: z.number().int().nonnegative(),
-      /** Sessions this job scored; null for a scan that was never scored. */
-      scoredSessions: z.number().int().nonnegative().nullable(),
-      spentCostUsd: z.number(),
-      maxCostUsd: z.number().nullable(),
-      error: z.string().nullable(),
-    }),
-  ),
-});
-export type AutoRoutingBackfillResponse = z.infer<
-  typeof AutoRoutingBackfillResponseSchema
 >;

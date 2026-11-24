@@ -3993,10 +3993,10 @@ const config = {
       process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,
       2000,
     ),
-    /** Idle sessions (live, plus scored past ones) a fit needs before it publishes a plan; fewer keep the organization in cold start. */
+    /** Idle sessions of its own a router's fit needs before it publishes a plan; fewer keep it in cold start. */
     minSessions: parsePositiveInt(
       process.env.ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS,
-      1000,
+      200,
     ),
   },
   kb: {

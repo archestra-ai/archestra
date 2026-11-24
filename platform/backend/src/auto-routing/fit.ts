@@ -9,15 +9,10 @@ import config from "@/config";
 import logger from "@/logging";
 import AutoRouterModel from "@/models/auto-router";
 import ModelModel from "@/models/model";
-import RoutingBackfillModel from "@/models/routing-backfill";
-import RoutingHistoryModel, {
-  type HistoryFitRow,
-  type PastWindow,
-} from "@/models/routing-history";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingUsageModel, {
   type FitVolume,
-  HISTORY_MS,
+  type HistoryFitRow,
 } from "@/models/routing-usage";
 import { ApiError } from "@/types";
 import {
@@ -106,7 +101,7 @@ export async function prepareFit(
 }
 
 /** Whether a fit would run on `settings`, or why none would. */
-export async function fitReadiness(
+async function fitReadiness(
   settings: AutoRouter,
 ): Promise<
   | { kind: "ready"; trio: Trio; budget: FitBudget }
@@ -222,7 +217,7 @@ export async function fitInputsUnchanged(
     return false;
   }
   const window = await readFitWindow({
-    router: settings,
+    routerId: settings.id,
     scorerVersionId: scorerVersion.id,
     inputWatermark: new Date(),
   });
@@ -234,19 +229,16 @@ export async function fitInputsUnchanged(
  * sessions: the cold-start progress, and what a refit would change.
  */
 export async function readFitWindow(params: {
-  router: FitScope;
+  routerId: string;
   scorerVersionId: string;
   inputWatermark: Date;
 }): Promise<FitWindowSummary> {
-  const [live, past] = await Promise.all([
-    RoutingUsageModel.findFitVolume({
-      ...params,
-      routerId: params.router.id,
-      minSessions: liveMinSessions(),
-    }),
-    readPastSessions({ ...params, longContextThreshold: null }, false),
-  ]);
-  return summarizeWindow(live, past);
+  const { minSessions } = config.autoRouting;
+  const volume = await RoutingUsageModel.findFitVolume({
+    ...params,
+    minSessions,
+  });
+  return { sessions: volume.sessions, minSessions, volume };
 }
 
 /**
@@ -282,19 +274,13 @@ function publish(
 type FitRun = { inputs: FitInputs; published: RoutingPublishResult };
 
 /**
- * What the fit learns from and sizes the plan for. It learns from the
- * router's own sessions alone once it has `liveMinSessions()` of them, so the
- * plan describes the traffic it routes; until then scored past sessions join
- * them. `sessions` is what the cold-start minimum `minSessions` counts.
- * Volume is the live window's once it spans a week; before that, the
- * backfill population's, which estimates it from all eligible traffic.
+ * What the fit learns from and sizes the plan for: the router's own sessions.
+ * `sessions` is what the cold-start minimum `minSessions` counts.
  */
 type FitWindowSummary = {
   sessions: number;
   minSessions: number;
-  pastSessions: number;
   volume: FitVolume;
-  volumeSource: "live" | "history";
 };
 
 /** How many sessions a fit read for a scorer version: the cold-start progress. */
@@ -447,28 +433,18 @@ async function simulate(
 }
 
 /** Why a fit nobody requested runs: what moved since the router's last fit outcome. */
-async function scheduledTrigger(params: {
+function scheduledTrigger(params: {
   settings: AutoRouter;
   scorerVersionId: string;
   latestScorerVersionId: string | null;
-}): Promise<RoutingPlanTrigger> {
+}): RoutingPlanTrigger {
   const { settings, latestScorerVersionId } = params;
   if (
     latestScorerVersionId !== null &&
     latestScorerVersionId !== params.scorerVersionId
   )
     return "scorer_change";
-  const unplanned = settings.generation > settings.plannedGeneration;
-  if (
-    unplanned &&
-    settings.usesPastSessions &&
-    (await RoutingBackfillModel.bumpedGeneration(
-      settings.organizationId,
-      settings.generation,
-    ))
-  )
-    return "backfill";
-  if (unplanned) return "settings";
+  if (settings.generation > settings.plannedGeneration) return "settings";
   return latestScorerVersionId === null ? "initial" : "nightly";
 }
 
@@ -488,7 +464,7 @@ async function readFitInputs(params: {
     tiers.kind === "ok"
       ? await readFitHistory(
           {
-            router: settings,
+            routerId: settings.id,
             scorerVersionId,
             inputWatermark,
             longContextThreshold: tiers.tiers.long_context_threshold,
@@ -498,11 +474,11 @@ async function readFitInputs(params: {
       : EMPTY_HISTORY;
   const trigger =
     params.requestedTrigger ??
-    (await scheduledTrigger({
+    scheduledTrigger({
       settings,
       scorerVersionId,
       latestScorerVersionId: latest?.plan.scorerVersionId ?? null,
-    }));
+    });
   return {
     organizationId: settings.organizationId,
     routerId: settings.id,
@@ -521,94 +497,34 @@ function volumeDocument(window: FitWindowSummary): RouterDocument {
   const { volume } = window;
   return {
     sessions: window.sessions,
-    past_sessions: window.pastSessions,
     tokens: volume.tokens,
     first_created_at: volume.firstCreatedAt?.toISOString() ?? null,
     last_created_at: volume.lastCreatedAt?.toISOString() ?? null,
-    volume_source: window.volumeSource,
   };
 }
 
-/**
- * The router's live sessions and, for the router that uses them, the
- * organization's scored past sessions, each weighted by how many sessions of
- * its window it stands for.
- */
+/** The router's live sessions, each weighted by how many sessions of its window it stands for. */
 export async function readFitHistory(
   params: {
-    router: FitScope;
+    routerId: string;
     scorerVersionId: string;
     inputWatermark: Date;
     longContextThreshold: number | null;
   },
   maxSessions?: number,
 ): Promise<FitHistory> {
-  const [live, past] = await Promise.all([
-    RoutingUsageModel.findFitHistory(
-      {
-        ...params,
-        routerId: params.router.id,
-        minSessions: liveMinSessions(),
-      },
-      maxSessions,
-    ),
-    readPastSessions(params, true),
-  ]);
-  const window = summarizeWindow(live.volume, past);
-  // The live sample is capped while its volume counts the whole window.
-  const liveWeight =
-    live.sample.length === 0 ? 1 : live.volume.sessions / live.sample.length;
+  const { minSessions } = config.autoRouting;
+  const { sample, volume } = await RoutingUsageModel.findFitHistory(
+    { ...params, minSessions },
+    maxSessions,
+  );
+  // The sample is capped while its volume counts the whole window.
+  const weight = sample.length === 0 ? 1 : volume.sessions / sample.length;
   return {
-    ...window,
-    sample: [
-      ...live.sample.map((row) => ({ ...row, weight: liveWeight })),
-      ...(window.pastSessions === 0 ? [] : past.sample),
-    ],
-  };
-}
-
-/** Which sessions a fit reads: the router's own, plus the organization's past ones when it uses them. */
-type FitScope = Pick<AutoRouter, "id" | "organizationId" | "usesPastSessions">;
-
-/** A router created after its organization could have several starts cold: it reads no past sessions. */
-async function readPastSessions(
-  params: {
-    router: FitScope;
-    scorerVersionId: string;
-    inputWatermark: Date;
-    longContextThreshold: number | null;
-  },
-  withSample: boolean,
-): Promise<PastWindow & { sample: HistoryFitRow[] }> {
-  const none = { scored: 0, population: EMPTY_HISTORY.volume, sample: [] };
-  if (!params.router.usesPastSessions) return none;
-  const { organizationId } = params.router;
-  const frame = await RoutingBackfillModel.findLatestScanned(organizationId);
-  if (!frame) return none;
-  return RoutingHistoryModel.findFitSnapshot({
-    organizationId,
-    scorerVersionId: params.scorerVersionId,
-    longContextThreshold: params.longContextThreshold,
-    frame,
-    windowStart: new Date(params.inputWatermark.getTime() - HISTORY_MS),
-    withSample,
-  });
-}
-
-function summarizeWindow(live: FitVolume, past: PastWindow): FitWindowSummary {
-  const span =
-    (live.lastCreatedAt?.getTime() ?? 0) -
-    (live.firstCreatedAt?.getTime() ?? 0);
-  const fromHistory =
-    span < LIVE_VOLUME_MIN_SPAN_MS && past.population.sessions > 0;
-  const liveMin = liveMinSessions();
-  const pastSessions = live.sessions >= liveMin ? 0 : past.scored;
-  return {
-    sessions: live.sessions + pastSessions,
-    minSessions: pastSessions === 0 ? liveMin : config.autoRouting.minSessions,
-    pastSessions,
-    volume: fromHistory ? past.population : live,
-    volumeSource: fromHistory ? "history" : "live",
+    sessions: volume.sessions,
+    minSessions,
+    volume,
+    sample: sample.map((row) => ({ ...row, weight })),
   };
 }
 
@@ -705,26 +621,15 @@ const EMPTY_HISTORY: FitHistory = {
   sample: [],
   sessions: 0,
   minSessions: 0,
-  pastSessions: 0,
   volume: {
     sessions: 0,
     tokens: 0,
     firstCreatedAt: null,
     lastCreatedAt: null,
   },
-  volumeSource: "live",
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Live auto traffic sizes the plan once its window spans this long. */
-const LIVE_VOLUME_MIN_SPAN_MS = 7 * DAY_MS;
-/** A router with this many sessions of its own is fitted on them alone. */
-const LIVE_FIT_MIN_SESSIONS = 200;
-
-/** Never above the configured minimum, which a deployment may lower. */
-function liveMinSessions(): number {
-  return Math.min(LIVE_FIT_MIN_SESSIONS, config.autoRouting.minSessions);
-}
 
 /** Bounds refits when settings keep changing under an inline fit. */
 const INLINE_FIT_ATTEMPTS = 3;

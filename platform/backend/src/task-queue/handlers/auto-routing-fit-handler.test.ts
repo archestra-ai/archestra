@@ -6,7 +6,7 @@ import { getAutoRouter } from "@/auto-routing/settings";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import { loadTrio, tiersFingerprint } from "@/auto-routing/tiers";
 import config from "@/config";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema } from "@/database";
 import { ModelModel } from "@/models";
 import AutoRouterModel from "@/models/auto-router";
 import RoutingPlanModel from "@/models/routing-plan";
@@ -91,7 +91,7 @@ describe("auto routing plan fit", () => {
     expect(await isDirty(org.routerId)).toBe(false);
   });
 
-  test("names an unrequested fit by what moved: nothing yet, then a finished backfill", async ({
+  test("names an unrequested fit by what moved: nothing yet, then its settings", async ({
     makeOrganization,
   }) => {
     const org = await configuredOrganization(makeOrganization);
@@ -112,28 +112,10 @@ describe("auto routing plan fit", () => {
       "initial",
     );
 
-    const scorerVersionId = (await activeSourceVersion()).id;
-    await withDbTransaction(async (tx) => {
-      const fitGeneration = await AutoRouterModel.bumpGeneration(
-        org.routerId,
-        tx,
-      );
-      await tx.insert(schema.routingBackfillsTable).values({
-        organizationId: org.organizationId,
-        status: "done",
-        phase: "score",
-        cutoff: new Date(),
-        windowStart: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        scannedAt: new Date(),
-        scorerVersionId,
-        maxSessions: 40,
-        maxCostUsd: "1",
-        fitGeneration,
-      });
-    });
+    await AutoRouterModel.update(org.routerId, { budgetUsdPerDay: "60.00" });
     await handleAutoRoutingFit({ routerId: org.routerId });
     expect((await RoutingPlanModel.findActive(org.routerId))?.trigger).toBe(
-      "backfill",
+      "settings",
     );
   });
 

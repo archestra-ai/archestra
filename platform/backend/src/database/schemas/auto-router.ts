@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -58,11 +57,7 @@ const autoRoutersTable = pgTable(
     plannedGeneration: bigint("planned_generation", { mode: "number" })
       .notNull()
       .default(0),
-    /**
-     * The router also learns from the organization's scored past sessions
-     * (`routing_backfills`). Only the router that existed before an
-     * organization could have several does; new ones start cold.
-     */
+    /** @deprecated unused; kept because columns are never dropped */
     usesPastSessions: boolean("uses_past_sessions").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -78,9 +73,6 @@ const autoRoutersTable = pgTable(
       table.organizationId,
       table.name,
     ),
-    uniqueIndex("auto_routers_one_past_sessions_per_org_uidx")
-      .on(table.organizationId)
-      .where(sql`${table.usesPastSessions}`),
   ],
 );
 

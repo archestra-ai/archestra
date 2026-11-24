@@ -65,7 +65,6 @@ describe("POST and PUT /api/auto-routing/routers", () => {
       name: "auto:support",
       enabled: true,
       budgetUsdPerDay: 12.5,
-      usesPastSessions: false,
       tiers: {
         fast: { id: fast.id },
         normal: { id: normal.id },

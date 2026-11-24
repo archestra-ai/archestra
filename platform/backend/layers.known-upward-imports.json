@@ -14,7 +14,6 @@
   "src/archestra-mcp-server/delegation.ts -> src/routes/mcp-gateway/utils.ts (mcp-imports-no-higher-layer)",
   "src/archestra-mcp-server/mcp-servers.ts -> src/websocket.ts (mcp-imports-no-higher-layer)",
   "src/archestra-mcp-server/skill-delegation.ts -> src/routes/chat/errors.ts (mcp-imports-no-higher-layer)",
-  "src/auto-routing/backfill.ts -> src/agents/chatops/utils.ts (policy-imports-no-higher-layer)",
   "src/auto-routing/eligibility.ts -> src/routes/proxy/model-router-access.ts (policy-imports-no-higher-layer)",
   "src/auto-routing/eligibility.ts -> src/routes/proxy/model-router-resolver.ts (policy-imports-no-higher-layer)",
   "src/auto-routing/first-user-text.ts -> src/routes/proxy/model-router-access.ts (policy-imports-no-higher-layer)",

@@ -15,6 +15,7 @@ import db, { schema, type Transaction } from "@/database";
 import {
   FEATURES_SCHEMA_VERSION,
   type InsertRoutingUsage,
+  type RoutingDecisionFeatures,
   RoutingDecisionFeaturesSchema,
 } from "@/types/auto-routing";
 
@@ -24,7 +25,7 @@ const usage = schema.routingUsageTable;
 /** A session counts once nothing was added to it for this long before the fit. */
 const IDLE_MS = 24 * 60 * 60 * 1000;
 /** How far back the fit reads sessions. */
-export const HISTORY_MS = 35 * 24 * 60 * 60 * 1000;
+const HISTORY_MS = 35 * 24 * 60 * 60 * 1000;
 
 class RoutingUsageModel {
   /** Called in the interaction's write transaction; a retried write adds nothing. */
@@ -218,7 +219,7 @@ class RoutingUsageModel {
               firstCreatedAt: null,
               lastCreatedAt: null,
             };
-        const sample = rows
+        const sample: Omit<HistoryFitRow, "weight">[] = rows
           .sort(
             (a, b) =>
               a.createdAt.getTime() - b.createdAt.getTime() ||
@@ -249,6 +250,24 @@ type FitWindow = {
 
 /** Bounds the sessions a fit materializes; volume still counts the whole window. */
 const MAX_FIT_SESSIONS = 50_000;
+
+/** A sampled session of the fit window, weighted by how many sessions of the window it stands for. */
+export type HistoryFitRow = {
+  createdAt: Date;
+  features: RoutingDecisionFeatures;
+  short: TokenBlock;
+  long: TokenBlock;
+  weight: number;
+};
+
+type TokenBlock = {
+  input: number;
+  cacheRead: number;
+  /** All cache writes; `cacheWrite1h` is the subset written with a 1h TTL. */
+  cacheWrite: number;
+  cacheWrite1h: number;
+  output: number;
+};
 
 /** The whole fit window, however many of its sessions the sample keeps. */
 export type FitVolume = {

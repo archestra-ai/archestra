@@ -1,13 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { isServiceAccountUserId } from "@/auth/service-account-user-id";
-import {
-  cancelBackfill,
-  describeBackfill,
-  startBackfillScan,
-  startBackfillScoring,
-} from "@/auto-routing/backfill";
 import { diagnoseAutoRouting } from "@/auto-routing/diagnostics";
 import { simulateFit } from "@/auto-routing/fit";
 import { previewAutoRouting } from "@/auto-routing/preview";
@@ -36,7 +29,6 @@ import {
 import {
   AutoRouterChangeResponseSchema,
   AutoRouterResponseSchema,
-  AutoRoutingBackfillResponseSchema,
   AutoRoutingDiagnosticsQuerySchema,
   AutoRoutingDiagnosticsResponseSchema,
   AutoRoutingPlanDetailSchema,
@@ -44,7 +36,6 @@ import {
   AutoRoutingPlansQuerySchema,
   AutoRoutingPreviewBodySchema,
   AutoRoutingPreviewResponseSchema,
-  AutoRoutingScoreBackfillBodySchema,
   AutoRoutingSimulateBodySchema,
   AutoRoutingSimulateResponseSchema,
   AutoRoutingStateResponseSchema,
@@ -144,7 +135,7 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CreateAutoRouter,
         description:
-          "Create an auto router with its tiers, budget and decision model. It learns from its own sessions only",
+          "Create an auto router with its tiers, budget and decision model",
         tags: TAGS,
         body: CreateAutoRouterBodySchema,
         response: constructResponseSchema(AutoRouterChangeResponseSchema),
@@ -355,77 +346,6 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     },
   );
-
-  fastify.get(
-    "/api/auto-routing/backfill",
-    {
-      schema: {
-        operationId: RouteId.GetAutoRoutingBackfill,
-        description:
-          "Get the newest historical backfill and what scoring past sessions would take, for the organization's first auto router",
-        tags: TAGS,
-        response: constructResponseSchema(AutoRoutingBackfillResponseSchema),
-      },
-    },
-    async ({ organizationId }, reply) =>
-      reply.send(await describeBackfill(organizationId)),
-  );
-
-  fastify.post(
-    "/api/auto-routing/backfill/scan",
-    {
-      schema: {
-        operationId: RouteId.ScanAutoRoutingBackfill,
-        description:
-          "Count the past sessions auto routing could learn from; reads the database only",
-        tags: TAGS,
-        response: constructResponseSchema(AutoRoutingBackfillResponseSchema),
-      },
-    },
-    async ({ organizationId, user }, reply) => {
-      await startBackfillScan(organizationId, humanUserId(user.id));
-      return reply.send(await describeBackfill(organizationId));
-    },
-  );
-
-  fastify.post(
-    "/api/auto-routing/backfill/score",
-    {
-      schema: {
-        operationId: RouteId.ScoreAutoRoutingBackfill,
-        description:
-          "Score a sample of the scanned past sessions with the session scorer, up to a USD ceiling",
-        tags: TAGS,
-        body: AutoRoutingScoreBackfillBodySchema,
-        response: constructResponseSchema(AutoRoutingBackfillResponseSchema),
-      },
-    },
-    async ({ organizationId, user, body }, reply) => {
-      await startBackfillScoring(organizationId, humanUserId(user.id), body);
-      return reply.send(await describeBackfill(organizationId));
-    },
-  );
-
-  fastify.delete(
-    "/api/auto-routing/backfill",
-    {
-      schema: {
-        operationId: RouteId.CancelAutoRoutingBackfill,
-        description: "Cancel the running historical backfill",
-        tags: TAGS,
-        response: constructResponseSchema(AutoRoutingBackfillResponseSchema),
-      },
-    },
-    async ({ organizationId }, reply) => {
-      await cancelBackfill(organizationId);
-      return reply.send(await describeBackfill(organizationId));
-    },
-  );
 };
 
 export default autoRoutingRoutes;
-
-/** The acting person, for `started_by`; service accounts have no users row. */
-function humanUserId(userId: string): string | null {
-  return isServiceAccountUserId(userId) ? null : userId;
-}

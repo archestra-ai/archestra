@@ -17,7 +17,6 @@ export const RoutingPlanTriggerSchema = z.enum([
   "settings",
   "manual",
   "scorer_change",
-  "backfill",
 ]);
 export type RoutingPlanTrigger = z.infer<typeof RoutingPlanTriggerSchema>;
 
@@ -182,8 +181,6 @@ export const AutoRouterSchema = AutoRoutingTrioSchema.extend({
   generation: z.number().int(),
   /** Generation of the last fit outcome; behind `generation` means a fit is due. */
   plannedGeneration: z.number().int(),
-  /** The router also learns from the organization's scored past sessions. */
-  usesPastSessions: z.boolean(),
 });
 export type AutoRouter = z.infer<typeof AutoRouterSchema>;
 
@@ -277,69 +274,3 @@ export const RoutingPlanRecordSchema = z.object({
   decisionCount: z.number().int().nonnegative(),
 });
 export type RoutingPlanRecord = z.infer<typeof RoutingPlanRecordSchema>;
-
-export const RoutingBackfillStatusSchema = z.enum([
-  "running",
-  /** The scan finished; scoring waits for an admin to start it. */
-  "scanned",
-  "done",
-  "failed",
-  "cancelled",
-  /** Replaced by a newer scan, or its scorer version is no longer the running one. */
-  "superseded",
-]);
-export type RoutingBackfillStatus = z.infer<typeof RoutingBackfillStatusSchema>;
-
-export const RoutingBackfillPhaseSchema = z.enum(["scan", "score"]);
-export type RoutingBackfillPhase = z.infer<typeof RoutingBackfillPhaseSchema>;
-
-/** The request shapes whose past sessions a backfill learns from. */
-export const RoutingApiShapeSchema = z.enum([
-  "chat_completions",
-  "responses",
-  "messages",
-]);
-export type RoutingApiShape = z.infer<typeof RoutingApiShapeSchema>;
-
-/** Eligible sessions of a scan by request shape and client. */
-export const RoutingBackfillBreakdownSchema = z.array(
-  z.object({
-    apiShape: RoutingApiShapeSchema,
-    client: z.string(),
-    sessions: z.number().int().nonnegative(),
-  }),
-);
-export type RoutingBackfillBreakdown = z.infer<
-  typeof RoutingBackfillBreakdownSchema
->;
-
-export const RoutingHistoryScoreStatusSchema = z.enum([
-  /** A paid call is under way or its reading did not land; read again until the attempts run out. */
-  "pending",
-  "scored",
-  /** No readable opening text; structured logs distinguish the reason. */
-  "no_text",
-  /** The scorer answered something unusable, or every paid attempt was spent; not retried for this version. */
-  "failed",
-]);
-export type RoutingHistoryScoreStatus = z.infer<
-  typeof RoutingHistoryScoreStatusSchema
->;
-
-export const SelectRoutingBackfillSchema = createSelectSchema(
-  schema.routingBackfillsTable,
-  {
-    status: RoutingBackfillStatusSchema,
-    phase: RoutingBackfillPhaseSchema,
-    breakdown: RoutingBackfillBreakdownSchema,
-  },
-);
-export type RoutingBackfill = z.infer<typeof SelectRoutingBackfillSchema>;
-
-export const SelectRoutingHistorySessionSchema = createSelectSchema(
-  schema.routingHistorySessionsTable,
-  { apiShape: RoutingApiShapeSchema },
-);
-export type RoutingHistorySession = z.infer<
-  typeof SelectRoutingHistorySessionSchema
->;

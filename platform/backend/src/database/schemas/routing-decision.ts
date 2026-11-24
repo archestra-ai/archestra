@@ -66,7 +66,7 @@ const routingDecisionsTable = pgTable(
       table.sessionKey,
       table.segment,
     ),
-    // Past sessions are checked against live ones by organization.
+    // Backs the cascade from organizations.
     index("routing_decisions_org_session_idx").on(
       table.organizationId,
       table.sessionKey,

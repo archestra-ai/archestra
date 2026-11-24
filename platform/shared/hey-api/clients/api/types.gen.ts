@@ -58494,6 +58494,8 @@ export type GetDesktopDevicesResponses = {
         servers: Array<{
             catalogId: string;
             name: string;
+            icon: string | null;
+            iconUrl: string | null;
             state: 'no_command' | 'starting' | 'running' | 'failed' | 'stopped';
             lastError: string | null;
             command: string | null;
@@ -58693,6 +58695,8 @@ export type UpdateDesktopDeviceServerResponses = {
         servers: Array<{
             catalogId: string;
             name: string;
+            icon: string | null;
+            iconUrl: string | null;
             state: 'no_command' | 'starting' | 'running' | 'failed' | 'stopped';
             lastError: string | null;
             command: string | null;

@@ -125,6 +125,8 @@ function server(overrides: Partial<Server>): Server {
   return {
     catalogId: "catalog-1",
     name: "Filesystem",
+    icon: null,
+    iconUrl: null,
     state: "running",
     lastError: null,
     command: "npx -y @modelcontextprotocol/server-filesystem",
@@ -179,6 +181,22 @@ describe("deviceServerRows", () => {
       ["Blender", "Failed"],
       ["Chrome DevTools", "Running"],
       ["Playwright", "Starting"],
+    ]);
+  });
+
+  it("gives the image of a server before its emoji, and nothing with none", () => {
+    const rows = deviceServerRows([
+      server({ catalogId: "a", icon: "🧩" }),
+      server({
+        catalogId: "b",
+        iconUrl: "/api/internal_mcp_catalog/b/icon?v=1",
+      }),
+      server({ catalogId: "c" }),
+    ]);
+    expect(rows.map((row) => row.icon)).toEqual([
+      "🧩",
+      "/api/internal_mcp_catalog/b/icon?v=1",
+      null,
     ]);
   });
 

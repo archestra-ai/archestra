@@ -219402,6 +219402,14 @@
                             "name": {
                               "type": "string"
                             },
+                            "icon": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "iconUrl": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "state": {
                               "nullable": true,
                               "type": "string",
@@ -219437,6 +219445,8 @@
                           "required": [
                             "catalogId",
                             "name",
+                            "icon",
+                            "iconUrl",
                             "state",
                             "lastError",
                             "command",
@@ -220098,6 +220108,14 @@
                           "name": {
                             "type": "string"
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "iconUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "state": {
                             "nullable": true,
                             "type": "string",
@@ -220133,6 +220151,8 @@
                         "required": [
                           "catalogId",
                           "name",
+                          "icon",
+                          "iconUrl",
                           "state",
                           "lastError",
                           "command",

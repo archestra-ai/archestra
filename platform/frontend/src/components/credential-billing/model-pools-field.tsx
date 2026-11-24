@@ -114,7 +114,7 @@ export function ModelPoolsField({
 }
 
 /** Name, what it serves first, its providers and, if off, that it won't answer. */
-function PoolSummary({ pool }: { pool: ModelPool }) {
+export function PoolSummary({ pool }: { pool: ModelPool }) {
   const serves = poolServes(pool);
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2">

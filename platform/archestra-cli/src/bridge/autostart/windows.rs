@@ -57,10 +57,7 @@ pub(super) fn start(
         &mut SystemRunKey,
         &mut super::SystemBackground { home: options.home },
     )?;
-    Ok(super::Started {
-        where_it_runs: "The Device tab in Archestra shows its status.",
-        at_login,
-    })
+    Ok(super::Started { at_login })
 }
 
 /// `archestra bridge stop` on Windows.

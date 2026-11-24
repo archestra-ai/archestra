@@ -9,7 +9,6 @@ import {
   type ProxyEndpointProvider,
 } from "@/app/connection/connection-flow.utils";
 import { OauthTokenRequest } from "@/components/connect-rail";
-import { CopyButton } from "@/components/copy-button";
 import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import { LlmConnectionDialogs } from "@/components/llm-connect-steps";
 import { Button } from "@/components/ui/button";
@@ -31,7 +30,6 @@ import {
   useLlmConnection,
 } from "@/components/use-llm-connection";
 import { RequestExample } from "@/components/virtual-key-connection-guide";
-import { getProxyBaseUrl } from "@/components/virtual-key-request-example";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -192,9 +190,6 @@ function EndpointRequest({
 
   return (
     <div className="space-y-3">
-      {selected !== "bedrock" && (
-        <EndpointAddress baseUrl={baseUrl} selected={selected} />
-      )}
       {connection.ready ? (
         <RequestExample
           key={connection.requestKey}
@@ -245,33 +240,6 @@ function EndpointRequest({
         targetLabel={targetLabel}
       />
     </div>
-  );
-}
-
-function EndpointAddress({
-  baseUrl,
-  selected,
-}: {
-  baseUrl: string;
-  selected: Target;
-}) {
-  const base = getProxyBaseUrl(
-    baseUrl,
-    selected === "model-router"
-      ? { kind: "model-router" }
-      : { kind: "provider", provider: selected },
-  );
-  const url = selected === "jev" ? `${base}/decisions` : base;
-  return (
-    <dl className="flex flex-wrap items-center gap-x-2">
-      <dt className="text-xs text-muted-foreground">
-        {selected === "jev" ? "Decisions endpoint" : "Base URL"}
-      </dt>
-      <dd className="flex min-w-0 items-center gap-1">
-        <code className="break-all font-mono text-xs">{url}</code>
-        <CopyButton text={url} />
-      </dd>
-    </dl>
   );
 }
 

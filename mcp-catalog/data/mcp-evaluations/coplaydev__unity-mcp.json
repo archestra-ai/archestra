@@ -1,0 +1,246 @@
+{
+  "name": "coplaydev__unity-mcp",
+  "display_name": "Unity",
+  "description": "Work with the Unity Editor on your device.",
+  "author": {
+    "name": "Coplay",
+    "url": "https://github.com/CoplayDev"
+  },
+  "homepage": "https://github.com/CoplayDev/unity-mcp",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMzU3LjY4IDM1Ny42OCI+PHJlY3Qgd2lkdGg9IjM1Ny42OCIgaGVpZ2h0PSIzNTcuNjgiIHJ4PSI3OC42ODk2IiBmaWxsPSIjMjIyYzM3Ii8+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNTAuODQgNDcuMzQpIj48cGF0aCBmaWxsPSIjZmZmIiBkPSJtMTY2Ljg3MiAxMzEuMjM3bDQ1LjkxLTc5LjI3NWwyMi4xODQgNzkuMjc1bC0yMi4xODUgNzkuMjU2em0tMjIuMzc2IDEyLjg3NGw0NS45MTYgNzkuMjYybC03OS45NjYtMjAuNDg2bC01Ny43Ny01OC43NzZ6bTQ1LjkwNi0xMDUuMDMzbC00NS45MDYgNzkuMjc1aC05MS44Mmw1Ny43Ny01OC43OHptNjUuNTM5IDY1LjE4TDIyNy45MzMuMDZsLTEwNC41NCAyNy45MjVsLTE1LjQ3NSAyNy4yMDdsLTMxLjQwMS0uMjI1TDAgMTMxLjI0NGw3Ni41MTcgNzYuMjU5aC4wMDNsMzEuMzg4LS4yMzJsMTUuNDk3IDI3LjIwN2wxMDQuNTI4IDI3LjkyTDI1NS45NCAxNTguMjJsLTE1LjkwNi0yNi45ODJ6Ii8+PC9nPjwvc3ZnPg==",
+  "instructions": "This MCP server runs on your device. You need the [Unity Editor](https://unity.com/download) and [`uvx`](https://docs.astral.sh/uv/getting-started/installation/) installed locally.\n\nBefore you connect, in the Unity Editor menu bar:\n\n1. Open Window → Package Management → Package Manager, click +, choose Add package from git URL, and paste `https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main`.\n2. Open Window → MCP for Unity → Toggle MCP Window, set Transport to Stdio, and click Start Session.\n\nKeep the project open in Unity while agents use it.",
+  "tools": [
+    {
+      "name": "batch_execute",
+      "description": "Executes multiple MCP commands in a single batch for dramatically better performance. STRONGLY RECOMMENDED when creating/modifying multiple objects, adding components to multiple targets, or performing any repetitive operations. Reduces latency and token costs by 10-100x compared to sequential tool "
+    },
+    {
+      "name": "blender_bridge",
+      "description": "Bridge to a running Blender that has the BlenderMCP addon connected (socket, default 127.0.0.1:9876; configured in Window > MCP for Unity > Generative > Blender Bridge). Unity talks to the addon directly, so no BlenderMCP client is needed."
+    },
+    {
+      "name": "debug_request_context",
+      "description": "Return the current FastMCP request context details (client_id, session_id, and meta dump)."
+    },
+    {
+      "name": "execute_code",
+      "description": "Execute arbitrary C# code inside the Unity Editor. The code runs as a method body with access to UnityEngine and UnityEditor namespaces. Use 'return' to send data back. Compiled in-memory — no script files created. Actions: execute (run code), get_history (list past executions), replay (re-run a his"
+    },
+    {
+      "name": "execute_menu_item",
+      "description": "Execute a Unity menu item by path."
+    },
+    {
+      "name": "find_gameobjects",
+      "description": "Search for GameObjects in the scene by name, tag, layer, component type, or path. Returns instance IDs only (paginated). Then use mcpforunity://scene/gameobject/{id} resource for full data, or mcpforunity://scene/gameobject/{id}/components for component details. For CRUD operations (create/modify/de"
+    },
+    {
+      "name": "find_in_file",
+      "description": "Searches a file with a regex pattern and returns line numbers and excerpts."
+    },
+    {
+      "name": "generate_audio",
+      "description": "Generate audio (sound effects and background music) with fal.ai models and import them as AudioClips into the Unity project. Bring-your-own-key: the fal key lives in the editor's secure store (shared with image generation) and never crosses the bridge."
+    },
+    {
+      "name": "generate_image",
+      "description": "Generate 2D images with AI providers (fal.ai, OpenRouter) and import them as textures/sprites into the Unity project. Bring-your-own-key: provider keys live in the editor's secure store and never cross the bridge."
+    },
+    {
+      "name": "generate_model",
+      "description": "Generate 3D models with AI providers (Tripo, Meshy, fal) and import them into the Unity project. Bring-your-own-key: provider keys live in the editor's secure store and never cross the bridge."
+    },
+    {
+      "name": "import_model",
+      "description": "Import 3D models from the Sketchfab marketplace into the Unity project. Bring-your-own-key: the Sketchfab token lives in the editor's secure store and never crosses the bridge."
+    },
+    {
+      "name": "import_model_file",
+      "description": "Import a local 3D model file that already exists on disk (e.g. an FBX/OBJ/glTF exported from Blender or another DCC tool) into the Unity project. The file is copied under Assets/ and run through Unity's model-import pipeline (scale-normalize, material settings; glTF requires glTFast). Carries no API"
+    },
+    {
+      "name": "manage_animation",
+      "description": "Manage Unity animation: Animator control and AnimationClip creation. Action prefixes: animator_* (play, crossfade, set parameters, get info), controller_* (create AnimatorControllers, add states/transitions/parameters), clip_* (create clips, add keyframe curves, assign to GameObjects). Action-specif"
+    },
+    {
+      "name": "manage_asset",
+      "description": "Performs asset operations (import, create, modify, delete, etc.) in Unity."
+    },
+    {
+      "name": "manage_build",
+      "description": "Manage Unity player builds — trigger builds, switch platforms, configure settings, manage build scenes and profiles, run batch builds across platforms. Actions: build, status, platform, settings, scenes, profiles, batch, cancel."
+    },
+    {
+      "name": "manage_camera",
+      "description": "Manage cameras (Unity Camera + Cinemachine). Works without Cinemachine using basic Camera; unlocks presets, pipelines, and blending when Cinemachine is installed. Use ping to check Cinemachine availability."
+    },
+    {
+      "name": "manage_components",
+      "description": "Add, remove, or set properties on components attached to GameObjects. Actions: add, remove, set_property. Requires target (instance ID or name) and component_type. For READING component data, use the mcpforunity://scene/gameobject/{id}/components resource or mcpforunity://scene/gameobject/{id}/compo"
+    },
+    {
+      "name": "manage_editor",
+      "description": "Controls and queries the Unity editor's state and settings. Read-only actions: telemetry_status, telemetry_ping. Modifying actions: play, pause, stop, set_active_tool, add_tag, remove_tag, add_layer, remove_layer, deploy_package, restore_package, undo, redo. For prefab editing (open/save/close prefa"
+    },
+    {
+      "name": "manage_gameobject",
+      "description": "Performs CRUD operations on GameObjects. Actions: create, modify, delete, duplicate, move_relative, look_at. NOT for searching — use the find_gameobjects tool to search by name/tag/layer/component/path. NOT for component management — use the manage_components tool (add/remove/set_property) or mcpfor"
+    },
+    {
+      "name": "manage_graphics",
+      "description": "Manage rendering graphics: volumes, post-processing, light baking, rendering stats, pipeline settings, and URP renderer features. Use ping to check pipeline and available features."
+    },
+    {
+      "name": "manage_material",
+      "description": "Manages Unity materials (set properties, colors, shaders, etc). Read-only actions: ping, get_material_info. Modifying actions: create, set_material_shader_property, set_material_color, assign_material_to_renderer, set_renderer_color."
+    },
+    {
+      "name": "manage_packages",
+      "description": "Manage Unity packages: query, install, remove, embed, and configure registries."
+    },
+    {
+      "name": "manage_physics",
+      "description": "Manage physics settings, collision matrix, materials, joints, queries, and validation."
+    },
+    {
+      "name": "manage_prefabs",
+      "description": "Manages Unity Prefab assets. Actions: get_info, get_hierarchy, create_from_gameobject, modify_contents, open_prefab_stage, save_prefab_stage, close_prefab_stage. Two approaches to prefab editing: (1) Headless: use modify_contents for automated/scripted edits without opening the prefab in the editor."
+    },
+    {
+      "name": "manage_probuilder",
+      "description": "Manage ProBuilder meshes for in-editor 3D modeling. Requires com.unity.probuilder package."
+    },
+    {
+      "name": "manage_profiler",
+      "description": "Unity Profiler session control, counter reads, memory snapshots, and Frame Debugger."
+    },
+    {
+      "name": "manage_scene",
+      "description": "Performs CRUD operations on Unity scenes. Read-only actions: get_hierarchy, get_active, get_build_settings, get_loaded_scenes, scene_view_frame. Modifying actions: create (with optional template), load (with optional additive flag), save, close_scene, set_active_scene, move_to_scene, validate (with "
+    },
+    {
+      "name": "refresh_unity",
+      "description": "Request a Unity asset database refresh and optionally a script compilation. Can optionally wait for readiness."
+    },
+    {
+      "name": "apply_text_edits",
+      "description": "Apply small text edits to a C# script identified by URI. IMPORTANT: This tool replaces EXACT character positions. Always verify content at target lines/columns BEFORE editing! RECOMMENDED WORKFLOW: 1. First call resources/read with start_line/line_count to verify exact content 2. Count columns caref"
+    },
+    {
+      "name": "create_script",
+      "description": "Create a new C# script at the given project path."
+    },
+    {
+      "name": "delete_script",
+      "description": "Delete a C# script by URI or Assets-relative path."
+    },
+    {
+      "name": "validate_script",
+      "description": "Validate a C# script and return diagnostics."
+    },
+    {
+      "name": "manage_script",
+      "description": "Compatibility router for legacy script operations. Prefer apply_text_edits (ranges) or script_apply_edits (structured) for edits. Read-only action: read. Modifying actions: create, delete."
+    },
+    {
+      "name": "manage_script_capabilities",
+      "description": "Get manage_script capabilities (supported ops, limits, and guards). Returns: - ops: list of supported structured ops - text_ops: list of supported text ops - max_edit_payload_bytes: server edit payload cap - guards: header/using guard enabled flag"
+    },
+    {
+      "name": "get_sha",
+      "description": "Get SHA256 and basic metadata for a Unity C# script without returning file contents. Requires uri (script path under Assets/ or mcpforunity://path/Assets/... or file://...)."
+    },
+    {
+      "name": "manage_scriptable_object",
+      "description": "Creates and modifies ScriptableObject assets using Unity SerializedObject property paths."
+    },
+    {
+      "name": "manage_shader",
+      "description": "Manages shader scripts in Unity (create, read, update, delete). Read-only action: read. Modifying actions: create, update, delete."
+    },
+    {
+      "name": "manage_texture",
+      "description": "Procedural texture generation for Unity. Creates textures with solid fills, patterns (checkerboard, stripes, dots, grid, brick), gradients, and noise. Actions: create, modify, delete, create_sprite, apply_pattern, apply_gradient, apply_noise, set_import_settings"
+    },
+    {
+      "name": "manage_tools",
+      "description": "Manage which tool groups are visible in this session. Actions: list_groups (show all groups and their status), activate (enable a group), deactivate (disable a group), sync (refresh visibility from Unity Editor's toggle states), reset (restore defaults). Activating a group makes its tools appear; de"
+    },
+    {
+      "name": "manage_ui",
+      "description": "Manages Unity UI Toolkit elements (UXML documents, USS stylesheets, UIDocument components). Read-only actions: ping, read, get_visual_tree, list. Modifying actions: create, update, delete, attach_ui_document, detach_ui_document, create_panel_settings, update_panel_settings, modify_visual_element. Vi"
+    },
+    {
+      "name": "manage_vfx",
+      "description": "Manage Unity VFX components (ParticleSystem, VisualEffect, LineRenderer, TrailRenderer). Action prefixes: particle_*, vfx_*, line_*, trail_*. Action-specific parameters go in `properties` (keys match ManageVFX.cs)."
+    },
+    {
+      "name": "read_console",
+      "description": "Gets messages from or clears the Unity Editor console. Defaults to 10 most recent entries. Use page_size/cursor for paging. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5'). The 'get' action is read-only; 'clear' modifies ephemeral UI state (not project data)."
+    },
+    {
+      "name": "run_tests",
+      "description": "Starts a Unity test run asynchronously and returns a job_id immediately. Poll with get_test_job for progress."
+    },
+    {
+      "name": "get_test_job",
+      "description": "Polls an async Unity test job by job_id."
+    },
+    {
+      "name": "script_apply_edits",
+      "description": "Structured C# edits (methods/classes) with safer boundaries - prefer this over raw text. Best practices: - Prefer anchor_* ops for pattern-based insert/replace near stable markers - Use replace_method/delete_method for whole-method changes (keeps signatures balanced) - Avoid whole-file regex deletes"
+    },
+    {
+      "name": "set_active_instance",
+      "description": "Set the active Unity instance for this client/session. Accepts Name@hash, hash prefix, or port number (stdio only)."
+    },
+    {
+      "name": "unity_docs",
+      "description": "Fetch official Unity documentation from docs.unity3d.com. Returns descriptions, parameter details, code examples, and caveats. Use after unity_reflect confirms a type exists, to get usage patterns, gotchas, and code examples before writing implementation code."
+    },
+    {
+      "name": "unity_reflect",
+      "description": "Inspect Unity's live C# API via reflection. Use this to verify that classes, methods, and properties exist before writing C# code — training data may be wrong or outdated."
+    }
+  ],
+  "prompts": [],
+  "keywords": ["unity", "game", "editor", "3d", "csharp", "desktop"],
+  "user_config": {},
+  "readme": null,
+  "category": "Development",
+  "archestra_config": {
+    "client_config_permutations": {
+      "unity-mcp": {
+        "command": "uvx",
+        "args": ["--from", "mcpforunityserver", "mcp-for-unity", "--transport", "stdio"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "server": {
+    "type": "desktop",
+    "command": "uvx",
+    "args": ["--from", "mcpforunityserver", "mcp-for-unity", "--transport", "stdio"],
+    "docs_url": "https://github.com/CoplayDev/unity-mcp#readme"
+  },
+  "github_info": {
+    "owner": "CoplayDev",
+    "repo": "unity-mcp",
+    "url": "https://github.com/CoplayDev/unity-mcp",
+    "name": "coplaydev__unity-mcp",
+    "path": null,
+    "stars": 16150,
+    "contributors": 99,
+    "issues": 129,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "19b66ecef4ac3a9be22a7a62ea21accb975c39e7"
+  },
+  "programming_language": "C#",
+  "license": "MIT"
+}

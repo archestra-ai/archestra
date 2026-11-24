@@ -3,11 +3,9 @@ import {
   isAzureAnthropicBackingModel,
   isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
-  lacksOpenAiChatCompletions,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   providerDisplayNames,
   RouteId,
-  requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -132,6 +130,7 @@ import {
   type ModelRouterOAuthClientAuth,
   type ModelRouterUserOAuthAuth,
   modelRouterAuthenticatedUserId,
+  modelServesChatCompletions,
   nativeResponsesProvider,
   selectModelRouterCredential,
   userProviderKeyMappings,
@@ -1108,15 +1107,7 @@ async function getNativeResponsesAdapter({
 function assertModelServesChatCompletions(
   resolution: ModelRouterResolution,
 ): void {
-  if (
-    !requiresResponsesApi(resolution.supportedEndpoints) &&
-    !(
-      resolution.provider === "openai" &&
-      lacksOpenAiChatCompletions(resolution.modelId)
-    )
-  ) {
-    return;
-  }
+  if (modelServesChatCompletions(resolution)) return;
   throw new ApiError(
     400,
     `Model "${resolution.requestedModel}" is only served over the Responses API. ` +

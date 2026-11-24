@@ -5,6 +5,7 @@ import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import { secretManager } from "@/secrets-manager";
 import { consumeMcpOAuthCredentialGrant } from "@/services/mcp-oauth-credential-grant";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -909,6 +910,95 @@ describe("OAuth routes", () => {
     expect(response.json().error.message).toContain(
       "Invalid or expired OAuth state",
     );
+  });
+
+  test("rejects incomplete required app credentials before OAuth discovery", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const serverUrl = "https://mcp.example.com/mcp";
+    const fetchMock = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
+
+    for (const [name, client_id] of [
+      ["Configured OAuth without either credential", ""],
+      ["Configured OAuth without a secret", "fixture-client-id"],
+    ]) {
+      const catalog = await makeInternalMcpCatalog({
+        name,
+        organizationId,
+        serverType: "remote",
+        serverUrl,
+        oauthConfig: {
+          name,
+          server_url: serverUrl,
+          grant_type: "authorization_code",
+          requires_client_credentials: true,
+          client_id,
+          redirect_uris: ["http://localhost:3000/oauth-callback"],
+          scopes: [],
+          default_scopes: [],
+          supports_resource_metadata: true,
+        },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/oauth/initiate",
+        payload: { catalogId: catalog.id },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toContain(
+        "add the Client ID and Client Secret",
+      );
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("starts configured OAuth authorization with a stored app secret", async ({
+    makeInternalMcpCatalog,
+    makeSecret,
+  }) => {
+    const origin = "https://mcp.example.com";
+    const serverUrl = `${origin}/mcp`;
+    const authorizationEndpoint = "https://mcp.example.com/authorize";
+    const secret = await makeSecret({
+      secret: { client_secret: "fixture-oauth-secret" },
+    });
+    const catalog = await makeInternalMcpCatalog({
+      name: "Configured OAuth with saved credentials",
+      organizationId,
+      serverType: "remote",
+      serverUrl,
+      oauthConfig: {
+        name: "Configured OAuth",
+        server_url: serverUrl,
+        grant_type: "authorization_code",
+        requires_client_credentials: true,
+        client_id: "fixture-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+    await InternalMcpCatalogModel.update(catalog.id, {
+      clientSecretId: secret.id,
+    });
+    globalThis.fetch = vi.fn<typeof fetch>().mockImplementation(async () =>
+      Response.json({
+        issuer: origin,
+        authorization_endpoint: authorizationEndpoint,
+        token_endpoint: "https://mcp.example.com/token",
+      }),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      payload: { catalogId: catalog.id },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const url = new URL(response.json().authorizationUrl);
+    expect(url.origin + url.pathname).toBe(authorizationEndpoint);
+    expect(url.searchParams.get("client_id")).toBe("fixture-client-id");
   });
 
   test("uses a configured OAuth resource separately from the MCP endpoint URL", async ({

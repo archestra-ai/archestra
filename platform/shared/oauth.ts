@@ -1,5 +1,32 @@
 import { z } from "zod";
 
+/** Requirements for remote authorization-code OAuth apps supplied by their catalog. */
+export function getRequiredOAuthAppCredentialState({
+  serverType,
+  oauthConfig,
+  hasSavedSecret = false,
+}: {
+  serverType: string | undefined;
+  oauthConfig?: {
+    requires_client_credentials?: boolean;
+    grant_type?: string;
+    client_id?: string;
+    client_secret?: string;
+  } | null;
+  hasSavedSecret?: boolean;
+}) {
+  const required =
+    serverType === "remote" &&
+    oauthConfig?.grant_type !== "client_credentials" &&
+    oauthConfig?.requires_client_credentials === true;
+  return {
+    required,
+    missingClientId: required && !oauthConfig?.client_id?.trim(),
+    missingClientSecret:
+      required && !hasSavedSecret && !oauthConfig?.client_secret?.trim(),
+  };
+}
+
 /**
  * Scopes supported by the OAuth 2.1 authorization server.
  * Used by better-auth oauthProvider config, well-known endpoints, and consent UI.

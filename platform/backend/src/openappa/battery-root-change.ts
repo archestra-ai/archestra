@@ -13,10 +13,11 @@ import { asRecord, parsePolicyToml } from "@/openappa/policy-text";
  * bundled battery's, `batteries/<name>/appa.toml`, and only for a battery
  * that governs MCP servers through its namespaces; one that governs the
  * organization is refused. An `[aliases.mcp]` binding may change only for a
- * namespace a bundled battery the file includes declares. A battery added
- * touches every target its namespaces are bound to afterwards, one removed
- * every target they were bound to before, and a binding changed the targets
- * it gains or loses.
+ * namespace one bundled battery the file includes declares, and no other
+ * battery it includes: a binding is the server list of every battery that
+ * declares its namespace. A battery added touches every target its
+ * namespaces are bound to afterwards, one removed every target they were
+ * bound to before, and a binding changed the targets it gains or loses.
  */
 export async function batteryRootChange(params: {
   before: string;
@@ -26,6 +27,12 @@ export async function batteryRootChange(params: {
    * organization, null for a name no bundled battery has.
    */
   namespacesOf: (name: string) => Promise<readonly string[] | null>;
+  /**
+   * The namespaces the battery an include entry other than a bundled one
+   * names declares, such as an uploaded package's: null when nothing answers
+   * the entry.
+   */
+  includedNamespacesOf: (entry: string) => Promise<readonly string[] | null>;
 }): Promise<{ prefixes: Set<string> } | { refused: string }> {
   const before = parsePolicyToml(params.before);
   const after = parsePolicyToml(params.after);
@@ -88,11 +95,23 @@ export async function batteryRootChange(params: {
         for (const target of bound.get(namespace) ?? []) prefixes.add(target);
     }
   // Every namespace a bundled battery the file includes declares, before or
-  // after: the bindings a battery change may move.
+  // after: the bindings a battery change may move. A binding is the server
+  // list of every included battery that declares its namespace, so one that
+  // another battery declares too stays as it was.
   const batteryNamespaces = new Set<string>();
-  for (const entry of new Set([...includedBefore, ...includedAfter]))
-    for (const namespace of (await declared(entry)) ?? [])
-      batteryNamespaces.add(namespace);
+  const declarers = new Map<string, number>();
+  let unreadable: string | undefined;
+  for (const entry of new Set([...includedBefore, ...includedAfter])) {
+    const bundled = BUNDLED_ENTRY.test(entry);
+    const declares = bundled
+      ? await declared(entry)
+      : await params.includedNamespacesOf(entry);
+    if (declares === null && !bundled) unreadable ??= entry;
+    for (const namespace of declares ?? []) {
+      if (bundled) batteryNamespaces.add(namespace);
+      declarers.set(namespace, (declarers.get(namespace) ?? 0) + 1);
+    }
+  }
   for (const namespace of new Set([
     ...boundBefore.keys(),
     ...boundAfter.keys(),
@@ -107,6 +126,14 @@ export async function batteryRootChange(params: {
     if (!batteryNamespaces.has(namespace))
       return {
         refused: `it binds the namespace ${JSON.stringify(namespace)}, which no bundled battery the policy includes declares`,
+      };
+    if ((declarers.get(namespace) ?? 0) > 1)
+      return {
+        refused: `it binds the namespace ${JSON.stringify(namespace)}, which another battery the policy includes declares too, so it changes that battery's servers`,
+      };
+    if (unreadable !== undefined)
+      return {
+        refused: `it binds the namespace ${JSON.stringify(namespace)} while the policy includes ${JSON.stringify(unreadable)}, whose namespaces could not be read`,
       };
     for (const target of moved) prefixes.add(target);
   }

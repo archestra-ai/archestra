@@ -964,6 +964,17 @@ class OpenAppaBatteriesService {
         403,
         `The policy includes ${batteryName} as an uploaded package, not the bundled battery, so changing which servers it governs takes permission to update guardrails.`,
       );
+    // A namespace's binding is the server list of every included battery
+    // that declares it, so moving it moves another battery's servers too.
+    const others = otherNamespaces(resolution, batteryName);
+    const shared = battery.namespaces.find((namespace) =>
+      others.has(namespace),
+    );
+    if (shared !== undefined)
+      throw new ApiError(
+        403,
+        `Another battery the policy includes also declares the namespace ${shared}, so changing which servers ${batteryName} governs changes that battery's servers too, which takes permission to update guardrails.`,
+      );
     const { targets, readiness } = await this.attachTargets({
       organizationId,
       catalogId: catalog.id,
@@ -996,7 +1007,7 @@ class OpenAppaBatteriesService {
           resolution,
           namespaces: battery.namespaces,
           targets,
-          keep: otherNamespaces(resolution, batteryName),
+          keep: others,
         }),
       ];
       assertDetaches({ edits, battery: batteryName, catalog: catalog.name });

@@ -10,6 +10,17 @@ const NAMESPACES: Record<string, string[]> = {
 
 const namespacesOf = async (name: string) => NAMESPACES[name] ?? null;
 
+/** An uploaded package that declares cloudflare's namespace too. */
+const UPLOADED_CLOUDFLARE = `batteries/cloudflare-extras@sha256-${"b".repeat(64)}/appa.toml`;
+
+/** What the other include entries declare: a repository file declares nothing. */
+const INCLUDED: Record<string, string[]> = {
+  "mcp/*.toml": [],
+  [UPLOADED_CLOUDFLARE]: ["cloudflare"],
+};
+
+const includedNamespacesOf = async (entry: string) => INCLUDED[entry] ?? null;
+
 const ROOT = `include = [
   "batteries/archestra/appa.toml",
   "batteries/cloudflare/appa.toml",
@@ -32,7 +43,7 @@ delta = {}
 `;
 
 const change = (after: string, before = ROOT) =>
-  batteryRootChange({ before, after, namespacesOf });
+  batteryRootChange({ before, after, namespacesOf, includedNamespacesOf });
 
 const prefixes = async (after: string, before = ROOT) => {
   const result = await change(after, before);
@@ -158,6 +169,42 @@ describe("batteryRootChange", () => {
     expect(result).toEqual({
       refused:
         'it binds the namespace "github", which no bundled battery the policy includes declares',
+    });
+  });
+
+  test("a binding another included battery declares too is refused: it is that battery's server list as well", async () => {
+    const shared = ROOT.replace(
+      '"mcp/*.toml",',
+      `"mcp/*.toml",\n  "${UPLOADED_CLOUDFLARE}",`,
+    );
+    const result = await change(
+      shared.replace(
+        'cloudflare = ["cloudflare_docs"]',
+        'cloudflare = ["cloudflare_docs", "cloudflare_observability"]',
+      ),
+      shared,
+    );
+    expect(result).toEqual({
+      refused: expect.stringContaining(
+        "another battery the policy includes declares too",
+      ),
+    });
+  });
+
+  test("a binding moved while an included package cannot be read is refused", async () => {
+    const unknown = ROOT.replace(
+      '"mcp/*.toml",',
+      `"mcp/*.toml",\n  "batteries/unknown@sha256-${"c".repeat(64)}/appa.toml",`,
+    );
+    const result = await change(
+      unknown.replace(
+        'cloudflare = ["cloudflare_docs"]',
+        'cloudflare = ["cloudflare_docs", "cloudflare_observability"]',
+      ),
+      unknown,
+    );
+    expect(result).toEqual({
+      refused: expect.stringContaining("could not be read"),
     });
   });
 

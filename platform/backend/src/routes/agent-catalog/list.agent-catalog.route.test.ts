@@ -1,6 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
   BUILT_IN_AGENT_IDS,
+  buildAgentCatalogRuntime,
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
@@ -839,5 +840,91 @@ describe("GET /api/agent-catalog", () => {
     ]);
     expect(pluginSummaries).not.toHaveBeenCalled();
     expect(externalSummaries).not.toHaveBeenCalled();
+  });
+
+  test("populates personal subscription provider info for runtime agents", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const claudeUnlocked = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Claude unlocked ${suffix}`,
+      runtime: buildAgentCatalogRuntime({
+        id: "claude-code",
+        image: "registry.test/claude-code:latest",
+      }),
+    });
+    const openaiCompanyKey = await makeLlmProviderApiKey(
+      ctx.organizationId,
+      null,
+      {
+        name: "Company OpenAI",
+        provider: "openai",
+      },
+    );
+    const codexLockedToSubscription = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Codex sub ${suffix}`,
+      llmApiKeyId: openaiCompanyKey.id,
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "codex",
+          image: "registry.test/codex:latest",
+        }),
+        accountLock: "subscription",
+      },
+    });
+    const codexOnCompanyKey = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Codex key ${suffix}`,
+      llmApiKeyId: openaiCompanyKey.id,
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "codex",
+          image: "registry.test/codex:latest",
+        }),
+        accountLock: "key",
+      },
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agent-catalog?limit=20&offset=0&name=${suffix}`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const rowsById = new Map(
+      response
+        .json()
+        .data.map(
+          (row: { value: Record<string, unknown> }) =>
+            [row.value.id, row.value] as const,
+        ),
+    );
+    expect(rowsById.get(claudeUnlocked.id)).toMatchObject({
+      resolvedLlmProvider: "anthropic",
+      resolvedLlmProviderKeyName: null,
+      resolvedLlmPersonalSubscription: true,
+    });
+    expect(rowsById.get(codexLockedToSubscription.id)).toMatchObject({
+      resolvedLlmProvider: "openai",
+      resolvedLlmProviderKeyName: null,
+      resolvedLlmPersonalSubscription: true,
+    });
+    expect(rowsById.get(codexOnCompanyKey.id)).toMatchObject({
+      resolvedLlmProvider: "openai",
+      resolvedLlmProviderKeyName: "Company OpenAI",
+    });
+    expect(rowsById.get(codexOnCompanyKey.id)).not.toHaveProperty(
+      "resolvedLlmPersonalSubscription",
+    );
   });
 });

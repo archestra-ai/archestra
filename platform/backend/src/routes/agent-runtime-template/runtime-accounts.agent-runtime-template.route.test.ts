@@ -126,6 +126,23 @@ describe("a runtime's account rule", () => {
       updatedAt: agent.updatedAt,
     };
   };
+  /** How the Agents list shows an agent's account, to an administrator. */
+  const listedAccount = async (id: string) => {
+    ctx.caller = ctx.admin;
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agents?ids=${id}`,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const [listed] = response.json().data;
+    return {
+      resolvedLlmProvider: listed.resolvedLlmProvider,
+      resolvedLlmProviderKeyName: listed.resolvedLlmProviderKeyName,
+      ...(listed.resolvedLlmPersonalSubscription !== undefined && {
+        resolvedLlmPersonalSubscription: listed.resolvedLlmPersonalSubscription,
+      }),
+    };
+  };
   const pair = (connection: Connection) => ({
     llmApiKeyId: connection.key.id,
     modelId: connection.model.id,
@@ -386,6 +403,11 @@ describe("a runtime's account rule", () => {
         expect(await launchOf(agent.id, ctx.member)).toMatchObject({
           boundKeyIds: [shared.key.id],
         });
+        // The Agents list names the company connection it runs on.
+        expect(await listedAccount(agent.id)).toEqual({
+          resolvedLlmProvider: "openai",
+          resolvedLlmProviderKeyName: shared.key.name,
+        });
       };
       await expectEarlierState();
 
@@ -402,8 +424,15 @@ describe("a runtime's account rule", () => {
       expect(await launchOf(agent.id, ctx.member)).toMatchObject({
         boundKeyIds: [chatgpt.key.id],
       });
-      // Someone who has not connected theirs is asked to, also an
-      // administrator.
+      // The Agents list shows the subscription, not the connection the
+      // agent still stores.
+      expect(await listedAccount(agent.id)).toEqual({
+        resolvedLlmProvider: "openai",
+        resolvedLlmProviderKeyName: null,
+        resolvedLlmPersonalSubscription: true,
+      });
+      // Someone who has not connected theirs is asked to, also one who can
+      // configure the runtime.
       expect(await preflightOf(agent.id, ctx.admin)).toMatchObject({
         ready: false,
         missingSubscription: "chatgpt",

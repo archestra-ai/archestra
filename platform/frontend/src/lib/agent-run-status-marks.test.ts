@@ -72,8 +72,9 @@ describe("runStatusMarks", () => {
       },
       {
         glyph: "live",
-        dot: "attention",
-        description: "Running · Needs your input",
+        dot: "input",
+        chip: { tone: "input", label: "Waiting for input" },
+        description: "Running · Waiting for input",
       },
     ],
     [
@@ -82,6 +83,7 @@ describe("runStatusMarks", () => {
       {
         glyph: "live",
         dot: "attention",
+        chip: { tone: "attention", label: "Needs sign-in" },
         description: "Running · Needs sign-in",
       },
     ],
@@ -90,8 +92,9 @@ describe("runStatusMarks", () => {
       { ...live, state: "TASK_STATE_INPUT_REQUIRED" },
       {
         glyph: "live",
-        dot: "attention",
-        description: "Running · Needs your input",
+        dot: "input",
+        chip: { tone: "input", label: "Waiting for input" },
+        description: "Running · Waiting for input",
       },
     ],
     [

@@ -3,6 +3,84 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
+export function useMyClaudeCodeAccount(enabled = true, polling = false) {
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: myAccountKey,
+    enabled,
+    refetchInterval: polling
+      ? (query) => {
+          const state = query.state.data?.state;
+          return state === "starting" || state === "connecting" ? 1000 : 2000;
+        }
+      : false,
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getMyClaudeCodeAccount();
+      throwOnApiError(error, { toastOnError: false });
+      const previous =
+        client.getQueryData<
+          archestraApiTypes.GetMyClaudeCodeAccountResponses["200"]
+        >(myAccountKey);
+      if (data?.state !== previous?.state) {
+        void client.invalidateQueries({ queryKey: ["agents"] });
+        if (data?.state !== "connected")
+          client.removeQueries({ queryKey: ["claude-code-models"] });
+      }
+      return data;
+    },
+  });
+}
+
+export function useMyClaudeCodeSignIn() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body:
+        | archestraApiTypes.CompleteMyClaudeCodeSignInData["body"]
+        | archestraApiTypes.StartMyClaudeCodeSignInData["body"]
+        | undefined,
+    ) => {
+      const { data, error } =
+        body && "flowId" in body
+          ? await archestraApiSdk.completeMyClaudeCodeSignIn({ body })
+          : await archestraApiSdk.startMyClaudeCodeSignIn({
+              body: body ?? {},
+            });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: async (data) => {
+      await client.cancelQueries({ queryKey: myAccountKey });
+      client.setQueryData(myAccountKey, data);
+      if (data?.state === "connected") {
+        void client.invalidateQueries({ queryKey: ["claude-code-account"] });
+        void client.invalidateQueries({ queryKey: ["claude-code-models"] });
+        void client.invalidateQueries({ queryKey: ["agents"] });
+      }
+    },
+  });
+}
+
+export function useDisconnectMyClaudeCodeAccount() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.disconnectMyClaudeCodeAccount();
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: async (data) => {
+      await client.cancelQueries({ queryKey: myAccountKey });
+      client.setQueryData(myAccountKey, data);
+      client.removeQueries({ queryKey: ["claude-code-models"] });
+      void client.invalidateQueries({ queryKey: ["claude-code-account"] });
+      void client.invalidateQueries({ queryKey: ["agents"] });
+      toast.success("Claude Code disconnected");
+    },
+  });
+}
+
 export function useClaudeCodeAccount(agentId: string, polling = false) {
   const client = useQueryClient();
   return useQuery({
@@ -101,6 +179,7 @@ export function useDisconnectClaudeCodeAccount(agentId: string) {
   });
 }
 
+const myAccountKey = ["claude-code-account", "me"] as const;
 const accountKey = (agentId: string) =>
   ["claude-code-account", agentId] as const;
 const modelsKey = (agentId: string) => ["claude-code-models", agentId] as const;

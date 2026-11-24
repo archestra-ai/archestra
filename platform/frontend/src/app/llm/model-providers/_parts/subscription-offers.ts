@@ -61,14 +61,17 @@ export function subscriptionKindOfCredential(
 }
 
 /**
- * Every subscription in the shared registry, in registry order, resolved
+ * Every subscription in the shared registry, in card display order, resolved
  * against the keys the viewer already has. Derived rather than hand-listed so a
  * new registry entry reaches this page without editing it.
  */
 export function buildSubscriptionOffers(
   credentials: LlmProviderApiKeyResponse[],
 ): SubscriptionOffer[] {
-  return SUBSCRIPTION_CREDENTIAL_KINDS.map((kind) => {
+  const orderedKinds = [...SUBSCRIPTION_CREDENTIAL_KINDS].sort(
+    (a, b) => cardOrderIndex(a) - cardOrderIndex(b),
+  );
+  return orderedKinds.map((kind) => {
     const { provider, displayName, marker } = SUBSCRIPTION_CREDENTIALS[kind];
     return {
       kind,
@@ -89,4 +92,18 @@ export function buildSubscriptionOffers(
       },
     };
   });
+}
+
+// ===
+
+const CARD_ORDER: readonly SubscriptionCredentialKind[] = [
+  "chatgpt",
+  "github-copilot",
+  "x-premium",
+  "microsoft-365-copilot",
+];
+
+function cardOrderIndex(kind: SubscriptionCredentialKind): number {
+  const index = CARD_ORDER.indexOf(kind);
+  return index === -1 ? CARD_ORDER.length : index;
 }

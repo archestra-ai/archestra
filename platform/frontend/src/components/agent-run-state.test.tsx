@@ -74,9 +74,35 @@ describe("AgentRunState", () => {
     );
 
     expect(
-      screen.getByRole("img", { name: "Running · Needs your input" }),
+      screen.getByRole("img", { name: "Running · Waiting for input" }),
     ).toBeVisible();
-    expect(screen.queryByText("Needs your input")).not.toBeInTheDocument();
+    expect(screen.queryByText("Waiting for input")).not.toBeInTheDocument();
+  });
+
+  it("renders the waiting-for-input badge in blue and sign-in warnings in amber", () => {
+    const { rerender } = render(
+      <AgentRunState
+        state="TASK_STATE_INPUT_REQUIRED"
+        attentionState="input_required"
+        endedAt={null}
+      />,
+    );
+    expect(screen.getByText("Waiting for input")).toHaveClass(
+      "text-blue-700",
+      "bg-blue-500/10",
+    );
+
+    rerender(
+      <AgentRunState
+        state="TASK_STATE_AUTH_REQUIRED"
+        attentionState="auth_required"
+        endedAt={null}
+      />,
+    );
+    expect(screen.getByText("Needs sign-in")).toHaveClass(
+      "text-amber-700",
+      "bg-amber-500/10",
+    );
   });
 
   it("reports a completed turn as an active session while it still calls the model", () => {

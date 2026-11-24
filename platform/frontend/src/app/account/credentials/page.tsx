@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { ClaudeCodeSubscription } from "@/app/account/_components/claude-code-subscription";
 import { useAccountCredentialsAccess } from "@/app/account/_components/use-account-credentials-access";
 import { RuntimeCredentialsSection } from "@/components/settings/runtime-credentials-section";
 
@@ -22,9 +21,6 @@ export default function AccountCredentialsPage() {
     );
   }, [redirectTo, router]);
 
-  if (!hasTab) return null;
-  if (canReadCredentials) return <RuntimeCredentialsSection mode="personal" />;
-  // Without credential:read there is no credentials list to show, only the
-  // reader's Claude Code sign-in.
-  return <ClaudeCodeSubscription />;
+  if (!hasTab || !canReadCredentials) return null;
+  return <RuntimeCredentialsSection mode="personal" />;
 }

@@ -682,6 +682,83 @@ describe("an agent's account lock at run time", () => {
     });
   });
 
+  describe("a subscription lock on an agent whose model is another provider's", () => {
+    // The lock came after the agent's company connection and model were
+    // picked. The runtime's subscription serves its own provider's models
+    // only, so that model is set aside with the connection: the run never
+    // resolves either, and takes a model the person's subscription serves,
+    // or waits for them to pick one.
+    for (const { label, ownProvider, ownModelId, waitsForPick } of [
+      {
+        label: "lower-ranked company model",
+        ownProvider: "xai",
+        ownModelId: "grok-3",
+        waitsForPick: false,
+      },
+      {
+        label: "higher-ranked company model",
+        ownProvider: "anthropic",
+        ownModelId: "claude-sonnet-4-5",
+        waitsForPick: true,
+      },
+    ] as const) {
+      test(`on Codex with a ${label}, the run never resolves the agent's company connection or its non-OpenAI model`, async ({
+        makeAgent,
+      }) => {
+        const { agent, own } = await agentWith({
+          makeAgent,
+          provider: ownProvider,
+          modelId: ownModelId,
+        });
+        const runtime: ResolvedAgentRuntime = {
+          ...codexRuntime(agent),
+          accountLock: "subscription",
+        };
+        // The person's own ChatGPT subscription is connected.
+        const chatGpt = await makeKeyWithModel({
+          organizationId,
+          provider: "openai",
+          modelId: "gpt-5.4",
+          userId: author.id,
+          apiKeyValue: "chatgpt-oauth:example-subscription",
+        });
+        const resolved = await getResolvedAgentRuntimeModelCompatibility({
+          runtime,
+          agent,
+          agentId: agent.id,
+          organizationId,
+          userId: author.id,
+        });
+        expect(resolved.companyConnectionId).toBeNull();
+        if (waitsForPick) {
+          expect(resolved).toMatchObject({
+            accountErrorFromChoice: false,
+            accountErrorFromModel: true,
+          });
+          await expect(ready({ agent, runtime })).rejects.toMatchObject({
+            statusCode: 409,
+          });
+          await AgentRuntimeUserAccountModel.upsert({
+            agentId: agent.id,
+            userId: author.id,
+            authentication: "subscription",
+            modelId: chatGpt.model.id,
+          });
+        } else {
+          expect(resolved.accountError).toBeNull();
+          expect(resolved.llm.selectedModel).toBe("gpt-5.4");
+        }
+
+        await expect(ready({ agent, runtime })).resolves.toBeUndefined();
+        const bound = await boundKeyId(
+          (await launch({ agent, runtime })).virtualApiKeyId,
+        );
+        expect(bound).toEqual([chatGpt.key.id]);
+        expect(bound).not.toContain(own.key.id);
+      });
+    }
+  });
+
   describe("on the maintained Codex runtime", () => {
     test("a key lock runs on the agent's OpenAI key without ChatGPT", async ({
       makeAgent,
@@ -731,6 +808,21 @@ describe("an agent's account lock at run time", () => {
       const run = await launch({ agent, runtime });
 
       await expect(ready({ agent, runtime })).resolves.toBeUndefined();
+      // The agent's model runs, since ChatGPT serves it, but never on the
+      // company connection the agent still stores.
+      expect(
+        await getResolvedAgentRuntimeModelCompatibility({
+          runtime,
+          agent,
+          agentId: agent.id,
+          organizationId,
+          userId: author.id,
+        }),
+      ).toMatchObject({
+        llm: { chatApiKeyId: null, selectedModel: "gpt-5.4" },
+        companyConnectionId: null,
+        accountError: null,
+      });
       const bound = await boundKeyId(run.virtualApiKeyId);
       expect(bound).toEqual([chatGpt.key.id]);
       expect(bound).not.toContain(own.key.id);

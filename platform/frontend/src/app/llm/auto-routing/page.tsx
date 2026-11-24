@@ -33,6 +33,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type AutoRouter,
   useAutoRouters,
+  useAutoRoutingState,
   useDeleteAutoRouter,
 } from "@/lib/auto-routing.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -132,7 +133,20 @@ export default function AutoRoutersPage() {
     },
   ];
 
-  const organizationOff = routers.length > 0 && !routers[0].enabled;
+  const { data: autoRoutingState } = useAutoRoutingState();
+  const organizationOff = autoRoutingState?.enabled === false;
+  const offNotice = organizationOff && (
+    <InlineNotice variant="neutral">
+      <span className="font-medium">Auto routing is off</span>
+      <InlineNoticeText>
+        No router is offered or answers requests until it is turned on in{" "}
+        <Link href="/settings/llm" className="underline">
+          Settings
+        </Link>
+        .
+      </InlineNoticeText>
+    </InlineNotice>
+  );
   const { data: canCreate, isPending: resolvingCreatePermission } =
     useHasPermissions({ llmProxy: ["update"] });
   // Nothing to list and nothing searched: the page explains auto routing
@@ -176,43 +190,34 @@ export default function AutoRoutersPage() {
           onRetry={() => query.refetch()}
         />
       ) : isFirstUse ? (
-        <EmptyState
-          variant="firstUse"
-          icon={Shuffle}
-          title="Send each session to the right model"
-          description="An auto router sends easy work to a cheap model and hard work to a smart one, within a daily budget."
-          canAct={resolvingCreatePermission ? undefined : canCreate}
-          readerMessage="Your admins haven't created an auto router yet."
-          action={
-            <Button size="sm" onClick={() => setCreating(true)}>
-              <Plus />
-              <span>Create an auto router</span>
-            </Button>
-          }
-          secondaryAction={
-            <ExternalDocsLink
-              href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyAutoRouting)}
-              className="text-sm"
-            >
-              How auto routing works
-            </ExternalDocsLink>
-          }
-        />
+        <div className="space-y-4">
+          {offNotice}
+          <EmptyState
+            variant="firstUse"
+            icon={Shuffle}
+            title="Send each session to the right model"
+            description="An auto router sends easy work to a cheap model and hard work to a smart one, within a daily budget."
+            canAct={resolvingCreatePermission ? undefined : canCreate}
+            readerMessage="Your admins haven't created an auto router yet."
+            action={
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <Plus />
+                <span>Create an auto router</span>
+              </Button>
+            }
+            secondaryAction={
+              <ExternalDocsLink
+                href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyAutoRouting)}
+                className="text-sm"
+              >
+                How auto routing works
+              </ExternalDocsLink>
+            }
+          />
+        </div>
       ) : (
         <div className="space-y-4">
-          {organizationOff && (
-            <InlineNotice variant="neutral">
-              <span className="font-medium">Auto routing is off</span>
-              <InlineNoticeText>
-                No router is offered or answers requests until it is turned on
-                in{" "}
-                <Link href="/settings/llm" className="underline">
-                  Settings
-                </Link>
-                .
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
+          {offNotice}
           <TableCardView storageKey="archestra-llm-auto-routers-view">
             <CollectionFilters>
               <FilterBar

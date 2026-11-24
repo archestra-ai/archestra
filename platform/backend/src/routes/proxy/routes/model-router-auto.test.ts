@@ -5,6 +5,7 @@ import {
   CHAT_API_KEY_ID_HEADER,
   LLM_PROXY_OAUTH_SCOPE,
   MEMBER_ROLE_NAME,
+  OPENCODE_AGENT_HEADER,
   PROVIDER_BASE_URL_HEADER,
   type ResourcePermissionGrant,
   USER_ID_HEADER,
@@ -2422,6 +2423,263 @@ describe("Model Router auto model", () => {
       });
     }
   });
+
+  describe("housekeeping bypass", () => {
+    for (const { ingress, path } of ENDPOINTS) {
+      test(`${ingress} bypasses housekeeping requests to the fast tier with 0 Jev calls and 0 routing_decisions rows`, async ({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      }) => {
+        const org = await setupOrganization({
+          makeOrganization,
+          makeSecret,
+          makeLlmProviderApiKey,
+        });
+        await publishPlan(org);
+
+        const response = await send(org, {
+          ingress,
+          path,
+          session: `hk-only-${ingress}`,
+          prompt: "Please write a 5-10 word title for this conversation.",
+          extra: ingress === "responses" ? { store: false } : undefined,
+        });
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(upstreamModels).toEqual([org.trio[0].modelId]);
+        expect(jevCalls).toBe(0);
+        expect(await decisions(org.organizationId)).toEqual([]);
+      });
+    }
+
+    test("housekeeping before first real turn on the same session_id does not pin the session", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+
+      const titleResponse = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-hk-before",
+        headers: {
+          "user-agent": "opencode/1.2.3",
+          [OPENCODE_AGENT_HEADER]: "title",
+        },
+        prompt: "Generate a short title for this session",
+      });
+
+      expect(titleResponse.statusCode, titleResponse.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[0].modelId]);
+      expect(jevCalls).toBe(0);
+      expect(await decisions(org.organizationId)).toEqual([]);
+
+      const mainTurn = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-hk-before",
+        headers: { "user-agent": "opencode/1.2.3" },
+        prompt: PROMPT,
+      });
+
+      expect(mainTurn.statusCode, mainTurn.body).toBe(200);
+      expect(upstreamModels).toEqual([
+        org.trio[0].modelId,
+        org.trio[2].modelId,
+      ]);
+      expect(jevCalls).toBe(1);
+      const rows = await decisions(org.organizationId);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        tierIndex: 2,
+        modelId: org.trio[2].id,
+      });
+    });
+
+    test("housekeeping after session pinned to smart routes to fast without mutating the smart decision", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+
+      const firstTurn = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-hk-after",
+        headers: { "user-agent": "opencode/1.2.3" },
+        prompt: PROMPT,
+      });
+      expect(firstTurn.statusCode, firstTurn.body).toBe(200);
+      const [pinnedBefore] = await decisions(org.organizationId);
+      expect(pinnedBefore).toMatchObject({
+        tierIndex: 2,
+        modelId: org.trio[2].id,
+      });
+
+      const titleTurn = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-hk-after",
+        headers: {
+          "user-agent": "opencode/1.2.3",
+          [OPENCODE_AGENT_HEADER]: "title",
+        },
+        prompt: "Write a title",
+      });
+      expect(titleTurn.statusCode, titleTurn.body).toBe(200);
+
+      const followUpTurn = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-hk-after",
+        headers: { "user-agent": "opencode/1.2.3" },
+        prompt: "Continue refactoring the billing module",
+      });
+      expect(followUpTurn.statusCode, followUpTurn.body).toBe(200);
+
+      expect(upstreamModels).toEqual([
+        org.trio[2].modelId,
+        org.trio[0].modelId,
+        org.trio[2].modelId,
+      ]);
+      expect(jevCalls).toBe(1);
+      expect(await decisions(org.organizationId)).toEqual([pinnedBefore]);
+    });
+
+    test("compaction request with a positive housekeeping prompt follows the pinned smart tier instead of bypassing to fast", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+
+      const firstTurn = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-compaction",
+        headers: { "user-agent": "opencode/1.2.3" },
+        prompt: PROMPT,
+      });
+      expect(firstTurn.statusCode, firstTurn.body).toBe(200);
+
+      const compactionTurn = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-compaction",
+        headers: {
+          "user-agent": "opencode/1.2.3",
+          [OPENCODE_AGENT_HEADER]: "compaction",
+        },
+        // Carries a positive housekeeping signal so removing the compaction veto fails this test.
+        prompt: "Please write a 5-10 word title for this conversation.",
+      });
+      expect(compactionTurn.statusCode, compactionTurn.body).toBe(200);
+
+      expect(upstreamModels).toEqual([
+        org.trio[2].modelId,
+        org.trio[2].modelId,
+      ]);
+      expect(jevCalls).toBe(1);
+      const rows = await decisions(org.organizationId);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        tierIndex: 2,
+        modelId: org.trio[2].id,
+      });
+    });
+
+    test("named Responses previous_response_id continuation with a positive housekeeping prompt stays on the pinned smart tier", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+
+      const firstTurn = await send(org, {
+        ingress: "responses",
+        path: "responses",
+        session: "s-resp-cont",
+        prompt: PROMPT,
+      });
+      expect(firstTurn.statusCode, firstTurn.body).toBe(200);
+
+      const continuation = await send(org, {
+        ingress: "responses",
+        path: "responses",
+        session: "s-resp-cont",
+        prompt: "Please write a 5-10 word title for this conversation.",
+        extra: { store: false, previous_response_id: "resp-auto" },
+      });
+      expect(continuation.statusCode, continuation.body).toBe(200);
+
+      expect(upstreamModels).toEqual([
+        org.trio[2].modelId,
+        org.trio[2].modelId,
+      ]);
+      expect(jevCalls).toBe(1);
+    });
+  });
+
+  test("live routing opens the Jev circuit breaker after 3 consecutive timeouts across distinct sessions", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await publishPlan(org);
+    config.autoRouting.scorerTimeoutMs = 50;
+    server.use(
+      http.post(JEV, async () => {
+        jevCalls += 1;
+        await delay("infinite");
+        return HttpResponse.json(SMART_ANSWERS);
+      }),
+    );
+
+    for (const session of ["s-cb-1", "s-cb-2", "s-cb-3", "s-cb-4"]) {
+      const response = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+
+    expect(jevCalls).toBe(3);
+    expect(upstreamModels).toEqual([
+      org.trio[1].modelId,
+      org.trio[1].modelId,
+      org.trio[1].modelId,
+      org.trio[1].modelId,
+    ]);
+  });
 });
 
 // === Helpers ===
@@ -2707,6 +2965,7 @@ async function send(
     prompt?: string;
     messages?: { role: string; content: string }[];
     extra?: Record<string, unknown>;
+    headers?: Record<string, string>;
     /** The requested model; `auto` by default. */
     model?: string;
   },
@@ -2722,6 +2981,7 @@ async function send(
     headers: {
       authorization: `Bearer ${org.credential}`,
       ...(params.session ? { "x-archestra-session-id": params.session } : {}),
+      ...params.headers,
     },
     payload: {
       model: params.model ?? "auto",

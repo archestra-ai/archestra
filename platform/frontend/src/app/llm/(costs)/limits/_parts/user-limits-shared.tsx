@@ -7,6 +7,7 @@ import type {
   DefaultUserLimit,
   UserLimitUsage,
 } from "@/lib/default-user-limit.query";
+import { formatCurrency } from "@/lib/utils/format-currency";
 import { cn } from "@/lib/utils/tailwind";
 
 export type UserLimitStatus = UserLimitUsage["status"];
@@ -128,12 +129,7 @@ export function formatLimit(value: number) {
 }
 
 export function formatUsd(value: number) {
-  return value.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatCurrency(value);
 }
 
 export function formatDate(iso: string) {

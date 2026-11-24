@@ -3181,12 +3181,9 @@ async function saveSource(params: {
   );
   // Saved with auto-merge in force, the App may just have been granted what
   // it lacked: the next minute's round tries the merge rather than waiting
-  // out a hold. A save that failed above lifts nothing.
-  if (
-    params.source.githubAppConfigId &&
-    config.openappa.selfService === "enabled" &&
-    autoMergeState().enabled
-  )
+  // out a hold. Auto-merge covers every pull request Archestra opens, with
+  // self-service on or off. A save that failed above lifts nothing.
+  if (params.source.githubAppConfigId && autoMergeState().enabled)
     await cacheManager
       .delete(heldMergesKey(params.organizationId, params.source.repo))
       .catch((err) =>

@@ -3714,6 +3714,72 @@ test("with auto-merge on, a policy pull request the APPA Keeper opened merges by
   expect(await queuedSyncs()).toHaveLength(1);
 });
 
+test("with auto-merge on and self-service off, saving the source lifts a repository's merge hold: the APPA Keeper's policy pull request merges the next minute", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const { results, merges } = await serveAutoMergeRepository({
+    organizationId: org.id,
+    requester: admin.email,
+    policyChange: true,
+  });
+  config.openappa.selfService = "disabled";
+  config.openappa.selfServiceAutoMerge = "enabled";
+  await db
+    .delete(schema.tasksTable)
+    .where(eq(schema.tasksTable.taskType, "openappa_github_sync"));
+  // A repository the App cannot merge in: read once, then left alone.
+  let repositoryReads = 0;
+  let squashAllowed = false;
+  server.use(
+    http.get(REPO, () => {
+      repositoryReads += 1;
+      return HttpResponse.json({
+        default_branch: "main",
+        allow_merge_commit: false,
+        allow_squash_merge: squashAllowed,
+        allow_rebase_merge: false,
+      });
+    }),
+  );
+  await checkDueAppaGithubSyncs();
+  await checkDueAppaGithubSyncs();
+  expect(repositoryReads).toBe(1);
+  expect(merges).toHaveLength(0);
+
+  // The admin allows squash merges and saves the source again, as the
+  // setup wizard does: the next minute's round tries the merge at once.
+  squashAllowed = true;
+  const row = await OpenAppaGithubSyncModel.find(org.id);
+  await configureAppaGithubSync({
+    organizationId: org.id,
+    userId: admin.id,
+    source: {
+      repo: "example/policies",
+      ref: "main",
+      path: "appa.toml",
+      interval: "1h",
+      validationDirectory: "",
+      githubPatId: null,
+      githubAppConfigId: row?.githubAppConfigId ?? null,
+      gitlabTokenId: null,
+    },
+  });
+  await syncAppaGithubPolicy(org.id);
+  await checkDueAppaGithubSyncs();
+  expect(repositoryReads).toBe(2);
+  expect(merges).toContainEqual({
+    number: 8,
+    sha: results[8],
+    merge_method: "squash",
+  });
+});
+
 test("following a policy pull request reads the APPA Keeper's phase by phase, and leaves a setup pull request to the plain status", async ({
   makeOrganization,
   makeUser,

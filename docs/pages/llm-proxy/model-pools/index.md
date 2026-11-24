@@ -8,26 +8,25 @@ beta: "Model Pools are in Beta."
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Keep a model answering when one provider hits its rate limit or goes down. A model pool serves one model, such as `claude-sonnet-5-5`, from several providers, such as Anthropic and AWS Bedrock. Clients ask for the model as they always do, and Archestra sends each request to a provider that can answer it.
+Model pools allows clients to reach for a single model, such as `claude-sonnet-5-5`, but under the hood, Archestra will route them from dfferent providers. 
 
-| Use | When you want | Example |
-| --- | --- | --- |
-| Model pool | One model from several providers, to spread load and survive outages | `claude-sonnet-5-5` from Anthropic, then Bedrock |
-| [Auto Routing](/docs/llm-proxy/auto-routing) | Several models under one daily budget, picked per session | Fast, normal, and smart models within a daily budget |
+Here are some of the common use cases for model pools:
 
-```mermaid
-flowchart LR
-    Client["Claude Code · Your apps"] -->|"claude-sonnet-5-5"| Pool["Model pool"]
-    Pool --> Order1["Order 1: Anthropic key"]
-    Pool -.->|"If order 1 is unavailable"| Order2["Order 2: Bedrock key"]
-    class Pool accent
-```
+| Goal | How it works |
+| --- | --- |
+| Survive a provider outage | An Anthropic key, with a Bedrock key as the fallback. |
+| Get past a rate limit | Keys from two or three provider accounts sharing traffic. |
+| Fall back to another model | `claude-sonnet-5-5` on Anthropic, with `gpt-6.1-sol` on OpenAI as the fallback in case Anthropic fails. |
+| Use reserved capacity first | An Azure AI Foundry provisioned deployment, with a pay-as-you-go deployment as the fallback while it's rate limited. |
+| Use your subscription first | Your personal GitHub Copilot connection, with a shared OpenAI key as the fallback. |
 
 ## Create a Pool
 
-A pool is the model clients ask for. Its members are the provider keys that serve that model.
+A model pool comprises of a few moving parts: models, members and orders. 
 
-Each member has an order: requests go to order 1 and move to order 2 when order 1 can't answer. Members with the same order share its traffic.
+When creating a pool, we pick a model which will serve as what we would like to provide to the client. From there, we can define members, which are effectively a group of providers that serve the selected model.
+
+Each member has an order: requests go to from order 1 and move to order 2 when order 1 can't answer. Members with the same order share its traffic.
 
 For example, a `claude-sonnet-5-5` pool with three members:
 
@@ -46,34 +45,21 @@ Before you start, add provider keys or connect your subscriptions on [Model Prov
 3. Under **Members**, click **Add member**. Pick a **Provider key**, then the **Model** ID that key uses for this model. If the key has no synced models, type the ID.
 4. To share an order's traffic, click **Add member** inside that order and set each member's weight under **Traffic**. To add a fallback, click **Add order**. Drag a member to move it to another order.
 5. Click **Create pool**.
+6. Add the pool to the virtual key or OAuth client your apps use, or their requests skip it. See [Who Can Use a Pool](#who-can-use-a-pool).
 
 @tab Terraform
-The [Archestra Terraform provider](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs) keeps a pool's model name, members, and strategy in code, so changes go through review like the rest of your infrastructure.
+Use Terraform if your team already manages infrastructure with it: the pool lives in code, and changes go through review. Otherwise, use the UI.
 
-1. Create a [service account key](/docs/reference/api#service-accounts) whose role holds [`llmModel:update`](/docs/reference/permissions#llmModel:update).
-2. Give the provider your Archestra URL and the key:
+1. Set up the [Archestra Terraform provider](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs/guides/getting-started), with your Archestra URL in `ARCHESTRA_BASE_URL` and a [service account key](/docs/reference/api#service-accounts) in `ARCHESTRA_API_KEY`. The key's role needs [`llmModel:update`](/docs/reference/permissions#llmModel:update), plus [`llmVirtualKey:create`](/docs/reference/permissions#llmVirtualKey:create) if Terraform also creates the virtual key.
+2. Declare the pool, and add it to the virtual key your apps use:
 
-   ```bash
-   export ARCHESTRA_BASE_URL="https://archestra.example.com"
-   export ARCHESTRA_API_KEY="arch_..."
-   ```
-
-3. Declare the provider and the pool.
-
-   ```terraform
-   terraform {
-     required_providers {
-       archestra = {
-         source = "archestra-ai/archestra"
-       }
-     }
-   }
-
+   ```hcl
    resource "archestra_model_pool" "sonnet" {
      name = "claude-sonnet-5-5" # the model clients ask for
      members = [
        {
-         provider_api_key_id = var.anthropic_key_id # a shared provider key's ID
+         # A shared provider key, such as archestra_model_provider.anthropic.id
+         provider_api_key_id = var.anthropic_key_id
          model_id            = "claude-sonnet-5-5"
          priority            = 1 # the member's order
        },
@@ -84,32 +70,17 @@ The [Archestra Terraform provider](https://registry.terraform.io/providers/arche
        },
      ]
    }
+
+   resource "archestra_virtual_key" "app" {
+     name           = "My app"
+     model_pool_ids = [archestra_model_pool.sonnet.id]
+   }
    ```
-
-4. Run `terraform init`, check `terraform plan`, and run `terraform apply`. The pool appears under **LLM → Model Pools**.
-
-- Terraform pools use shared provider keys only. A member's `weight` sets its share of its order, and `routing_strategy` sets the selection strategy: `weighted` or `least-tokens`.
-- Terraform doesn't manage **Failover** settings. `terraform apply` leaves them as set in the UI, except **Member overrides**, which it clears.
-- To manage a pool made in the UI, import it before you apply. See the provider's [model pools guide](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs/guides/model-pools).
 :::
 
-Then add the pool to the virtual key or OAuth client your apps use, or their requests skip it. See [Who Can Use a Pool](#who-can-use-a-pool).
+## Selection Strategy
 
-## Common Setups
-
-Most pools follow one of these shapes. In the pool editor, a fallback goes in a later order, and members that share traffic go in the same order.
-
-| Goal | Set up |
-| --- | --- |
-| Survive a provider outage | An Anthropic key, with a Bedrock key as the fallback. |
-| Get past a rate limit | Keys from two or three provider accounts sharing traffic, with **Least tokens used**. Keys in one account usually share its rate limit, so add accounts or providers, not keys. |
-| Fall back to another model | `claude-sonnet-5-5` on Anthropic, with `gpt-6.1-sol` on OpenAI as the fallback. Clients keep asking for `claude-sonnet-5-5`. |
-| Use reserved capacity first | An Azure AI Foundry provisioned deployment, with a pay-as-you-go deployment as the fallback while it's rate limited. |
-| Use your subscription first | Your personal GitHub Copilot connection, with a shared OpenAI key as the fallback. Others skip your subscription and use the shared key. |
-
-## Load Balancing
-
-Load balancing spreads requests across the members of one order, so no single key takes all the traffic and hits its rate limit. The selection strategy decides which member gets each request. Pick it under **Selection strategy** when you create or edit a pool.
+The selection strategy decides which member gets each request. Different strategies forwards the request in different manners. Pick it under **Selection strategy** when you create or edit a pool.
 
 | Selection strategy | Picks | Use it when |
 | --- | --- | --- |

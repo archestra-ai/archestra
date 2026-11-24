@@ -477,6 +477,7 @@ export function RequestExample({
   virtualApiKeyId,
   grantedRouterIds,
   fields,
+  fallbackExample,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -527,6 +528,8 @@ export function RequestExample({
    * which copies the real key when the reader may read it.
    */
   fields?: React.ReactNode;
+  /** Copyable content for dashboard formats that do not have a curl template. */
+  fallbackExample?: React.ReactNode;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
@@ -824,7 +827,7 @@ export function RequestExample({
     return fields ? (
       <div className="space-y-3">
         {fieldRow}
-        {message}
+        {fallbackExample ?? message}
       </div>
     ) : (
       message
@@ -1040,14 +1043,16 @@ export function MaskedCodeExample({
  * real key in the command when the reader may read it (their own key, or one
  * just created), and the env var otherwise; the block itself stays masked.
  */
-function FloatingCodeExample({
+export function FloatingCodeExample({
   code,
   secret,
-  placeholder,
+  placeholder = MASKED_KEY,
+  copyLabel,
 }: {
   code: string;
-  secret: RevealableSecret | undefined;
-  placeholder: string;
+  secret?: RevealableSecret;
+  placeholder?: string;
+  copyLabel?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -1079,6 +1084,7 @@ function FloatingCodeExample({
       <UnstyledButton
         type="button"
         onClick={onCopy}
+        aria-label={copyLabel && (copied ? "Copied" : copyLabel)}
         disabled={copying}
         className="absolute top-2.5 right-2.5 inline-flex h-7 items-center gap-1.5 rounded-md border border-terminal-edge px-2.5 text-xs font-medium text-terminal-muted transition-colors hover:text-terminal-emphasis"
       >

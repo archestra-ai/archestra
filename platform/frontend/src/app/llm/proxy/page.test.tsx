@@ -590,12 +590,17 @@ describe("LLM Proxy dashboard endpoint", () => {
     const openai = screen.getByText(/\/v1\/bedrock\/openai$/);
     expect(native).toBeVisible();
     expect(openai).toBeVisible();
-    const addressRow = openai.closest("dd");
-    if (!addressRow) throw new Error("Missing address row");
     await user.click(
-      within(addressRow).getByRole("button", { name: "Copy to clipboard" }),
+      screen.getByRole("button", { name: "Copy Bedrock SDK URL" }),
     );
-    expect(copyToClipboard).toHaveBeenCalledWith(openai.textContent);
+    expect(copyToClipboard).toHaveBeenLastCalledWith(native.textContent);
+    await user.click(
+      screen.getByRole("button", { name: "Copy OpenAI-compatible URL" }),
+    );
+    expect(copyToClipboard).toHaveBeenLastCalledWith(openai.textContent);
+    expect(
+      screen.queryByText(/No example.*base URL above/),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the configured identity provider instead of setup to a read-only viewer", async () => {

@@ -30,7 +30,10 @@ import {
   type LlmConnection,
   useLlmConnection,
 } from "@/components/use-llm-connection";
-import { RequestExample } from "@/components/virtual-key-connection-guide";
+import {
+  FloatingCodeExample,
+  RequestExample,
+} from "@/components/virtual-key-connection-guide";
 import { getProxyBaseUrl } from "@/components/virtual-key-request-example";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
@@ -190,15 +193,21 @@ function EndpointRequest({
     </>
   );
 
+  const fallbackExample =
+    selected === "bedrock" ? <BedrockExamples baseUrl={baseUrl} /> : undefined;
+
   return (
     <div className="space-y-3">
-      <EndpointAddresses baseUrl={baseUrl} selected={selected} />
+      {selected !== "bedrock" && (
+        <EndpointAddress baseUrl={baseUrl} selected={selected} />
+      )}
       {connection.ready ? (
         <RequestExample
           key={connection.requestKey}
           connectionBaseUrl={baseUrl}
           {...connection.requestProps}
           fields={fields}
+          fallbackExample={fallbackExample}
         />
       ) : (
         <>
@@ -220,6 +229,7 @@ function EndpointRequest({
             connection={connection}
             targetLabel={targetLabel}
           />
+          {fallbackExample}
         </>
       )}
       {connection.ready && auth === "oauth" && connection.picked?.oauth && (
@@ -246,40 +256,53 @@ function EndpointRequest({
   );
 }
 
-function EndpointAddresses({
+function BedrockExamples({ baseUrl }: { baseUrl: string }) {
+  const url = getProxyBaseUrl(baseUrl, {
+    kind: "provider",
+    provider: "bedrock",
+  });
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <div className="min-w-0 space-y-1.5">
+        <p className="text-xs text-muted-foreground">Bedrock SDK</p>
+        <FloatingCodeExample code={url} copyLabel="Copy Bedrock SDK URL" />
+      </div>
+      <div className="min-w-0 space-y-1.5">
+        <p className="text-xs text-muted-foreground">
+          OpenAI-compatible client
+        </p>
+        <FloatingCodeExample
+          code={`${url}/openai`}
+          copyLabel="Copy OpenAI-compatible URL"
+        />
+      </div>
+    </div>
+  );
+}
+
+function EndpointAddress({
   baseUrl,
   selected,
 }: {
   baseUrl: string;
   selected: Target;
 }) {
-  const url = getProxyBaseUrl(
+  const base = getProxyBaseUrl(
     baseUrl,
     selected === "model-router"
       ? { kind: "model-router" }
       : { kind: "provider", provider: selected },
   );
-  const addresses =
-    selected === "bedrock"
-      ? [
-          { label: "Bedrock SDK base URL", url },
-          { label: "OpenAI-compatible base URL", url: `${url}/openai` },
-        ]
-      : selected === "jev"
-        ? [{ label: "Decisions endpoint", url: `${url}/decisions` }]
-        : [{ label: "Base URL", url }];
-
+  const url = selected === "jev" ? `${base}/decisions` : base;
   return (
-    <dl className="space-y-1.5">
-      {addresses.map(({ label, url }) => (
-        <div key={label} className="flex flex-wrap items-center gap-x-2">
-          <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd className="flex min-w-0 items-center gap-1">
-            <code className="break-all font-mono text-xs">{url}</code>
-            <CopyButton text={url} />
-          </dd>
-        </div>
-      ))}
+    <dl className="flex flex-wrap items-center gap-x-2">
+      <dt className="text-xs text-muted-foreground">
+        {selected === "jev" ? "Decisions endpoint" : "Base URL"}
+      </dt>
+      <dd className="flex min-w-0 items-center gap-1">
+        <code className="break-all font-mono text-xs">{url}</code>
+        <CopyButton text={url} />
+      </dd>
     </dl>
   );
 }

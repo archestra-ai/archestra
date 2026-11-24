@@ -153,6 +153,38 @@ describe("buildCurlExample", () => {
   -d '{"model": "openai:gpt-5.4", "messages": [{"role": "user", "content": "Hello!"}]}'`);
   });
 
+  it.each([
+    "standard",
+    "passthrough",
+    "token",
+  ] as const)("uses the Bedrock Converse body and %s authentication", (keyType) => {
+    const modelId = "us.anthropic.claude-sonnet-4-6";
+    const example = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "provider", provider: "bedrock" },
+      keyType,
+      keyValue: key,
+      model: modelId,
+      compact: true,
+    });
+
+    expect(example).toContain(`curl ${base}/bedrock/converse`);
+    expect(example).toContain(
+      `Authorization: Bearer ${keyType === "passthrough" ? "$AWS_BEARER_TOKEN_BEDROCK" : key}`,
+    );
+    if (keyType === "passthrough") {
+      expect(example).toContain(`X-Archestra-Virtual-Key: ${key}`);
+    } else {
+      expect(example).not.toContain("X-Archestra-Virtual-Key");
+    }
+    expect(
+      JSON.parse(example?.match(/-d '([\s\S]*)'$/)?.[1] ?? "null"),
+    ).toEqual({
+      modelId,
+      messages: [{ role: "user", content: [{ text: "Hello!" }] }],
+    });
+  });
+
   it("uses chat completions with a bearer token for OpenAI-wire providers", () => {
     const example = buildCurlExample({
       connectionBaseUrl: base,
@@ -331,10 +363,10 @@ describe("buildCurlExample", () => {
     expect(
       buildCurlExample({
         connectionBaseUrl: base,
-        target: { kind: "provider", provider: "bedrock" },
+        target: { kind: "provider", provider: "cohere" },
         keyType: "standard",
         keyValue: key,
-        model: "anthropic.claude",
+        model: "command-a",
       }),
     ).toBeNull();
   });

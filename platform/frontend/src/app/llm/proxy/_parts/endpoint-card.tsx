@@ -30,10 +30,7 @@ import {
   type LlmConnection,
   useLlmConnection,
 } from "@/components/use-llm-connection";
-import {
-  FloatingCodeExample,
-  RequestExample,
-} from "@/components/virtual-key-connection-guide";
+import { RequestExample } from "@/components/virtual-key-connection-guide";
 import { getProxyBaseUrl } from "@/components/virtual-key-request-example";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
@@ -193,9 +190,6 @@ function EndpointRequest({
     </>
   );
 
-  const fallbackExample =
-    selected === "bedrock" ? <BedrockExamples baseUrl={baseUrl} /> : undefined;
-
   return (
     <div className="space-y-3">
       {selected !== "bedrock" && (
@@ -207,7 +201,6 @@ function EndpointRequest({
           connectionBaseUrl={baseUrl}
           {...connection.requestProps}
           fields={fields}
-          fallbackExample={fallbackExample}
         />
       ) : (
         <>
@@ -229,7 +222,6 @@ function EndpointRequest({
             connection={connection}
             targetLabel={targetLabel}
           />
-          {fallbackExample}
         </>
       )}
       {connection.ready && auth === "oauth" && connection.picked?.oauth && (
@@ -252,30 +244,6 @@ function EndpointRequest({
         selected={selected}
         targetLabel={targetLabel}
       />
-    </div>
-  );
-}
-
-function BedrockExamples({ baseUrl }: { baseUrl: string }) {
-  const url = getProxyBaseUrl(baseUrl, {
-    kind: "provider",
-    provider: "bedrock",
-  });
-  return (
-    <div className="grid gap-3 lg:grid-cols-2">
-      <div className="min-w-0 space-y-1.5">
-        <p className="text-xs text-muted-foreground">Bedrock SDK</p>
-        <FloatingCodeExample code={url} copyLabel="Copy Bedrock SDK URL" />
-      </div>
-      <div className="min-w-0 space-y-1.5">
-        <p className="text-xs text-muted-foreground">
-          OpenAI-compatible client
-        </p>
-        <FloatingCodeExample
-          code={`${url}/openai`}
-          copyLabel="Copy OpenAI-compatible URL"
-        />
-      </div>
     </div>
   );
 }

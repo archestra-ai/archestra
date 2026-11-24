@@ -175,6 +175,18 @@ export function buildCurlExample(params: {
     ].join(" \\\n");
   }
 
+  if (provider === "bedrock") {
+    return curl(`${baseUrl}/converse`, [
+      `Authorization: Bearer ${credential}`,
+      ...virtualKeyHeader,
+      "Content-Type: application/json",
+    ])(
+      json({
+        modelId: model,
+        messages: [{ role: "user", content: [{ text: HELLO }] }],
+      }),
+    );
+  }
   if (provider === "jev") {
     return curl(`${baseUrl}/decisions`, [
       `Authorization: Bearer ${credential}`,
@@ -235,6 +247,7 @@ export function buildCurlExample(params: {
 
 /** Env var a passthrough example reads the caller's provider key from. */
 export function providerKeyEnvVar(provider: SupportedProvider): string {
+  if (provider === "bedrock") return "AWS_BEARER_TOKEN_BEDROCK";
   return `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
 }
 

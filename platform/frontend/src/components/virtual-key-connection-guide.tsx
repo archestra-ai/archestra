@@ -477,7 +477,6 @@ export function RequestExample({
   virtualApiKeyId,
   grantedRouterIds,
   fields,
-  fallbackExample,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -528,8 +527,6 @@ export function RequestExample({
    * which copies the real key when the reader may read it.
    */
   fields?: React.ReactNode;
-  /** Copyable content for dashboard formats that do not have a curl template. */
-  fallbackExample?: React.ReactNode;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
@@ -827,7 +824,7 @@ export function RequestExample({
     return fields ? (
       <div className="space-y-3">
         {fieldRow}
-        {fallbackExample ?? message}
+        {message}
       </div>
     ) : (
       message
@@ -843,6 +840,22 @@ export function RequestExample({
         )}
         <AutoRoutingUnavailableHint offer={autoRouting} />
         {imageNotes}
+        {target.kind === "provider" &&
+          target.provider === "bedrock" &&
+          isPassthrough && (
+            <p className="text-sm text-muted-foreground">
+              Set <InlineCode>{providerKeyEnvVar("bedrock")}</InlineCode> to
+              your Amazon Bedrock API key, then copy and run the request.
+              {keyValue !== "" && (
+                <>
+                  {" "}
+                  If the copied request uses{" "}
+                  <InlineCode>{credentialEnvVar}</InlineCode>, set it to your
+                  Archestra passthrough key.
+                </>
+              )}
+            </p>
+          )}
         <FloatingCodeExample
           code={example}
           secret={secret}
@@ -1043,16 +1056,14 @@ export function MaskedCodeExample({
  * real key in the command when the reader may read it (their own key, or one
  * just created), and the env var otherwise; the block itself stays masked.
  */
-export function FloatingCodeExample({
+function FloatingCodeExample({
   code,
   secret,
-  placeholder = MASKED_KEY,
-  copyLabel,
+  placeholder,
 }: {
   code: string;
-  secret?: RevealableSecret;
-  placeholder?: string;
-  copyLabel?: string;
+  secret: RevealableSecret | undefined;
+  placeholder: string;
 }) {
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -1084,7 +1095,6 @@ export function FloatingCodeExample({
       <UnstyledButton
         type="button"
         onClick={onCopy}
-        aria-label={copyLabel && (copied ? "Copied" : copyLabel)}
         disabled={copying}
         className="absolute top-2.5 right-2.5 inline-flex h-7 items-center gap-1.5 rounded-md border border-terminal-edge px-2.5 text-xs font-medium text-terminal-muted transition-colors hover:text-terminal-emphasis"
       >

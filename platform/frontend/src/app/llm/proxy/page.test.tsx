@@ -571,12 +571,30 @@ describe("LLM Proxy dashboard endpoint", () => {
       screen.queryByText(/No .* key yet\. The proxy needs/),
     ).not.toBeInTheDocument();
   });
-  it("can copy both Bedrock addresses even without a runnable example", async () => {
+  it("shows how to call Bedrock Converse with a passthrough key and no stored provider key", async () => {
     providerKeys = [];
     standardKeys = [];
+    passthroughKeys = [
+      {
+        ...JUDGE_KEY,
+        id: "vk-passthrough",
+        keyType: "passthrough",
+        name: "Bring my own key",
+        providerApiKeys: [],
+      },
+    ];
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-virtual-keys/vk-passthrough/value`, () =>
+        HttpResponse.json({ value: "arch_bedrock_test" }),
+      ),
+    );
     const user = userEvent.setup();
     renderPage();
 
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Passthrough" }),
+    );
     await user.click(
       await screen.findByRole("combobox", { name: "API format" }),
     );
@@ -586,21 +604,18 @@ describe("LLM Proxy dashboard endpoint", () => {
     );
     await user.click(await screen.findByRole("option", { name: /Bedrock/ }));
 
-    const native = screen.getByText(/\/v1\/bedrock$/);
-    const openai = screen.getByText(/\/v1\/bedrock\/openai$/);
-    expect(native).toBeVisible();
-    expect(openai).toBeVisible();
-    await user.click(
-      screen.getByRole("button", { name: "Copy Bedrock SDK URL" }),
+    const command = await screen.findByText(/\/v1\/bedrock\/converse/);
+    expect(command.closest("pre")).toHaveTextContent(
+      "AWS_BEARER_TOKEN_BEDROCK",
     );
-    expect(copyToClipboard).toHaveBeenLastCalledWith(native.textContent);
-    await user.click(
-      screen.getByRole("button", { name: "Copy OpenAI-compatible URL" }),
-    );
-    expect(copyToClipboard).toHaveBeenLastCalledWith(openai.textContent);
+    expect(command.closest("pre")).not.toHaveTextContent("arch_bedrock_test");
     expect(
-      screen.queryByText(/No example.*base URL above/),
-    ).not.toBeInTheDocument();
+      screen.getByText(/your Amazon Bedrock API key, then copy/),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Copy$/ }));
+    expect(copyToClipboard).toHaveBeenCalledWith(
+      expect.stringContaining("X-Archestra-Virtual-Key: arch_bedrock_test"),
+    );
   });
 
   it("shows the configured identity provider instead of setup to a read-only viewer", async () => {

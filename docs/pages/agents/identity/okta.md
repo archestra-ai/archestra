@@ -7,6 +7,7 @@ beta: "Preview. Okta for AI Agents is in early access at Okta, and your Okta pla
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give every agent its own AI agent in Okta, so Okta can tell your agents apart. Okta then decides which people each agent may act for and which resources it may reach, and its System Log names the agent on every token. Deactivate one AI agent in Okta, and only that agent stops.
 

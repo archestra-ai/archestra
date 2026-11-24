@@ -5,6 +5,8 @@ order: 3
 lastUpdated: 2026-11-04
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Archestra's web and worker pods keep no state of their own, so you add capacity and survive a lost node by running more pods. PostgreSQL holds everything else, which makes it the one part to size carefully and to run with a standby.
 
 ## Pick a Size

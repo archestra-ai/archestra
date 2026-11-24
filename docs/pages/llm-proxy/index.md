@@ -6,6 +6,7 @@ lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 See every model call your company makes: who made it, which model, what it cost, and what the model tried to do. A developer's Claude Code session, a support bot, and a nightly job show in one log. Each has its cost, per person.
 

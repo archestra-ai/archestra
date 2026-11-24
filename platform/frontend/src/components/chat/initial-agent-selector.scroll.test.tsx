@@ -179,7 +179,10 @@ it("loads one bounded page per bottom scroll, appends without duplicate selectio
   act(() => screen.getByRole("option", { name: /Choice 43/ }).focus());
   await userEvent.keyboard("{ArrowDown}{Enter}");
   expect(onChange).toHaveBeenCalledWith("choice-44");
-});
+  // The file's first test pays for the first render and queries 45 options
+  // by role many times. On a busy CI runner that takes about 10 seconds, the
+  // default limit.
+}, 30_000);
 
 it("finds and selects the chat-capable built-in agent by search", async () => {
   const policyAssistant = makeAgent({

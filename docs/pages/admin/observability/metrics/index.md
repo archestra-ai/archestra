@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-10-30
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Scrape Archestra's Prometheus metrics to track model spend, tool calls, guardrails, agent runs, and platform health. Choose a reference below to look up metric names, labels, and aggregation behavior.
 
 [Guardrails and OpenAPPA metrics](/docs/admin/observability/metrics/openappa) use the same scrape endpoints and authentication as all other Archestra metrics.

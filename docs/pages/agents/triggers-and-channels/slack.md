@@ -6,6 +6,7 @@ lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Each agent gets its own Slack bot, and people @mention it by name: `@archestra_marketing` and `@archestra_coding` can work in the same channel, even the same thread. The answer streams in as the agent writes it, and a **Stop** button ends it.
 

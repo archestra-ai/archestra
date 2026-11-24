@@ -6,6 +6,7 @@ lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 When an agent uses a tool, it acts as a real account in that app. Ask an agent to open a GitHub issue with your account, and the issue shows your name. The agent sees only what you can see.
 

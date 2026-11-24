@@ -14,7 +14,7 @@ import { useTeamLimitAccess } from "@/lib/limits-access";
 const TABS = [
   { label: "Costs", href: "/llm/costs" },
   { label: "Limits", href: "/llm/limits" },
-  { label: "Exports", href: "/llm/cost-exports" },
+  { label: "FinOps Export", href: "/llm/cost-exports" },
 ];
 
 const PAGE_CONFIG: Record<
@@ -35,7 +35,7 @@ const PAGE_CONFIG: Record<
     description: "Set spend and rate limits for LLM traffic.",
   },
   "/llm/cost-exports": {
-    title: "Exports",
+    title: "FinOps Export",
     description: <CostExportsDescription />,
   },
 };
@@ -62,15 +62,7 @@ function TeamCostsDescription({ canReadModels }: { canReadModels: boolean }) {
 function CostExportsDescription() {
   return (
     <>
-      Send cost and usage to your own object storage on a schedule, in the
-      FinOps FOCUS format. Exports write to a{" "}
-      <Link
-        href="/settings/blob-providers"
-        className="text-primary hover:underline"
-      >
-        blob provider
-      </Link>
-      .{" "}
+      Export LLM cost and usage data.{" "}
       <ExternalDocsLink
         href={getDocsUrl(
           DocsPage.PlatformCostExports,

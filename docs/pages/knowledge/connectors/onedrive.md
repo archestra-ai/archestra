@@ -5,6 +5,8 @@ order: 9
 lastUpdated: 2026-10-05
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from the OneDrive for Business drives of the people you pick. Text, Office documents, and PDFs are indexed. Images up to 4 MB are indexed when the [embedding model accepts image input](/docs/knowledge/settings#image-embedding).
 
 ## Connecting OneDrive

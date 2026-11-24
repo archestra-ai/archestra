@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-11-09
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let people sign in with their workplace accounts. Test one sign-in before requiring SSO for everyone. This is an [Enterprise feature](/pricing).
 
 <span id="callback-urls"></span>

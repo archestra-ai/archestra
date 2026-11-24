@@ -6,6 +6,8 @@ lastUpdated: 2026-11-14
 explore: false
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 <span id="large-log-histories"></span><span id="docker-persistence"></span>
 
 PostgreSQL holds all of Archestra's state, so its backups and failover are your instance's backups and failover. Use a managed database in production: the Helm chart's bundled database runs one replica with no standby.

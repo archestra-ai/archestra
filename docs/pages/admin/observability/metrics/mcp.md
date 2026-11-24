@@ -5,6 +5,8 @@ order: 3
 lastUpdated: 2026-10-31
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Track tool calls through the MCP Gateway and the state of self-hosted MCP servers. See [Labels](/docs/admin/observability/metrics#labels) for request and agent dimensions.
 
 ## Metrics

@@ -236,13 +236,14 @@ export function GithubSyncSetupDialog({
   const selfService = selfServiceEnvironment
     ? selfServiceEnvironment.value === "enabled"
     : chosenSelfService;
-  // Whether the App merges each server's rules pull request once its check
-  // passes. On unless self-service was already set up, which keeps the saved
-  // choice; the environment variable, while set, decides instead.
+  // Whether the App merges each policy pull request Archestra opens, the
+  // APPA Keeper's and each server's self-served rules, once its checks pass.
+  // On for a new connection; editing keeps the saved choice. The environment
+  // variable, while set, decides instead.
   const [chosenAutoMerge, setAutoMerge] = useState(
-    editing?.selfService ? editing.selfServiceAutoMerge : true,
+    editing ? editing.selfServiceAutoMerge : true,
   );
-  const autoMergeEnvironment = syncStatus?.selfService?.autoMerge?.environment;
+  const autoMergeEnvironment = syncStatus?.autoMerge?.environment;
   const autoMerge = autoMergeEnvironment
     ? autoMergeEnvironment.value === "enabled"
     : chosenAutoMerge;
@@ -493,7 +494,8 @@ export function GithubSyncSetupDialog({
         ...credential,
         selfService: withSelfService,
         selfServiceDirectory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
-        selfServiceAutoMerge: withSelfService && chosenAutoMerge,
+        // A GitHub App merges; a GitLab token never does.
+        selfServiceAutoMerge: !gitlab && chosenAutoMerge,
       };
       setOutcome(() => () => configure.mutateAsync(body).then(setupPullOf));
       return;
@@ -510,7 +512,7 @@ export function GithubSyncSetupDialog({
       ...(withSelfService && serversFolder !== DEFAULT_SELF_SERVICE_FOLDER
         ? { selfServiceDirectory: serversFolder }
         : {}),
-      ...(withSelfService ? { selfServiceAutoMerge: chosenAutoMerge } : {}),
+      ...(gitlab ? {} : { selfServiceAutoMerge: chosenAutoMerge }),
       existing: !creatingProject,
       // Editing moves the running sync to the new repository, created or not.
       ...((!creatingProject || editing) && { replace: !!editing }),
@@ -858,36 +860,6 @@ export function GithubSyncSetupDialog({
                   Wildcards and <code>..</code> are not allowed.
                 </p>
               )}
-            </div>
-          ) : null}
-          {selfService ? (
-            // After the folder, at the same level as the self-service choice.
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="github-sync-self-service-auto-merge"
-                className="mt-0.5"
-                checked={autoMerge}
-                disabled={!!autoMergeEnvironment}
-                onCheckedChange={(checked) => setAutoMerge(checked === true)}
-              />
-              <div className="space-y-1">
-                <Label htmlFor="github-sync-self-service-auto-merge">
-                  Auto-merge pull requests
-                </Label>
-                <FieldDescription>
-                  MCP owners can manage their guardrails without GitHub access.
-                </FieldDescription>
-                {autoMergeEnvironment ? (
-                  <FieldDescription>
-                    Set with{" "}
-                    <code className="font-mono">
-                      {autoMergeEnvironment.variable}=
-                      {autoMergeEnvironment.value}
-                    </code>
-                    . Unset the environment variable to choose here.
-                  </FieldDescription>
-                ) : null}
-              </div>
             </div>
           ) : null}
         </div>
@@ -1358,6 +1330,36 @@ export function GithubSyncSetupDialog({
               onValueChange={setSyncInterval}
             />
           </div>
+          {gitlab ? null : (
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="github-sync-auto-merge"
+                className="mt-0.5"
+                checked={autoMerge}
+                disabled={!!autoMergeEnvironment}
+                onCheckedChange={(checked) => setAutoMerge(checked === true)}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="github-sync-auto-merge">
+                  Auto-merge pull requests
+                </Label>
+                <FieldDescription>
+                  Guardrails changes made here merge once their checks pass,
+                  without GitHub access.
+                </FieldDescription>
+                {autoMergeEnvironment ? (
+                  <FieldDescription>
+                    Set with{" "}
+                    <code className="font-mono">
+                      {autoMergeEnvironment.variable}=
+                      {autoMergeEnvironment.value}
+                    </code>
+                    . Unset the environment variable to choose here.
+                  </FieldDescription>
+                ) : null}
+              </div>
+            </div>
+          )}
           <Collapsible open={advanced} onOpenChange={setAdvanced}>
             <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
               <ChevronRight className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />

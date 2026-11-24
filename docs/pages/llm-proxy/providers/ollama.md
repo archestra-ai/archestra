@@ -6,6 +6,7 @@ lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Run models on your own server with Ollama, and use them like any cloud model, with no API key. Pull a model with `ollama pull <model-name>` before you connect it.
 

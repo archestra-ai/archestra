@@ -107,18 +107,11 @@ function getLivenessPresentation(
   const deadlineLabel = Number.isNaN(deadlineAt)
     ? "Hard deadline unavailable"
     : `Hard stop in ${formatDuration(deadlineAt - now)}`;
-  if (
+  // A run waiting for input says so in the header's badge. The strip stays
+  // calm: a quiet model is what waiting looks like, not an alert.
+  const waitingForInput =
     run.attentionState === "input_required" ||
-    run.state === "TASK_STATE_INPUT_REQUIRED"
-  ) {
-    return {
-      title: "Waiting for input",
-      detail: "The agent reported that it needs a response to continue.",
-      deadlineLabel,
-      icon: MessageCircleQuestion,
-      needsAttention: true,
-    };
-  }
+    run.state === "TASK_STATE_INPUT_REQUIRED";
   if (
     run.attentionState === "auth_required" ||
     run.state === "TASK_STATE_AUTH_REQUIRED"
@@ -133,7 +126,7 @@ function getLivenessPresentation(
   }
 
   const inactivityMs = now - modelActivityBaseline(run).getTime();
-  if (hasNoRecentModelActivity(run, now)) {
+  if (!waitingForInput && hasNoRecentModelActivity(run, now)) {
     return {
       title: run.lastModelActivityAt
         ? `No model activity for ${formatDuration(inactivityMs)}`

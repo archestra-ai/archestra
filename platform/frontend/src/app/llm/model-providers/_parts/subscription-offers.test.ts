@@ -75,8 +75,8 @@ describe("buildSubscriptionOffers", () => {
     ).toEqual([
       ["chatgpt", null],
       ["github-copilot", "copilot"],
-      ["microsoft-365-copilot", null],
       ["x-premium", null],
+      ["microsoft-365-copilot", null],
     ]);
   });
 

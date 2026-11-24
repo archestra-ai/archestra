@@ -2,7 +2,12 @@ import {
   type archestraApiTypes,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
+import {
+  accountAlternative,
+  companyAccountWordsOf,
+} from "@/components/agent-runtime-account-choice";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
+import { useAgentRuntimeAccount } from "@/lib/agent-runtime-account.query";
 
 type Preflight = archestraApiTypes.GetAgentRuntimePreflightResponses["200"];
 
@@ -13,25 +18,53 @@ type Preflight = archestraApiTypes.GetAgentRuntimePreflightResponses["200"];
  */
 export function useAgentRunBlock(agentId: string, enabled: boolean) {
   const preflight = useAgentRuntimePreflight(agentId, enabled);
+  // The account says whether the company option is open to the reader: a
+  // sign-in block then names it too, since it is the other way in.
+  const account = useAgentRuntimeAccount(
+    agentId,
+    enabled && preflight.data?.ready === false,
+  );
   if (!enabled || !preflight.data) return null;
-  return agentRunBlock(preflight.data);
+  const alternative = account.data ? accountAlternative(account.data) : null;
+  return agentRunBlock(preflight.data, {
+    companyAccount:
+      account.data && alternative?.way === "provider"
+        ? companyAccountWordsOf(account.data).a
+        : null,
+  });
 }
 
 /**
  * Every block is one short instruction: what to do, and for whom when it is
  * not the reader's to do.
  */
-export function agentRunBlock(preflight: Preflight): string | null {
+export function agentRunBlock(
+  preflight: Preflight,
+  options: {
+    /**
+     * The company account the reader can switch to instead, as one of two
+     * ("a company API key"): a sign-in block names both ways. Null while
+     * the agent is locked to personal subscriptions.
+     */
+    companyAccount?: string | null;
+  } = {},
+): string | null {
   if (preflight.ready) return null;
   const missing = [...preflight.missing, ...preflight.misconfigured];
   if (missing.some(({ adminOnly }) => adminOnly)) {
     return "Only admins can run this agent.";
   }
+  const signIn = (title: string) =>
+    doThis(
+      options.companyAccount
+        ? `${title} or use ${options.companyAccount}`
+        : title,
+    );
   if (missing.some(({ key }) => key === CLAUDE_ACCOUNT)) {
-    return doThis("Sign in with Claude");
+    return signIn("Sign in with Claude");
   }
   if (preflight.missingSubscription) {
-    return doThis(
+    return signIn(
       SUBSCRIPTION_CREDENTIALS[preflight.missingSubscription].connect
         .signInTitle,
     );

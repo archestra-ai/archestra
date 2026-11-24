@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-10-06
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from your Jira issues: "Has anyone reported this login error before?" finds the old ticket and its fix. The connector syncs issues and their discussions.
 
 **Indexed:** issue descriptions, comments, and metadata from Jira Cloud or Server.

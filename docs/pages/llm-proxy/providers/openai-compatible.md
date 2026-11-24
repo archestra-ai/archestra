@@ -6,6 +6,7 @@ lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Connect vLLM, llama.cpp, LM Studio, SGLang, or any other server with the OpenAI `/v1` API. Add it as the **OpenAI-compatible** provider. Archestra uses its Chat Completions and Embeddings endpoints.
 

@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-10-15
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Keep an investigation's chats, files, agent runs, and schedules together. Project instructions carry across conversations, so a new agent can use the same reference files and conventions.
 
 ![A project with its chat composer, files panel, and schedules](/docs/automated_screenshots/platform-projects_project-overview.webp)

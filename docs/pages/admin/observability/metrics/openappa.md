@@ -5,6 +5,8 @@ order: 9
 lastUpdated: 2026-11-19
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Track [Guardrails](/docs/agents/guardrails) hooks and OpenAPPA engine operations through Archestra's standard Prometheus `/metrics` endpoint.
 
 ## Collection Setup

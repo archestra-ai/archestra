@@ -7,9 +7,9 @@
 //! 3. The new program installs itself: it copies itself to
 //!    `~/.archestra/bin/` and starts the MCP bridge again.
 //!
-//! The MCP bridge does the same by itself on Windows
-//! ([`crate::bridge::update`]); on macOS and Linux this command is the
-//! update.
+//! The MCP bridge in the background does the same by itself, when Archestra
+//! allows it ([`crate::bridge::update`]). This command does it at once, and
+//! also for a program that the MCP bridge gave up on.
 
 use std::io;
 use std::path::PathBuf;

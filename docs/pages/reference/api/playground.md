@@ -5,6 +5,8 @@ order: 11
 lastUpdated: 2026-11-04
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Use the interactive playground when you need to send an API request from the browser. The [topic pages](/docs/reference/api) are easier to scan for parameters and response fields.
 
 :::swagger-ui

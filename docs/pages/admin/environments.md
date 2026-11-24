@@ -5,6 +5,8 @@ order: 3
 lastUpdated: 2026-11-20
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Keep a staging agent away from production tools and knowledge, and give its workloads a different network policy. Environments separate resource sets inside one Archestra organization.
 
 <span id="cluster-support"></span>

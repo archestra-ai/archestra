@@ -93,7 +93,7 @@ export const DocsPage = {
   PlatformLlmProxyModelPools: "llm-proxy/model-pools",
   PlatformMastraExample: "integrations/sdks-and-frameworks",
   PlatformMcpGateway: "mcp/gateway",
-  PlatformMigrateYourAgents: "get-started/migrate",
+  PlatformMigrateYourAgents: "agents/migrate-from-openclaw",
   PlatformMsTeams: "agents/triggers-and-channels/ms-teams",
   PlatformN8nExample: "integrations/web-ui-and-automation",
   PlatformObservability: "admin/observability",

@@ -7,6 +7,7 @@ lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give your app its own identity in Archestra, not a person's token. A support bot, a nightly job, or an internal portal gets an OAuth client. You choose the gateways and agents it reaches. Its tokens expire, and you can rotate its secret at any time.
 

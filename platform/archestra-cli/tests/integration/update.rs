@@ -8,7 +8,8 @@ use std::time::Duration;
 use archestra_cli::bridge::config::Config;
 use archestra_cli::bridge::update::{UpdateError, download_verified, downloaded_program_path};
 use archestra_cli::bridge::{
-    AutoUpdate, Bridge, RunOptions, StartOptions, SyncState, http_client, prepare, served_program,
+    AutoUpdate, Bridge, RunOptions, StartOptions, SyncState, Timings, http_client, prepare,
+    served_program,
 };
 use archestra_cli::{layout, program};
 
@@ -42,6 +43,15 @@ async fn run_with_auto_update(
     dir: &TestDir,
     home: &Path,
 ) -> tokio::task::JoinHandle<()> {
+    run_with_auto_update_and(mock, dir, home, timings()).await
+}
+
+async fn run_with_auto_update_and(
+    mock: &MockControlPlane,
+    dir: &TestDir,
+    home: &Path,
+    timings: Timings,
+) -> tokio::task::JoinHandle<()> {
     std::fs::create_dir_all(layout::bridge_dir(home)).expect("mkdir");
     // A computer that is signed in already: the start only syncs.
     Config::new(mock.control_plane_config())
@@ -58,7 +68,7 @@ async fn run_with_auto_update(
     let mut bridge = Bridge::new(RunOptions {
         config_path: dir.config_path(),
         control_plane: prepared.config.control_plane,
-        timings: timings(),
+        timings,
         sync: SyncState::default(),
         update: prepared.update,
         auto_update: Some(AutoUpdate {
@@ -162,7 +172,7 @@ async fn a_download_with_another_checksum_changes_nothing() {
 }
 
 #[tokio::test]
-async fn the_bridge_installs_an_update_one_time_when_archestra_allows_it() {
+async fn the_bridge_installs_an_update_when_archestra_allows_it() {
     let mock = MockControlPlane::start().await;
     serve_new_program(&mock, true);
     let dir = TestDir::new();
@@ -181,16 +191,47 @@ async fn the_bridge_installs_an_update_one_time_when_archestra_allows_it() {
         std::fs::read(downloaded_program_path(home.path())).expect("read"),
         NEW_PROGRAM
     );
-
-    // Archestra still serves that program (an install that did not work):
-    // the MCP bridge does not try it again, here or after a new start.
-    std::fs::remove_file(&note).expect("remove");
-    tokio::time::sleep(Duration::from_millis(300)).await;
     bridge.abort();
-    let bridge = run_with_auto_update(&mock, &dir, home.path()).await;
-    tokio::time::sleep(Duration::from_millis(300)).await;
+}
+
+#[tokio::test]
+async fn the_bridge_tries_a_program_one_time_in_a_run_and_one_more_time_after_a_new_start() {
+    let mock = MockControlPlane::start().await;
+    serve_new_program(&mock, true);
+    let dir = TestDir::new();
+    let home = tempfile::tempdir().expect("temp home");
+    let note = installed_note(home.path());
+
+    // Archestra still serves the program after each try: an install that
+    // did not work. The MCP bridge syncs often, and waits only a moment
+    // after a try: only the count of the tries stops the next one.
+    let often = || Timings {
+        sync_interval: Duration::from_millis(50),
+        ..timings()
+    };
+    let bridge = run_with_auto_update_and(&mock, &dir, home.path(), often()).await;
+    wait_for("the first try", || note.exists()).await;
+    std::fs::remove_file(&note).expect("remove");
+    // The same run does not try again, however long it runs.
+    tokio::time::sleep(Duration::from_millis(400)).await;
     assert!(!note.exists());
     assert_eq!(mock.program_downloads().len(), 1);
+    bridge.abort();
+
+    // A new start (the next login): one more try.
+    let bridge = run_with_auto_update_and(&mock, &dir, home.path(), often()).await;
+    wait_for("the second try", || note.exists()).await;
+    std::fs::remove_file(&note).expect("remove");
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert!(!note.exists());
+    assert_eq!(mock.program_downloads().len(), 2);
+    bridge.abort();
+
+    // Each later start: no try.
+    let bridge = run_with_auto_update_and(&mock, &dir, home.path(), often()).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert!(!note.exists());
+    assert_eq!(mock.program_downloads().len(), 2);
     bridge.abort();
 }
 

@@ -55,6 +55,7 @@ export function BlobProviderDialog({
   onOpenChange,
   provider,
   onSaved,
+  addHeading,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -62,6 +63,11 @@ export function BlobProviderDialog({
   provider: BlobProvider | null;
   /** Called with the provider once it saves. */
   onSaved?: (saved: BlobProvider) => void;
+  /**
+   * Replaces the title and description while adding a provider, for a page
+   * that opens this dialog as a step of its own flow and has to say why.
+   */
+  addHeading?: { title: string; description: string };
 }) {
   const form = useBlobProviderForm({
     open,
@@ -109,8 +115,12 @@ export function BlobProviderDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={provider ? "Edit blob provider" : "Add blob provider"}
-      description="A small test object is written and deleted before saving."
+      title={
+        provider
+          ? "Edit blob provider"
+          : (addHeading?.title ?? "Add blob provider")
+      }
+      description={provider ? undefined : addHeading?.description}
       size="medium"
     >
       <DialogForm
@@ -424,7 +434,7 @@ export function BlobProviderDialog({
               ? "Testing connection…"
               : provider
                 ? "Test and save"
-                : "Test and add"}
+                : "Add"}
           </Button>
         </DialogStickyFooter>
       </DialogForm>

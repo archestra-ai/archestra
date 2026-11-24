@@ -40,6 +40,7 @@ import {
   catalogToolPrefixes,
   openappaBatteriesService,
 } from "@/openappa/batteries";
+import { batteryRootChange } from "@/openappa/battery-root-change";
 import {
   addedGrants,
   openappaDeclarations,
@@ -47,6 +48,7 @@ import {
 } from "@/openappa/declarations";
 import {
   asRecord,
+  isPolicyChangeBranch,
   isServerRulesBranch,
   isServerRulesFile,
   isServerRulesFolder,
@@ -120,6 +122,7 @@ export async function getAppaGithubSync(organizationId: string) {
       enabled: enterpriseTier.isOpenappaActive(),
       source: null,
       selfService: selfServiceState(row),
+      autoMerge: autoMergeState(row),
       hasPolicy: false,
       validationDirectory,
       githubWebUrl,
@@ -135,6 +138,7 @@ export async function getAppaGithubSync(organizationId: string) {
     enabled: enterpriseTier.isOpenappaActive(),
     source,
     selfService: { ...selfServiceState(row), ...(await leftoverRule(row)) },
+    autoMerge: autoMergeState(row),
     hasPolicy: content !== null,
     validationDirectory,
     githubWebUrl,
@@ -180,10 +184,7 @@ type SyncRow = NonNullable<
  * set, else the setting saved with the source. Off by default.
  */
 function selfServiceState(
-  row: Pick<
-    SyncRow,
-    "selfService" | "selfServiceDirectory" | "selfServiceAutoMerge"
-  > | null,
+  row: Pick<SyncRow, "selfService" | "selfServiceDirectory"> | null,
 ): {
   enabled: boolean;
   setting: boolean;
@@ -191,7 +192,6 @@ function selfServiceState(
   environment?: { variable: string; value: "enabled" | "disabled" };
   /** Off, a branch rule that still requires the check; see `leftoverRule`. */
   leftoverRule?: LeftoverRule;
-  autoMerge: ReturnType<typeof autoMergeState>;
 } {
   const value = config.openappa.selfService;
   const setting = row?.selfService ?? false;
@@ -202,13 +202,12 @@ function selfServiceState(
     ...(value
       ? { environment: { variable: OPENAPPA_SELF_SERVICE_VARIABLE, value } }
       : {}),
-    autoMerge: autoMergeState(row),
   };
 }
 
 /**
- * Whether the GitHub App merges each self-served rules pull request once its
- * policy check passes, and what decides it:
+ * Whether the GitHub App merges each pull request Archestra opens for a
+ * policy change once its checks pass, and what decides it:
  * ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE while it is set, else the
  * setting saved with the source. Off by default.
  */
@@ -251,11 +250,24 @@ export function selfServiceActive(row: SyncRow | null): row is SyncRow & {
 }
 
 /**
- * Whether the GitHub App merges each self-served rules pull request once its
- * policy check passes: on, with self-service in force on the source.
+ * Whether the GitHub App merges each pull request Archestra opens for a
+ * policy change (the APPA Keeper's, Settings', and a server's self-served
+ * rules) once its checks pass: on, for a GitHub App source that syncs. The
+ * App posts the policy check and merges, so a token or a GitLab source never
+ * gets it.
  */
-export function selfServiceAutoMergeActive(row: SyncRow | null): boolean {
-  return selfServiceActive(row) && autoMergeState(row).enabled;
+export function autoMergeActive(row: AutoMergeSource | null): boolean {
+  return autoMergeEligible(row) && autoMergeState(row).enabled;
+}
+
+type AutoMergeSource = Pick<
+  SyncRow,
+  "interval" | "repo" | "path" | "githubAppConfigId" | "selfServiceAutoMerge"
+>;
+
+/** A GitHub App source that syncs: the only kind the App merges for. */
+function autoMergeEligible(row: AutoMergeSource | null): boolean {
+  return !!row?.interval && !!row.repo && !!row.path && !!row.githubAppConfigId;
 }
 
 /** What the MCP registry asks: whether its servers' editors may change their rules now. */
@@ -356,10 +368,9 @@ export async function createAppaGithubRepository(params: {
     );
   const selfService = params.selfService ?? false;
   const selfServiceDirectory = params.selfServiceDirectory ?? "mcp";
-  // Auto-merge rides on self-service: saved off with it, so turning
-  // self-service on later merges nothing nobody asked for.
+  // Auto-merge takes the GitHub App, which merges; off unless asked for.
   const selfServiceAutoMerge =
-    selfService && (params.selfServiceAutoMerge ?? false);
+    !!params.githubAppConfigId && (params.selfServiceAutoMerge ?? false);
   if (selfService) checkSelfServiceDirectory(selfServiceDirectory, params);
   if (
     !(await userHasPermission(
@@ -1030,13 +1041,6 @@ async function setSelfService(params: {
   }
   if (params.enabled)
     await shareKeeperOnceInForce(params.organizationId, params.row);
-  // Auto-merge rides on self-service: off together, so the next turn on
-  // merges nothing nobody asked for.
-  if (!params.enabled && params.row.selfServiceAutoMerge)
-    await OpenAppaGithubSyncModel.setSelfServiceAutoMerge(
-      params.organizationId,
-      false,
-    );
   if (params.enabled && params.row.repo)
     await forgetRefusedChecks(params.organizationId, params.row.repo);
   try {
@@ -1111,9 +1115,9 @@ async function shareKeeperOnceInForce(
 }
 
 /**
- * Turn auto-merge of self-served pull requests on or off for the source.
- * It takes self-service in force; the environment variable, while set, is
- * the only switch.
+ * Turn auto-merge of the policy pull requests Archestra opens on or off for
+ * the source. It takes a GitHub App source that syncs; the environment
+ * variable, while set, is the only switch.
  */
 async function setSelfServiceAutoMerge(params: {
   organizationId: string;
@@ -1126,10 +1130,10 @@ async function setSelfServiceAutoMerge(params: {
       400,
       `${state.environment.variable} sets auto-merge for this deployment. Unset it to edit this setting.`,
     );
-  if (params.enabled && !selfServiceActive(params.row))
+  if (params.enabled && !autoMergeEligible(params.row))
     throw new ApiError(
       409,
-      "Auto-merge needs MCP Guardrails Self-Service in force: a syncing GitHub App source with self-service on.",
+      "Auto-merge needs a policy repository connected through a GitHub App that syncs.",
     );
   // The App may just have been granted what it lacked: the next minute's
   // round tries the merge rather than waiting out the hold.
@@ -1150,8 +1154,8 @@ async function setSelfServiceAutoMerge(params: {
   logger.info(
     { organizationId: params.organizationId, enabled: params.enabled },
     params.enabled
-      ? "OpenAPPA auto-merge of self-served pull requests turned on"
-      : "OpenAPPA auto-merge of self-served pull requests turned off",
+      ? "OpenAPPA auto-merge of policy pull requests turned on"
+      : "OpenAPPA auto-merge of policy pull requests turned off",
   );
 }
 
@@ -1490,7 +1494,7 @@ const REFUSED_TTL = 10 * TimeInMs.Minute;
 const RECHECK_AUTHORSHIP = 15 * TimeInMs.Minute;
 
 /**
- * How long a self-served pull request GitHub refused to merge twice is left
+ * How long a pull request Archestra opened that GitHub refused to merge twice is left
  * to people before the App tries again at the same head. The first refusal
  * is tried again the next minute: a check just posted can take GitHub a
  * moment to count against the branch rules. The same hold applies to a
@@ -1523,10 +1527,11 @@ type CheckedResult = {
   policy: (Verdict & { deployment: string }) | null;
   /**
    * What the pull request changes that Git sync reads, whether it may, and
-   * whether it is self-served: one MCP server's rules, opened by this
-   * deployment's App for a member who may change them.
+   * whether auto-merge may take it: opened by this deployment's App on a
+   * branch it opens for a change, a policy change or one MCP server's rules,
+   * for a member who may make that change.
    */
-  judged: Verdict & { governed: string[]; selfServed: boolean };
+  judged: Verdict & { governed: string[]; autoMergeable: boolean };
 };
 
 /** One check's outcome as stored. */
@@ -1550,7 +1555,7 @@ type Verdict = {
  * against changes (`deploymentState`), and a refusal every fifteen minutes
  * besides. Only a changed outcome is posted.
  *
- * With auto-merge in force, a self-served pull request whose check passed is
+ * With auto-merge in force, a pull request Archestra opened for a change whose check passed is
  * merged through the App right after, and on later passes while it stays
  * open, so a merge that failed for now is tried again.
  */
@@ -1587,9 +1592,7 @@ async function checkAppaGithubPullRequests(organizationId: string) {
     row.sourceCommit ?? "",
   );
   const checking = pulls.slice(0, MAX_CHECKED_PULLS);
-  const merger = selfServiceAutoMergeActive(row)
-    ? new AutoMerger(source)
-    : null;
+  const merger = autoMergeActive(row) ? new AutoMerger(source) : null;
   // What the source reads decides which files a pull request governs, so a
   // policy file or servers' folder moved makes every stored result stale,
   // the unrelated ones included.
@@ -1598,8 +1601,10 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   for (const [index, pull] of checking.entries()) {
     const key = keys[index] as AllowedCacheKey;
     const stored = checked.get(key);
-    // A result stored in an earlier shape is checked again whole.
-    const previous = stored?.judged ? stored : undefined;
+    // A result stored in an earlier shape is checked again whole: one stored
+    // before auto-merge took policy changes says nothing about them.
+    const previous =
+      stored?.judged && "autoMergeable" in stored.judged ? stored : undefined;
     const now = Date.now();
     // What the pull request changes, and who asked, stand for a while; the
     // policy's check while the deployment it was checked against does, a
@@ -1629,11 +1634,15 @@ async function checkAppaGithubPullRequests(organizationId: string) {
               {
                 governed: ["*"],
                 outcome: { accepted: true },
-                selfServed: false,
+                autoMergeable: false,
               };
           const made = verdict(read?.outcome ?? null, { checkedAt: now });
           return made && read
-            ? { ...made, governed: read.governed, selfServed: read.selfServed }
+            ? {
+                ...made,
+                governed: read.governed,
+                autoMergeable: read.autoMergeable,
+              }
             : null;
         })();
     // A read or a check that failed for now is checked again next minute.
@@ -1709,9 +1718,10 @@ async function checkAppaGithubPullRequests(organizationId: string) {
 }
 
 /**
- * Merges self-served pull requests through the App while auto-merge is in
- * force. The token that may write, and the merge method the repository
- * allows, are read once per pass, and only when a pull request is due.
+ * Merges the pull requests Archestra opened for a change through the App
+ * while auto-merge is in force. The token that may write, and the merge
+ * method the repository allows, are read once per pass, and only when a pull
+ * request is due.
  */
 class AutoMerger {
   private access: Promise<{
@@ -1732,9 +1742,9 @@ class AutoMerger {
   }
 
   /**
-   * Merge a pull request whose check passed when it is self-served, unless
-   * GitHub refused it at this head: once, it is tried again the next
-   * minute; more than once, fifteen minutes later.
+   * Merge a pull request whose check passed when Archestra opened it for a
+   * change, unless GitHub refused it at this head: once, it is tried again
+   * the next minute; more than once, fifteen minutes later.
    */
   async mergeIfDue(params: {
     pull: CheckedPull;
@@ -1755,10 +1765,10 @@ class AutoMerger {
       ? "its check did not pass"
       : result.judged.governed.length === 0
         ? "it changes no policy file"
-        : !result.judged.selfServed
-          ? "it is not self-served"
-          : !pull.number || !pull.ref || !isServerRulesBranch(pull.ref)
-            ? "it is not on a server rules branch"
+        : !result.judged.autoMergeable
+          ? `${archestraMcpBranding.appName} did not open it for a change`
+          : !pull.number || !pull.ref || !isChangeBranch(pull.ref)
+            ? `it is not on a branch ${archestraMcpBranding.appName} opens for a change`
             : refusal &&
                 Date.now() - refusal.at <
                   // A ruleset that takes the check from another App waits
@@ -1805,7 +1815,7 @@ class AutoMerger {
     if (merged.ok) {
       logger.info(
         { organizationId, repo, number: pull.number },
-        "OpenAPPA merged a self-served Guardrails rules pull request",
+        "OpenAPPA merged a policy pull request it opened",
       );
       // A pull applies the merge now rather than at the next schedule.
       await noteSyncOwed(organizationId, repo);
@@ -1837,7 +1847,7 @@ class AutoMerger {
           status: merged.status,
           message: "message" in merged ? merged.message : undefined,
         },
-        "GitHub refused to merge a self-served Guardrails rules pull request; it is left for people, and tried again later",
+        "GitHub refused to merge a policy pull request OpenAPPA opened; it is left for people, and tried again later",
       );
       await recordMergeRefusal(this.source, pull, {
         ...explainMergeRefusal(merged),
@@ -1853,7 +1863,7 @@ class AutoMerger {
         status: merged.status,
         ...("error" in merged ? { err: merged.error } : {}),
       },
-      "OpenAPPA could not merge a self-served Guardrails rules pull request; it tries again next minute",
+      "OpenAPPA could not merge a policy pull request it opened; it tries again next minute",
     );
   }
 
@@ -1876,7 +1886,7 @@ class AutoMerger {
     if (read.body.merged === true) {
       logger.info(
         { organizationId, repo, number: pull.number },
-        "A self-served Guardrails rules pull request was merged by someone else meanwhile",
+        "A policy pull request OpenAPPA opened was merged by someone else meanwhile",
       );
       await noteSyncOwed(organizationId, repo);
       await queueSyncAfterMerge(organizationId, repo);
@@ -1885,7 +1895,7 @@ class AutoMerger {
     if (read.body.state && read.body.state !== "open") {
       logger.info(
         { organizationId, repo, number: pull.number },
-        "A self-served Guardrails rules pull request was closed meanwhile",
+        "A policy pull request OpenAPPA opened was closed meanwhile",
       );
       return true;
     }
@@ -1942,7 +1952,7 @@ class AutoMerger {
       if (!method) {
         logger.warn(
           { organizationId, repo },
-          "The policy repository allows no merge method; self-served pull requests are left for people",
+          "The policy repository allows no merge method; policy pull requests are left for people",
         );
         await hold(HELD_NO_MERGE_METHOD);
         return null;
@@ -1956,13 +1966,22 @@ class AutoMerger {
       logger.warn(
         { organizationId, repo, error },
         refused
-          ? "OpenAPPA cannot merge self-served pull requests: the GitHub App needs Contents and Pull requests write"
-          : "OpenAPPA could not reach GitHub to merge self-served pull requests; it tries again next minute",
+          ? "OpenAPPA cannot merge policy pull requests: the GitHub App needs Contents and Pull requests write"
+          : "OpenAPPA could not reach GitHub to merge policy pull requests; it tries again next minute",
       );
       if (refused) await hold(HELD_NO_PERMISSION);
       return null;
     }
   }
+}
+
+/**
+ * A branch Archestra opens for a change auto-merge may take: a policy or
+ * validation change from the APPA Keeper or Settings, or one MCP server's
+ * rules or batteries.
+ */
+function isChangeBranch(ref: string): boolean {
+  return isPolicyChangeBranch(ref) || isServerRulesBranch(ref);
 }
 
 /** The key under which a repository the App cannot merge in waits fifteen minutes. */
@@ -2075,7 +2094,7 @@ const PASSING = new Set(["success", "neutral", "skipped"]);
  */
 const CHECKS_SETTLE = 30 * TimeInMs.Second;
 
-/** Whether a self-served pull request may merge now, by every check on it. */
+/** Whether a pull request Archestra opened may merge now, by every check on it. */
 export type MergeReadiness =
   | { state: "ready" }
   /** Checks still running, by name; none named while they register. */
@@ -2088,7 +2107,7 @@ export type MergeReadiness =
 const CHECK_RUN_PAGES = 10;
 
 /**
- * Whether a self-served pull request may merge now: it neither conflicts nor
+ * Whether a pull request Archestra opened may merge now: it neither conflicts nor
  * is a draft, every check run on its head finished and passed, and GitHub's
  * merge state counts no other check or commit status that does not pass. One
  * opened moments ago waits for its checks to register. The token reads checks
@@ -2181,7 +2200,7 @@ export async function mergeReadiness(params: {
 }
 
 /**
- * A refused merge of one self-served pull request at its head: when, how
+ * A refused merge of one pull request Archestra opened, at its head: when, how
  * often, and why, in the user's terms. GitHub makes a new test-merge commit
  * after every refused merge, so this is kept by number and head, apart from
  * the check result, which follows the test-merge commit.
@@ -2277,6 +2296,24 @@ export function checkAppaPullRequestsSoon(organizationId: string) {
     ),
   );
 }
+
+/**
+ * Check one organization's pull requests now because one the App opened is
+ * ready to merge: whoever follows it need not wait for the minute's round.
+ * One such round runs at a time for an organization; a look meanwhile waits
+ * for it rather than start another.
+ */
+export function mergeReadyPullRequestsSoon(organizationId: string) {
+  const running = mergeRounds.get(organizationId);
+  if (running) return running;
+  const round = checkAppaPullRequestsSoon(organizationId).finally(() =>
+    mergeRounds.delete(organizationId),
+  );
+  mergeRounds.set(organizationId, round);
+  return round;
+}
+
+const mergeRounds = new Map<string, Promise<unknown>>();
 
 /**
  * Why GitHub refused a merge, in the user's terms. A ruleset that takes the
@@ -2421,10 +2458,14 @@ type CheckedPull = {
 
 /**
  * What a pull request changes that Git sync reads, whether it may, and
- * whether it is self-served: one this deployment's App opened on a server
- * rules branch, for a member it names.
+ * whether auto-merge may take it: one this deployment's App opened on a
+ * branch it opens for a change, for a member it names.
  */
-type Judged = { governed: string[]; outcome: PullOutcome; selfServed: boolean };
+type Judged = {
+  governed: string[];
+  outcome: PullOutcome;
+  autoMergeable: boolean;
+};
 
 export type PolicySource = RepositorySource & {
   path: string;
@@ -2570,6 +2611,8 @@ async function githubPullRequests(
                   base,
                   number,
                   ref: ref ?? null,
+                  head,
+                  branch,
                   user: pull.user ?? null,
                 }),
             }
@@ -2616,8 +2659,11 @@ async function judgeGithubPull(params: {
   api: string;
   base: string;
   number: number;
-  /** The head branch: only a server rules branch is self-served. */
+  /** The head branch: only a branch Archestra opens for a change is auto-merged. */
   ref: string | null;
+  /** The head commit, and the branch the pull request merges into. */
+  head: string;
+  branch: string;
   user: GithubPullUser | null;
 }): Promise<Judged | null> {
   const { source, token, base, number } = params;
@@ -2651,7 +2697,7 @@ async function judgeGithubPull(params: {
   if (changed === "over")
     return {
       governed: [],
-      selfServed: false,
+      autoMergeable: false,
       outcome: {
         accepted: false,
         title: "This pull request changes too many files to check",
@@ -2668,14 +2714,22 @@ async function judgeGithubPull(params: {
   );
   const paths = governed.map((file) => file.path);
   if (governed.length === 0)
-    return { governed: paths, selfServed: false, outcome: { accepted: true } };
+    return {
+      governed: paths,
+      autoMergeable: false,
+      outcome: { accepted: true },
+    };
   const own = await ownIdentity({ source });
   if (own === null) return null;
   const byArchestra =
     own !== undefined &&
     own.login.toLowerCase() === params.user?.login?.toLowerCase();
   if (!byArchestra)
-    return { governed: paths, selfServed: false, outcome: { accepted: true } };
+    return {
+      governed: paths,
+      autoMergeable: false,
+      outcome: { accepted: true },
+    };
   const requester = await archestraPullRequester({
     ...params,
     own,
@@ -2688,14 +2742,24 @@ async function judgeGithubPull(params: {
   });
   if (requester === null) return null;
   if ("refused" in requester)
-    return { governed: paths, selfServed: false, outcome: requester.refused };
+    return {
+      governed: paths,
+      autoMergeable: false,
+      outcome: requester.refused,
+    };
   if ("setup" in requester)
-    return { governed: paths, selfServed: false, outcome: { accepted: true } };
+    return {
+      governed: paths,
+      autoMergeable: false,
+      outcome: { accepted: true },
+    };
   const { userId, email } = requester;
   const prefixes = governed.some((file) => file.prefix !== null)
     ? await catalogToolPrefixes(source.organizationId)
     : null;
-  let needsPolicyPermission = false;
+  // The files that are the policy's own matter: the policy file, the rest
+  // beside it, the validations, and a server file no server carries.
+  const policyFiles: string[] = [];
   for (const file of governed) {
     if (
       !file.prefix ||
@@ -2704,7 +2768,7 @@ async function judgeGithubPull(params: {
     ) {
       // No server carries that prefix, or the built-in tools do: the policy's
       // own matter.
-      needsPolicyPermission = true;
+      policyFiles.push(file.path);
       continue;
     }
     // The file governs every server whose tools carry its prefix, so the
@@ -2717,7 +2781,7 @@ async function judgeGithubPull(params: {
     if (refused.length > 0)
       return {
         governed: paths,
-        selfServed: false,
+        autoMergeable: false,
         outcome: {
           accepted: false,
           title: "The requester may not change these rules",
@@ -2731,36 +2795,183 @@ async function judgeGithubPull(params: {
         },
       };
   }
-  if (needsPolicyPermission) {
+  if (policyFiles.length > 0) {
     const permissions = await RoleCompositionModel.getUserPermissions({
       userId,
       organizationId: source.organizationId,
     });
     if (!permissions.guardrailsPolicy?.includes("update")) {
-      const first = governed.find(
-        (file) =>
-          !file.prefix ||
-          !prefixes?.byPrefix.get(file.prefix)?.size ||
-          governsBuiltInTools(file.prefix, prefixes),
-      );
-      return {
-        governed: paths,
-        selfServed: false,
-        outcome: {
-          accepted: false,
-          title: "The requester may not change the policy",
-          reason: `${email} may not change ${first?.path ?? source.path}: that takes the guardrailsPolicy:update permission.`,
-        },
-      };
+      // A server's editor may change the policy file only to attach or
+      // detach a bundled battery for servers they may edit, from a server's
+      // branch, while self-service is in force.
+      const batteries =
+        policyFiles.length === 1 &&
+        policyFiles[0] === source.path &&
+        isServerRulesBranch(params.ref ?? "") &&
+        selfServiceActive(
+          await OpenAppaGithubSyncModel.find(source.organizationId),
+        )
+          ? await batteryChangeRefusal({
+              ...params,
+              userId,
+              email,
+              prefixes:
+                prefixes ?? (await catalogToolPrefixes(source.organizationId)),
+            })
+          : undefined;
+      if (batteries === null) return null;
+      if (batteries !== false)
+        return {
+          governed: paths,
+          autoMergeable: false,
+          outcome: batteries ?? {
+            accepted: false,
+            title: "The requester may not change the policy",
+            reason: `${email} may not change ${policyFiles[0] ?? source.path}: that takes the guardrailsPolicy:update permission.`,
+          },
+        };
     }
   }
   return {
     governed: paths,
     // Opened by the App for a member who may make the change: auto-merge
-    // takes it only on a server rules branch, never on any other proposal.
-    selfServed: isServerRulesBranch(params.ref ?? ""),
+    // takes it only on a branch Archestra opens for a change, never on the
+    // setup, the template files or the self-service include.
+    autoMergeable: isChangeBranch(params.ref ?? ""),
     outcome: { accepted: true },
   };
+}
+
+/**
+ * Whether a member without the permission to update guardrails may make a
+ * pull request's change to the policy file: false when it only attaches or
+ * detaches bundled batteries for MCP servers they may edit, else the refusal
+ * to post. Null for a read that failed for now.
+ */
+async function batteryChangeRefusal(params: {
+  source: PolicySource;
+  base: string;
+  head: string;
+  branch: string;
+  userId: string;
+  email: string;
+  prefixes: Awaited<ReturnType<typeof catalogToolPrefixes>>;
+}): Promise<PullOutcome | false | null> {
+  const { source, base, prefixes } = params;
+  const refuse = (reason: string): PullOutcome => ({
+    accepted: false,
+    title: "The requester may not change the policy",
+    reason: `${params.email} may not change ${source.path}: ${reason}. Anything else there takes the guardrailsPolicy:update permission.`,
+  });
+  // The policy file before and after is read with a token for the
+  // repository's contents: the check's own token posts checks and reads pull
+  // requests, and GitHub refuses it the files.
+  const { token } = await resolveOpenAppaGithubAccess(source, {
+    contents: "read",
+  });
+  if (!token) return null;
+  const compared = await githubCall<{ merge_base_commit?: { sha?: string } }>({
+    token,
+    url: `${base}/compare/${encodeURIComponent(params.branch)}...${params.head}`,
+  }).catch(() => null);
+  const mergeBase = compared?.ok ? compared.body.merge_base_commit?.sha : null;
+  if (!mergeBase || !/^[a-f0-9]{40}$/.test(mergeBase)) {
+    logger.warn(
+      {
+        organizationId: source.organizationId,
+        repo: source.repo,
+        status: compared?.status,
+        message: compared && !compared.ok ? compared.message : undefined,
+      },
+      "OpenAPPA could not compare a pull request with its base branch to check a battery change; it tries again next minute",
+    );
+    return null;
+  }
+  let before: string | null;
+  let after: string | null;
+  try {
+    [before, after] = await Promise.all([
+      githubFileAt({ base, token, commit: mergeBase, path: source.path }),
+      githubFileAt({ base, token, commit: params.head, path: source.path }),
+    ]);
+  } catch (err) {
+    logger.warn(
+      { organizationId: source.organizationId, repo: source.repo, err },
+      "OpenAPPA could not read the policy file of a pull request to check a battery change; it tries again next minute",
+    );
+    return null;
+  }
+  if (before === null || after === null)
+    return refuse("it adds or removes the policy file");
+  // What every battery either version includes declares, uploaded packages
+  // too: a binding another battery declares is that battery's server list.
+  let included: Map<string, readonly string[] | null>;
+  try {
+    const resolutions = await Promise.all(
+      [before, after].map((content) =>
+        openappaDeclarations.resolve({
+          organizationId: source.organizationId,
+          content,
+        }),
+      ),
+    );
+    included = new Map(
+      resolutions.flatMap(({ entries }) =>
+        entries.map(
+          ({ entry, battery }) => [entry, battery?.namespaces ?? null] as const,
+        ),
+      ),
+    );
+  } catch (err) {
+    logger.warn(
+      { organizationId: source.organizationId, repo: source.repo, err },
+      "OpenAPPA could not read the batteries a pull request's policy file includes to check a battery change; it tries again next minute",
+    );
+    return null;
+  }
+  const change = await batteryRootChange({
+    before,
+    after,
+    namespacesOf: async (name) =>
+      (
+        await openappaDeclarations.resolveInstalled({
+          organizationId: source.organizationId,
+          name,
+          packageHash: null,
+        })
+      )?.namespaces ?? null,
+    // A repository file folds in rules, not a battery.
+    includedNamespacesOf: async (entry) =>
+      openappaRepositoryIncludes.isRepositoryFile(entry)
+        ? []
+        : (included.get(entry) ?? null),
+  });
+  if ("refused" in change) return refuse(change.refused);
+  for (const prefix of change.prefixes) {
+    if (
+      !prefixes.byPrefix.get(prefix)?.size ||
+      governsBuiltInTools(prefix, prefixes)
+    )
+      return refuse(
+        `it changes the batteries of the tool prefix ${JSON.stringify(prefix)}, which no MCP server a member may edit carries`,
+      );
+    const refused = await ownersNotEditable({
+      organizationId: source.organizationId,
+      userId: params.userId,
+      servers: await rulesFileServers(prefix, prefixes),
+    });
+    if (refused.length > 0)
+      return refuse(
+        `changing the batteries of ${prefix} takes edit access to ${await ownersAsNamedFor(
+          {
+            organizationId: source.organizationId,
+            userId: params.userId,
+            servers: refused,
+          },
+        )} in the MCP registry`,
+      );
+  }
+  return false;
 }
 
 /**
@@ -3037,15 +3248,13 @@ async function saveSource(params: {
   /** The caller shares the Keeper itself, once the source proved to work. */
   deferKeeperShare?: boolean;
 }): Promise<SyncRow | null> {
-  // Auto-merge rides on self-service, and both take a GitHub App: a source
-  // saved without either keeps auto-merge off, so a later switch on merges
-  // nothing nobody asked for.
+  // Auto-merge takes a GitHub App, which merges: a source saved without
+  // one keeps it off, so a later switch to an App merges nothing nobody
+  // asked for.
   params.source = {
     ...params.source,
     selfServiceAutoMerge:
-      params.source.selfService &&
-      !!params.source.githubAppConfigId &&
-      params.source.selfServiceAutoMerge,
+      !!params.source.githubAppConfigId && params.source.selfServiceAutoMerge,
   };
   if (
     (params.source.githubPatId ||

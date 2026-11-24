@@ -7,6 +7,7 @@ lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Admins tune search for every Knowledge Base under **Settings → Knowledge**. Only the embedding model is required.
 

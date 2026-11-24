@@ -6,6 +6,7 @@ lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give every person their own account in an MCP server without anyone installing it. Ask an agent for your unread mail, and the mail server sees you, not a shared bot. On each tool call, Archestra trades the person's company sign-in token for a token the server accepts, so your identity provider still decides who gets what.
 

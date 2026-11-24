@@ -36,16 +36,9 @@ You can configure an export on the **Costs & Limits → FinOps Export** page.
 
 ### How It Works
 
-<span id="where-files-land"></span>Each hour or day is one file, under the blob provider's key prefix, then the export's **Folder**:
+<span id="where-files-land"></span>Depending on how it is configured, an export writes one file per day or one per hour. Daily files are named like `cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10.csv`. Hourly files add the hour: `archestra-focus-2026-11-10T14.csv`.
 
-```text
-<provider prefix>/cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10.csv
-<provider prefix>/cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10T14.csv
-```
-
-The first line is a daily file and the second an hourly file for 14:00 to 15:00 UTC.
-
-<span id="when-files-are-written"></span>A file is written about 15 to 20 minutes after its hour or day ends, so requests still running at the end are counted. **Run now** writes the latest completed period without waiting. A rerun overwrites the same file, so a period is never in two files.
+<span id="when-files-are-written"></span>A file arrives about 15 to 20 minutes after its day or hour ends. If a file is written again, it replaces the old one.
 
 ### File Format
 

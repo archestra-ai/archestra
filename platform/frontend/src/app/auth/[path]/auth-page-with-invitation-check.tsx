@@ -18,6 +18,7 @@ import {
 import { useInvitationCheck } from "@/lib/auth/invitation.query";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
+import { cn } from "@/lib/utils/tailwind";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const router = useRouter();
@@ -99,11 +100,9 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
 
   // The notice (default credentials, SSO setup) only concerns password
   // sign-in. With it disabled, the card already says how to sign in.
+  const isPlainSignIn = path === "sign-in" && !invitationId;
   const showSignInNotice =
-    path === "sign-in" &&
-    !invitationId &&
-    !isLoadingPublicConfig &&
-    !isBasicAuthDisabled;
+    isPlainSignIn && !isLoadingPublicConfig && !isBasicAuthDisabled;
 
   const isSignInOrSignUp = path === "sign-in" || isSignUpPath;
   // Every standalone auth surface mirrors the sign-in layout (logo on top);
@@ -116,37 +115,64 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
 
   return (
     <BackendConnectivityStatus>
-      <main className="h-full flex items-center justify-center p-4">
-        <div className="w-full max-w-md space-y-4">
-          {showLogo && <AppLogo />}
-          {showSignInNotice && <SignInNotice />}
-          {showExistingUserMessage && (
-            <Card className="mb-4">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Welcome Back!</CardTitle>
-                <CardDescription>
-                  You already have an account. Please sign in to join the new
-                  organization.
-                </CardDescription>
-              </CardHeader>
-            </Card>
+      <main
+        className={cn(
+          "h-full p-4",
+          isPlainSignIn
+            ? "overflow-y-auto"
+            : "flex items-center justify-center",
+        )}
+      >
+        <div
+          className={cn(
+            "w-full max-w-md",
+            isPlainSignIn
+              ? "mx-auto grid h-full grid-rows-[minmax(15rem,1fr)_auto_minmax(1rem,1fr)] sm:grid-rows-[minmax(13rem,1fr)_auto_minmax(1rem,1fr)]"
+              : "space-y-4",
           )}
-          {/*
-            callbackURL behavior differs by flow:
-            - Invitation flow: Points back to auth page with invitationId preserved.
-              After OAuth/SSO completes, user returns here to trigger invitation acceptance.
-            - Normal flow: Points to final destination (from redirectTo param or /).
-              After auth completes, user goes directly to their intended page.
-          */}
-          <AuthViewWithErrorHandling
-            path={path}
-            callbackURL={getAuthCallbackURL({
-              invitationId,
-              redirectTo,
-              searchParams,
-            })}
-          />
-          {isSignInOrSignUp && <CommunityLinks />}
+        >
+          {isPlainSignIn ? (
+            // This row's size is independent of the late notice. Keep both
+            // above the form without delaying or moving the form. Allow
+            // scrolling when the notice wraps at a narrow width or high zoom.
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pb-4 [contain:size]">
+              <div className="mt-auto shrink-0">
+                <AppLogo />
+              </div>
+              {showSignInNotice && <SignInNotice />}
+            </div>
+          ) : (
+            showLogo && <AppLogo />
+          )}
+          <div className="space-y-4">
+            {showExistingUserMessage && (
+              <Card className="mb-4">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Welcome Back!</CardTitle>
+                  <CardDescription>
+                    You already have an account. Please sign in to join the new
+                    organization.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            )}
+            {/*
+              callbackURL behavior differs by flow:
+              - Invitation flow: Points back to auth page with invitationId preserved.
+                After OAuth/SSO completes, user returns here to trigger invitation acceptance.
+              - Normal flow: Points to final destination (from redirectTo param or /).
+                After auth completes, user goes directly to their intended page.
+            */}
+            <AuthViewWithErrorHandling
+              path={path}
+              callbackURL={getAuthCallbackURL({
+                invitationId,
+                redirectTo,
+                searchParams,
+              })}
+            />
+            {isSignInOrSignUp && <CommunityLinks />}
+          </div>
         </div>
       </main>
     </BackendConnectivityStatus>

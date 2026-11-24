@@ -8,7 +8,7 @@ beta: "Model Pools are in Beta."
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Model pools allows clients to reach for a single model, such as `claude-sonnet-5-5`, but under the hood, Archestra will route them from dfferent providers. 
+Model pools allow clients to reach for a single model, such as `claude-sonnet-5-5`, but under the hood, Archestra will route them from different providers.
 
 Here are some of the common use cases for model pools:
 
@@ -22,11 +22,11 @@ Here are some of the common use cases for model pools:
 
 ## Create a Pool
 
-A model pool comprises of a few moving parts: models, members and orders. 
+A model pool comprises a few moving parts: models, members and orders.
 
 When creating a pool, we pick a model which will serve as what we would like to provide to the client. From there, we can define members, which are effectively a group of providers that serve the selected model.
 
-Each member has an order: requests go to from order 1 and move to order 2 when order 1 can't answer. Members with the same order share its traffic.
+Each member has an order: requests go to order 1 and move to order 2 when order 1 can't answer. Members with the same order share its traffic.
 
 For example, a `claude-sonnet-5-5` pool with three members:
 
@@ -80,7 +80,7 @@ Use Terraform if your team already manages infrastructure with it: the pool live
 
 ## Selection Strategy
 
-The selection strategy decides which member gets each request. Different strategies forwards the request in different manners. Pick it under **Selection strategy** when you create or edit a pool.
+The selection strategy decides which member gets each request. Different strategies forward the request in different manners. Pick it under **Selection strategy** when you create or edit a pool.
 
 | Selection strategy | Picks | Use it when |
 | --- | --- | --- |

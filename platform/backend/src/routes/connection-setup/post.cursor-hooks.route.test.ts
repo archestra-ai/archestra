@@ -1139,6 +1139,7 @@ describe("Cursor hooks report chats to Guardrails", () => {
         organization_id: ctx.organizationId,
         caller_id: `user:${ctx.user.id}`,
         session_id: `user:${ctx.user.id}|cursor-chat-1`,
+        presenter: "attended",
       },
       callId: expect.stringMatching(
         /^call-36:MCP:archestra__yell:[0-9a-f]{12}$/,

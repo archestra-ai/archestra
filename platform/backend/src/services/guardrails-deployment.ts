@@ -177,16 +177,25 @@ export async function setGuardrailsDeployment(
 }
 
 const LINE_CHECKS_AT_ONCE = 4;
+/** How long a settings save waits on its line check before it answers. */
+const LINE_CHECK_DEADLINE_MS = 5_000;
 
 export const LINE_CHECK_UNAVAILABLE =
   "The settings are saved, but whether every organization's policy can carry them could not be checked. See the backend log.";
 
+export const LINE_CHECK_INCOMPLETE =
+  "The settings are saved, but not every organization's policy was checked before the response was due. The warnings above may not be all of them.";
+
 /**
  * Why a line `settings` open sessions on can't carry its approvers over some
  * organization's served policy, so those sessions follow Enforce instead. The
- * settings are already saved, so a check that fails says so and fails nothing.
+ * settings are already saved, so a check that fails says so and fails nothing,
+ * and one still running at the deadline answers with what it gathered.
  */
-async function lineWarnings(settings: GuardrailsSettings): Promise<string[]> {
+export async function lineWarnings(
+  settings: GuardrailsSettings,
+  deadlineMs = LINE_CHECK_DEADLINE_MS,
+): Promise<string[]> {
   const lines = new Set<LineRefusal["variant"]>(
     settings.mode === "observe"
       ? ["observe"]
@@ -195,33 +204,56 @@ async function lineWarnings(settings: GuardrailsSettings): Promise<string[]> {
         : ["enforce-approved"],
   );
   if (lines.size === 0) return [];
+  const deadline = Date.now() + deadlineMs;
+  const gathered = new Set<string>();
+  let failed = false;
+  let skipped = false;
+  const check = async (organizationId: string) => {
+    if (Date.now() >= deadline) {
+      skipped = true;
+      return;
+    }
+    try {
+      const served =
+        await openappaBatteriesService.servedComposition(organizationId);
+      if (served === null) return;
+      const warnings = await openappaDeclarations.lineWarnings(served, {
+        enforcedMarks: settings.enforcedMarks,
+        lines,
+      });
+      for (const warning of warnings) gathered.add(warning);
+    } catch (error) {
+      failed = true;
+      logger.error(
+        { err: error, organizationId },
+        "Guardrails line check failed",
+      );
+    }
+  };
+  let timer: NodeJS.Timeout | undefined;
   try {
-    const checked = await mapWithConcurrency(
-      await OrganizationModel.findAllIds(),
-      LINE_CHECKS_AT_ONCE,
-      async (organizationId) =>
-        openappaDeclarations.lineWarnings(
-          (await openappaBatteriesService.getEffectivePolicy(organizationId))
-            .content,
-          { enforcedMarks: settings.enforcedMarks, lines },
-        ),
-    );
-    const failed = checked.flatMap((result) =>
-      result.status === "rejected" ? [result.reason] : [],
-    );
-    if (failed.length > 0)
-      logger.error({ errors: failed }, "Guardrails line check failed");
-    return [
-      ...new Set(
-        checked.flatMap((result) =>
-          result.status === "fulfilled" ? result.value : [],
-        ),
+    const organizations = await OrganizationModel.findAllIds();
+    const finished = await Promise.race([
+      mapWithConcurrency(organizations, LINE_CHECKS_AT_ONCE, check).then(
+        () => true,
       ),
-      ...(failed.length > 0 ? [LINE_CHECK_UNAVAILABLE] : []),
+      new Promise<false>((resolve) => {
+        timer = setTimeout(
+          () => resolve(false),
+          Math.max(0, deadline - Date.now()),
+        );
+      }),
+    ]);
+    return [
+      ...gathered,
+      ...(failed ? [LINE_CHECK_UNAVAILABLE] : []),
+      ...(finished && !skipped ? [] : [LINE_CHECK_INCOMPLETE]),
     ];
   } catch (error) {
     logger.error({ err: error }, "Guardrails line check failed");
     return [LINE_CHECK_UNAVAILABLE];
+  } finally {
+    clearTimeout(timer);
   }
 }
 

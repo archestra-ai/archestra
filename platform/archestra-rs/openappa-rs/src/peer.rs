@@ -87,7 +87,11 @@ async fn execute(
     let line = super::lines::Line {
         organization_id: input.organization_id.clone(),
         variant: state
-            .variant_of(&input.organization_id, Some(&root))
+            .variant_of(
+                &input.organization_id,
+                Some(&root),
+                input.presenter.acting()?,
+            )
             .await?,
     };
     super::on_deployment(&state, &line, &policy, |pinned| {
@@ -1324,6 +1328,8 @@ fn iso8601(time: SystemTime) -> String {
 #[serde(deny_unknown_fields)]
 struct PeerInput {
     organization_id: String,
+    /// Who presents the operation, as the host authenticated the request.
+    presenter: crate::lines::Presenter,
     #[serde(default)]
     caller_id: Option<String>,
     session_id: String,
@@ -1426,6 +1432,7 @@ mod tests {
     fn actor(caller_id: Option<&str>) -> PeerInput {
         PeerInput {
             organization_id: "org".to_owned(),
+            presenter: crate::lines::Presenter::Attended,
             caller_id: caller_id.map(str::to_owned),
             session_id: "session".to_owned(),
             parent_id: None,

@@ -11,10 +11,27 @@ export type OpenAppaSession = {
    */
   fork_of?: string;
   /**
-   * `true` only where an Agent Runtime credential authenticated the session: a
-   * new root it opens is unattended. `false` where the host verified the
-   * request holds no runtime or delegated binding, so it cannot continue a
-   * family a runtime opened. Absent where the host cannot tell.
+   * Who presents the request, as the host authenticated it. The runtime refuses
+   * an attended presenter any operation in a family an Agent Runtime opened.
+   * Absent only where the host cannot tell; it reaches the runtime as unknown.
    */
-  agent_runtime?: boolean;
+  presenter?: OpenAppaPresenter;
 };
+
+/**
+ * `runtime`: an Agent Runtime credential, whose new root is unattended.
+ * `attended`: a request with no runtime or delegated binding, a user's
+ * ordinary call. `delegated`: a binding the host signed into one family, a
+ * spawned child or a peer proof. `unknown`: the host cannot tell.
+ */
+export type OpenAppaPresenter =
+  | "runtime"
+  | "attended"
+  | "delegated"
+  | "unknown";
+
+/**
+ * A review lookup's presenter: a session's, or `reviewer`, the host reading
+ * for a person who rules on the family's offers without acting in it.
+ */
+export type OpenAppaReviewPresenter = OpenAppaPresenter | "reviewer";

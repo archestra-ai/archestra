@@ -338,7 +338,7 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
         organization_id: agent.organizationId,
         caller_id: `user:${user.id}`,
         session_id: `user:${user.id}|${workloadName}`,
-        agent_runtime: true,
+        presenter: "runtime",
       },
       identity: {
         sessionId: workloadName,
@@ -351,16 +351,31 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
     });
 
     // The same user naming the runtime's session without its binding reaches
-    // the same scoped id, marked as holding no binding: the runtime refuses it
-    // a family the run opened.
+    // the same scoped id, which only the run's binding may open.
+    await expect(
+      admitOpenappaRequest(
+        await admission({
+          agent,
+          principal: { authenticatedUserId: user.id },
+          headers: {
+            ...grokHeaders,
+            "x-grok-session-id": workloadName,
+            "x-appa-session-id": workloadName,
+          },
+          overrides: { body: grokBody, originalRequest: grokBody },
+        }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    // A session of the same user that names no workspace is attended.
     const attended = await admitOpenappaRequest(
       await admission({
         agent,
         principal: { authenticatedUserId: user.id },
         headers: {
           ...grokHeaders,
-          "x-grok-session-id": workloadName,
-          "x-appa-session-id": workloadName,
+          "x-grok-session-id": "foreground",
+          "x-appa-session-id": "foreground",
         },
         overrides: { body: grokBody, originalRequest: grokBody },
       }),
@@ -368,8 +383,8 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
     expect(attended).toMatchObject({
       kind: "governed",
       session: {
-        session_id: `user:${user.id}|${workloadName}`,
-        agent_runtime: false,
+        session_id: `user:${user.id}|foreground`,
+        presenter: "attended",
       },
     });
 

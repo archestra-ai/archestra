@@ -867,6 +867,7 @@ async function cursorSession(params: {
     organization_id: params.organizationId,
     caller_id: callerId,
     session_id: sessionId,
+    presenter: "attended",
   };
 }
 

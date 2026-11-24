@@ -212,6 +212,7 @@ const RuntimeFailureCode = z.enum([
   "unstarted_parent",
   "policy_moved",
   "legacy_family",
+  "unattended_family",
   "policy_refused",
   "runtime_misconfigured",
   "pool_exhausted",
@@ -367,6 +368,12 @@ function classifyCode(code: RuntimeFailureCode, message: string): Failure {
         statusCode: 409,
         detail:
           "This conversation was opened under an earlier Guardrails policy model. Start a new conversation.",
+      };
+    case "unattended_family":
+      return {
+        statusCode: 409,
+        detail:
+          "An Agent Runtime run opened this conversation. Only a request carrying that run's binding continues it.",
       };
     case "trajectory_ended":
       return CONVERSATION_ENDED;

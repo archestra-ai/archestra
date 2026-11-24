@@ -1564,6 +1564,7 @@ for (const [background, chat] of [
         session_id: `user:${user.id}|${rootId}`,
       };
       const declaration = await executeRemedyByOffer({
+        presenter: "attended",
         organizationId,
         callerId: session.caller_id,
         sessionId: session.session_id,
@@ -2013,6 +2014,7 @@ for (const [background, chat] of [
           // A second native child can address its sibling, but cannot use
           // the sender hint to claim root authority or target itself.
           const siblingDeclaration = await executeRemedyByOffer({
+            presenter: "attended",
             organizationId,
             callerId: session.caller_id,
             sessionId: session.session_id,
@@ -2292,6 +2294,7 @@ for (const [background, chat] of [
           [];
         for (const letter of ["A", "B"]) {
           const declared = await executeRemedyByOffer({
+            presenter: "attended",
             organizationId,
             callerId: session.caller_id,
             sessionId: session.session_id,
@@ -2442,6 +2445,7 @@ for (const [background, chat] of [
       ] as const) {
         // A rejected ChildEnd is authenticated host failure, never a child value.
         const declaredRejection = await executeRemedyByOffer({
+          presenter: "attended",
           organizationId,
           callerId: session.caller_id,
           sessionId: session.session_id,
@@ -2838,6 +2842,7 @@ for (const [background, chat] of [
           plan: "Take no return from the subagent",
         };
         const declared = await executeRemedyByOffer({
+          presenter: "attended",
           organizationId,
           callerId: session.caller_id,
           sessionId: session.session_id,

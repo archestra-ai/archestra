@@ -47,7 +47,7 @@ const schema = {
 
 function family() {
   const organization = `subagent-${randomUUID()}`;
-  const parent = { organization_id: organization, caller_id: 'user:test', session_id: `user:test|${randomUUID()}` };
+  const parent = { organization_id: organization, presenter: 'attended', caller_id: 'user:test', session_id: `user:test|${randomUUID()}` };
   const hook = async (session, event) =>
     JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
   const remedy = async (session, toolCallId, args) =>
@@ -55,6 +55,7 @@ function family() {
       await native.executeRemedyByOffer(
         JSON.stringify({
           organization_id: organization,
+          presenter: 'attended',
           caller_id: session.caller_id,
           trajectory: {
             v: 1,
@@ -179,6 +180,7 @@ test('a subagent under a deferred return reads what narrows it, and its answer w
   const lookup = {
     organizationId: run.organization,
     sessionId: run.parent.session_id,
+    presenter: 'attended',
     spawnCallId: 's1',
     controlTool: presentation.control_tool,
     supportsDelegation: true,

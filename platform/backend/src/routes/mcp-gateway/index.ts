@@ -29,6 +29,7 @@ import {
 } from "@/openappa/service";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import {
+  isRuntimeWorkspaceSession,
   RUNTIME_BINDING_HEADER,
   resolveGatewayRuntimeSession,
   resolveRuntimeSessionForWorkspace,
@@ -433,10 +434,22 @@ async function handleMcpPostRequest(
               scope: `user:${tokenAuthContext.userId}`,
             })
           : undefined;
-    // A user token vouches for no runtime: it cannot continue a family an
-    // Agent Runtime run opened.
-    if (runtimeSession.kind !== "session" && openappaSession)
-      openappaSession = { ...openappaSession, agent_runtime: false };
+    // A user token vouches for no runtime: it may neither continue a family an
+    // Agent Runtime run opened nor open the one a run's workspace owns.
+    if (runtimeSession.kind !== "session" && openappaSession) {
+      if (
+        await isRuntimeWorkspaceSession({
+          organizationId: openappaSession.organization_id,
+          sessionId: openappaSession.session_id,
+        })
+      ) {
+        throw new ApiError(
+          409,
+          "This OpenAPPA session belongs to an Agent Runtime run; only a request carrying that run's binding opens it",
+        );
+      }
+      openappaSession = { ...openappaSession, presenter: "attended" };
+    }
     if (runtimeSession.kind === "session" && openappaEnabled()) {
       const workspace = await resolveRuntimeSessionForWorkspace({
         organizationId: runtimeSession.identity.organizationId,
@@ -451,7 +464,7 @@ async function handleMcpPostRequest(
           "The runtime gateway request has no bound workspace",
         );
       }
-      openappaSession = { ...workspace.session, agent_runtime: true };
+      openappaSession = { ...workspace.session, presenter: "runtime" };
     }
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;

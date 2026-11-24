@@ -693,9 +693,11 @@ pub async fn openappa_root_kinds(roots: Vec<String>) -> napi::Result<Vec<Option<
 pub async fn get_openappa_status(
     organization_id: String,
     session_id: String,
+    #[napi(ts_arg_type = "'runtime' | 'attended' | 'delegated' | 'unknown'")] presenter: String,
     policy: DispatchPolicy,
     encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OpenappaStatus>> {
+    let presenter = crate::lines::Presenter::parse(&presenter)?;
     if organization_id.is_empty()
         || organization_id.len() > 512
         || organization_id.chars().any(char::is_control)
@@ -719,9 +721,18 @@ pub async fn get_openappa_status(
         let Some(root) = root else {
             return Ok(None);
         };
+        // A family opened under the earlier policy model has no label to report:
+        // its next event is refused with `legacy_family`.
+        let variant = match state
+            .variant_of(&organization_id, Some(&root), presenter)
+            .await
+        {
+            Err(error) if crate::errors::is_legacy_family(&error) => return Ok(None),
+            variant => variant?,
+        };
         let line = crate::lines::Line {
             organization_id: organization_id.clone(),
-            variant: state.variant_of(&organization_id, Some(&root)).await?,
+            variant,
         };
         on_deployment(&state, &line, &policy, |pinned| {
             let key = SessionKey::new(&organization_id, &session_id);

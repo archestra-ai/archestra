@@ -286,6 +286,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       organizationId: h.agent.organizationId,
       sessionId: runtimeSession.session_id,
       offerId,
+      presenter: "attended",
     });
     expect(
       await getHitlReviewResult({ session: runtimeSession, callId, offerId }),

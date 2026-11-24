@@ -94,6 +94,7 @@ function expectNativeRemedy(
     ...(expected.toolCallId ? { tool_call_id: expected.toolCallId } : {}),
     original_arguments: expected.originalArguments,
     arguments: expected.args,
+    presenter: "attended",
     presentation: {
       control_tool: expected.controlTool ?? "archestra__execute_remedy_plan",
       supports_delegation: false,
@@ -807,6 +808,7 @@ describe("APPA feature boundary", () => {
     ).toEqual([
       {
         ...session,
+        presenter: "unknown",
         event: "tool_call",
         operation_id: "call:report",
         tool: "yell",
@@ -822,6 +824,7 @@ describe("APPA feature boundary", () => {
       },
       {
         ...session,
+        presenter: "attended",
         event: "yell",
         yell_receiver: { port: expect.any(Number), token: expect.any(String) },
         operation_id: "yell:report",
@@ -1041,6 +1044,7 @@ describe("APPA feature boundary", () => {
     ).toEqual([
       {
         ...session,
+        presenter: "unknown",
         event: "yell",
         yell_receiver: { port: expect.any(Number), token: expect.any(String) },
         operation_id: "yell:toolu_report",
@@ -1435,6 +1439,7 @@ describe("APPA feature boundary", () => {
     try {
       await evaluateToolCalls(claimsFull, call("second"), canonicalize);
       await executeRemedyByOffer({
+        presenter: "attended",
         organizationId,
         sessionId: "session",
         originalArguments: '{"offer_id":"offer-1"}',
@@ -2652,6 +2657,7 @@ describe("APPA feature boundary", () => {
     ).toEqual([
       {
         ...child,
+        presenter: "unknown",
         event: "child_return",
         operation_id: "runtime-return:task:turn",
         output: "private source text",
@@ -2659,6 +2665,7 @@ describe("APPA feature boundary", () => {
       },
       {
         ...child,
+        presenter: "unknown",
         event: "child_return",
         operation_id: "runtime-return:task:turn:echo",
         output: "approved summary",
@@ -2822,6 +2829,7 @@ describe("APPA feature boundary", () => {
     ).toEqual([
       {
         ...child,
+        presenter: "unknown",
         event: "child_end",
         operation_id: "child_end:turn",
         output: "REPORT-RAW-KOALA-0831",
@@ -2829,6 +2837,7 @@ describe("APPA feature boundary", () => {
       },
       {
         ...child,
+        presenter: "unknown",
         event: "child_end",
         operation_id: "child_end:turn:echo",
         output: "SUMMARY(24 characters): safe",
@@ -3005,6 +3014,7 @@ describe("APPA feature boundary", () => {
 
     expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toEqual({
       ...session,
+      presenter: "unknown",
       event: "tool_result",
       tool_call_id: "spawn-call",
       spawned_id: "conversation:child",
@@ -3496,11 +3506,13 @@ describe("APPA feature boundary", () => {
     ).toEqual([
       {
         ...session,
+        presenter: "unknown",
         event: "session_start",
         withhold_consult_content: false,
       },
       {
         ...session,
+        presenter: "unknown",
         event: "tool_result",
         tool_call_id: "call",
         output: "RAW RESULT",
@@ -4251,6 +4263,7 @@ describe("remedy by offer", () => {
     );
 
     const result = await executeRemedyByOffer({
+      presenter: "attended",
       organizationId,
       sessionId: "session",
       toolCallId: "client-remedy-1",
@@ -4272,6 +4285,7 @@ describe("remedy by offer", () => {
 
   test("nests a child parent id and omits it for a root", async () => {
     await executeRemedyByOffer({
+      presenter: "attended",
       organizationId,
       sessionId: "user:alice|child",
       parentId: "user:alice|parent",
@@ -4291,6 +4305,7 @@ describe("remedy by offer", () => {
 
     native.executeRemedyByOffer.mockClear();
     await executeRemedyByOffer({
+      presenter: "attended",
       organizationId,
       sessionId: "root",
       originalArguments: '{"offer_id":"offer-1"}',
@@ -4314,6 +4329,7 @@ describe("remedy by offer", () => {
 
     await expect(
       executeRemedyByOffer({
+        presenter: "attended",
         organizationId,
         sessionId: "session",
         toolCallId: "client-remedy-2",
@@ -4377,6 +4393,7 @@ describe("remedy by offer", () => {
 
     await expect(
       executeRemedyByOffer({
+        presenter: "attended",
         organizationId,
         sessionId: "session",
         toolCallId: "client-remedy-malformed",
@@ -4438,6 +4455,7 @@ describe("remedy by offer", () => {
     );
 
     const answer = await executeRemedyByOffer({
+      presenter: "attended",
       organizationId,
       sessionId: "session",
       toolCallId: "client-remedy-3",
@@ -4690,6 +4708,7 @@ describe("remedy by offer", () => {
       organizationId,
       "user:alice|child",
       "offer-1",
+      "attended",
       undefined,
     );
     expect(elicit).not.toHaveBeenCalled();
@@ -4832,6 +4851,7 @@ describe("remedy by offer", () => {
     );
     await expect(
       loadOfferReview({
+        presenter: "attended",
         organizationId,
         sessionId: "conversation",
         offerId: "offer-1",
@@ -5003,6 +5023,7 @@ describe("remedy by offer", () => {
     expect(wire).toEqual({
       organization_id: organizationId,
       caller_id: "user:alice",
+      presenter: "unknown",
       session_id: "conversation",
       operation_id: "peer_send:call-1",
       recipient_session_id: "conversation:worker",
@@ -5108,6 +5129,7 @@ describe("remedy by offer", () => {
     });
     const args = { offer_id: "offer-peer-read-1", label: {} };
     await executeRemedyByOffer({
+      presenter: "attended",
       organizationId,
       callerId: session.caller_id,
       sessionId: session.session_id,

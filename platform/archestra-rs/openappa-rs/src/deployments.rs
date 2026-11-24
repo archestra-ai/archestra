@@ -16,6 +16,7 @@
 //! line's head. A process follows a publish it made itself; one another process
 //! made surfaces as a retryable refusal until this process pins the new head
 //! ([`Deployments::repin`]).
+use appa_engine::profile::PolicyRevision;
 use appa_eventlog::{DeploymentName, LogStore, PolicyHead};
 use appa_runtime::api::{OpenError, PreparedDeployment, PublishedDeployment, Runtime};
 use sha2::{Digest, Sha256};
@@ -117,6 +118,13 @@ struct Pinned {
 impl Pinned {
     /// Whether `policy` compiles to this deployment: the same document, and the same
     /// answer for every variable it looked up.
+    /// Whether this is the very entry `other` was cloned from: a held `Pinned` reaches
+    /// callers only through `Clone`, sharing its content allocation.
+    fn is(&self, other: &Pinned) -> bool {
+        self.published.revision() == other.published.revision()
+            && Arc::ptr_eq(&self.content, &other.content)
+    }
+
     /// Whether this deployment of `variant`'s line serves `policy`. The Enforce line
     /// composes no approvers, so the enforced marks do not change what it serves.
     fn serves(&self, variant: Variant, policy: &HostedPolicy) -> bool {
@@ -213,8 +221,10 @@ impl Deployments {
         policy: &HostedPolicy,
         stale: &PublishedDeployment,
     ) -> Result<Option<PublishedDeployment>, Fault> {
+        // Only a deployment prepared from this dispatch's own policy and credentials,
+        // never another dispatch's at the same revision.
         let Some(pinned) = self
-            .held(line)
+            .serving(line, policy)
             .filter(|pinned| pinned.published.revision() == stale.revision())
         else {
             // A concurrent dispatch already moved this line's deployment on, which this
@@ -239,16 +249,18 @@ impl Deployments {
             self.forget(line, &pinned);
             return Ok(None);
         };
-        self.by_line
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(
-                line.clone(),
-                Pinned {
-                    published: published.clone(),
-                    ..pinned
-                },
-            );
+        let mut held = self.by_line.lock().unwrap_or_else(PoisonError::into_inner);
+        // Another dispatch replaced the entry during the read: its deployment stands.
+        if !held.get(line).is_some_and(|current| current.is(&pinned)) {
+            return Ok(None);
+        }
+        held.insert(
+            line.clone(),
+            Pinned {
+                published: published.clone(),
+                ..pinned
+            },
+        );
         Ok(Some(published))
     }
 
@@ -312,10 +324,7 @@ impl Deployments {
     /// with equal text, so an older dispatch cannot evict the replacement.
     fn forget(&self, line: &Line, pinned: &Pinned) {
         let mut held = self.by_line.lock().unwrap_or_else(PoisonError::into_inner);
-        if held.get(line).is_some_and(|current| {
-            current.published.revision() == pinned.published.revision()
-                && Arc::ptr_eq(&current.content, &pinned.content)
-        }) {
+        if held.get(line).is_some_and(|current| current.is(pinned)) {
             held.remove(line);
         }
     }
@@ -334,7 +343,7 @@ impl Deployments {
 /// and the publish are PostgreSQL round trips, so callers run it on a blocking
 /// thread.
 fn prepare(
-    runtime: &Runtime,
+    runtime: &Arc<Runtime>,
     store: &LogStore,
     line: &Line,
     policy: &HostedPolicy,
@@ -377,21 +386,22 @@ fn prepare(
         if publishes && !stored_composition(store, &line.organization_id, composition)? {
             return Err(DeploymentError::Superseded);
         }
-        // A line with approvers is also composed from the enforced marks; one composed
-        // from marks an operator has since changed must not replace a newer head.
-        if publishes
-            && line.variant != Variant::Enforce
-            && !stored_enforced_marks(store, &policy.guardrails.enforced_marks)?
-        {
-            return Err(DeploymentError::Superseded);
-        }
     }
-    let published = runtime
-        .publish_if_head(&name, &prepared, head.map(|head| head.revision))
-        .map_err(|error| match error {
-            OpenError::PolicyHeadMoved { .. } => DeploymentError::Superseded,
-            error => DeploymentError::Failed(open_fault(error)),
-        })?;
+    let expected = head.map(|head| head.revision);
+    // A line with approvers is also composed from the enforced marks, so it publishes
+    // under the settings row's lock, which a settings write waits on, and only while
+    // the stored marks are the ones it was composed from.
+    let published = match (&policy.composition, line.variant) {
+        (Some(_), Variant::Observe | Variant::EnforceApproved) => publish_under_marks(
+            runtime,
+            store,
+            &name,
+            &prepared,
+            expected,
+            &policy.guardrails.enforced_marks,
+        )?,
+        _ => publish(runtime, &name, &prepared, expected),
+    }?;
     let pinned = Pinned {
         content: policy.content.as_str().into(),
         enforced_marks: policy.guardrails.enforced_marks.clone(),
@@ -460,21 +470,55 @@ fn stored_composition(
     Ok(stored.is_none_or(|stored| stored == composition))
 }
 
-/// Whether `enforced_marks` are the deployment's stored enforced marks.
-fn stored_enforced_marks(
+fn publish(
+    runtime: &Runtime,
+    name: &DeploymentName,
+    prepared: &PreparedDeployment,
+    expected: Option<PolicyRevision>,
+) -> Result<PublishedDeployment, DeploymentError> {
+    runtime
+        .publish_if_head(name, prepared, expected)
+        .map_err(|error| match error {
+            OpenError::PolicyHeadMoved { .. } => DeploymentError::Superseded,
+            error => DeploymentError::Failed(open_fault(error)),
+        })
+}
+
+/// Publishes holding a share lock on the Guardrails settings row, and only while its
+/// enforced marks are `enforced_marks`: a settings write then lands before or after
+/// the publish, never between the check and it.
+fn publish_under_marks(
+    runtime: &Arc<Runtime>,
     store: &LogStore,
+    name: &DeploymentName,
+    prepared: &PreparedDeployment,
+    expected: Option<PolicyRevision>,
     enforced_marks: &BTreeSet<String>,
-) -> Result<bool, Fault> {
-    let stored = crate::Sql(store).with_client(|client| {
-        Ok(client
+) -> Result<Result<PublishedDeployment, DeploymentError>, Fault> {
+    let (runtime, name, prepared, marks) = (
+        runtime.clone(),
+        name.clone(),
+        prepared.clone(),
+        enforced_marks.clone(),
+    );
+    Ok(crate::Sql(store).with_client(move |client| {
+        let mut settings = client.transaction()?;
+        let stored: BTreeSet<String> = settings
             .query_opt(
-                "SELECT enforced_marks FROM guardrails_deployment LIMIT 1",
+                "SELECT enforced_marks FROM guardrails_deployment LIMIT 1 FOR SHARE",
                 &[],
             )?
             .and_then(|row| row.get::<_, Option<Vec<String>>>(0))
-            .unwrap_or_default())
-    })?;
-    Ok(stored.into_iter().collect::<BTreeSet<_>>() == *enforced_marks)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+        if stored != marks {
+            return Ok(Err(DeploymentError::Superseded));
+        }
+        let published = publish(&runtime, &name, &prepared, expected);
+        settings.commit()?;
+        Ok(published)
+    })?)
 }
 
 /// The key the event log stores a policy file under: the SHA-256 of its exact bytes,
@@ -549,6 +593,7 @@ mod tests {
     /// Runs `future` to completion on a runtime of its own, as a dispatch would.
     fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
         tokio::runtime::Builder::new_current_thread()
+            .enable_all()
             .build()
             .unwrap()
             .block_on(future)
@@ -841,6 +886,81 @@ mod tests {
                     HookDecision::AllowCall { .. }
                 ),
                 "{variant:?} still clears an unrelated mark"
+            );
+        }
+    }
+
+    /// An annotator on loopback that answers every consult requiring the `review` mark.
+    fn review_annotator() -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("a loopback port");
+        let address = listener.local_addr().expect("bound");
+        std::thread::spawn(move || {
+            const ANSWER: &str = r#"{"version":1,"answer":{"delta":{},"requires":{"history":[],"attention":["review"]},"emits":[]}}"#;
+            for mut stream in listener.incoming().flatten() {
+                let mut request = Vec::new();
+                let mut chunk = [0u8; 8192];
+                loop {
+                    match stream.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(read) => request.extend_from_slice(&chunk[..read]),
+                    }
+                    let text = String::from_utf8_lossy(&request);
+                    let Some(end) = text.find("\r\n\r\n") else {
+                        continue;
+                    };
+                    let length = text[..end]
+                        .lines()
+                        .filter_map(|line| line.split_once(':'))
+                        .find(|(name, _)| name.trim().eq_ignore_ascii_case("content-length"))
+                        .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if request.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{ANSWER}",
+                    ANSWER.len()
+                );
+            }
+        });
+        format!("http://{address}/annotate")
+    }
+
+    #[test]
+    fn no_injected_approver_clears_a_mark_an_enforced_tools_annotator_answers() {
+        let url = review_annotator();
+        let annotated = |marks: &str| {
+            format!(
+                "{GATED}[[policy.tool]]\nname = \"host/archestra/wire\"\ntags = [\"enforced\"]\nannotator = \"tagger\"\n[[policy.tool]]\nname = \"host/archestra/note\"\ndelta = {{}}\nrequires = {{ attention = [\"note\"] }}\n[[policy.annotator]]\nname = \"tagger\"\n{marks}[externals.annotators.tagger]\nurl = \"{url}\"\n"
+            )
+        };
+        let runtime = runtime();
+        let deployments = Deployments::default();
+        for (organization, marks) in [("org-named", "marks = [\"review\"]\n"), ("org-omitted", "")]
+        {
+            let line = Line {
+                organization_id: organization.to_owned(),
+                variant: Variant::Observe,
+            };
+            let pinned = runtime.pinned(&serving(&deployments, &runtime, &line, &annotated(marks)));
+            let root = TrajectoryId(format!("annotated-{organization}"));
+            let settings = Family::opening(Variant::Observe, false).settings;
+            assert_eq!(open(&pinned, &root, settings), HookDecision::Ack);
+            let decision = call(&pinned, &root, "host/archestra/wire");
+            assert!(
+                !matches!(decision, HookDecision::AllowCall { .. }),
+                "{organization}: the annotator's mark is left to a person: {decision:?}"
+            );
+            assert_eq!(
+                matches!(
+                    call(&pinned, &root, "host/archestra/note"),
+                    HookDecision::AllowCall { .. }
+                ),
+                !marks.is_empty(),
+                "{organization}: an omitted list withholds every declared mark"
             );
         }
     }
@@ -1150,6 +1270,39 @@ mod tests {
                 &policy(&edited(JEV, "b"), Some("b-key"))
             ),
             1
+        );
+    }
+
+    #[test]
+    fn a_repin_never_takes_another_dispatchs_credential_at_the_same_revision() {
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        let one = on_store(store.clone());
+        let ones = Deployments::default();
+        let first = serve(&ones, &one, "org-a", &policy(JEV, Some("one"))).unwrap();
+        let rotated = serve(&ones, &one, "org-a", &policy(JEV, Some("two"))).unwrap();
+        assert_eq!(first.revision(), rotated.revision());
+        assert!(
+            block_on(ones.repin(
+                &one,
+                &store,
+                &enforce("org-a"),
+                &policy(JEV, Some("one")),
+                &first
+            ))
+            .unwrap()
+            .is_none(),
+            "the held deployment carries the rotated credential"
+        );
+        assert!(
+            block_on(ones.repin(
+                &one,
+                &store,
+                &enforce("org-a"),
+                &policy(JEV, Some("two")),
+                &rotated
+            ))
+            .unwrap()
+            .is_some()
         );
     }
 

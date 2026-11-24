@@ -110,24 +110,41 @@ static TOKENS: LazyLock<[[LineVariant; 2]; 3]> = LazyLock::new(|| {
     })
 });
 
-/// Who presents a dispatch, as the host authenticated it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// Who presents an operation on a family, as the host authenticated the request.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum Presenter {
-    /// An Agent Runtime credential.
+    /// An Agent Runtime credential; a root it opens is unattended.
     Runtime,
-    /// A request the host verified holds no runtime or delegated binding.
+    /// A request holding no runtime or delegated binding.
     Attended,
-    /// A host path that cannot tell; it opens attended families.
+    /// A binding the host signed into one family: a spawned child, a peer proof.
+    Delegated,
+    /// A host path that cannot tell who presents it; it opens attended roots.
     Unknown,
+    /// The host reading for a person who rules on a family's offers, never acting in it.
+    Reviewer,
 }
 
 impl Presenter {
-    pub(crate) fn of(agent_runtime: Option<bool>) -> Presenter {
-        match agent_runtime {
-            Some(true) => Presenter::Runtime,
-            Some(false) => Presenter::Attended,
-            None => Presenter::Unknown,
+    pub(crate) fn opens_unattended(self) -> bool {
+        self == Presenter::Runtime
+    }
+
+    /// Refuses a presenter that only reads to an operation that acts in a family.
+    pub(crate) fn acting(self) -> napi::Result<Presenter> {
+        match self {
+            Presenter::Reviewer => Err(crate::errors::invalid_input(
+                "a reviewer reads a family's offers and acts in none",
+            )),
+            presenter => Ok(presenter),
         }
+    }
+
+    /// The presenter a host spells across NAPI.
+    pub(crate) fn parse(token: &str) -> napi::Result<Presenter> {
+        serde_json::from_value(serde_json::Value::String(token.to_owned()))
+            .map_err(|_| crate::errors::invalid_input(format!("unknown presenter {token:?}")))
     }
 }
 
@@ -205,8 +222,9 @@ impl Family {
             .is_some_and(|token| token.as_str().ends_with(UNATTENDED_SUFFIX))
     }
 
-    /// Whether `presenter` may continue the family: an unattended one never by a request
-    /// verified to hold no runtime binding, so it cannot borrow the family's approvals.
+    /// Whether `presenter` may act in the family: an unattended one never by a request
+    /// holding no runtime or delegated binding, so it cannot borrow the run's approvals
+    /// or state.
     pub(crate) fn continued_by(&self, presenter: Presenter) -> bool {
         !(self.unattended() && presenter == Presenter::Attended)
     }
@@ -287,6 +305,9 @@ mod tests {
         assert!(!runtime.continued_by(Presenter::Attended));
         assert!(runtime.continued_by(Presenter::Runtime));
         assert!(runtime.continued_by(Presenter::Unknown));
+        assert!(runtime.continued_by(Presenter::Delegated));
+        assert!(runtime.continued_by(Presenter::Reviewer));
+        assert!(Presenter::Reviewer.acting().is_err());
         let attended = Family::opening(Variant::EnforceApproved, false);
         assert!(attended.continued_by(Presenter::Attended));
         let legacy = Family {

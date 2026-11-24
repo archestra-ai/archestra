@@ -101,7 +101,10 @@ async function deploymentRefusal(params: {
 }): Promise<{
   errors: string[];
   warnings: string[];
-  /** What the deployment would serve, when it composes. */
+  /**
+   * What the deployment would serve: the document's composition, or the one
+   * it retains under an accepted refusal.
+   */
   composed: string | null;
 }> {
   const { organizationId, content, previous } = params;
@@ -137,7 +140,10 @@ async function deploymentRefusal(params: {
     warnings: [...submitted.refusal, ...submitted.heldBack].map(
       (line) => inDeployment(line) + keptNote,
     ),
-    composed,
+    // The deployment keeps serving the composition it retained.
+    composed:
+      composed ??
+      (await openappaBatteriesService.servedComposition(organizationId)),
   };
 }
 

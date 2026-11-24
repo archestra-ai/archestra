@@ -15,6 +15,7 @@ test('a peer caller id is bounded before a session is opened', async () => {
       native.sendPeerMessage(
         JSON.stringify({
           organization_id: 'org',
+          presenter: 'attended',
           session_id: 'session',
           caller_id: 'c'.repeat(513),
           operation_id: 'peer_send:bound',
@@ -30,6 +31,7 @@ test('a peer caller id is bounded before a session is opened', async () => {
       native.sendPeerMessage(
         JSON.stringify({
           organization_id: 'org',
+          presenter: 'attended',
           session_id: 'session',
           caller_id: 'user:ok\n',
           operation_id: 'peer_send:control',
@@ -67,11 +69,13 @@ context_control = true
   const other_organization = `peer-${randomUUID()}`;
   const parent = {
     organization_id,
+    presenter: 'attended',
     caller_id: 'user:owner',
     session_id: `family-${randomUUID()}`,
   };
   const child = {
     organization_id,
+    presenter: 'attended',
     caller_id: 'user:worker',
     session_id: `${parent.session_id}:worker`,
     parent_id: parent.session_id,
@@ -116,6 +120,7 @@ context_control = true
   assert.ok(offer?.offer_id, JSON.stringify(blockedSpawn));
   const declared = JSON.parse(await native.executeRemedyByOffer(JSON.stringify({
     organization_id: parent.organization_id,
+    presenter: 'attended',
     caller_id: parent.caller_id,
     trajectory: { v: 1, session_id: parent.session_id },
     execution_mode: 'tracked',
@@ -156,7 +161,7 @@ context_control = true
   );
   assert.equal(Number(unstarted.rows[0].count), 0);
   assert.ok(['ack', 'context'].includes((await hook(child, { event: 'session_start' })).decision));
-  const before = await native.getOpenappaStatus(parent.organization_id, parent.session_id, policy);
+  const before = await native.getOpenappaStatus(parent.organization_id, parent.session_id, 'attended', policy);
 
   const released = await hook(parent, {
     event: 'tool_call',
@@ -293,7 +298,7 @@ context_control = true
   const ambiguous = await admit(child, { sender_session_id: parent.session_id });
   assert.equal(ambiguous.kind, 'unverified');
 
-  const after = await native.getOpenappaStatus(parent.organization_id, parent.session_id, policy);
+  const after = await native.getOpenappaStatus(parent.organization_id, parent.session_id, 'attended', policy);
   assert.equal(after.trust, before.trust);
   assert.equal(after.audience, before.audience);
 
@@ -319,6 +324,7 @@ context_control = true
     if (!narrowedHeld.offers?.[0]?.offer_id) throw new Error(JSON.stringify(narrowedHeld));
     const accepted = JSON.parse(await native.executeRemedyByOffer(JSON.stringify({
       organization_id: parent.organization_id,
+      presenter: 'attended',
       caller_id: parent.caller_id,
       trajectory: { v: 1, session_id: parent.session_id },
       execution_mode: 'tracked',
@@ -373,6 +379,7 @@ context_control = true
     assert.ok(firstRead.offers?.[0]?.offer_id, JSON.stringify(firstRead));
     const accepted = JSON.parse(await native.executeRemedyByOffer(JSON.stringify({
       organization_id: child.organization_id,
+      presenter: 'attended',
       caller_id: child.caller_id,
       trajectory: { v: 1, session_id: child.session_id, parent_id: child.parent_id },
       execution_mode: 'tracked',

@@ -1630,6 +1630,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
                     organizationId: binding.session.organization_id,
                     sessionId: binding.session.session_id,
                     offerId,
+                    presenter: binding.session.presenter ?? "unknown",
                   })
                 )?.tool)
               : undefined;
@@ -5127,6 +5128,7 @@ async function persistedSession(
     session_id: row.sessionId,
     ...(row.callerId ? { caller_id: row.callerId } : {}),
     ...(row.parentId ? { parent_id: row.parentId } : {}),
+    ...(sender.presenter ? { presenter: sender.presenter } : {}),
   };
 }
 

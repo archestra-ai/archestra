@@ -175,6 +175,8 @@ export interface DeferredReturnLookup {
   controlTool: string
   supportsDelegation: boolean
   yellTool?: string
+  /** Who presents the lookup, as the host authenticated the request. */
+  presenter: 'runtime' | 'attended' | 'delegated' | 'unknown'
 }
 
 export declare function dispatchHook(input: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<string>
@@ -227,7 +229,7 @@ export declare function getOpenappaReplayEngineVersion(): string
  * None before the session started, and for a family opened under the earlier
  * policy model, whose next event is refused instead.
  */
-export declare function getOpenappaStatus(organizationId: string, sessionId: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
+export declare function getOpenappaStatus(organizationId: string, sessionId: string, presenter: 'runtime' | 'attended' | 'delegated' | 'unknown', policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
 
 /** The deployment's Guardrails settings, as the host resolved them. */
 export interface GuardrailsSettings {
@@ -312,7 +314,7 @@ export declare function loadDeferredReturn(lookup: DeferredReturnLookup, policy:
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the proxy-stamped current trajectory; no offer-owner lookup.
  */
-export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string, encryption?: ContentEncryption | undefined | null): Promise<OfferReviewOutput | null>
+export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string, presenter: 'runtime' | 'attended' | 'delegated' | 'unknown' | 'reviewer', encryption?: ContentEncryption | undefined | null): Promise<OfferReviewOutput | null>
 
 export interface OfferReviewOutput {
   offerId: string

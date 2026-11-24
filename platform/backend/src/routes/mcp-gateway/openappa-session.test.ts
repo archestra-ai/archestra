@@ -617,6 +617,85 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
+  test("a user token may not open a Runtime workspace's session, and its remedy is attended", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const { value: token } = await UserTokenModel.create(
+      user.id,
+      agent.organizationId,
+    );
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({ actorKind: "user", actorId: user.id })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const workloadName = `workspace-${task.id}`;
+    await AgentWorkspaceModel.create({
+      organizationId: agent.organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName,
+      state: "active",
+      activeTaskId: task.id,
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    native.executeRemedyByOffer.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        offer: { status: "known" },
+        result: { content: [{ type: "text", text: "[appa] Authorized." }] },
+      }),
+    );
+    const remedy = (sessionHeader?: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token}`,
+          ...(sessionHeader ? { "x-appa-session-id": sessionHeader } : {}),
+        },
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-1",
+              plan: "keep",
+              trajectory: currentTrajectory({
+                session_id: scopedSessionId(`user:${user.id}`, workloadName),
+              }),
+            },
+          },
+          id: "user-remedy",
+        },
+      });
+
+    native.executeRemedyByOffer.mockClear();
+    const claimed = await remedy(workloadName);
+    expect(claimed.statusCode).toBe(409);
+    expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
+
+    const headerless = await remedy();
+    expect(headerless.statusCode, headerless.body).toBe(200);
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
+    ).toMatchObject({ presenter: "attended" });
+  });
+
   test("a signed runtime binding spends as the workspace, and a sibling header does not", async ({
     makeAgent,
     makeOrganization,
@@ -712,7 +791,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(accepted.statusCode, accepted.body).toBe(200);
     expect(
       JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({ caller_id: principal, trajectory });
+    ).toMatchObject({ caller_id: principal, trajectory, presenter: "runtime" });
     expect(
       JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
     ).not.toHaveProperty("owner_caller_id");

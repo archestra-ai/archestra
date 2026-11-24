@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { GuardrailsSettings } from "@archestra/openappa-rs";
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
@@ -16,6 +17,8 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   guardrailsDispatchSettings,
   isGuardrailsV2Active,
+  LINE_CHECK_INCOMPLETE,
+  lineWarnings,
 } from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
@@ -703,6 +706,16 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       await save({ mode: "off", personApproval: "auto_unattended" }),
       "Off opens no family on a line with approvers",
     ).toEqual([]);
+    const observe: GuardrailsSettings = {
+      mode: "observe",
+      personApproval: "ask",
+      enforcedMarks: [],
+    };
+    expect(
+      await lineWarnings(observe, 0),
+      "a scan past its deadline answers that it is incomplete",
+    ).toEqual([LINE_CHECK_INCOMPLETE]);
+    expect(await lineWarnings(observe)).toHaveLength(1);
     await save({ personApproval: "auto_everywhere" });
     expect(await guardrailsDispatchSettings()).toEqual({
       mode: "enforce",

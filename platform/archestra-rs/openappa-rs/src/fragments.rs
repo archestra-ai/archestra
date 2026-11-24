@@ -172,7 +172,9 @@ fn enforced_exception(registry: &Registry) -> Vec<String> {
 }
 
 /// The marks no injected approver attends: the enforced ones, and every mark an
-/// `enforced` tool requires, since attention routes by mark and never reads tags.
+/// `enforced` tool may require, declared or answered by its annotator (whose omitted
+/// `marks` the registry reads as every declared mark), since attention routes by mark
+/// and never reads tags.
 fn withheld_marks(registry: &Registry, enforced_marks: &BTreeSet<String>) -> BTreeSet<String> {
     registry
         .tools()
@@ -183,8 +185,12 @@ fn withheld_marks(registry: &Registry, enforced_marks: &BTreeSet<String>) -> BTr
                 .attention
                 .iter()
                 .map(|mark| mark.as_str().to_owned())
+                .collect::<Vec<_>>(),
+            ToolDeclaration::Annotated { annotator, .. } => registry
+                .annotators()
+                .filter(|(name, _)| *name == annotator)
+                .flat_map(|(_, mandate)| mandate.marks().map(|mark| mark.as_str().to_owned()))
                 .collect(),
-            ToolDeclaration::Annotated { .. } => Vec::new(),
         })
         .chain(enforced_marks.iter().cloned())
         .collect()

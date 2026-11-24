@@ -36,6 +36,7 @@ describe("OpenAPPA subagent binding", () => {
       caller_id: "user:user-1",
       session_id: "user:user-1|conversation:agent:call-1",
       parent_id: "user:user-1|conversation",
+      presenter: "delegated",
     });
   });
 

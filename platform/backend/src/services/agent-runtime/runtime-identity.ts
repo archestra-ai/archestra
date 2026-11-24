@@ -131,9 +131,34 @@ export function runtimeOpenAppaSession(params: {
     organization_id: params.organizationId,
     caller_id: callerId,
     session_id: scopedSessionId(callerId, params.workloadName),
+    presenter: "runtime",
     // parentId is already a full session id. Do not scope it again.
     ...(params.parentId ? { parent_id: params.parentId } : {}),
   };
+}
+
+/**
+ * Whether `sessionId` is the OpenAPPA session of a persisted workspace in the
+ * organization: only a request carrying that run's binding may open it.
+ */
+export async function isRuntimeWorkspaceSession(params: {
+  organizationId: string;
+  sessionId: string;
+}): Promise<boolean> {
+  const workloadName = params.sessionId.slice(
+    params.sessionId.lastIndexOf("|") + 1,
+  );
+  const workspace = await AgentWorkspaceModel.findByWorkloadName(workloadName);
+  return (
+    workspace?.organizationId === params.organizationId &&
+    runtimeOpenAppaSession({
+      organizationId: workspace.organizationId,
+      workspaceId: workspace.id,
+      workloadName: workspace.workloadName,
+      actorKind: workspace.actorKind,
+      actorId: workspace.actorId,
+    }).session_id === params.sessionId
+  );
 }
 
 /**

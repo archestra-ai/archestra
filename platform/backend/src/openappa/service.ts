@@ -78,7 +78,11 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
-import type { OpenAppaSession } from "@/types/openappa-session";
+import type {
+  OpenAppaPresenter,
+  OpenAppaReviewPresenter,
+  OpenAppaSession,
+} from "@/types/openappa-session";
 import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import {
@@ -97,7 +101,10 @@ import { isUnenforcedSession } from "./unenforced";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
-export type { OpenAppaSession } from "@/types/openappa-session";
+export type {
+  OpenAppaPresenter,
+  OpenAppaSession,
+} from "@/types/openappa-session";
 export const APPA_CHAT_SOURCES = [
   "chat",
   "chat:tool_call_repair",
@@ -339,6 +346,7 @@ export function openappaEnabled(): boolean {
 export async function getOpenappaStatus(params: {
   organizationId: string;
   sessionId: string;
+  presenter: OpenAppaPresenter;
 }) {
   if (!openappaEnabled()) return null;
   try {
@@ -355,6 +363,7 @@ export async function getOpenappaStatus(params: {
               module.getOpenappaStatus(
                 params.organizationId,
                 params.sessionId,
+                params.presenter,
                 policy,
                 encryption,
               ),
@@ -685,6 +694,7 @@ async function dispatchWithPrincipal(params: {
                 module.dispatchHook(
                   JSON.stringify({
                     ...session,
+                    presenter: session.presenter ?? "unknown",
                     ...event,
                     ...principal,
                     // Last, so nothing spread above can override the host's reading.
@@ -872,6 +882,7 @@ export function chatOpenAppaSession(
     organization_id: organizationId,
     caller_id: `${USER_CALLER_PREFIX}${userId}`,
     session_id: sessionId,
+    presenter: "attended",
   };
 }
 
@@ -2188,6 +2199,8 @@ function decisionMessage(decision: NativeDecision): string {
  */
 export async function executeRemedyByOffer(params: {
   organizationId: string;
+  /** Who presents the remedy, as the host authenticated the call. */
+  presenter: OpenAppaPresenter;
   /** The principal the gateway authenticated, in the proxy's `user:<id>` form. */
   callerId?: string;
   /** Current caller-scoped session resolved by the client adapter. */
@@ -2219,6 +2232,7 @@ export async function executeRemedyByOffer(params: {
         module.executeRemedyByOffer(
           JSON.stringify({
             organization_id: params.organizationId,
+            presenter: params.presenter,
             trajectory: currentTrajectory({
               session_id: params.sessionId,
               ...(params.parentId ? { parent_id: params.parentId } : {}),
@@ -2340,6 +2354,7 @@ export async function loadDeferredReturn(params: {
                   organizationId: session.organization_id,
                   sessionId: session.session_id,
                   spawnCallId: params.spawnCallId,
+                  presenter: session.presenter ?? "unknown",
                   controlTool: presentation.control_tool,
                   supportsDelegation: presentation.supports_delegation,
                   ...(presentation.yell_tool
@@ -2608,6 +2623,7 @@ export async function loadOfferReview(params: {
   organizationId: string;
   sessionId: string;
   offerId: string;
+  presenter: OpenAppaReviewPresenter;
 }): Promise<{
   offer_id: string;
   text: string;
@@ -2645,6 +2661,7 @@ export async function loadOfferReview(params: {
             params.organizationId,
             params.sessionId,
             params.offerId,
+            params.presenter,
             encryption,
           ),
       ),
@@ -2890,6 +2907,7 @@ function peerNotice(value: z.infer<typeof PeerNoticeWireSchema>): PeerNotice {
 function peerActor(session: OpenAppaSession) {
   return {
     organization_id: session.organization_id,
+    presenter: session.presenter ?? "unknown",
     session_id: session.session_id,
     ...(session.caller_id ? { caller_id: session.caller_id } : {}),
     ...(session.parent_id ? { parent_id: session.parent_id } : {}),

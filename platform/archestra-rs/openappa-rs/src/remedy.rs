@@ -83,7 +83,7 @@ pub async fn execute_remedy_by_offer(
         parent_id: owner.parent_id,
         principal: None,
         fork_of: None,
-        agent_runtime: None,
+        presenter: input.presenter,
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
@@ -161,8 +161,11 @@ pub async fn load_offer_review(
     organization_id: String,
     session_id: String,
     offer_id: String,
+    #[napi(ts_arg_type = "'runtime' | 'attended' | 'delegated' | 'unknown' | 'reviewer'")]
+    presenter: String,
     encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OfferReviewOutput>> {
+    let presenter = crate::lines::Presenter::parse(&presenter)?;
     // Mirror execute_remedy_by_offer: clone state, drop the mutex, then lease
     // a connection before host SQL so review loads never contend with
     // dispatches on the runtime state mutex.
@@ -173,7 +176,7 @@ pub async fn load_offer_review(
     let root = crate::session::recorded_root(pg, &key)?;
     let deployment = leased
         .state
-        .variant_of(&organization_id, root.as_deref())
+        .variant_of(&organization_id, root.as_deref(), presenter)
         .await?
         .line(&organization_id)
         .as_str()
@@ -990,7 +993,7 @@ mod typed_tests {
     fn remedy_operation_preserves_existing_receipt_identifiers() {
         let mut input: crate::input::Input = serde_json::from_str(
             r#"{
-                "organization_id": "test-organization",
+                "presenter": "attended", "organization_id": "test-organization",
                 "session_id": "test-session",
                 "event": "remedy",
                 "arguments": {"value": 1}

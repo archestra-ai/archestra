@@ -68,6 +68,7 @@ import {
   executeYell,
   listPeerMessages,
   loadOfferReview,
+  type OpenAppaPresenter,
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
@@ -1230,6 +1231,7 @@ const registry = defineArchestraTools([
         trajectory: stamp,
         context,
       });
+      const presenter = remedyPresenter(context, stamp);
       const spender = authenticatedRuntimeSpender({
         userId: context.userId,
         callerId: context.openappaSession?.caller_id,
@@ -1252,6 +1254,7 @@ const registry = defineArchestraTools([
         // runtime checks the floor and holds it for the next subagent call.
         const declared = await executeRemedyByOffer({
           organizationId: context.organizationId,
+          presenter,
           callerId: spender,
           sessionId: stamp.session_id,
           ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
@@ -1291,6 +1294,7 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         sessionId: stamp.session_id,
         offerId: remedy.offer_id,
+        presenter,
       });
       // A publish on the session's line while the reviewer decides retires the
       // offer: the answer then applies to nothing, and the result says why.
@@ -1493,6 +1497,7 @@ const registry = defineArchestraTools([
       const executePlan = () =>
         executeRemedyByOffer({
           organizationId,
+          presenter,
           ...(spender ? { callerId: spender } : {}),
           sessionId: stamp.session_id,
           ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
@@ -1631,6 +1636,24 @@ function organizationUser(
   const { organizationId, userId } = context;
   if (!organizationId || !userId) throw new ApiError(401, message);
   return { organizationId, userId };
+}
+
+/**
+ * Who presents a remedy on the stamped trajectory: the run itself only when
+ * the gateway verified its binding and the stamp names its session or one of
+ * its children. An ordinary user call is attended, header or not.
+ */
+function remedyPresenter(
+  context: ArchestraContext,
+  stamp: { session_id: string; parent_id?: string },
+): OpenAppaPresenter {
+  if (context.openappaSubagent) return "delegated";
+  const session = context.openappaSession;
+  return session?.presenter === "runtime" &&
+    (stamp.session_id === session.session_id ||
+      stamp.parent_id === session.session_id)
+    ? "runtime"
+    : "attended";
 }
 
 function organization(context: ArchestraContext): string {
@@ -2194,6 +2217,8 @@ async function peerExecution(params: {
       session_id: proof.session_id,
       ...(proof.caller_id ? { caller_id: proof.caller_id } : {}),
       ...(proof.parent_id ? { parent_id: proof.parent_id } : {}),
+      // The host signed this proof into the one session it names.
+      presenter: "delegated",
     },
     toolCallId: proof.call_id,
   };

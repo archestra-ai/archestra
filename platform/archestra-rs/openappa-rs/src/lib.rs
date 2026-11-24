@@ -326,16 +326,18 @@ impl State {
     /// that root follows, or the one a fork's parent follows. Otherwise a new root opens
     /// on the line the deployment's settings give this session.
     async fn family(&self, input: &Input, guardrails: &lines::Guardrails) -> napi::Result<Routed> {
-        let presenter = lines::Presenter::of(input.agent_runtime);
+        let presenter = input.presenter.acting()?;
+        let organization_id = &input.organization_id;
         let root = self.dispatch_root(input)?;
-        let followed = match self.followed(&input.organization_id, &root).await? {
+        let resolved = match self.resolve(organization_id, &root, presenter).await? {
             Some(family) => Some(family),
             None => match &input.fork_of {
                 Some(fork_of) => {
-                    let parent = SessionKey::new(&input.organization_id, fork_of);
+                    let parent = SessionKey::new(organization_id, fork_of);
                     match recorded_root(&Sql(&self.store), &parent)? {
                         Some(parent_root) => {
-                            self.followed(&input.organization_id, &parent_root).await?
+                            self.resolve(organization_id, &parent_root, presenter)
+                                .await?
                         }
                         None => None,
                     }
@@ -343,17 +345,14 @@ impl State {
                 None => None,
             },
         };
-        match followed {
-            Some(family) if !family.continued_by(presenter) => Err(invalid_input(
-                "An Agent Runtime run opened this OpenAPPA session; only a request carrying that run's runtime binding continues it",
-            )),
-            Some(family) => Ok(Routed::Follows { root, family }),
-            None => Ok(Routed::Opens {
+        Ok(match resolved {
+            Some(family) => Routed::Follows { root, family },
+            None => Routed::Opens {
                 root,
-                variant: guardrails.opening(presenter == lines::Presenter::Runtime),
-                unattended: presenter == lines::Presenter::Runtime,
-            }),
-        }
+                variant: guardrails.opening(presenter.opens_unattended()),
+                unattended: presenter.opens_unattended(),
+            },
+        })
     }
 
     /// The family a new root opens: on `variant`'s line, or on the Enforce line when that
@@ -395,12 +394,30 @@ impl State {
         &self,
         organization_id: &str,
         root: Option<&str>,
+        presenter: lines::Presenter,
     ) -> napi::Result<lines::Variant> {
         let followed = match root {
-            Some(root) => self.followed(organization_id, root).await?,
+            Some(root) => self.resolve(organization_id, root, presenter).await?,
             None => None,
         };
         Ok(followed.map_or(lines::Variant::Enforce, |family| family.variant))
+    }
+
+    /// The family `root` follows, or `None` before it opened: the one place an
+    /// operation on a family learns it, refused to a presenter that may not act in it.
+    async fn resolve(
+        &self,
+        organization_id: &str,
+        root: &str,
+        presenter: lines::Presenter,
+    ) -> napi::Result<Option<lines::Family>> {
+        match self.followed(organization_id, root).await? {
+            Some(family) if !family.continued_by(presenter) => Err(failure(
+                Failure::Binding(BindingFailure::UnattendedFamily),
+                "An Agent Runtime run opened this OpenAPPA session; only a request carrying that run's runtime binding acts in it",
+            )),
+            resolved => Ok(resolved),
+        }
     }
 
     /// The family `root` follows, read from its log, or `None` before it opened.
@@ -577,7 +594,7 @@ impl State {
         let child_return = input.event == HookEventKind::ChildReturn;
         let observation = self.label_observation(&input, &root);
         let result = recording
-            .dispatch_in_family(input, root, key, &family.settings)
+            .dispatch_in_family(input, root, key, &family)
             .await;
         consults::store(&sql, attribution, &consults);
         if result.is_ok() {
@@ -680,10 +697,11 @@ impl State {
         input: Input,
         root: String,
         key: SessionKey,
-        settings: &SessionSettings,
+        family: &lines::Family,
     ) -> napi::Result<Value> {
         let sql = Sql(&self.store);
         let pg = &sql;
+        let settings = &family.settings;
 
         let actor = expected_actor(&root, &input.session_id, input.parent_id.as_deref());
         let lookup = key.clone();
@@ -705,6 +723,17 @@ impl State {
             ?;
         if let Some(saved) = &existing {
             check_session_identity(saved, &root, &input)?;
+            // The family may have opened since this dispatch chose its line: the one
+            // that opened first is the one this event is handled against.
+            match self
+                .resolve(&input.organization_id, &root, input.presenter)
+                .await?
+            {
+                Some(durable) if durable.variant != family.variant => {
+                    return Err(policy_moved());
+                }
+                _ => {}
+            }
         } else {
             let forked_at = input
                 .fork_of
@@ -731,7 +760,24 @@ impl State {
             };
             let decision = hooks::handle(&self.runtime, start).await;
             if !matches!(decision, HookDecision::Ack | HookDecision::Context { .. }) {
+                // A concurrent opener's family refuses this start's token: answer as
+                // resolving that family would, refusing the presenter or retrying on it.
+                if actor.child.is_none()
+                    && let Some(durable) = self
+                        .resolve(&input.organization_id, &root, input.presenter)
+                        .await?
+                    && (durable.variant, durable.unattended())
+                        != (family.variant, family.unattended())
+                {
+                    return Err(policy_moved());
+                }
                 return Err(invariant(wire(&decision)?));
+            }
+            // A start that acked opened or continued this very family.
+            if actor.child.is_none() {
+                self.deployments
+                    .families
+                    .remember(&input.organization_id, &root, family);
             }
             // A child opens under its fork's seed: the parent's label when it spawned
             // the child. A parent that addressed the child before this first event may

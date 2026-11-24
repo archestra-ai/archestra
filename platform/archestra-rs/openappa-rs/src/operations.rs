@@ -569,7 +569,7 @@ mod tests {
     fn an_anonymous_remedy_omits_the_spender_and_a_foreign_version_is_invalid() {
         let anonymous = serde_json::from_str::<crate::input::OfferInput>(
             r#"{
-                "organization_id": "organization",
+                "presenter": "attended", "organization_id": "organization",
                 "trajectory": {"v": 1, "session_id": "session", "parent_id": null},
                 "arguments": {"offer_id": "0123456789abcdef"},
                 "execution_mode": "untracked",
@@ -632,7 +632,7 @@ mod tests {
     #[test]
     fn retry_fields_stay_in_context_and_out_of_the_idempotency_key() {
         let input: crate::input::Input = serde_json::from_value(serde_json::json!({
-            "organization_id": "organization",
+            "presenter": "attended", "organization_id": "organization",
             "session_id": "session",
             "event": "tool_call",
             "tool": "read_untrusted",
@@ -649,7 +649,7 @@ mod tests {
         assert_eq!(context["dispatch"], "my_gateway_archestra__run_tool");
 
         let legacy: crate::input::Input = serde_json::from_value(serde_json::json!({
-            "organization_id": "organization",
+            "presenter": "attended", "organization_id": "organization",
             "session_id": "session",
             "event": "tool_call",
             "tool": "read_untrusted",
@@ -667,7 +667,7 @@ mod tests {
     fn a_declared_return_is_keyed_with_its_call_and_read_back_for_recovery() {
         let spawn = |declares: Option<serde_json::Value>| -> crate::input::Input {
             let mut input = serde_json::json!({
-                "organization_id": "organization",
+                "presenter": "attended", "organization_id": "organization",
                 "session_id": "session",
                 "event": "tool_call",
                 "operation_id": "call:spawn",

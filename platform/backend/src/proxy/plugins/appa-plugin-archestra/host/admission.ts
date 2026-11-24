@@ -44,6 +44,7 @@ import type { AppaTrustedContext } from "@/proxy/plugins/appa-plugin-archestra/t
 import { withCallerScope } from "@/proxy/plugins/appa-plugin-archestra/utils";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import {
+  isRuntimeWorkspaceSession,
   RUNTIME_BINDING_HEADER,
   resolveRuntimeIdentityByVirtualKeys,
   resolveRuntimeSessionForWorkspace,
@@ -358,7 +359,7 @@ export async function admitOpenappaRequest(params: {
         })
       : undefined;
   const runtimeSession: OpenAppaSession | undefined = runtimeWorkspace
-    ? { ...runtimeWorkspace.session, agent_runtime: true }
+    ? { ...runtimeWorkspace.session, presenter: "runtime" }
     : undefined;
   // A bound subagent ends its turns the way a runtime workspace does: its
   // return is keyed by the spawn call that opened it.
@@ -559,9 +560,20 @@ export async function admitOpenappaRequest(params: {
       // The launcher stored the authenticated parent before giving the pod data.
       session = runtimeSession;
     } else if (session && !subagentBinding) {
-      // No binding vouches for this request, so it cannot continue a family an
-      // Agent Runtime run opened.
-      session = { ...session, agent_runtime: false };
+      // No binding vouches for this request: it may neither continue a family
+      // an Agent Runtime run opened nor open the one a run's workspace owns.
+      if (
+        await isRuntimeWorkspaceSession({
+          organizationId: agent.organizationId,
+          sessionId: session.session_id,
+        })
+      ) {
+        throw new ApiError(
+          409,
+          "This OpenAPPA session belongs to an Agent Runtime run; only a request carrying that run's binding opens it",
+        );
+      }
+      session = { ...session, presenter: "attended" };
     }
     if (!session)
       throw new ApiError(
@@ -914,6 +926,7 @@ async function recordedReviewedSession(
   const scope = {
     organization_id: session.organization_id,
     ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+    ...(session.presenter ? { presenter: session.presenter } : {}),
   };
   const requester = withCallerScope(session, reviewed.requesterId);
   if (requester === reviewed.rootSessionId)

@@ -231,11 +231,14 @@ describe("protected runtime protocol", () => {
           secret,
         }),
       ).toEqual({
-        session: (
-          context.resources.get(
-            APPA_PLUGIN_TRUSTED_CONTEXT,
-          ) as AppaTrustedContext
-        ).session,
+        session: {
+          ...(
+            context.resources.get(
+              APPA_PLUGIN_TRUSTED_CONTEXT,
+            ) as AppaTrustedContext
+          ).session,
+          presenter: "delegated",
+        },
         toolCallId: "spawn-one",
         spawn: true,
       });

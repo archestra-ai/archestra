@@ -150,7 +150,7 @@ url = "http://127.0.0.1:${redirect.server.address().port}/"
     return { child, done };
   };
   const run = (request) => pod(request).done;
-  const scope = () => ({ organization_id: `lease-${randomUUID()}`, caller_id: 'user:owner', session_id: randomUUID() });
+  const scope = () => ({ organization_id: `lease-${randomUUID()}`, presenter: 'attended', caller_id: 'user:owner', session_id: randomUUID() });
   const toolCall = (session, id, tool) => ({
     ...session, event: 'tool_call', operation_id: `call:${id}`, tool, arguments: { a: 1 },
   });
@@ -159,6 +159,7 @@ url = "http://127.0.0.1:${redirect.server.address().port}/"
   });
   const offerInput = (session, event) => ({
     organization_id: session.organization_id,
+    presenter: 'attended',
     caller_id: session.caller_id,
     trajectory: { v: 1, session_id: session.session_id, ...(session.parent_id ? { parent_id: session.parent_id } : {}) },
     execution_mode: 'tracked',

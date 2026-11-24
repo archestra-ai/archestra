@@ -579,6 +579,7 @@ describe("runtime OpenAPPA identity", () => {
       organization_id: org.id,
       caller_id: `user:${user.id}`,
       session_id: `user:${user.id}|${bound.workspace.workloadName}`,
+      presenter: "runtime",
     });
   });
 

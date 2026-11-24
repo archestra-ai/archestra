@@ -2910,6 +2910,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await getOpenappaStatus({
           organizationId,
           sessionId: id,
+          // The owner of a chat conversation, read as its own session.
+          presenter: "attended",
         }),
       );
     },

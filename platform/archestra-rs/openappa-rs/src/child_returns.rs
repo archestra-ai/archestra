@@ -493,7 +493,7 @@ mod runtime_child_tests {
 
     fn event_input(event: &str, extra: Value) -> Input {
         let mut input = json!({
-            "organization_id": "organization",
+            "presenter": "attended", "organization_id": "organization",
             "session_id": "child-session",
             "parent_id": "parent-session",
             "event": event,

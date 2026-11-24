@@ -285,7 +285,7 @@ describe("OpenAPPA tool execution", () => {
       { ...mockContext, openappaSession: session },
     );
     expect(list).toHaveBeenCalledExactlyOnceWith({
-      session,
+      session: { ...session, presenter: "delegated" },
       toolCallId: "peer-call-1",
     });
     expect(response.content).toEqual([
@@ -392,6 +392,7 @@ describe("OpenAPPA tool execution", () => {
         caller_id: `user:${mockContext.userId}`,
         session_id: "session-1:worker",
         parent_id: "session-1",
+        presenter: "delegated",
       },
       toolCallId: "peer-call-1",
       args: { message_id: "message-1" },
@@ -437,6 +438,7 @@ describe("OpenAPPA tool execution", () => {
         caller_id: `user:${mockContext.userId}`,
         session_id: "session-1:worker",
         parent_id: "session-1",
+        presenter: "delegated",
       },
       toolCallId: "peer-call-1",
       args: { message_id: "message-1" },
@@ -2430,6 +2432,7 @@ describe("OpenAPPA tool execution", () => {
       organizationId: orgId,
       sessionId: childId,
       offerId: "offer-child",
+      presenter: "attended",
     });
     expect(executeSpy).toHaveBeenCalledWith(
       expect.objectContaining({

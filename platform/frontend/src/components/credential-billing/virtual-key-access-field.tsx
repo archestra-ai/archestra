@@ -2,6 +2,7 @@
 
 import type { SupportedProvider } from "@archestra/shared";
 import {
+  Boxes,
   ChevronDown,
   ChevronRight,
   KeyRound,
@@ -144,6 +145,7 @@ export function VirtualKeyAccessField(props: AccessProps) {
           <div className="border-b bg-muted/30 px-2 py-1.5">
             <TabsList size="sm" className="bg-transparent">
               <TabsTrigger value="providers">
+                <Boxes aria-hidden />
                 <span>Providers</span>
                 <TabCount
                   value={

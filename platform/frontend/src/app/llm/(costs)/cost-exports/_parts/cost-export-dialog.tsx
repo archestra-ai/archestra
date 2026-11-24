@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  COST_EXPORT_FORMAT_LABELS,
-  type CostExportSchedule,
-} from "@archestra/shared";
+import type { CostExportSchedule } from "@archestra/shared";
 import { AlertTriangle, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
@@ -86,7 +83,6 @@ export function CostExportDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={isEdit ? "Edit cost export" : "Schedule cost export"}
-      description={`Writes ${COST_EXPORT_FORMAT_LABELS.focus_csv} files of LLM cost and usage to a blob provider.`}
       size="small"
     >
       <DialogForm

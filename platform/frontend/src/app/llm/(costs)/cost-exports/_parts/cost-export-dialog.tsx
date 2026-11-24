@@ -5,6 +5,7 @@ import {
   type CostExportSchedule,
 } from "@archestra/shared";
 import { AlertTriangle, Plus } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 import {
   BlobProviderLogo,
@@ -24,9 +25,11 @@ import {
 } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { CostExport } from "@/lib/cost-export.query";
 import { CostExportStartFrom } from "./cost-export-start-from";
 import { exampleObjectKey, useCostExportForm } from "./use-cost-export-form";
@@ -69,6 +72,10 @@ export function CostExportDialog({
   }, [failure]);
 
   const noProviders = !form.providersLoading && providers.length === 0;
+  // The Blob Providers settings page is open to settings readers.
+  const { data: canManageProviders } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   const fileName = (schedule: CostExportSchedule) =>
     exampleObjectKey({ ...values, schedule })
       .split("/")
@@ -111,15 +118,16 @@ export function CostExportDialog({
                 <p className="text-sm text-muted-foreground">
                   No blob providers yet.
                 </p>
-                <Button
+                <PermissionButton
                   type="button"
                   size="sm"
                   variant="outline"
+                  permissions={{ organizationSettings: ["update"] }}
                   onClick={onAddProvider}
                 >
                   <Plus />
                   Add blob provider
-                </Button>
+                </PermissionButton>
               </div>
             ) : (
               <SearchableSelect
@@ -158,6 +166,16 @@ export function CostExportDialog({
                   };
                 })}
               />
+            )}
+            {canManageProviders && (
+              // Adding a second provider, renaming or deleting one happens
+              // on the settings page; its rows lead back here.
+              <Link
+                href="/settings/blob-providers"
+                className="inline-block text-xs text-primary hover:underline"
+              >
+                Manage blob providers
+              </Link>
             )}
           </Field>
 

@@ -29,11 +29,11 @@ const STUDIO_NAV = [
   "Plugins",
   "MCP Registry",
   "MCP Gateways",
+  "Model Providers",
   "LLM Proxy",
   "Virtual Keys",
   // No OAuth Clients row on either side: every client, LLM and MCP alike,
   // is managed on one page in settings.
-  "Model Providers",
   "Model Pools",
   "Auto Routing",
   "Cost Controls",

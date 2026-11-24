@@ -311,4 +311,12 @@ describe("ModelPoolsPage", () => {
     expect(await screen.findByText("glm-5")).toBeInTheDocument();
     expect(screen.queryByText("glm-4.6")).not.toBeInTheDocument();
   });
+
+  it("opens the pool a link names with ?edit=", async () => {
+    pools = [pool("glm-5", [{ enabled: true }])];
+    renderPage("search=glm-5&edit=pool-glm-5");
+    expect(
+      await screen.findByRole("dialog", { name: "glm-5" }),
+    ).toBeInTheDocument();
+  });
 });

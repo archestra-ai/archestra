@@ -1,11 +1,8 @@
 "use client";
 
 import {
-  type archestraApiTypes,
   DocsPage,
-  isModelRouterSupportedProvider,
   LLM_PROXY_OAUTH_SCOPE,
-  PROVIDERS_REQUIRING_BASE_URL,
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -13,7 +10,6 @@ import { Check, ChevronDown, Eye, EyeOff, Layers, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode, useId, useState } from "react";
 import type { ProxyEndpointProvider } from "@/app/connection/connection-flow.utils";
-import { PoolProviders } from "@/app/llm/model-pools/_parts/pool-providers";
 import {
   ConnectStep,
   type ConnectStepProps,
@@ -23,14 +19,8 @@ import {
 } from "@/components/connect-rail";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { CreateManagedOAuthClientDialog } from "@/components/create-managed-oauth-client-dialog";
-import {
-  type CreatedVirtualKey,
-  CreateVirtualKeyDialogWithData,
-  type VirtualKeyType,
-} from "@/components/create-virtual-key-dialog";
+import { CreateVirtualKeyDialogWithData } from "@/components/create-virtual-key-dialog";
 import { KeyAutoRouters } from "@/components/credential-billing/key-auto-routers";
-import { poolAnswers } from "@/components/credential-billing/model-pool-access";
-import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import {
@@ -38,7 +28,6 @@ import {
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { ProviderIcon } from "@/components/provider-icon";
-import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
   TerminalCard,
@@ -54,37 +43,23 @@ import {
 import { Label } from "@/components/ui/label";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
+  type LlmAuthMethod,
+  type LlmConnection,
+  useLlmConnection,
+} from "@/components/use-llm-connection";
+import {
   RequestExample,
   type RevealableSecret,
 } from "@/components/virtual-key-connection-guide";
-import type {
-  RequestCredential,
-  RequestTarget,
-} from "@/components/virtual-key-request-example";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
-import { useAutoRouters } from "@/lib/auto-routing.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useLlmProxy, useUpdateLlmProxy } from "@/lib/llm-proxy.query";
-import { type ModelPool, useModelPools } from "@/lib/model-pools.query";
-import {
-  useCreateOauthClient,
-  useOauthClients,
-} from "@/lib/oauth-clients.query";
-import { useOrganization } from "@/lib/organization.query";
+import type { ModelPool } from "@/lib/model-pools.query";
+import { useCreateOauthClient } from "@/lib/oauth-clients.query";
 import { cn } from "@/lib/utils/tailwind";
-import {
-  useAllVirtualApiKeys,
-  useFetchVirtualApiKeyValue,
-} from "@/lib/virtual-api-keys.query";
-
-type LlmOauthClient =
-  archestraApiTypes.GetOauthClientsResponses["200"]["data"][number];
-
-/** How callers authenticate to the LLM Proxy. */
-export type LlmAuthMethod = "standard" | "passthrough" | "oauth" | "idp";
 
 /**
  * The steps for one endpoint and auth method, each showing what exists:
@@ -123,236 +98,41 @@ export function LlmConnectSteps({
   offerAutoModel?: boolean;
 }) {
   const providerCatalog = useModelProviderCatalog({ fresh: true });
-  const isRouter = selected === "model-router";
-  const servesTarget = (provider: SupportedProvider) =>
-    isRouter ? isModelRouterSupportedProvider(provider) : provider === selected;
+  const connection = useLlmConnection({ selected, auth, pool, offerAutoModel });
+  const {
+    isRouter,
+    servesTarget,
+    providerKeysPending,
+    hasProviderKey,
+    allowsUnauthenticated,
+    canManageLlmSettings,
+    canCreateKey,
+    canCreateOauth,
+    options,
+    picked,
+    pickKey,
+    pickedKey,
+    pickedClient,
+    pickedPools,
+    routerClient,
+    takesPools,
+    offersPools,
+    offersRouters,
+    isVirtualKey,
+    secret,
+    ready,
+    setCreateKeyType,
+    setOauthCreateOpen,
+    setAddProviderKeyOpen,
+  } = connection;
+  const idpStep = useIdentityProviderStep();
 
-  const { data: providerApiKeys = [], isPending: providerKeysPending } =
-    useLlmProviderApiKeys();
-  const targetProviderKeys = providerApiKeys.filter((key) =>
-    servesTarget(key.provider),
-  );
-
-  const { data: organization } = useOrganization();
-  const { data: canManageLlmSettings } = useHasPermissions({
-    organizationSettings: ["update"],
-  });
-  const allowsUnauthenticated =
-    organization?.allowUnauthenticatedLlmProxyRequests ?? false;
-
-  const { data: virtualKeys } = useAllVirtualApiKeys({
-    keyType: auth === "passthrough" ? "passthrough" : "standard",
-    limit: 100,
-    offset: 0,
-    enabled: auth === "standard" || auth === "passthrough",
-    toastOnError: false,
-  });
-  const { data: llmOauthClients } = useOauthClients({
-    limit: 100,
-    capability: LLM_PROXY_OAUTH_SCOPE,
-    enabled: auth === "oauth",
-    toastOnError: false,
-  });
-  const oauthClients: LlmOauthClient[] = llmOauthClients?.data ?? [];
-  const { data: session } = useSession();
-  const { data: canCreateKey } = useHasPermissions({
-    llmVirtualKey: ["create"],
-  });
-  const { data: canCreateOauth } = useHasPermissions({
-    oauthClient: ["create"],
-  });
-
-  const [createKeyType, setCreateKeyType] = useState<VirtualKeyType | null>(
-    null,
-  );
-  const [oauthCreateOpen, setOauthCreateOpen] = useState(false);
-  const [created, setCreated] = useState<CreatedVirtualKey | null>(null);
-  // undefined: nothing picked yet; null: "None" picked.
-  const [pickedId, setPickedId] = useState<string | null | undefined>();
-  // The request remounts with each key; the model picked survives it.
-  const [pickedModel, setPickedModel] = useState<string>();
-
-  // A standard key or OAuth client is usable here only if it maps a provider
-  // key behind this endpoint; a passthrough key carries none and always fits.
-  const reaches = (credential: { providerApiKeys: ProviderApiKeyMappings }) =>
-    credential.providerApiKeys.some((mapping) =>
-      servesTarget(mapping.provider),
-    );
-  // A virtual key calls a pool only once the pool was added to it.
-  const callsPool = (key: { id: string }, target: ModelPool) =>
-    target.virtualApiKeyIds.includes(key.id);
-  // Pools are asked for by name on the Unified Model API.
-  const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
-  const offersPools =
-    canReadPools === true &&
-    (auth === "standard" || auth === "oauth") &&
-    isRouter;
-  const { data: pools = [] } = useModelPools({
-    enabled: offersPools,
-    toastOnError: false,
-  });
-  const poolsOf = (key: { id: string }) =>
-    offersPools ? pools.filter((candidate) => callsPool(key, candidate)) : [];
-  // Only a client calling as the app takes pools, and only those added to it.
-  const takesPools = (client: LlmOauthClient) =>
-    client.grantType === "client_credentials";
-  const clientPoolsOf = (client: LlmOauthClient) =>
-    offersPools && takesPools(client)
-      ? pools.filter((candidate) => client.modelPoolIds.includes(candidate.id))
-      : [];
-  // Auto routers are asked for by name on the Unified Model API too, and
-  // answer on their own provider keys.
-  const offersRouters =
-    offerAutoModel &&
-    (auth === "standard" || auth === "oauth") &&
-    isRouter &&
-    !pool;
-  const { data: routers = [] } = useAutoRouters({ enabled: offersRouters });
-  const hasRouter = (key: { id: string }) =>
-    offersRouters &&
-    routers.some((router) => router.virtualApiKeyIds.includes(key.id));
-  const clientHasRouter = (client: LlmOauthClient) =>
-    offersRouters &&
-    takesPools(client) &&
-    routers.some((router) => client.autoRouterIds.includes(router.id));
-  // A credential with a pool or auto router added still fits the Unified
-  // Model API when it maps no provider key here, such as one on current and
-  // future providers.
-  const keyOptions = (virtualKeys?.data ?? []).filter((key) =>
-    pool
-      ? callsPool(key, pool)
-      : auth === "passthrough" ||
-        reaches(key) ||
-        poolsOf(key).length > 0 ||
-        hasRouter(key),
-  );
-  const clientOptions = oauthClients.filter(
-    (client) =>
-      reaches(client) ||
-      clientPoolsOf(client).length > 0 ||
-      clientHasRouter(client),
-  );
-  const credentialSummary = (
-    credential: { providerApiKeys: ProviderApiKeyMappings },
-    poolCount: number,
-    allProviders = false,
-  ) => {
-    const providers = new Set(
-      credential.providerApiKeys.map((mapping) => mapping.provider),
-    ).size;
-    return [
-      allProviders
-        ? "All providers"
-        : `${providers} ${providers === 1 ? "provider" : "providers"}`,
-      `${poolCount} ${poolCount === 1 ? "pool" : "pools"}`,
-    ].join(" · ");
-  };
-  const keySummary = (key: (typeof keyOptions)[number]) =>
-    offersPools
-      ? credentialSummary(key, poolsOf(key).length, key.includeFutureProviders)
-      : undefined;
-  const clientSummary = (client: LlmOauthClient) =>
-    offersPools && takesPools(client)
-      ? credentialSummary(client, clientPoolsOf(client).length)
-      : undefined;
-  const allOptions =
-    auth === "oauth"
-      ? clientOptions.map((client) => ({
-          id: client.id,
-          authorId: client.authorId,
-          tokenStart: null,
-          name: client.name,
-          label: client.name,
-          description: clientSummary(client),
-          mappings: client.providerApiKeys,
-          oauth: { clientId: client.clientId, grantType: client.grantType },
-        }))
-      : keyOptions.map((key) => ({
-          id: key.id,
-          authorId: key.authorId,
-          tokenStart: key.tokenStart,
-          name: key.name,
-          // The key's start shows in the key field; the picker stays short.
-          label: key.name,
-          description: keySummary(key),
-          mappings: key.providerApiKeys,
-          oauth: null,
-        }));
-  // The reader's own credentials come first, so the default pick is one they
-  // can reveal; anyone else's follow under their own heading.
-  const noun = auth === "oauth" ? "clients" : "keys";
-  const isOwn = (option: { authorId: string | null }) =>
-    !!session?.user && option.authorId === session.user.id;
-  const options = [
-    ...allOptions
-      .filter(isOwn)
-      .map((option) => ({ ...option, group: `Your ${noun}` })),
-    ...allOptions
-      .filter((option) => !isOwn(option))
-      .map((option) => ({ ...option, group: `Other ${noun}` })),
-  ];
-  // Like a standard key, the first fits until another is picked. Passthrough
-  // attribution is optional, so "None" (an explicit null) stays none.
-  const picked =
-    pickedId === null
-      ? undefined
-      : (options.find((option) => option.id === pickedId) ?? options[0]);
-  // The chosen key goes into the request masked, revealed or copied on
-  // request — but only for keys the reader may read (their own, or one just
-  // created here); anyone else's key is read from an env var.
-  const isVirtualKey = auth === "standard" || auth === "passthrough";
-  const fetchKeyValue = useFetchVirtualApiKeyValue();
-  const createdHere = created && picked?.id === created.id ? created : null;
-  const [revealed, setRevealed] = useState<string | null>(null);
-  const secret: RevealableSecret | undefined =
-    isVirtualKey &&
-    picked &&
-    (createdHere || (session?.user && picked.authorId === session.user.id))
-      ? {
-          resolve: async () =>
-            createdHere
-              ? (createdHere.value ?? null)
-              : await fetchKeyValue.mutateAsync(picked.id),
-          revealed,
-          onRevealedChange: setRevealed,
-        }
-      : undefined;
-  const pickKey = (id: string | null) => {
-    setPickedId(id);
-    setRevealed(null);
-  };
   const keyField = picked && isVirtualKey && (
     <KeyField
       masked={`${picked.tokenStart ?? "arch_"}••••••••••••`}
       secret={secret}
     />
   );
-
-  // Pool grants authorize their member keys independently of which provider
-  // keys the viewer can read directly.
-  const hasUsablePoolGrant =
-    auth === "standard"
-      ? keyOptions.some((key) => poolsOf(key).some(poolAnswers))
-      : auth === "oauth"
-        ? clientOptions.some((client) =>
-            clientPoolsOf(client).some(poolAnswers),
-          )
-        : false;
-  // Likewise an auto router answers on its tiers' own keys.
-  const hasRouterGrant =
-    auth === "standard"
-      ? keyOptions.some(hasRouter)
-      : auth === "oauth" && clientOptions.some(clientHasRouter);
-  const hasProviderKey =
-    !!pool ||
-    targetProviderKeys.length > 0 ||
-    hasUsablePoolGrant ||
-    hasRouterGrant;
-  const [addProviderKeyOpen, setAddProviderKeyOpen] = useState(false);
-  // A new key starts with the primary key of each provider this target
-  // serves; the create dialog shows and changes them.
-  const primaryKeyPerProvider = primaryKeyMappings(targetProviderKeys);
-  const idpStep = useIdentityProviderStep();
 
   // Which provider key a request uses belongs to the credential, so the
   // provider-key step only appears when there is none to use yet.
@@ -404,29 +184,7 @@ export function LlmConnectSteps({
       </span>
     );
   };
-  const target: RequestTarget = isRouter
-    ? { kind: "model-router" }
-    : { kind: "provider", provider: selected };
 
-  const pickedKey =
-    auth === "standard"
-      ? keyOptions.find((key) => key.id === picked?.id)
-      : undefined;
-  const pickedClient =
-    auth === "oauth"
-      ? clientOptions.find((client) => client.id === picked?.id)
-      : undefined;
-  const pickedPools = pickedKey
-    ? poolsOf(pickedKey)
-    : pickedClient
-      ? clientPoolsOf(pickedClient)
-      : [];
-  // Step 4 offers only the pools the picked key or client can call, and only
-  // those with a member that can answer.
-  const requestPools = pickedPools.filter(poolAnswers).map((entry) => ({
-    name: entry.name,
-    description: <PoolProviders pool={entry} />,
-  }));
   // The pools the picked key or client can call, read-only: set up on the
   // Model Pools page or in the credential's own dialog.
   const poolSection =
@@ -443,9 +201,6 @@ export function LlmConnectSteps({
       />
     ) : null);
 
-  // Only a client calling as the app takes auto routers, like pools.
-  const routerClient =
-    pickedClient && takesPools(pickedClient) ? pickedClient : undefined;
   const routerSection =
     offersRouters &&
     hasProviderKey &&
@@ -463,19 +218,7 @@ export function LlmConnectSteps({
     ) : null);
 
   let credentialSteps: RailRow[];
-  let credential: RequestCredential;
-  let credentialEnvVar: string;
-  let ready: boolean;
-  let mappedProviderKeys: Array<{
-    provider: SupportedProvider;
-    providerApiKeyId: string;
-  }> = [];
-
   if (auth === "standard") {
-    credential = "standard";
-    credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY";
-    ready = hasProviderKey && !!picked;
-    mappedProviderKeys = picked?.mappings ?? [];
     credentialSteps = [
       {
         done: !!picked,
@@ -500,7 +243,7 @@ export function LlmConnectSteps({
           <CredentialSelect
             label="Virtual key"
             createLabel="Create new virtual key"
-            canCreate={!pool && !!canCreateKey}
+            canCreate={!pool && canCreateKey}
             onCreate={() => setCreateKeyType("standard")}
             options={options}
             value={picked?.id}
@@ -517,11 +260,6 @@ export function LlmConnectSteps({
       },
     ];
   } else if (auth === "passthrough") {
-    credential = "passthrough";
-    credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY";
-    // Requests need a passthrough key unless the org allows unauthenticated
-    // LLM proxy requests, so the step is only complete once one is picked.
-    ready = allowsUnauthenticated || !!picked;
     credentialSteps = [
       {
         done: !!picked,
@@ -533,8 +271,8 @@ export function LlmConnectSteps({
             picked={picked}
             options={options}
             required={!allowsUnauthenticated}
-            canCreate={!!canCreateKey}
-            canManageLlmSettings={!!canManageLlmSettings}
+            canCreate={canCreateKey}
+            canManageLlmSettings={canManageLlmSettings}
             onPick={pickKey}
             onCreate={() => setCreateKeyType("passthrough")}
           />
@@ -542,36 +280,6 @@ export function LlmConnectSteps({
       },
     ];
   } else if (auth === "oauth") {
-    credential = "token";
-    credentialEnvVar = "ARCHESTRA_LLM_ACCESS_TOKEN";
-    ready = hasProviderKey && !!picked;
-    mappedProviderKeys = picked?.mappings ?? [];
-    if (
-      pickedClient?.grantType === "client_credentials" &&
-      pickedClient.includeFutureProviders &&
-      pickedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE)
-    ) {
-      // Match runtime automatic access: explicit provider overrides win;
-      // only usable shared primary keys fill the remaining providers.
-      const explicitProviders = new Set(
-        mappedProviderKeys.map((mapping) => mapping.provider),
-      );
-      mappedProviderKeys = [
-        ...mappedProviderKeys,
-        ...targetProviderKeys
-          .filter(
-            (key) =>
-              key.isPrimary &&
-              key.userId === null &&
-              !key.subscriptionKind &&
-              !key.requiresReauthentication &&
-              (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
-                !!key.baseUrl?.trim()) &&
-              !explicitProviders.has(key.provider),
-          )
-          .map((key) => ({ provider: key.provider, providerApiKeyId: key.id })),
-      ];
-    }
     credentialSteps = [
       {
         done: !!picked,
@@ -591,7 +299,7 @@ export function LlmConnectSteps({
           <CredentialSelect
             label="OAuth client"
             createLabel="Create new OAuth client"
-            canCreate={!!canCreateOauth}
+            canCreate={canCreateOauth}
             onCreate={() => setOauthCreateOpen(true)}
             options={options}
             value={picked?.id}
@@ -613,21 +321,14 @@ export function LlmConnectSteps({
       },
     ];
   } else {
-    credential = "token";
-    credentialEnvVar = "ARCHESTRA_LLM_IDP_TOKEN";
-    ready = hasProviderKey && idpStep.configured;
     credentialSteps = [idpStep.row];
   }
 
   const request = ready && (
     <RequestExample
-      key={`${picked?.id ?? "none"}:${secret ? "secret" : "env"}`}
+      key={connection.requestKey}
       connectionBaseUrl={baseUrl}
-      target={target}
-      keyType={credential}
-      secret={secret}
-      // Passthrough with "None": the request carries only the provider key.
-      keyValue={auth === "passthrough" && !picked ? "" : undefined}
+      {...connection.requestProps}
       // A virtual key shows in its own step above, so no env-var hint here.
       credentialField={
         isVirtualKey ? (
@@ -642,26 +343,6 @@ export function LlmConnectSteps({
           </p>
         ) : undefined
       }
-      credentialEnvVar={credentialEnvVar}
-      routerProviders={
-        // App clients cannot borrow provider access from the viewer's catalog.
-        mappedProviderKeys.length > 0 ||
-        (pickedClient && takesPools(pickedClient))
-          ? mappedProviderKeys
-              .map((mapping) => mapping.provider)
-              .filter(isModelRouterSupportedProvider)
-          : targetProviderKeys
-              .map((key) => key.provider)
-              .filter(isModelRouterSupportedProvider)
-      }
-      mappedProviderKeys={mappedProviderKeys}
-      fixedModel={pool?.name}
-      pools={pool ? [] : requestPools}
-      initialModel={pickedModel}
-      onModelChange={setPickedModel}
-      offerAutoModel={offerAutoModel && isRouter && !pool}
-      virtualApiKeyId={pickedKey?.id}
-      grantedRouterIds={routerClient?.autoRouterIds}
     />
   );
 
@@ -688,30 +369,53 @@ export function LlmConnectSteps({
           <ConnectStep key={row.title} number={firstNumber + index} {...row} />
         ),
       )}
-
-      <CreateVirtualKeyDialogWithData
-        open={createKeyType !== null}
-        onOpenChange={(open) => {
-          if (!open) setCreateKeyType(null);
-        }}
-        keyType={createKeyType ?? "standard"}
-        initialProviderApiKeys={primaryKeyPerProvider}
+      <LlmConnectionDialogs
+        connection={connection}
+        selected={selected}
         targetLabel={targetLabel}
-        onCreated={(key) => {
-          setCreated(key);
-          pickKey(key.id);
+      />
+    </>
+  );
+}
+
+/**
+ * The create dialogs a connection opens: a virtual key (picked once made), an
+ * OAuth client, and a provider key for the endpoint.
+ */
+export function LlmConnectionDialogs({
+  connection,
+  selected,
+  targetLabel,
+}: {
+  connection: LlmConnection;
+  selected: "model-router" | ProxyEndpointProvider;
+  targetLabel: string;
+}) {
+  const isRouter = selected === "model-router";
+  return (
+    <>
+      <CreateVirtualKeyDialogWithData
+        open={connection.createKeyType !== null}
+        onOpenChange={(open) => {
+          if (!open) connection.setCreateKeyType(null);
         }}
+        keyType={connection.createKeyType ?? "standard"}
+        initialProviderApiKeys={connection.primaryKeyPerProvider}
+        targetLabel={targetLabel}
+        onCreated={connection.onKeyCreated}
       />
       <OauthClientCreateFlow
-        open={oauthCreateOpen}
-        onOpenChange={setOauthCreateOpen}
+        open={connection.oauthCreateOpen}
+        onOpenChange={connection.setOauthCreateOpen}
       />
       <CreateLlmProviderApiKeyDialog
-        open={addProviderKeyOpen}
-        onOpenChange={setAddProviderKeyOpen}
+        open={connection.addProviderKeyOpen}
+        onOpenChange={connection.setAddProviderKeyOpen}
         title={`Add ${isRouter ? "provider" : targetLabel} key`}
         description="The proxy uses this key to call the provider."
-        allowedProviders={isRouter ? undefined : [selected]}
+        allowedProviders={
+          isRouter ? undefined : [selected as SupportedProvider]
+        }
         credentialMode="api-key"
         showConsoleLink
       />

@@ -89,6 +89,12 @@ export interface NavItem {
    * this, gating falls back to `url`.
    */
   permissionUrls?: string[];
+  /**
+   * One of the pages of the row above it, drawn indented under it with a
+   * guide line and no icon. The collapsed icon rail and the search palette
+   * still treat it as a row of its own.
+   */
+  nested?: boolean;
 }
 
 export interface NavGroup {
@@ -220,19 +226,6 @@ export const contentNavGroups: NavGroup[] = [
     label: "LLM",
     items: [
       {
-        // Exact match: the proxy's sibling tabs are rows of their own now, so
-        // a prefix match would light this row on all three.
-        title: "LLM Proxy",
-        url: "/llm/proxy",
-        icon: Network,
-        customIsActive: (pathname: string) => pathname === "/llm/proxy",
-      },
-      {
-        title: "Virtual Keys",
-        url: "/llm/proxy/virtual-keys",
-        icon: KeyRound,
-      },
-      {
         // Subscriptions & API Keys and Models share a tab bar, so one row
         // covers both; `getModelProvidersNavigationUrl` opens the first one
         // the reader may see.
@@ -247,6 +240,20 @@ export const contentNavGroups: NavGroup[] = [
         dotKey: "nav:model-providers",
       },
       {
+        // Exact match: the pages nested below are rows of their own, so a
+        // prefix match would light this row on Virtual Keys too.
+        title: "LLM Proxy",
+        url: "/llm/proxy",
+        icon: Network,
+        customIsActive: (pathname: string) => pathname === "/llm/proxy",
+      },
+      {
+        title: "Virtual Keys",
+        url: "/llm/proxy/virtual-keys",
+        icon: KeyRound,
+        nested: true,
+      },
+      {
         title: "Model Pools",
         url: "/llm/model-pools",
         icon: Layers,
@@ -254,6 +261,7 @@ export const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/model-pools"),
         beta: true,
         badgeLabel: "Beta",
+        nested: true,
       },
       {
         title: "Auto Routing",
@@ -263,6 +271,7 @@ export const contentNavGroups: NavGroup[] = [
           pathname.startsWith(AUTO_ROUTING_URL),
         beta: true,
         badgeLabel: "Beta",
+        nested: true,
       },
       {
         // Limits and Exports share a tab bar, so one row covers both;
@@ -275,6 +284,7 @@ export const contentNavGroups: NavGroup[] = [
           pathname === "/llm/limits" ||
           pathname.startsWith("/llm/cost-exports"),
         permissionUrls: ["/llm/limits", "/llm/cost-exports"],
+        nested: true,
       },
     ],
   },

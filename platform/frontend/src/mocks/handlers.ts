@@ -456,6 +456,7 @@ export const handlers: HttpHandler[] = [
     templates: [],
     popularAgentOverrides: organizationSeed.popularAgentOverrides,
   }),
+  ...getJson("/api/limits", []),
   ...getJson("/api/default-user-limits", []),
   // Per-user limit usage on the Limits page: no members, nothing spent.
   ...getJson("/api/default-user-limits/users", {

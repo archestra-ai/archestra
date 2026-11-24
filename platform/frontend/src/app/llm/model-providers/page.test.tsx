@@ -585,6 +585,10 @@ describe("ApiKeysPage", () => {
   });
 
   it("clears an active label filter with the other table filters", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
     useDataTableQueryParamsMock.mockReturnValue({
       searchParams: new URLSearchParams(
         "search=claude&provider=anthropic&labels=stage%3Aproduction",
@@ -1282,6 +1286,41 @@ describe("ApiKeysPage", () => {
 
     expect(personalCards().queryByText("Claude Code")).toBeNull();
     expect(personalCards().getAllByText("Connect")).toHaveLength(4);
+  });
+
+  it("keeps a connected Claude Code subscription disconnectable without provider-key read permission while hiding provider API keys", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { anthropic: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseMyClaudeCodeAccount.mockReturnValue({
+      data: { state: "connected", expiresAt: "2027-06-15T00:00:00.000Z" },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<ApiKeysPage />);
+
+    const claudeCard = within(
+      screen.getByTestId(`${E2eTestId.SubscriptionProviderCard}-claude-code`),
+    );
+    expect(claudeCard.getByText("Connected")).toBeVisible();
+    expect(
+      claudeCard.getByRole("button", { name: "Disconnect" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Enterprise plans")).not.toBeInTheDocument();
+    expect(screen.queryByText("Provider API keys")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(E2eTestId.ChatApiKeysTable),
+    ).not.toBeInTheDocument();
   });
 });
 

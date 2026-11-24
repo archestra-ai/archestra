@@ -851,7 +851,7 @@ export default function ApiKeysPage() {
         />
 
         {/* Turned off by an admin, alone or with GitHub Copilot itself. */}
-        {enterprisePlansHidden ? null : (
+        {!apiKeyQueriesEnabled || enterprisePlansHidden ? null : (
           <OrganizationSubscriptionCards
             name={providerCatalog.enterprisePlanName}
             credentials={organizationSubscriptions}
@@ -890,107 +890,111 @@ export default function ApiKeysPage() {
           />
         )}
 
-        <div className="space-y-1 pt-1">
-          <h2 className="text-sm font-medium">Provider API keys</h2>
-          <p className="text-sm text-muted-foreground">
-            Keys for the providers that authenticate with an API key, shared
-            across the organization or kept to a team or person.
-          </p>
-        </div>
+        {apiKeyQueriesEnabled ? (
+          <>
+            <div className="space-y-1 pt-1">
+              <h2 className="text-sm font-medium">Provider API keys</h2>
+              <p className="text-sm text-muted-foreground">
+                Keys for the providers that authenticate with an API key, shared
+                across the organization or kept to a team or person.
+              </p>
+            </div>
 
-        <BulkActionsScope>
-          <CollectionFilters>
-            <FilterBar
-              onClearFilters={
-                hasActiveFilters ? () => clearFilters() : undefined
-              }
-              search={
-                <SearchInput
-                  isLoading={isFetching}
-                  objectNamePlural="credentials"
-                  searchFields={["name"]}
-                  paramName="search"
-                  className={filterSearchClass}
-                />
-              }
-            >
-              <ResourceAccessFilter
-                resource="llmProviderApiKey"
-                noun="credentials"
-              />
-              <Select
-                value={providerFilter}
-                onValueChange={(value) =>
-                  updateQueryParams({
-                    provider: value === "all" ? null : value,
-                  })
-                }
-              >
-                <SelectTrigger
-                  size="sm"
-                  aria-label="Filter by provider"
-                  className={filterControlClass({
-                    active: providerFilter !== "all",
-                  })}
+            <BulkActionsScope>
+              <CollectionFilters>
+                <FilterBar
+                  onClearFilters={
+                    hasActiveFilters ? () => clearFilters() : undefined
+                  }
+                  search={
+                    <SearchInput
+                      isLoading={isFetching}
+                      objectNamePlural="credentials"
+                      searchFields={["name"]}
+                      paramName="search"
+                      className={filterSearchClass}
+                    />
+                  }
                 >
-                  <SelectValue placeholder="All providers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All providers</SelectItem>
-                  <LlmProviderSelectItems options={providerOptions} />
-                </SelectContent>
-              </Select>
-              <EntityLabelFilter
-                useLabelKeys={useLlmProviderApiKeyLabelKeys}
-                useLabelValues={useLlmProviderApiKeyLabelValues}
-                className={filterControlClass({
-                  active: Boolean(labelsFilter),
-                })}
-              />
-            </FilterBar>
-          </CollectionFilters>
+                  <ResourceAccessFilter
+                    resource="llmProviderApiKey"
+                    noun="credentials"
+                  />
+                  <Select
+                    value={providerFilter}
+                    onValueChange={(value) =>
+                      updateQueryParams({
+                        provider: value === "all" ? null : value,
+                      })
+                    }
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      aria-label="Filter by provider"
+                      className={filterControlClass({
+                        active: providerFilter !== "all",
+                      })}
+                    >
+                      <SelectValue placeholder="All providers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All providers</SelectItem>
+                      <LlmProviderSelectItems options={providerOptions} />
+                    </SelectContent>
+                  </Select>
+                  <EntityLabelFilter
+                    useLabelKeys={useLlmProviderApiKeyLabelKeys}
+                    useLabelValues={useLlmProviderApiKeyLabelValues}
+                    className={filterControlClass({
+                      active: Boolean(labelsFilter),
+                    })}
+                  />
+                </FilterBar>
+              </CollectionFilters>
 
-          <div data-testid={E2eTestId.ChatApiKeysTable}>
-            <BulkActions
-              count={selectedApiKeys.length}
-              noun="API key"
-              onClear={clearSelection}
-              busy={bulkDeleteMutation.isPending}
-              selectAllMatching={selectAllMatching}
-            >
-              <PermissionButton
-                permissions={{}}
-                disabled={!canDeleteSelected}
-                tooltip={
-                  canDeleteSelected
-                    ? undefined
-                    : "You can't delete every selected API key"
-                }
-                variant="destructive"
-                size="sm"
-                onClick={() => setIsBulkDeleteDialogOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Delete</span>
-              </PermissionButton>
-            </BulkActions>
-            <DataTable
-              columns={columns}
-              data={rows}
-              getRowId={(row) => row.id}
-              rowSelection={rowSelection}
-              onRowSelectionChange={setRowSelection}
-              onPageRowIdsChange={onPageRowIdsChange}
-              hideSelectedCount
-              isLoading={permissionsPending || isFetching}
-              emptyIcon={Boxes}
-              emptyMessage="No credentials configured"
-              hasActiveFilters={hasActiveFilters}
-              filteredEmptyMessage="No LLM provider credentials match your filters"
-              onClearFilters={clearFilters}
-            />
-          </div>
-        </BulkActionsScope>
+              <div data-testid={E2eTestId.ChatApiKeysTable}>
+                <BulkActions
+                  count={selectedApiKeys.length}
+                  noun="API key"
+                  onClear={clearSelection}
+                  busy={bulkDeleteMutation.isPending}
+                  selectAllMatching={selectAllMatching}
+                >
+                  <PermissionButton
+                    permissions={{}}
+                    disabled={!canDeleteSelected}
+                    tooltip={
+                      canDeleteSelected
+                        ? undefined
+                        : "You can't delete every selected API key"
+                    }
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setIsBulkDeleteDialogOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </PermissionButton>
+                </BulkActions>
+                <DataTable
+                  columns={columns}
+                  data={rows}
+                  getRowId={(row) => row.id}
+                  rowSelection={rowSelection}
+                  onRowSelectionChange={setRowSelection}
+                  onPageRowIdsChange={onPageRowIdsChange}
+                  hideSelectedCount
+                  isLoading={permissionsPending || isFetching}
+                  emptyIcon={Boxes}
+                  emptyMessage="No credentials configured"
+                  hasActiveFilters={hasActiveFilters}
+                  filteredEmptyMessage="No LLM provider credentials match your filters"
+                  onClearFilters={clearFilters}
+                />
+              </div>
+            </BulkActionsScope>
+          </>
+        ) : null}
 
         {/* Create Dialog */}
         <CreateLlmProviderApiKeyDialog

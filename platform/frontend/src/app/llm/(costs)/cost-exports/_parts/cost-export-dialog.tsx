@@ -108,6 +108,18 @@ export function CostExportDialog({
             id={`${id}-provider`}
             label="Destination"
             error={form.errorFor("blobProviderId")}
+            labelAction={
+              canManageProviders && (
+                // Adding a second provider, renaming or deleting one happens
+                // on the settings page; its rows lead back here.
+                <Link
+                  href="/settings/blob-providers"
+                  className="text-xs text-primary hover:underline"
+                >
+                  Manage blob providers
+                </Link>
+              )
+            }
           >
             {noProviders ? (
               <div className="flex items-center justify-between gap-3">
@@ -163,16 +175,6 @@ export function CostExportDialog({
                 })}
               />
             )}
-            {canManageProviders && (
-              // Adding a second provider, renaming or deleting one happens
-              // on the settings page; its rows lead back here.
-              <Link
-                href="/settings/blob-providers"
-                className="inline-block text-xs text-primary hover:underline"
-              >
-                Manage blob providers
-              </Link>
-            )}
           </Field>
 
           <div className="space-y-2">
@@ -204,9 +206,12 @@ export function CostExportDialog({
                         — {option.hint}
                       </span>
                     </span>
-                    <span className="block truncate font-mono text-xs text-muted-foreground">
-                      {fileName(option.value)}
-                    </span>
+                    {/* Only the chosen option names its file, to keep the form short. */}
+                    {values.schedule === option.value && (
+                      <span className="block truncate font-mono text-xs text-muted-foreground">
+                        {fileName(option.value)}
+                      </span>
+                    )}
                   </span>
                 </Label>
               ))}
@@ -301,17 +306,23 @@ function Field({
   label,
   hint,
   error,
+  labelAction,
   children,
 }: {
   id: string;
   label: string;
   hint?: string;
   error?: string;
+  /** A small link on the label's row, at its right end. */
+  labelAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-baseline justify-between gap-3">
+        <Label htmlFor={id}>{label}</Label>
+        {labelAction}
+      </div>
       {children}
       {error ? (
         <p className="text-sm text-destructive">{error}</p>

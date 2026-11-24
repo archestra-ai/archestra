@@ -9,6 +9,7 @@ import {
   PackagePlus,
   Pencil,
   Plus,
+  Puzzle,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -62,7 +63,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useScopedCapabilities } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import {
   usePluginLabelKeys,
@@ -449,9 +453,9 @@ function PluginsList() {
   /**
    * Nothing has come back yet, so the page cannot tell whether it is about to
    * show a list or an empty state. Rendering the list branch meanwhile puts
-   * the filter bar, the table and the "Add new plugin" button on screen and
-   * then replaces the lot with the empty state — see the same guard on the
-   * skills page, where that swap measured ~250ms.
+   * the filter bar and the table on screen and then replaces them with the
+   * empty state — see the same guard on the skills page, where that swap
+   * measured ~250ms.
    *
    * `isPending` is paired with `isFetching` so a disabled query, which stays
    * pending indefinitely, cannot hold this true.
@@ -465,20 +469,20 @@ function PluginsList() {
       <PageLayout
         title="Plugins"
         description={PLUGINS_DESCRIPTION}
+        // The header stays the same while loading, empty or listing, so the
+        // first plugin doesn't shift it.
         actionButton={
           <div className="flex items-center gap-2">
-            {!showEmptyState && !isInitialPluginsLoad && (
-              <PermissionButton
-                permissions={{ plugin: ["create"] }}
-                size="sm"
-                asChild
-              >
-                <Link href="/plugins/new">
-                  <Plus className="h-4 w-4" />
-                  Add new plugin
-                </Link>
-              </PermissionButton>
-            )}
+            <PermissionButton
+              permissions={{ plugin: ["create"] }}
+              size="sm"
+              asChild
+            >
+              <Link href="/plugins/new">
+                <Plus className="h-4 w-4" />
+                Add new plugin
+              </Link>
+            </PermissionButton>
             <ResourceListActions resource="plugin" />
           </div>
         }
@@ -841,23 +845,33 @@ function PluginsList() {
 }
 
 function PluginsEmptyState() {
+  const { data: canCreate, isPending } = useHasPermissions({
+    plugin: ["create"],
+  });
   return (
     <EmptyState
-      className="min-h-[60vh]"
-      icon={Braces}
-      title="No plugins yet."
-      description="Create a plugin for Claude Code, Claude Desktop, Codex, Copilot CLI, or Cursor."
+      variant="firstUse"
+      icon={Puzzle}
+      title="Extend the coding tools your team already uses"
+      description="A skill teaches an agent how to do a task. A plugin bundles files such as skills, commands, and hooks for one coding tool. Share it, and each person installs it with one command."
+      canAct={isPending ? undefined : canCreate}
+      readerMessage="Your admins haven't shared a plugin yet."
       action={
-        <PermissionButton
-          permissions={{ plugin: ["create"] }}
-          size="sm"
-          asChild
-        >
-          <Link href="/plugins/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add your first plugin
+        <Button size="sm" asChild>
+          <Link href="/plugins/new?source=blank">
+            <Plus />
+            <span>Create a plugin</span>
           </Link>
-        </PermissionButton>
+        </Button>
+      }
+      secondaryAction={
+        // The wizard's first step lists the popular marketplaces.
+        <Link
+          href="/plugins/new"
+          className="text-sm text-primary hover:underline"
+        >
+          Browse popular plugins
+        </Link>
       }
     />
   );

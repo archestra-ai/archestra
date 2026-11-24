@@ -134,10 +134,77 @@ describe("ModelPoolsPage", () => {
     ];
     renderPage();
     expect(
-      await screen.findByText("Connect your first model provider"),
+      await screen.findByRole("button", { name: "Add model provider" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Create pool" }),
+      screen.queryByRole("button", { name: "Create a pool" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("waits for the provider check before offering to create a pool", async () => {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, async () => {
+        await promise;
+        return HttpResponse.json([]);
+      }),
+    );
+
+    renderPage();
+    try {
+      expect(
+        await screen.findByText(
+          "Keep your models answering when a provider fails",
+        ),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: /^Create (a )?pool$/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText("A pool serves one model from several provider keys."),
+      ).toBeVisible();
+    } finally {
+      resolve();
+    }
+    expect(
+      await screen.findByRole("button", { name: "Add model provider" }),
+    ).toBeEnabled();
+  });
+
+  it("explains pools on a page with none, under the usual header", async () => {
+    renderPage();
+    expect(
+      await screen.findByText(
+        "Keep your models answering when a provider fails",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create a pool" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Create pool" })).toBeEnabled();
+    expect(screen.getByText("Read more in the docs")).toBeInTheDocument();
+  });
+
+  it("tells a reader without permission who creates pools", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    renderPage();
+    expect(
+      await screen.findByText("Your admins haven't created a model pool yet."),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Create a pool" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the list and the header once a pool exists", async () => {
+    pools = [pool("glm-4.6", [{ enabled: true }])];
+    renderPage();
+    expect(await screen.findAllByText("glm-4.6")).not.toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Create pool" })).toBeEnabled();
+    expect(screen.getByText("Read more in the docs")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Keep your models answering when a provider fails"),
     ).not.toBeInTheDocument();
   });
 
@@ -157,10 +224,10 @@ describe("ModelPoolsPage", () => {
     ];
     renderPage();
     expect(
-      await screen.findByRole("button", { name: "Create pool" }),
+      await screen.findByRole("button", { name: "Create a pool" }),
     ).toBeEnabled();
     expect(
-      screen.queryByText("Connect your first model provider"),
+      screen.queryByRole("button", { name: "Add model provider" }),
     ).not.toBeInTheDocument();
   });
 
@@ -179,10 +246,10 @@ describe("ModelPoolsPage", () => {
     ];
     renderPage();
     expect(
-      await screen.findByRole("button", { name: "Create pool" }),
+      await screen.findByRole("button", { name: "Create a pool" }),
     ).toBeEnabled();
     expect(
-      screen.queryByText("Connect your first model provider"),
+      screen.queryByRole("button", { name: "Add model provider" }),
     ).not.toBeInTheDocument();
   });
 
@@ -197,7 +264,7 @@ describe("ModelPoolsPage", () => {
     ];
     renderPage();
     expect(
-      await screen.findByText("Connect your first model provider"),
+      await screen.findByRole("button", { name: "Add model provider" }),
     ).toBeInTheDocument();
   });
 
@@ -219,7 +286,7 @@ describe("ModelPoolsPage", () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(
-      await screen.findByRole("button", { name: "Create pool" }),
+      await screen.findByRole("button", { name: "Create a pool" }),
     );
     const dialog = await screen.findByRole("dialog");
     await user.click(

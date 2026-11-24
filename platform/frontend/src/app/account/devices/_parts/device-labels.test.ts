@@ -3,6 +3,8 @@ import {
   devicePlatformLabel,
   deviceProgramUpdateNotice,
   deviceProgramVersionLabel,
+  deviceServerRows,
+  deviceServersLabel,
   deviceStatusLabel,
 } from "./device-labels";
 
@@ -114,5 +116,97 @@ describe("deviceProgramUpdateNotice", () => {
       command: "archestra update",
       after: " in a terminal on that device.",
     });
+  });
+});
+
+type Server = Parameters<typeof deviceServerRows>[0][number];
+
+function server(overrides: Partial<Server>): Server {
+  return {
+    catalogId: "catalog-1",
+    name: "Filesystem",
+    state: "running",
+    lastError: null,
+    command: "npx -y @modelcontextprotocol/server-filesystem",
+    url: null,
+    enabled: true,
+    toolCount: 14,
+    ...overrides,
+  };
+}
+
+describe("deviceServersLabel", () => {
+  it("counts the running servers, and shows no failed count when none failed", () => {
+    expect(
+      deviceServersLabel({
+        online: true,
+        servers: [
+          server({ catalogId: "a" }),
+          server({ catalogId: "b" }),
+          server({ catalogId: "c", state: "starting" }),
+        ],
+      }),
+    ).toEqual({ running: "2 running", failed: null });
+  });
+
+  it("adds the failed count when a server failed", () => {
+    expect(
+      deviceServersLabel({
+        online: true,
+        servers: [
+          server({ catalogId: "a" }),
+          server({ catalogId: "b", state: "failed" }),
+        ],
+      }),
+    ).toEqual({ running: "1 running", failed: "1 failed" });
+  });
+
+  it("knows nothing for an offline device", () => {
+    expect(
+      deviceServersLabel({ online: false, servers: [server({})] }),
+    ).toBeNull();
+  });
+});
+
+describe("deviceServerRows", () => {
+  it("lists failed servers first, the others in their order", () => {
+    const rows = deviceServerRows([
+      server({ catalogId: "a", name: "Chrome DevTools" }),
+      server({ catalogId: "b", name: "Blender", state: "failed" }),
+      server({ catalogId: "c", name: "Playwright", state: "starting" }),
+    ]);
+    expect(rows.map((row) => [row.name, row.state])).toEqual([
+      ["Blender", "Failed"],
+      ["Chrome DevTools", "Running"],
+      ["Playwright", "Starting"],
+    ]);
+  });
+
+  it("words a known error as one plain sentence", () => {
+    const [row] = deviceServerRows([
+      server({
+        name: "Blender",
+        state: "failed",
+        command: "uvx blender-mcp",
+        lastError:
+          "cannot start the program: No such file or directory (os error 2)",
+      }),
+    ]);
+    expect(row.error).toBe('The program "uvx" was not found on this device.');
+  });
+
+  it("shows an unknown error as it came", () => {
+    const [row] = deviceServerRows([
+      server({ state: "failed", lastError: "something else went wrong" }),
+    ]);
+    expect(row.error).toBe("something else went wrong");
+  });
+
+  it("gives a running server no error", () => {
+    const [row] = deviceServerRows([
+      server({ lastError: "an old error from before it ran" }),
+    ]);
+    expect(row.error).toBeNull();
+    expect(row.running).toBe(true);
   });
 });

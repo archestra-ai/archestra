@@ -61,10 +61,7 @@ pub enum LaunchdError {
 /// `archestra bridge start` on macOS.
 pub(super) fn start(options: &Options<'_>, add_to_login: bool) -> Result<Started, AutostartError> {
     let at_login = install_and_start(options, add_to_login, &mut SystemLaunchctl)?;
-    Ok(Started {
-        where_it_runs: "The Device tab in Archestra shows its status.",
-        at_login,
-    })
+    Ok(Started { at_login })
 }
 
 /// `archestra bridge stop` on macOS.

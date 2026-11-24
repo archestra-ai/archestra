@@ -173,7 +173,7 @@ fn put_the_program_on_the_path() {
         return;
     };
     match crate::shell_path::add(&home) {
-        Ok(added) => println!("{}", added.message()),
+        Ok(added) => tracing::info!(?added, "the `archestra` command is on the PATH"),
         Err(error) => {
             tracing::warn!(%error, "cannot put the `archestra` command on the PATH");
         }

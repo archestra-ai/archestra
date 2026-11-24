@@ -4,7 +4,7 @@
 # Go toolchain is sourced from the official golang:alpine image because Alpine's
 # community repo lags upstream Go patch releases. Stays binary-compatible since
 # both images share the Alpine base.
-FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-bin
+FROM golang:1.26.11-alpine@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab AS go-bin
 
 FROM ghcr.io/astral-sh/uv:0.9.30@sha256:538e0b39736e7feae937a65983e49d2ab75e1559d35041f9878b7b7e51de91e4 AS uv-bin
 
@@ -14,7 +14,7 @@ FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb
 # Multi-stage build for minimal final image
 # Alpine is pinned to 3.23 (not the floating `-alpine`): 3.24's git and musl
 # are reported vulnerable until 3.24 publishes the fixes 3.23 already has.
-FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:0bc00c86d1ea5ca081791c8fae35d98311c7addbcb37219ca25fca1991a69d43 AS python-builder
+FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:c42f2ca2c28720226e87f0a86a1edb05cea9d307f4556591a7bd852fea74f900 AS python-builder
 
 # Install Python build dependencies
 RUN apk add --no-cache \
@@ -116,7 +116,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Final stage - minimal runtime image with Python 3.12
-FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:0bc00c86d1ea5ca081791c8fae35d98311c7addbcb37219ca25fca1991a69d43
+FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:c42f2ca2c28720226e87f0a86a1edb05cea9d307f4556591a7bd852fea74f900
 
 # Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \

@@ -38,7 +38,7 @@ RUN curl -fsSL --retry 3 \
  && /out/gh api --help >/dev/null \
  && /out/gh auth git-credential --help >/dev/null
 
-FROM dhi.io/node:24.22.3-debian13-dev@sha256:810c2c99b5a81edea5a402abd0afc693ccd51712e22cee6824d910c3e564c182 AS agent-base
+FROM dhi.io/node:24.22.3-debian13-dev@sha256:aa2362cc595c51bcaaed8820482ff4cde2c610d4a9af4fcd281909954bd861ac AS agent-base
 ARG TARGETARCH
 # DHI's apt mirror can serve a stale archive after its signed index changes.
 # Request fresh packages while retaining apt's index and archive verification.

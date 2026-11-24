@@ -112,6 +112,11 @@ export function BudgetFields({
   const [chosenInterval, setChosenInterval] =
     useState<LimitCleanupInterval>("calendar_month");
   const interval = spendCap?.cleanupInterval ?? chosenInterval;
+  // The text as typed, while the field has focus. Limits are whole dollars:
+  // the cap rounds up, and the field shows the saved amount once it blurs.
+  const [capDraft, setCapDraft] = useState<string | null>(null);
+  // Typing commits each prefix; text that ends unusable restores this.
+  const [capOnFocus, setCapOnFocus] = useState<SpendCapValue>(null);
 
   const payerLabel =
     layout === "inline" ? "Who pays" : `Who pays for this ${subject}?`;
@@ -169,19 +174,32 @@ export function BudgetFields({
       <InputGroupInput
         id={`${idPrefix}-spend-cap`}
         aria-label="Spend cap in dollars"
-        inputMode="numeric"
+        inputMode="decimal"
         placeholder="No cap"
         disabled={capLocked}
-        value={spendCap ? String(spendCap.limitValue) : ""}
+        value={capDraft ?? (spendCap ? String(spendCap.limitValue) : "")}
         onChange={(event) => {
-          const digits = event.target.value.replace(/[^0-9]/g, "");
-          const amount = Number.parseInt(digits, 10);
-          onSpendCapChange(
-            digits && amount > 0
-              ? { limitValue: amount, cleanupInterval: interval }
-              : null,
-          );
+          setCapDraft(event.target.value);
+          const cap = parseCap(event.target.value);
+          switch (cap.kind) {
+            case "cleared":
+              // Retyping the amount keeps the period it had.
+              setChosenInterval(interval);
+              onSpendCapChange(null);
+              break;
+            case "dollars":
+              onSpendCapChange({
+                limitValue: cap.dollars,
+                cleanupInterval: interval,
+              });
+              break;
+            case "unusable":
+              onSpendCapChange(capOnFocus);
+              break;
+          }
         }}
+        onFocus={() => setCapOnFocus(spendCap)}
+        onBlur={() => setCapDraft(null)}
       />
     </InputGroup>
   );
@@ -297,6 +315,34 @@ export function BudgetFields({
       </fieldset>
     </div>
   );
+}
+
+const MAX_SPEND_CAP_DOLLARS = 2_147_483_647;
+
+/**
+ * A typed cap, rounded up to whole dollars. Text that is not a usable amount
+ * keeps the cap the field had when it was focused, shown again on blur.
+ */
+function parseCap(
+  text: string,
+):
+  | { kind: "cleared" }
+  | { kind: "dollars"; dollars: number }
+  | { kind: "unusable" } {
+  if (text.trim() === "") return { kind: "cleared" };
+  if (text.includes("-")) return { kind: "unusable" };
+  // "$", spaces and apostrophes only format the amount.
+  const digits = text.replace(/[^\d.,]/g, "");
+  const amount = /^\d{1,3}(,\d{3})+(\.\d*)?$/.test(digits)
+    ? digits.replace(/,/g, "")
+    : /^\d*,\d{0,2}$/.test(digits)
+      ? digits.replace(",", ".")
+      : digits;
+  if (!/^\d*\.?\d*$/.test(amount)) return { kind: "unusable" };
+  const dollars = Math.ceil(Number(amount));
+  return dollars > 0 && dollars <= MAX_SPEND_CAP_DOLLARS
+    ? { kind: "dollars", dollars }
+    : { kind: "unusable" };
 }
 
 /** Info shown in place of the billing team for clients whose users pay. */

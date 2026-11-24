@@ -260,6 +260,7 @@ export function CreateVirtualKeyDialog({
         spendCap: null,
         grants: [],
         modelPoolIds: [],
+        autoRouterIds: [],
         labels: [],
         ownerId: undefined,
       };
@@ -304,7 +305,8 @@ export function CreateVirtualKeyDialog({
     isPassthrough ||
     includeFutureProviders ||
     providerApiKeyIds.length > 0 ||
-    (canSetModelPools && modelPoolIds.length > 0);
+    (canSetModelPools && modelPoolIds.length > 0) ||
+    (canSetAutoRouters && autoRouterIds.length > 0);
   const canSubmit =
     newKeyName.trim().length > 0 && hasAccess && !createMutation.isPending;
 
@@ -323,6 +325,7 @@ export function CreateVirtualKeyDialog({
       spendCap,
       grants,
       modelPoolIds,
+      autoRouterIds,
       labels,
       ownerId,
     });

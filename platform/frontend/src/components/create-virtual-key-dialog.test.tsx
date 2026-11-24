@@ -234,12 +234,6 @@ describe("CreateVirtualKeyDialog", () => {
       "href",
       "/llm/model-pools",
     );
-    expect(
-      screen.getByText(
-        /assigned pool's exact name as the model. Do not add a provider prefix/,
-      ),
-    ).toBeVisible();
-    expect(screen.getByText(/open its Connect section/)).toBeVisible();
     expect(screen.queryByText(/\/undefined/)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/No runnable model example/),

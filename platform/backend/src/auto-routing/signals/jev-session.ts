@@ -242,11 +242,9 @@ function hashBreakerKey(params: {
   url: string;
   model: string;
 }): string {
-  return createHmac("sha256", BREAKER_KEY_SALT)
-    .update(
-      `${params.credentialScope}\u0000${params.apiKey}\u0000${params.url}\u0000${params.model}`,
-    )
-    .digest("hex");
+  const payload = `${params.credentialScope}\u0000${params.apiKey}\u0000${params.url}\u0000${params.model}`;
+  // codeql[js/insufficient-password-hash] Buckets a high-entropy API key for ephemeral process-local circuit-breaker state, not password storage or verification.
+  return createHmac("sha256", BREAKER_KEY_SALT).update(payload).digest("hex");
 }
 
 function isTransientScorerError(error: SignalSourceError): boolean {

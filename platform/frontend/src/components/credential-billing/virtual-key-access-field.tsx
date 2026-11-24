@@ -613,13 +613,19 @@ function useAccess(props: AccessProps) {
     onChange(value.filter((mapping) => mapping.provider !== provider));
   const removeKey = (keyId: string) =>
     onChange(value.filter((mapping) => mapping.providerApiKeyId !== keyId));
-  const addPool = (id: string) => onModelPoolIdsChange([...modelPoolIds, id]);
+  // Rebuilt from the pools and routers that still exist, so one deleted
+  // elsewhere drops out on the next change instead of failing Create.
+  const listedPoolIds = listedPools.map((pool) => pool.id);
+  const listedRouterIds = listedRouters.map((router) => router.id);
+  const addPool = (id: string) => onModelPoolIdsChange([...listedPoolIds, id]);
   const removePool = (id: string) =>
-    onModelPoolIdsChange(modelPoolIds.filter((poolId) => poolId !== id));
+    onModelPoolIdsChange(listedPoolIds.filter((poolId) => poolId !== id));
   const addRouter = (id: string) =>
-    onAutoRouterIdsChange([...autoRouterIds, id]);
+    onAutoRouterIdsChange([...listedRouterIds, id]);
   const removeRouter = (id: string) =>
-    onAutoRouterIdsChange(autoRouterIds.filter((routerId) => routerId !== id));
+    onAutoRouterIdsChange(
+      listedRouterIds.filter((routerId) => routerId !== id),
+    );
 
   /** "8 providers · 1 pool · 1 router" */
   const summary = [
@@ -642,7 +648,6 @@ function useAccess(props: AccessProps) {
     props,
     catalog,
     includeFutureProviders,
-    providers,
     sharedProviders,
     noProviderKeys: providers.length === 0,
     providerRows,
@@ -665,7 +670,7 @@ function useAccess(props: AccessProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Provider access mode cards (unchanged from the current field)
+// Provider access mode cards
 // ---------------------------------------------------------------------------
 
 function ProviderAccessModes({ model }: { model: AccessModel }) {
@@ -741,35 +746,22 @@ function ModeCard({
 // The scoped picker: providers, pools and routers, not individual keys
 // ---------------------------------------------------------------------------
 
-type PickerKind = "routers" | "pools" | "providers";
-
 /**
  * Adds a provider (on its primary key), a model pool or an auto router. Keys
  * are chosen afterwards, on the provider's row. Closes after each pick;
  * anything already added is left out.
  */
-function ScopedPicker({
-  model,
-  label = "Add a provider, model pool or auto router",
-  only,
-  className,
-}: {
-  model: AccessModel;
-  label?: string;
-  /** Limit the picker to one kind, e.g. an "Add provider" button in a group. */
-  only?: PickerKind;
-  className?: string;
-}) {
+function ScopedPicker({ model }: { model: AccessModel }) {
+  const label = "Add a provider, model pool or auto router";
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const changeOpen = (next: boolean) => {
     setOpen(next);
     if (!next) setSearch("");
   };
-  const shows = (kind: PickerKind) => !only || only === kind;
-  const routers = shows("routers") ? model.addableRouters : [];
-  const pools = shows("pools") ? model.addablePools : [];
-  const providers = shows("providers") ? model.addableProviders : [];
+  const routers = model.addableRouters;
+  const pools = model.addablePools;
+  const providers = model.addableProviders;
   const nothingLeft =
     routers.length === 0 && pools.length === 0 && providers.length === 0;
 
@@ -782,7 +774,7 @@ function ScopedPicker({
           role="combobox"
           aria-expanded={open}
           aria-label={label}
-          className={cn("w-full justify-start font-normal", className)}
+          className="w-full justify-start font-normal"
         >
           <Plus className="text-muted-foreground" />
           <span className="flex-1 truncate text-left text-muted-foreground">
@@ -799,11 +791,7 @@ function ScopedPicker({
           <CommandInput
             value={search}
             onValueChange={setSearch}
-            placeholder={
-              only === "providers"
-                ? "Search providers…"
-                : "Search providers, pools and routers…"
-            }
+            placeholder="Search providers, pools and routers…"
           />
           <CommandList className="max-h-[320px]">
             <CommandEmpty>
@@ -1070,12 +1058,11 @@ function DetailGrid({
   const columns = {
     2: "grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]",
     3: "grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto]",
-    4: "grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto_auto]",
   }[headings.length];
   return (
     <div className={cn("grid items-center gap-x-3 gap-y-1.5", columns)}>
       {headings.map((heading) => (
-        <span key={heading || "actions"} className="text-muted-foreground">
+        <span key={heading} className="text-muted-foreground">
           {heading}
         </span>
       ))}

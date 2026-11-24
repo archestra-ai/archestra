@@ -111,6 +111,18 @@ pub struct DispatchPolicy {
     /// dispatch whose composition is no longer the stored one publishes nothing
     /// and is refused as retryable; absent, nothing is checked.
     pub composition_hash: Option<String>,
+    /// Absent, every new session opens on the Enforce line.
+    pub guardrails: Option<GuardrailsSettings>,
+}
+
+/// The deployment's Guardrails settings, as the host resolved them.
+#[napi(object)]
+pub struct GuardrailsSettings {
+    #[napi(ts_type = "'observe' | 'enforce'")]
+    pub mode: String,
+    #[napi(ts_type = "'ask' | 'auto_unattended' | 'auto_everywhere'")]
+    pub person_approval: String,
+    pub enforced_marks: Vec<String>,
 }
 
 #[napi(object)]
@@ -121,13 +133,25 @@ pub struct OpenappaStatus {
     pub policy_revision: i64,
 }
 
-impl From<DispatchPolicy> for deployments::HostedPolicy {
-    fn from(policy: DispatchPolicy) -> Self {
-        deployments::HostedPolicy {
+impl TryFrom<DispatchPolicy> for deployments::HostedPolicy {
+    type Error = napi::Error;
+
+    fn try_from(policy: DispatchPolicy) -> napi::Result<Self> {
+        let guardrails = match policy.guardrails {
+            Some(GuardrailsSettings {
+                mode,
+                person_approval,
+                enforced_marks,
+            }) => crate::lines::Guardrails::parse(&mode, &person_approval, enforced_marks)
+                .map_err(invalid_input)?,
+            None => crate::lines::Guardrails::enforce(),
+        };
+        Ok(deployments::HostedPolicy {
             content: policy.content,
             credentials: deployments::HostCredentials::new(policy.credentials),
             composition: policy.composition_hash,
-        }
+            guardrails,
+        })
     }
 }
 
@@ -631,7 +655,7 @@ pub async fn get_openappa_status(
     {
         return Err(invalid_input("invalid session identity"));
     }
-    let policy: deployments::HostedPolicy = policy.into();
+    let policy: deployments::HostedPolicy = policy.try_into()?;
     let result = AssertUnwindSafe(async move {
         let state = initialized().await?.encrypted(encryption)?;
         let session = SessionKey::new(&organization_id, &session_id);
@@ -641,10 +665,14 @@ pub async fn get_openappa_status(
                 .await
                 .map_err(panicked)??;
         // An unstarted session has no status, and is no reason to publish.
-        if root.is_none() {
+        let Some(root) = root else {
             return Ok(None);
-        }
-        on_deployment(&state, &organization_id, &policy, |pinned| {
+        };
+        let line = crate::lines::Line {
+            organization_id: organization_id.clone(),
+            variant: state.variant_of(&organization_id, Some(&root))?,
+        };
+        on_deployment(&state, &line, &policy, |pinned| {
             let key = SessionKey::new(&organization_id, &session_id);
             async move { session_status(pinned, key).await }
         })

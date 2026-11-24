@@ -65,7 +65,7 @@ enum PeerKind {
 async fn peer_call(input: String, policy: DispatchPolicy, kind: PeerKind) -> napi::Result<String> {
     let parsed: PeerInput = serde_json::from_str(&input).map_err(invalid_input)?;
     validate_actor(&parsed)?;
-    let result = std::panic::AssertUnwindSafe(execute(parsed, policy.into(), kind))
+    let result = std::panic::AssertUnwindSafe(execute(parsed, policy.try_into()?, kind))
         .catch_unwind()
         .await;
     match result {
@@ -83,7 +83,12 @@ async fn execute(
     kind: PeerKind,
 ) -> napi::Result<Value> {
     let state = initialized().await?;
-    super::on_deployment(&state, &input.organization_id, &policy, |pinned| {
+    let root = acting_root(&Sql(&state.store), &input)?;
+    let line = super::lines::Line {
+        organization_id: input.organization_id.clone(),
+        variant: state.variant_of(&input.organization_id, Some(&root))?,
+    };
+    super::on_deployment(&state, &line, &policy, |pinned| {
         execute_pinned(pinned, &input, kind)
     })
     .await

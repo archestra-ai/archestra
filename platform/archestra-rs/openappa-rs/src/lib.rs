@@ -16,6 +16,7 @@ mod errors;
 mod input;
 mod labels;
 mod lease;
+mod lines;
 mod metrics;
 mod operations;
 #[cfg_attr(test, allow(dead_code))]
@@ -199,7 +200,7 @@ fn state_mutex() -> &'static Mutex<Option<State>> {
 /// again.
 async fn on_deployment<T, Work>(
     state: &State,
-    organization_id: &str,
+    line: &lines::Line,
     policy: &deployments::HostedPolicy,
     work: impl Fn(State) -> Work,
 ) -> napi::Result<T>
@@ -211,25 +212,17 @@ where
         .deployment(
             &state.runtime,
             &state.store,
-            organization_id,
+            line,
             policy,
             state.reporting.is_some(),
         )
         .await
-        .map_err(|refusal| match refusal {
-            deployments::DeploymentError::Superseded => policy_moved(),
-            deployments::DeploymentError::Diverged => Fault::binding(
-                BindingFailure::InvalidInput,
-                "OpenAPPA was handed two policy documents under one composition; the organization's deployment is unchanged",
-            )
-            .into(),
-            deployments::DeploymentError::Failed(fault) => fault.into(),
-        })?;
+        .map_err(deployment_refusal)?;
     match work(state.pinned(&deployment)).await {
         Err(moved) if is_policy_moved(&moved) => {
             let Some(head) = state
                 .deployments
-                .repin(&state.runtime, &state.store, organization_id, &deployment)
+                .repin(&state.runtime, &state.store, line, &deployment)
                 .await?
             else {
                 return Err(policy_moved());
@@ -243,6 +236,18 @@ where
     }
 }
 
+fn deployment_refusal(refusal: deployments::DeploymentError) -> napi::Error {
+    match refusal {
+        deployments::DeploymentError::Superseded => policy_moved(),
+        deployments::DeploymentError::Diverged => Fault::binding(
+            BindingFailure::InvalidInput,
+            "OpenAPPA was handed two policy documents under one composition; the organization's deployment is unchanged",
+        )
+        .into(),
+        deployments::DeploymentError::Failed(fault) => fault.into(),
+    }
+}
+
 #[napi(js_name = "dispatchHook")]
 pub async fn dispatch_hook(
     input: String,
@@ -251,7 +256,7 @@ pub async fn dispatch_hook(
 ) -> napi::Result<String> {
     let input: Input = serde_json::from_str(&input).map_err(invalid_input)?;
     validate(&input)?;
-    run(input, policy.into(), encryption).await
+    run(input, policy.try_into()?, encryption).await
 }
 
 /// Runs one validated event through a view pinned to its organization's deployment.
@@ -262,9 +267,14 @@ async fn run(
 ) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
         let state = initialized().await?.encrypted(encryption)?;
-        on_deployment(&state, &input.organization_id, &policy, |pinned| {
-            let input = input.clone();
-            async move { pinned.dispatch(input).await }
+        let (root, family) = state.family(&input, &policy.guardrails)?;
+        let line = lines::Line {
+            organization_id: input.organization_id.clone(),
+            variant: family.variant,
+        };
+        on_deployment(&state, &line, &policy, |pinned| {
+            let (input, root, family) = (input.clone(), root.clone(), family.clone());
+            async move { pinned.dispatch(input, root, family).await }
         })
         .await
     })
@@ -287,6 +297,64 @@ async fn initialized() -> napi::Result<State> {
 }
 
 impl State {
+    /// The root a dispatch for `input` decides in, and the family it belongs to: the one
+    /// that root follows, the one a fork's parent follows, or a new one opening on the
+    /// line the deployment's settings give this session.
+    fn family(
+        &self,
+        input: &Input,
+        guardrails: &lines::Guardrails,
+    ) -> napi::Result<(String, lines::Family)> {
+        let root = self.dispatch_root(input)?;
+        if let Some(family) = self.followed(&input.organization_id, &root)? {
+            return Ok((root, family));
+        }
+        if let Some(fork_of) = &input.fork_of {
+            let parent = SessionKey::new(&input.organization_id, fork_of);
+            if let Some(parent_root) = recorded_root(&Sql(&self.store), &parent)?
+                && let Some(family) = self.followed(&input.organization_id, &parent_root)?
+            {
+                return Ok((root, family));
+            }
+        }
+        let opening = guardrails.opening(input.agent_runtime);
+        Ok((root, lines::Family::opening(opening)))
+    }
+
+    /// The line a started family follows; the Enforce line when `root` names none yet.
+    fn variant_of(
+        &self,
+        organization_id: &str,
+        root: Option<&str>,
+    ) -> napi::Result<lines::Variant> {
+        let followed = match root {
+            Some(root) => self.followed(organization_id, root)?,
+            None => None,
+        };
+        Ok(followed.map_or(lines::Variant::Enforce, |family| family.variant))
+    }
+
+    /// The family `root` follows, read from its log, or `None` before it opened.
+    fn followed(&self, organization_id: &str, root: &str) -> napi::Result<Option<lines::Family>> {
+        let families = &self.deployments.families;
+        if let Some(family) = families.get(organization_id, root) {
+            return Ok(Some(family));
+        }
+        let log = match self.store.log(&TrajectoryId(root.to_owned())) {
+            Ok(log) => log,
+            Err(appa_eventlog::ReadError::UnknownRoot { .. }) => return Ok(None),
+            Err(error) => return Err(errors::read_failure(error)),
+        };
+        let family = lines::Family::of_log(organization_id, &log).ok_or_else(|| {
+            invariant(format!(
+                "the family of {root} follows deployment {}, none of its organization's lines",
+                log.deployment()
+            ))
+        })?;
+        families.remember(organization_id, root, &family);
+        Ok(Some(family))
+    }
+
     /// Opens this session's root as a fork of `fork_of`.
     /// Freezes the parent session's policy revision, labels, effects, and
     /// denials into the new root. Returns the parent watermark bounding inherited results.
@@ -296,6 +364,7 @@ impl State {
         input: &Input,
         fork_of: &str,
         root: &str,
+        settings: &SessionSettings,
     ) -> napi::Result<Option<SystemTime>> {
         if input.parent_id.is_some() {
             return Err(invalid_input(
@@ -340,7 +409,7 @@ impl State {
                     &TrajectoryId(parent_root),
                     &TrajectoryId(parent_trajectory),
                     &TrajectoryId(root.to_owned()),
-                    SessionSettings::default(),
+                    settings.clone(),
                 )
                 .map_err(fork_refused)?;
             return Ok(None);
@@ -361,7 +430,7 @@ impl State {
                 &TrajectoryId(parent_root),
                 &TrajectoryId(parent_trajectory),
                 &TrajectoryId(root.to_owned()),
-                SessionSettings::default(),
+                settings.clone(),
             )
             .map_err(fork_refused)?;
         Ok(Some(forked_at))
@@ -409,10 +478,14 @@ impl State {
         })
     }
 
-    async fn dispatch(&self, input: Input) -> napi::Result<Value> {
+    async fn dispatch(
+        &self,
+        input: Input,
+        root: String,
+        family: lines::Family,
+    ) -> napi::Result<Value> {
         let key = SessionKey::of(&input);
         let sql = Sql(&self.store);
-        let root = self.dispatch_root(&input)?;
         let consults = Arc::new(consults::ConsultBuffer::default());
         let recording = State {
             runtime: Arc::new(self.runtime.transcribing(consults.clone())),
@@ -426,7 +499,9 @@ impl State {
         };
         let child_return = input.event == HookEventKind::ChildReturn;
         let observation = self.label_observation(&input, &root);
-        let result = recording.dispatch_in_family(input, root, key).await;
+        let result = recording
+            .dispatch_in_family(input, root, key, &family.settings)
+            .await;
         consults::store(&sql, attribution, &consults);
         if result.is_ok() {
             self.record_label(&sql, observation);
@@ -528,6 +603,7 @@ impl State {
         input: Input,
         root: String,
         key: SessionKey,
+        settings: &SessionSettings,
     ) -> napi::Result<Value> {
         let sql = Sql(&self.store);
         let pg = &sql;
@@ -556,7 +632,7 @@ impl State {
             let forked_at = input
                 .fork_of
                 .as_deref()
-                .map(|fork_of| self.open_fork(pg, &input, fork_of, &root))
+                .map(|fork_of| self.open_fork(pg, &input, fork_of, &root, settings))
                 .transpose()?
                 .flatten();
             let start = if let Some(child) = &actor.child {
@@ -573,7 +649,7 @@ impl State {
                     title: None,
                     start: None,
                     launch: None,
-                    settings: SessionSettings::default(),
+                    settings: settings.clone(),
                 }
             };
             let decision = hooks::handle(&self.runtime, start).await;

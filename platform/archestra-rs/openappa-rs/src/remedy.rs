@@ -83,6 +83,7 @@ pub async fn execute_remedy_by_offer(
         parent_id: owner.parent_id,
         principal: None,
         fork_of: None,
+        agent_runtime: false,
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
@@ -106,8 +107,8 @@ pub async fn execute_remedy_by_offer(
         declares: None,
     };
     validate(&input)?;
-    let response: Value =
-        serde_json::from_str(&run(input, policy.into(), encryption).await?).map_err(invariant)?;
+    let response: Value = serde_json::from_str(&run(input, policy.try_into()?, encryption).await?)
+        .map_err(invariant)?;
     Ok(with_offer_status(response, OfferStatusKind::Known)?.to_string())
 }
 

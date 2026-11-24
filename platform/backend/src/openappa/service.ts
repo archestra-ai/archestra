@@ -74,6 +74,7 @@ import type {
 } from "@/routes/proxy/utils/gateway-tool-names";
 import {
   type GuardrailsV2Activation,
+  guardrailsDispatchSettings,
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
@@ -834,14 +835,17 @@ async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const policy =
-      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    const [policy, guardrails] = await Promise.all([
+      openappaBatteriesService.getEffectivePolicy(organizationId),
+      guardrailsDispatchSettings(),
+    ]);
     return {
       ...(await openappaDeclarations.dispatchPolicy({
         organizationId,
         content: policy.content,
       })),
       compositionHash: policy.contentHash,
+      guardrails,
     };
   } catch (error) {
     throw openappaFailure(error);

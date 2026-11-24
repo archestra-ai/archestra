@@ -350,15 +350,16 @@ export async function admitOpenappaRequest(params: {
         : "OpenAPPA runtime binding does not match this run",
     );
   }
-  const runtimeSession =
+  const runtimeWorkspace =
     runtimeIdentity && runtimeBindingMatches
-      ? (
-          await resolveRuntimeSessionForWorkspace({
-            organizationId: runtimeIdentity.organizationId,
-            workspaceId: runtimeIdentity.workspaceId,
-          })
-        )?.session
+      ? await resolveRuntimeSessionForWorkspace({
+          organizationId: runtimeIdentity.organizationId,
+          workspaceId: runtimeIdentity.workspaceId,
+        })
       : undefined;
+  const runtimeSession: OpenAppaSession | undefined = runtimeWorkspace
+    ? { ...runtimeWorkspace.session, agent_runtime: true }
+    : undefined;
   // A bound subagent ends its turns the way a runtime workspace does: its
   // return is keyed by the spawn call that opened it.
   const runtimeSessionId =

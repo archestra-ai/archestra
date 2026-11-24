@@ -447,7 +447,7 @@ async function handleMcpPostRequest(
           "The runtime gateway request has no bound workspace",
         );
       }
-      openappaSession = workspace.session;
+      openappaSession = { ...workspace.session, agent_runtime: true };
     }
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;

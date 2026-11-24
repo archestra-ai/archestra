@@ -338,6 +338,7 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
         organization_id: agent.organizationId,
         caller_id: `user:${user.id}`,
         session_id: `user:${user.id}|${workloadName}`,
+        agent_runtime: true,
       },
       identity: {
         sessionId: workloadName,
@@ -348,6 +349,20 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
         runtimeSessionId: `user:${user.id}|${workloadName}`,
       },
     });
+
+    // The same client without the runtime credential is an attended session.
+    const attended = await admitOpenappaRequest(
+      await admission({
+        agent,
+        principal: { authenticatedUserId: user.id },
+        headers: grokHeaders,
+        overrides: { body: grokBody, originalRequest: grokBody },
+      }),
+    );
+    expect(attended.kind).toBe("governed");
+    expect(
+      attended.kind === "governed" ? attended.session.agent_runtime : true,
+    ).toBeUndefined();
 
     const observed = await admitOpenappaRequest(
       await admission({

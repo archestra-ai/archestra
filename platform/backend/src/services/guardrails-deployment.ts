@@ -1,3 +1,4 @@
+import type { GuardrailsSettings } from "@archestra/openappa-rs";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -67,6 +68,21 @@ export async function getGuardrailsDeploymentFromSnapshot(
     annotatorLlmApiKeyId: row.annotatorLlmApiKeyId,
     featureEnabled: enterpriseTier.isOpenappaActive(),
     active: enterpriseTier.isOpenappaActive() && mode !== "off",
+  };
+}
+
+/**
+ * The settings a dispatch carries to the runtime, which picks from them the line
+ * a session opening now follows. A dispatch made while Guardrails are off
+ * finishes its turn on the Enforce line.
+ */
+export async function guardrailsDispatchSettings(): Promise<GuardrailsSettings> {
+  const { mode, personApproval, enforcedMarks } =
+    await getGuardrailsDeployment();
+  return {
+    mode: mode === "observe" ? "observe" : "enforce",
+    personApproval,
+    enforcedMarks,
   };
 }
 

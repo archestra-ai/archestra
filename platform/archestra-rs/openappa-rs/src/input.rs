@@ -121,6 +121,10 @@ pub(crate) struct Input {
     /// initialized from that session's state. Mutually exclusive with `parent_id`.
     #[serde(default)]
     pub(crate) fork_of: Option<String>,
+    /// The session is authenticated by an Agent Runtime credential. Read only when its
+    /// event opens a new root: a child or a fork follows its family's line.
+    #[serde(default)]
+    pub(crate) agent_runtime: bool,
     pub(crate) event: HookEventKind,
     #[serde(default)]
     pub(crate) operation_id: Option<String>,

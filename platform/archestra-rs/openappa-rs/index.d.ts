@@ -185,6 +185,8 @@ export interface DispatchPolicy {
    * and is refused as retryable; absent, nothing is checked.
    */
   compositionHash?: string
+  /** Absent, every new session opens on the Enforce line. */
+  guardrails?: GuardrailsSettings
 }
 
 export interface EditedPolicy {
@@ -218,6 +220,13 @@ export declare function getOpenappaReplayEngineVersion(): string
  * policy model, whose next event is refused instead.
  */
 export declare function getOpenappaStatus(organizationId: string, sessionId: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
+
+/** The deployment's Guardrails settings, as the host resolved them. */
+export interface GuardrailsSettings {
+  mode: 'observe' | 'enforce'
+  personApproval: 'ask' | 'auto_unattended' | 'auto_everywhere'
+  enforcedMarks: Array<string>
+}
 
 export interface HelperBindingInput {
   /**

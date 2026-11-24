@@ -3,7 +3,8 @@
 //! The runtime is shared by every organization, so no dispatch reloads it: each one
 //! runs through a view pinned to its organization's deployment line, which its
 //! consults, decisions and new roots read whatever another organization dispatches
-//! meanwhile. Each organization's line is named by its id. A deployment is compiled
+//! meanwhile. An organization has one line per [`Variant`]; its Enforce line is named
+//! by its id. A deployment is compiled
 //! from the organization's effective policy with the credential values the host
 //! resolved for it, published as the head of that line, and reused while both still
 //! answer the same: a new policy, or a rotated, removed or rebound credential,
@@ -26,6 +27,7 @@ use std::{
 
 use crate::{
     errors::{BindingFailure, Fault},
+    lines::{Families, Guardrails, Line},
     policy::open_fault,
 };
 
@@ -58,6 +60,7 @@ pub(crate) struct HostedPolicy {
     /// The content hash of the stored composition `content` was read from, when the
     /// host read it from one.
     pub composition: Option<String>,
+    pub guardrails: Guardrails,
 }
 
 /// Why no deployment serves a dispatch.
@@ -123,16 +126,16 @@ struct CompiledPolicy {
     answers: [u8; 32],
 }
 
-/// The latest deployment of every organization that dispatched, by organization id.
-/// Only an organization's latest policy is served, so an entry is replaced when that
-/// policy or its credentials change, and the map holds one entry per organization.
-/// Organization entries live for this process's lifetime.
+/// The latest deployment of every line that dispatched: one per organization and
+/// variant. Only a line's latest policy is served, so an entry is replaced when that
+/// policy or its credentials change. Entries live for this process's lifetime.
 #[derive(Default)]
 pub(crate) struct Deployments {
-    by_organization: Mutex<HashMap<String, Pinned>>,
-    /// One preparation at a time per organization: concurrent dispatches that miss
-    /// wait for the one preparing and then reuse its deployment.
-    preparing: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    by_line: Mutex<HashMap<Line, Pinned>>,
+    /// One preparation at a time per line: concurrent dispatches that miss wait for
+    /// the one preparing and then reuse its deployment.
+    preparing: Mutex<HashMap<Line, Arc<tokio::sync::Mutex<()>>>>,
+    pub(crate) families: Families,
 }
 
 impl Deployments {
@@ -152,12 +155,12 @@ impl Deployments {
         &self,
         runtime: &Arc<Runtime>,
         store: &Arc<LogStore>,
-        organization_id: &str,
+        line: &Line,
         policy: &HostedPolicy,
         agent_yell: bool,
     ) -> Result<PublishedDeployment, DeploymentError> {
         Ok(self
-            .pinned(runtime, store, organization_id, policy, agent_yell)
+            .pinned(runtime, store, line, policy, agent_yell)
             .await?
             .published)
     }
@@ -178,39 +181,39 @@ impl Deployments {
         &self,
         runtime: &Arc<Runtime>,
         store: &Arc<LogStore>,
-        organization_id: &str,
+        line: &Line,
         stale: &PublishedDeployment,
     ) -> Result<Option<PublishedDeployment>, Fault> {
         let Some(pinned) = self
-            .held(organization_id)
+            .held(line)
             .filter(|pinned| pinned.published.revision() == stale.revision())
         else {
-            // A concurrent dispatch already moved this organization's deployment on.
-            return Ok(self.held(organization_id).map(|pinned| pinned.published));
+            // A concurrent dispatch already moved this line's deployment on.
+            return Ok(self.held(line).map(|pinned| pinned.published));
         };
         let (runtime, store) = (runtime.clone(), store.clone());
-        let line = DeploymentName::new(organization_id);
+        let name = line.name();
         let (key, prepared) = (pinned.key.clone(), pinned.prepared.clone());
         let head = tokio::task::spawn_blocking(move || -> Result<_, Fault> {
-            let Some(head) = store.head(&line).map_err(storage)? else {
+            let Some(head) = store.head(&name).map_err(storage)? else {
                 return Ok(None);
             };
             if head.key.as_str() != &*key {
                 return Ok(None);
             }
-            pin_existing(&runtime, &line, &prepared, &head).map(Some)
+            pin_existing(&runtime, &name, &prepared, &head).map(Some)
         })
         .await
         .map_err(panicked)??;
         let Some(published) = head else {
-            self.forget(organization_id, &pinned);
+            self.forget(line, &pinned);
             return Ok(None);
         };
-        self.by_organization
+        self.by_line
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(
-                organization_id.to_owned(),
+                line.clone(),
                 Pinned {
                     published: published.clone(),
                     ..pinned
@@ -223,77 +226,74 @@ impl Deployments {
         &self,
         runtime: &Arc<Runtime>,
         store: &Arc<LogStore>,
-        organization_id: &str,
+        line: &Line,
         policy: &HostedPolicy,
         agent_yell: bool,
     ) -> Result<Pinned, DeploymentError> {
-        if let Some(pinned) = self.serving(organization_id, policy) {
+        if let Some(pinned) = self.serving(line, policy) {
             return Ok(pinned);
         }
         let gate = self
             .preparing
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .entry(organization_id.to_owned())
+            .entry(line.clone())
             .or_default()
             .clone();
         let _preparing = gate.lock().await;
-        if let Some(pinned) = self.serving(organization_id, policy) {
+        if let Some(pinned) = self.serving(line, policy) {
             return Ok(pinned);
         }
-        if let Some(held) = self.held(organization_id)
+        if let Some(held) = self.held(line)
             && let Some(composition) = &policy.composition
             && held.composition.as_deref() == Some(composition.as_str())
             && *held.content != *policy.content
         {
             eprintln!(
-                "OpenAPPA: organization {organization_id} dispatched a second policy document under composition {composition}; refusing to publish it"
+                "OpenAPPA: line {} dispatched a second policy document under composition {composition}; refusing to publish it",
+                line.name()
             );
             return Err(DeploymentError::Diverged);
         }
         let (runtime, store) = (runtime.clone(), store.clone());
-        let (organization, policy) = (organization_id.to_owned(), policy.clone());
+        let (owned, policy) = (line.clone(), policy.clone());
         let pinned = tokio::task::spawn_blocking(move || {
-            prepare(&runtime, &store, &organization, &policy, agent_yell)
+            prepare(&runtime, &store, &owned, &policy, agent_yell)
         })
         .await
         .map_err(panicked)??;
-        self.by_organization
+        self.by_line
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .insert(organization_id.to_owned(), pinned.clone());
+            .insert(line.clone(), pinned.clone());
         Ok(pinned)
     }
 
-    /// The deployment held for this organization when it still serves `policy`.
-    fn serving(&self, organization_id: &str, policy: &HostedPolicy) -> Option<Pinned> {
-        self.held(organization_id)
-            .filter(|pinned| pinned.serves(policy))
+    /// The deployment held for this line when it still serves `policy`.
+    fn serving(&self, line: &Line, policy: &HostedPolicy) -> Option<Pinned> {
+        self.held(line).filter(|pinned| pinned.serves(policy))
     }
 
-    /// Drop the organization's deployment when it is still `pinned`, so the next
+    /// Drop the line's deployment when it is still `pinned`, so the next
     /// dispatch prepares and publishes from the policy it carries.
     /// A held `Pinned` reaches callers only through `Clone`, sharing its content
     /// allocation. Pointer identity distinguishes that entry from a replacement
     /// with equal text, so an older dispatch cannot evict the replacement.
-    fn forget(&self, organization_id: &str, pinned: &Pinned) {
-        let mut held = self
-            .by_organization
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        if held.get(organization_id).is_some_and(|current| {
+    fn forget(&self, line: &Line, pinned: &Pinned) {
+        let mut held = self.by_line.lock().unwrap_or_else(PoisonError::into_inner);
+        if held.get(line).is_some_and(|current| {
             current.published.revision() == pinned.published.revision()
                 && Arc::ptr_eq(&current.content, &pinned.content)
         }) {
-            held.remove(organization_id);
+            held.remove(line);
         }
     }
 
-    fn held(&self, organization_id: &str) -> Option<Pinned> {
-        self.by_organization
+    fn held(&self, line: &Line) -> Option<Pinned> {
+        self.by_line
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .get(organization_id)
+            .get(line)
             .cloned()
     }
 }
@@ -305,7 +305,7 @@ impl Deployments {
 fn prepare(
     runtime: &Runtime,
     store: &LogStore,
-    organization_id: &str,
+    line: &Line,
     policy: &HostedPolicy,
     agent_yell: bool,
 ) -> Result<Pinned, DeploymentError> {
@@ -317,16 +317,16 @@ fn prepare(
     config.reporting.agent_yell = agent_yell;
     let key = policy_file_key(config.policy_file().bytes());
     let prepared = runtime.prepare_deployment(config).map_err(open_fault)?;
-    let line = DeploymentName::new(organization_id);
-    let head = store.head(&line).map_err(storage)?;
+    let name = line.name();
+    let head = store.head(&name).map_err(storage)?;
     if let Some(composition) = &policy.composition {
         let publishes = head.as_ref().is_none_or(|head| head.key.as_str() != key);
-        if publishes && !stored_composition(store, organization_id, composition)? {
+        if publishes && !stored_composition(store, &line.organization_id, composition)? {
             return Err(DeploymentError::Superseded);
         }
     }
     let published = runtime
-        .publish_if_head(&line, &prepared, head.map(|head| head.revision))
+        .publish_if_head(&name, &prepared, head.map(|head| head.revision))
         .map_err(|error| match error {
             OpenError::PolicyHeadMoved { .. } => DeploymentError::Superseded,
             error => DeploymentError::Failed(open_fault(error)),
@@ -478,6 +478,15 @@ mod tests {
             content: content.to_owned(),
             credentials: HostCredentials::new(key.map(|key| (KEY.to_owned(), key.to_owned()))),
             composition: None,
+            guardrails: Guardrails::enforce(),
+        }
+    }
+
+    /// The organization's Enforce line, which every family opened before variants follows.
+    fn enforce(organization: &str) -> Line {
+        Line {
+            organization_id: organization.to_owned(),
+            variant: crate::lines::Variant::Enforce,
         }
     }
 
@@ -489,10 +498,10 @@ mod tests {
         organization: &str,
         policy: &HostedPolicy,
     ) -> bool {
-        let before = deployments.held(organization);
+        let before = deployments.held(&enforce(organization));
         serve(deployments, runtime, organization, policy).expect("the policy compiles");
         let after = deployments
-            .held(organization)
+            .held(&enforce(organization))
             .expect("a deployment is held");
         before.is_none_or(|before| !Arc::ptr_eq(&before.content, &after.content))
     }
@@ -503,12 +512,18 @@ mod tests {
         organization: &str,
         policy: &HostedPolicy,
     ) -> Result<PublishedDeployment, String> {
-        block_on(deployments.deployment(runtime, &runtime.store, organization, policy, false))
-            .map_err(|error| match error {
-                DeploymentError::Superseded => "superseded".to_owned(),
-                DeploymentError::Diverged => "diverged".to_owned(),
-                DeploymentError::Failed(fault) => fault.message,
-            })
+        block_on(deployments.deployment(
+            runtime,
+            &runtime.store,
+            &enforce(organization),
+            policy,
+            false,
+        ))
+        .map_err(|error| match error {
+            DeploymentError::Superseded => "superseded".to_owned(),
+            DeploymentError::Diverged => "diverged".to_owned(),
+            DeploymentError::Failed(fault) => fault.message,
+        })
     }
 
     #[test]
@@ -521,10 +536,10 @@ mod tests {
         // As a host-read composition would be held; the in-memory store has no host table
         // to check a first publish against.
         deployments
-            .by_organization
+            .by_line
             .lock()
             .unwrap()
-            .get_mut("org-a")
+            .get_mut(&enforce("org-a"))
             .expect("a deployment is held")
             .composition = Some("composition-1".into());
         let head = runtime.store.head(&line).unwrap();
@@ -611,7 +626,7 @@ mod tests {
                                 .pinned(
                                     &runtime,
                                     &runtime.store,
-                                    "org-a",
+                                    &enforce("org-a"),
                                     &policy(JEV, Some("one")),
                                     false,
                                 )
@@ -688,7 +703,7 @@ mod tests {
             "org-a",
             &policy(JEV, Some("rotated"))
         ));
-        assert_eq!(deployments.by_organization.lock().unwrap().len(), 2);
+        assert_eq!(deployments.by_line.lock().unwrap().len(), 2);
     }
 
     /// `content` with one more tool rule: a change to the bytes the policy compiles to,
@@ -787,13 +802,13 @@ mod tests {
             2
         );
         assert!(
-            block_on(ones.repin(&one, &store, "org-a", &first))
+            block_on(ones.repin(&one, &store, &enforce("org-a"), &first))
                 .unwrap()
                 .is_none(),
             "another policy at the head is not published over"
         );
         assert!(
-            ones.held("org-a").is_none(),
+            ones.held(&enforce("org-a")).is_none(),
             "the stale deployment is forgotten, so the next dispatch prepares from its own policy"
         );
         assert_eq!(
@@ -811,7 +826,7 @@ mod tests {
             revision(&others, &other, "org-a", &policy(&edited, Some("one"))),
             4
         );
-        let head = block_on(ones.repin(&one, &store, "org-a", &second))
+        let head = block_on(ones.repin(&one, &store, &enforce("org-a"), &second))
             .unwrap()
             .expect("the head names this deployment's policy");
         assert_eq!(head.revision(), 4);
@@ -852,7 +867,7 @@ mod tests {
             let published = block_on(deployments.deployment(
                 &runtime,
                 &store,
-                ORGANIZATION,
+                &enforce(ORGANIZATION),
                 &policy(AFTER, None),
                 false,
             ))
@@ -864,7 +879,7 @@ mod tests {
         let original = block_on(deployments.deployment(
             &runtime,
             &store,
-            ORGANIZATION,
+            &enforce(ORGANIZATION),
             &policy(BEFORE, None),
             false,
         ))
@@ -944,7 +959,7 @@ mod tests {
         assert_eq!(store.head(&line).unwrap().unwrap(), advanced);
         assert_eq!(store.log(&root).unwrap().facts().len(), opening_facts);
         assert!(
-            block_on(deployments.repin(&runtime, &store, ORGANIZATION, &original))
+            block_on(deployments.repin(&runtime, &store, &enforce(ORGANIZATION), &original))
                 .unwrap()
                 .is_none()
         );

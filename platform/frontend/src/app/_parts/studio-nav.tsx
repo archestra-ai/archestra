@@ -4,7 +4,6 @@ import {
   AppWindow,
   Bot,
   Boxes,
-  Brain,
   ChartColumn,
   CircleDollarSign,
   Database,
@@ -234,21 +233,18 @@ export const contentNavGroups: NavGroup[] = [
         icon: KeyRound,
       },
       {
+        // Subscriptions & API Keys and Models share a tab bar, so one row
+        // covers both; `getModelProvidersNavigationUrl` opens the first one
+        // the reader may see.
         title: "Model Providers",
         url: "/llm/model-providers",
         icon: Boxes,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/model-providers"),
-        // The dot covers the pair (see DOTTED_NAV_ITEMS): opening Models
-        // clears it too.
-        dotKey: "nav:model-providers",
-      },
-      {
-        title: "Models",
-        url: "/llm/models",
-        icon: Brain,
-        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/model-providers") ||
           pathname.startsWith("/llm/models"),
+        permissionUrls: ["/llm/model-providers", "/llm/models"],
+        // The dot covers both tabs (see DOTTED_NAV_ITEMS).
+        dotKey: "nav:model-providers",
       },
       {
         title: "Model Pools",

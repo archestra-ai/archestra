@@ -991,6 +991,29 @@ describe("ConversationSearchPalette", () => {
     expect(screen.queryByText("Agents")).not.toBeInTheDocument();
   });
 
+  it("opens Models from search for a Models-only reader", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    vi.mocked(usePermissionMap).mockReturnValue(
+      Object.fromEntries(
+        Object.keys(requiredPagePermissionsMap).map((url) => [
+          url,
+          url !== "/llm/model-providers",
+        ]),
+      ),
+    );
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "models" },
+    });
+    fireEvent.click(screen.getByText("Model Providers"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/llm/models");
+  });
+
   it("leaves out a page the reader may not open", () => {
     mockUseConversations.mockReturnValue({
       data: [],

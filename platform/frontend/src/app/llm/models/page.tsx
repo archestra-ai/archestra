@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  MODEL_PROVIDERS_TITLE,
+  useModelProvidersTabs,
+} from "@/app/llm/model-providers/_parts/model-providers-tabs";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -112,6 +116,7 @@ import {
 export default function ModelsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const apiKeyFilter = searchParams.get("apiKey") ?? "all";
+  const tabs = useModelProvidersTabs();
   const { hasActiveScopeFilters, access, sharedWith } = useScopeFilterParams();
   const {
     data: models = [],
@@ -651,7 +656,8 @@ export default function ModelsPage() {
   if (isModelsLoadError) {
     return (
       <PageLayout
-        title="Models"
+        title={MODEL_PROVIDERS_TITLE}
+        tabs={tabs}
         description='Models available from your configured providers. Use "Refresh Models" to re-fetch models and capabilities from providers.'
         actionButton={refreshModelsButton}
       >
@@ -666,7 +672,8 @@ export default function ModelsPage() {
 
   return (
     <PageLayout
-      title="Models"
+      title={MODEL_PROVIDERS_TITLE}
+      tabs={tabs}
       description='Models available from your configured providers. Use "Refresh Models" to re-fetch models and capabilities from providers.'
       actionButton={refreshModelsButton}
     >

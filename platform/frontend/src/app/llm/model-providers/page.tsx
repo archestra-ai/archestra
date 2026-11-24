@@ -110,6 +110,10 @@ import { useOrganization } from "@/lib/organization.query";
 import { githubOrganizationLabel } from "@/lib/organization-subscription";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
+import {
+  MODEL_PROVIDERS_TITLE,
+  useModelProvidersTabs,
+} from "./_parts/model-providers-tabs";
 import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
 import {
   buildSubscriptionOffers,
@@ -142,6 +146,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 export default function ApiKeysPage() {
   const router = useRouter();
   const docsUrl = getFrontendDocsUrl("llm-proxy/providers");
+  const tabs = useModelProvidersTabs();
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
@@ -801,7 +806,8 @@ export default function ApiKeysPage() {
 
   return (
     <PageLayout
-      title="Model Providers"
+      title={MODEL_PROVIDERS_TITLE}
+      tabs={tabs}
       description="Connect credentials for the LLM providers used in Chat and the LLM Proxy."
       actionButton={addApiKeyButton}
     >

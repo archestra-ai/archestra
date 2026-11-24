@@ -77,8 +77,17 @@ describe("buildGuardrails", () => {
         "/openappa/policy?line=4",
       ],
     ]);
-    expect(guardrails?.labelAt(BASE + 6_000)?.trust).toBe("trusted");
-    expect(guardrails?.labelAt(BASE + 8_000)?.trust).toBe("suspicious");
+    // Before the first record, the label is that record's before-state.
+    expect(guardrails?.labelAt(BASE + 6_000)).toEqual({
+      trust: "trusted",
+      audience: expect.any(String),
+      inferred: true,
+    });
+    expect(guardrails?.labelAt(BASE + 8_000)).toEqual({
+      trust: "suspicious",
+      audience: expect.any(String),
+      inferred: false,
+    });
   });
 
   it("blames the request that asked for a client-run tool when no tool call was logged", () => {

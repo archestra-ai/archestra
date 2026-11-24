@@ -113,6 +113,7 @@ import {
 } from "@/openappa/runtime-tool-claims";
 import {
   type AppaChildReturnRecord,
+  type AppaHostedCallDecision,
   admitPeerMessage,
   approveSpawnReturn,
   cancelCalls,
@@ -1495,12 +1496,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           }),
         );
     const held = calls.flatMap((call, index) => {
-      const decision = decisions[index];
-      return decision.kind === "hold"
-        ? [{ call, feedback: decision.feedback }]
-        : [];
+      const decision: AppaHostedCallDecision = decisions[index];
+      return decision.kind === "hold" ? [{ call, ...decision }] : [];
     });
     if (held.length === 0) return { decision: "release" };
+    // As for a proposed call, the runtime holds no record of a call refused
+    // before any ruling, so the notice's result is answered from here.
+    for (const { call, feedback, proxyNotice } of held)
+      if (proxyNotice)
+        await retainUnansweredNotice({
+          session: this.governedSession(binding),
+          callId: call.id,
+          notice: feedback,
+        });
     // The client must run the notices, so the turn stays open.
     binding.turnOpen = true;
     const notices = held.map(({ call, feedback }) => ({
@@ -1848,17 +1856,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // call, so the result the client sends back is answered from here and
       // never ruled on as a call that ran. Without the retained reason the
       // runtime answers that result as withheld, so a failed write is not fatal.
-      if (decision.kind === "deny" && decision.proxyNotice) {
-        try {
-          await cacheManager.set(
-            unansweredNoticeKey({ session, callId: id }),
-            decision.feedback,
-            TimeInMs.Day,
-          );
-        } catch (err) {
-          logger.warn({ err }, "OpenAPPA could not retain a denial's reason");
-        }
-      }
+      if (decision.kind === "deny" && decision.proxyNotice)
+        await retainUnansweredNotice({
+          session,
+          callId: id,
+          notice: decision.feedback,
+        });
     }
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
@@ -3037,6 +3040,23 @@ function waitFailure(wait: CommonToolResult): string {
       ? wait.content
       : JSON.stringify(wait.content);
   return ` The wait itself failed, and the client reported:\n${reported}\n`;
+}
+
+/** Without the retained notice the runtime answers its result as withheld. */
+async function retainUnansweredNotice(params: {
+  session: OpenAppaSession;
+  callId: string;
+  notice: string;
+}): Promise<void> {
+  try {
+    await cacheManager.set(
+      unansweredNoticeKey(params),
+      params.notice,
+      TimeInMs.Day,
+    );
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not retain a denial's reason");
+  }
 }
 
 function unansweredNoticeKey(params: {

@@ -1668,9 +1668,14 @@ function isJson(text: string): boolean {
 /** Verdict on a call the provider already ran. */
 // SPDX-SnippetEnd
 
-type AppaHostedCallDecision =
+export type AppaHostedCallDecision =
   | { kind: "release" }
-  | { kind: "hold"; feedback: string };
+  | {
+      kind: "hold";
+      feedback: string;
+      /** Refused before any ruling: the runtime holds no record of the call. */
+      proxyNotice?: true;
+    };
 
 /**
  * Rules on calls the provider ran inside the inference call. Nothing can stop
@@ -1710,7 +1715,11 @@ export async function evaluateHostedToolCalls(
     );
     return decisions.map((decision) =>
       decision.kind === "deny"
-        ? { kind: "hold", feedback: decision.feedback }
+        ? {
+            kind: "hold",
+            feedback: decision.feedback,
+            ...(decision.proxyNotice ? { proxyNotice: true as const } : {}),
+          }
         : { kind: "release" },
     );
   }

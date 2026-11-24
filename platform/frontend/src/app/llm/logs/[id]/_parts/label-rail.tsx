@@ -195,7 +195,11 @@ export function LabelRail({
           />
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-xs text-left">
-          <p className="mb-1 font-medium">Last recorded session label</p>
+          <p className="mb-1 font-medium">
+            {label.inferred
+              ? "Inferred session baseline"
+              : "Last recorded session label"}
+          </p>
           <LaneLine
             glyph={<LaneGlyph highlight="trust" label={label} />}
             name="Trust"

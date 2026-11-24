@@ -14894,3 +14894,102 @@ describe("the removed soft-block override", () => {
     }
   });
 });
+
+describe("a provider-hosted call refused before any ruling", () => {
+  test("its notice, not the runtime's withheld answer, reaches the next upstream request", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const native = await import("@archestra/openappa-rs");
+    const initialize = vi
+      .spyOn(native, "initializeOpenappa")
+      .mockResolvedValue(undefined);
+    const connection = vi
+      .spyOn(database, "getDatabaseConnectionString")
+      .mockReturnValue("postgresql://unused:unused@127.0.0.1:1/unused");
+    const events: Array<{ event: string }> = [];
+    // The annotator times out on the search the provider already ran; any
+    // result submitted for it matches no released call.
+    const dispatch = vi
+      .spyOn(native, "dispatchHook")
+      .mockImplementation(async (raw) => {
+        const event = JSON.parse(raw);
+        events.push(event);
+        if (event.event === "tool_call")
+          throw new Error(
+            "OpenAPPA processing interrupted: annotator=archestra.tool-call error=timeout",
+          );
+        return JSON.stringify(
+          event.event === "tool_result"
+            ? {
+                decision: "block",
+                feedback: "[appa] withheld: no released call",
+                approved_output: "[appa] withheld: no released call",
+                output_source: "runtime",
+                code: "unreleased_call",
+              }
+            : { decision: "ack" },
+        );
+      });
+    const contextFor = () => {
+      const context = requestContext({
+        sessionId: "hosted-notice",
+        organizationId,
+      });
+      trustedOf(context).request = {
+        tools: stubRequestTools(),
+        session: {},
+        customTools: new Set(),
+        declaredTools: [],
+      };
+      return context;
+    };
+    const plugin = new AppaPluginArchestra([]);
+    try {
+      const first = contextFor();
+      await plugin.onSessionInit(first);
+      const hold = await plugin.onHostedToolCalls({
+        ...first,
+        hostedToolCalls: [
+          {
+            id: "ws_1",
+            name: "web_search",
+            arguments: { query: "rust" },
+            output: "search results",
+          },
+        ],
+      });
+      if (hold?.decision !== "hold") throw new Error("the search was not held");
+      const [carrier] = hold.notices;
+      const notice = readNotice({
+        callId: "ws_1",
+        arguments: carrier.arguments,
+      })?.result;
+      expect(notice).toEqual(expect.any(String));
+      await plugin.onCleanup(first);
+
+      const next = contextFor();
+      await plugin.onSessionInit(next);
+      const results = await plugin.onToolResults({
+        ...next,
+        toolResults: [
+          {
+            id: carrier.id,
+            name: "archestra__get_remedy_plans",
+            content: "notice delivered",
+            isError: true,
+          },
+        ],
+      });
+
+      expect(results?.toolResultUpdates?.[carrier.id]).toBe(notice);
+      // The runtime was never asked to answer the notice's result.
+      expect(events.filter((each) => each.event === "tool_result")).toEqual([]);
+      await plugin.onCleanup(next);
+    } finally {
+      dispatch.mockRestore();
+      connection.mockRestore();
+      initialize.mockRestore();
+    }
+  });
+});

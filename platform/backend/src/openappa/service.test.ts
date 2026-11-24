@@ -1512,6 +1512,7 @@ describe("APPA feature boundary", () => {
       {
         kind: "hold",
         feedback: unansweredAnnotationNotice(failure, "executed")?.notice,
+        proxyNotice: true,
       },
     ]);
   });

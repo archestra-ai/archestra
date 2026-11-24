@@ -92,6 +92,7 @@ const ROUTER = {
 
 let providerKeys: unknown[] = [];
 let standardKeys: unknown[] = [];
+let passthroughKeys: unknown[] = [];
 let standardTotal: number | undefined;
 
 const server = setupServer(
@@ -123,7 +124,9 @@ const server = setupServer(
   http.get(`${API_ORIGIN}/api/llm-virtual-keys`, ({ request }) => {
     const keyType = new URL(request.url).searchParams.get("keyType");
     return HttpResponse.json(
-      keyType === "standard" ? page(standardKeys, standardTotal) : page([]),
+      keyType === "standard"
+        ? page(standardKeys, standardTotal)
+        : page(passthroughKeys),
     );
   }),
   http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
@@ -150,6 +153,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   providerKeys = [ANTHROPIC_KEY, JEV_KEY];
   standardKeys = [JUDGE_KEY];
+  passthroughKeys = [];
   standardTotal = undefined;
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
@@ -411,9 +415,7 @@ describe("LLM Proxy dashboard, new organization", () => {
     expect(
       within(card("Pools and routers")).getByText("Optional"),
     ).toBeInTheDocument();
-    expect(
-      await screen.findByText(/A ready-to-run example appears here/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/No provider key yet/)).toBeInTheDocument();
     // A key needs a provider key to map, so creating one waits for it.
     expect(
       within(card("Virtual keys")).getAllByRole("button", {
@@ -527,7 +529,7 @@ describe("LLM Proxy dashboard endpoint", () => {
     expect(block).toHaveTextContent(`-d '{"model": `);
     // Masked on the page.
     expect(block).not.toHaveTextContent("arch_judge_secret");
-    await user.click(screen.getByRole("button", { name: "Copy" }));
+    await user.click(screen.getByRole("button", { name: /^Copy$/ }));
     await waitFor(() =>
       expect(copyToClipboard).toHaveBeenCalledWith(
         expect.stringContaining("Authorization: Bearer arch_judge_secret"),
@@ -535,7 +537,18 @@ describe("LLM Proxy dashboard endpoint", () => {
     );
   });
 
-  it("moves passthrough off the Unified Model API, which has no route for it", async () => {
+  it("offers native passthrough without any stored provider or standard key", async () => {
+    providerKeys = [];
+    standardKeys = [];
+    passthroughKeys = [
+      {
+        ...JUDGE_KEY,
+        id: "vk-passthrough",
+        keyType: "passthrough",
+        name: "Bring my own key",
+        providerApiKeys: [],
+      },
+    ];
     const user = userEvent.setup();
     renderPage();
 
@@ -552,8 +565,78 @@ describe("LLM Proxy dashboard endpoint", () => {
       ).not.toHaveTextContent("Unified Model API"),
     );
     expect(
-      screen.getByRole("combobox", { name: "Passthrough key" }),
+      await within(card("Endpoint")).findByText("Bring my own key"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No .* key yet\. The proxy needs/),
+    ).not.toBeInTheDocument();
+  });
+  it("can copy both Bedrock addresses even without a runnable example", async () => {
+    providerKeys = [];
+    standardKeys = [];
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("combobox", { name: "API format" }),
+    );
+    await user.type(
+      screen.getByPlaceholderText("Search formats..."),
+      "bedrock",
+    );
+    await user.click(await screen.findByRole("option", { name: /Bedrock/ }));
+
+    const native = screen.getByText(/\/v1\/bedrock$/);
+    const openai = screen.getByText(/\/v1\/bedrock\/openai$/);
+    expect(native).toBeVisible();
+    expect(openai).toBeVisible();
+    const addressRow = openai.closest("dd");
+    if (!addressRow) throw new Error("Missing address row");
+    await user.click(
+      within(addressRow).getByRole("button", { name: "Copy to clipboard" }),
+    );
+    expect(copyToClipboard).toHaveBeenCalledWith(openai.textContent);
+  });
+
+  it("shows the configured identity provider instead of setup to a read-only viewer", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmProxy?.includes("update"),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-proxy`, () =>
+        HttpResponse.json({ id: "proxy-1", identityProviderId: "idp-1" }),
+      ),
+      http.get(`${API_ORIGIN}/api/identity-providers`, () =>
+        HttpResponse.json([
+          {
+            id: "idp-1",
+            providerId: "oidc",
+            issuer: "https://idp.example.test",
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Identity provider" }),
+    );
+
+    expect(
+      await screen.findByText("Trusting https://idp.example.test"),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "Set up identity provider" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "API format" }),
+    ).not.toHaveTextContent("Unified Model API");
   });
 });
 

@@ -9,6 +9,7 @@ import {
   type ProxyEndpointProvider,
 } from "@/app/connection/connection-flow.utils";
 import { OauthTokenRequest } from "@/components/connect-rail";
+import { CopyButton } from "@/components/copy-button";
 import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import { LlmConnectionDialogs } from "@/components/llm-connect-steps";
 import { Button } from "@/components/ui/button";
@@ -30,14 +31,14 @@ import {
   useLlmConnection,
 } from "@/components/use-llm-connection";
 import { RequestExample } from "@/components/virtual-key-connection-guide";
+import { getProxyBaseUrl } from "@/components/virtual-key-request-example";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useLlmProxy, useUpdateLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
-import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
-import { DashboardCard, NotSetUpBadge, ProviderLogo } from "./dashboard-card";
+import { DashboardCard, ProviderLogo } from "./dashboard-card";
 
 type Target = "model-router" | ProxyEndpointProvider;
 
@@ -51,63 +52,39 @@ const AUTH_OPTIONS: Array<{ value: LlmAuthMethod; label: string }> = [
 const CREATE_VALUE = "__create__";
 const NONE_VALUE = "__none__";
 
-/**
- * A ready-to-run request: pick the API format, how it authenticates, the
- * credential and the model, and the curl below follows. It appears once the
- * organization has a provider key and a virtual key.
- */
+/** Build the request for the selected auth method, even on an empty org. */
 export function EndpointCard({ baseUrl }: { baseUrl: string }) {
-  const { data: providerKeys = [], isPending: providerKeysPending } =
-    useLlmProviderApiKeys();
-  const { data: standardKeys, isPending: keysPending } = useAllVirtualApiKeys({
-    keyType: "standard",
-    limit: 1,
-    offset: 0,
-    toastOnError: false,
-  });
-  const notReady =
-    !providerKeysPending &&
-    !keysPending &&
-    (providerKeys.length === 0 || (standardKeys?.pagination.total ?? 0) === 0);
   const [selected, setSelected] = useState<Target>("model-router");
   const [auth, setAuth] = useState<LlmAuthMethod>("standard");
 
   return (
-    <DashboardCard
-      id="llm-proxy-endpoint"
-      title="Endpoint"
-      status={notReady && <NotSetUpBadge>Not ready</NotSetUpBadge>}
-    >
-      {notReady ? (
-        <p className="text-[12.5px] text-muted-foreground">
-          A ready-to-run example appears here once you have a provider API key
-          and a virtual key.
-        </p>
-      ) : (
-        <EndpointRequest
-          // A credential belongs to one format and auth method; start over
-          // when either changes.
-          key={`${selected}:${auth}`}
-          baseUrl={baseUrl}
-          selected={selected}
-          auth={auth}
-          onSelectedChange={(next) => {
-            setSelected(next);
-            // The Unified Model API has no passthrough route.
-            if (next === "model-router" && auth === "passthrough") {
-              setAuth("standard");
-            }
-          }}
-          onAuthChange={(next, fallbackProvider) => {
-            setAuth(next);
-            if (next === "passthrough" && selected === "model-router") {
-              setSelected(fallbackProvider);
-            }
-          }}
-        />
-      )}
+    <DashboardCard id="llm-proxy-endpoint" title="Endpoint">
+      <EndpointRequest
+        // A credential belongs to one format and auth method; start over
+        // when either changes.
+        key={`${selected}:${auth}`}
+        baseUrl={baseUrl}
+        selected={selected}
+        auth={auth}
+        onSelectedChange={(next) => {
+          setSelected(next);
+          if (next === "model-router" && usesNativeFormat(auth)) {
+            setAuth("standard");
+          }
+        }}
+        onAuthChange={(next, fallbackProvider) => {
+          setAuth(next);
+          if (usesNativeFormat(next) && selected === "model-router") {
+            setSelected(fallbackProvider);
+          }
+        }}
+      />
     </DashboardCard>
   );
+}
+
+function usesNativeFormat(auth: LlmAuthMethod) {
+  return auth === "passthrough" || auth === "idp";
 }
 
 function EndpointRequest({
@@ -215,6 +192,7 @@ function EndpointRequest({
 
   return (
     <div className="space-y-3">
+      <EndpointAddresses baseUrl={baseUrl} selected={selected} />
       {connection.ready ? (
         <RequestExample
           key={connection.requestKey}
@@ -265,6 +243,44 @@ function EndpointRequest({
         targetLabel={targetLabel}
       />
     </div>
+  );
+}
+
+function EndpointAddresses({
+  baseUrl,
+  selected,
+}: {
+  baseUrl: string;
+  selected: Target;
+}) {
+  const url = getProxyBaseUrl(
+    baseUrl,
+    selected === "model-router"
+      ? { kind: "model-router" }
+      : { kind: "provider", provider: selected },
+  );
+  const addresses =
+    selected === "bedrock"
+      ? [
+          { label: "Bedrock SDK base URL", url },
+          { label: "OpenAI-compatible base URL", url: `${url}/openai` },
+        ]
+      : selected === "jev"
+        ? [{ label: "Decisions endpoint", url: `${url}/decisions` }]
+        : [{ label: "Base URL", url }];
+
+  return (
+    <dl className="space-y-1.5">
+      {addresses.map(({ label, url }) => (
+        <div key={label} className="flex flex-wrap items-center gap-x-2">
+          <dt className="text-xs text-muted-foreground">{label}</dt>
+          <dd className="flex min-w-0 items-center gap-1">
+            <code className="break-all font-mono text-xs">{url}</code>
+            <CopyButton text={url} />
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -393,6 +409,9 @@ function IdentityProviderField({ id }: { id: string }) {
   });
   const { data: canUpdate } = useHasPermissions({ llmProxy: ["update"] });
   const updateProxy = useUpdateLlmProxy();
+  const issuer = identityProviders.find(
+    (provider) => provider.id === proxy?.identityProviderId,
+  )?.issuer;
   return (
     <Field id={id} label="Identity provider">
       {identityProviders.length > 0 && canUpdate ? (
@@ -405,12 +424,20 @@ function IdentityProviderField({ id }: { id: string }) {
           noneLabel="No identity provider"
           className="w-full"
         />
-      ) : (
+      ) : proxy?.identityProviderId ? (
+        <div id={id} className="break-all text-sm">
+          {issuer ? `Trusting ${issuer}` : "Identity provider configured"}
+        </div>
+      ) : canUpdate ? (
         <Button asChild variant="outline" className="w-full">
           <Link id={id} href="/settings/identity-providers">
             Set up identity provider
           </Link>
         </Button>
+      ) : (
+        <div id={id} className="text-sm text-muted-foreground">
+          No identity provider configured.
+        </div>
       )}
     </Field>
   );
@@ -426,19 +453,27 @@ function NotReadyHint({
   connection: LlmConnection;
   targetLabel: string;
 }) {
+  const { data: canAddKey } = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
   const providerNoun = connection.isRouter ? "provider" : targetLabel;
+  if (auth !== "passthrough" && connection.providerKeysPending) {
+    return null;
+  }
   if (!connection.hasProviderKey && auth !== "passthrough") {
     return (
       <p className="text-[12.5px] text-muted-foreground">
         No {providerNoun} key yet. The proxy needs one to call the provider.{" "}
-        <Button
-          variant="link"
-          size="xs"
-          className="h-auto px-0"
-          onClick={() => connection.setAddProviderKeyOpen(true)}
-        >
-          Add {providerNoun} key
-        </Button>
+        {canAddKey && (
+          <Button
+            variant="link"
+            size="xs"
+            className="h-auto px-0"
+            onClick={() => connection.setAddProviderKeyOpen(true)}
+          >
+            Add {providerNoun} key
+          </Button>
+        )}
       </p>
     );
   }

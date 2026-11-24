@@ -201,15 +201,6 @@ export function companyAccountInUse(
  * them. Switching needs nothing more from them: `clear` drops their choice
  * for the agent's default, the others store that way as their choice.
  */
-export function alternativeLabels(
-  account: AgentRuntimeAccount,
-): readonly [subscription: string, company: string] {
-  return [
-    "Use personal subscription instead",
-    `Use ${companyAccountWordsOf(account).short} instead`,
-  ];
-}
-
 export function accountAlternative(account: AgentRuntimeAccount): {
   way: AccountWay;
   label: string;
@@ -243,6 +234,16 @@ export function accountAlternative(account: AgentRuntimeAccount): {
 }
 
 // ===
+
+/** The alternative button labels: to the subscription, to the company account. */
+function alternativeLabels(
+  account: AgentRuntimeAccount,
+): readonly [subscription: string, company: string] {
+  return [
+    "Use personal subscription instead",
+    `Use ${companyAccountWordsOf(account).short} instead`,
+  ];
+}
 
 const COMPANY_API_KEY = "A company API key";
 const COMPANY_ENTERPRISE_PLAN = "The company's enterprise plan";

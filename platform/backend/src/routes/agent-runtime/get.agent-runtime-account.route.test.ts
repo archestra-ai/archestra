@@ -1211,7 +1211,7 @@ describe("GET /api/agents/:id/runtime/account", () => {
     });
   });
 
-  test("the preflight is not ready while a locked subscription has no model of its own to run", async ({
+  test("a locked subscription sets the agent's company model aside and runs one the person's subscription serves", async ({
     makeAgent,
   }) => {
     const own = await makeKeyWithModel({
@@ -1252,29 +1252,17 @@ describe("GET /api/agents/:id/runtime/account", () => {
         url: `/api/agents/${agent.id}/runtime/account`,
         payload: { authentication: "subscription", modelId },
       });
-    // Picking a model fixes it, not choosing the account again.
-    const needsModel = {
-      ready: false,
-      accountError:
-        "This agent's model is not available through your GitHub Copilot. Choose a model on the agent's page.",
-      accountErrorFromChoice: false,
-      accountErrorFromModel: true,
+    // The OpenAI model came with the company connection the agent stored
+    // before it was locked: neither is what its runs use now.
+    expect(await preflight()).toMatchObject({
+      ready: true,
+      accountError: null,
+      accountErrorFromModel: false,
       missingSubscription: null,
-    };
-
-    expect(await preflight()).toMatchObject(needsModel);
+    });
     expect((await read(agent.id)).json()).toMatchObject({
       lock: "subscription",
       choice: null,
-      choiceError: null,
-    });
-
-    // A stored choice of the subscription without a model is not a broken
-    // choice either: it still only lacks a model.
-    expect((await choose(null)).statusCode).toBe(200);
-    expect(await preflight()).toMatchObject(needsModel);
-    expect((await read(agent.id)).json()).toMatchObject({
-      choice: { authentication: "subscription", modelId: null },
       choiceError: null,
     });
 

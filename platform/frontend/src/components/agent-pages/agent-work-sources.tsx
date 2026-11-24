@@ -133,11 +133,22 @@ export function AgentWorkSources({
             >
               <Monitor className="size-4" />
             </span>
-            <div className="min-w-0 flex-[1_1_18rem] space-y-1">
+            <div className="min-w-0 flex-[1_1_18rem] space-y-1.5">
               <h3 className="text-sm font-semibold">From your laptop</h3>
-              <p className="text-sm text-muted-foreground">
-                {`Add the ${appName} MCP gateway to Claude Code or Codex once. Your changes, files and credentials move into a run here; "bring it back" returns a patch.`}
-              </p>
+              <ol className="list-decimal space-y-1 pl-4 text-sm text-muted-foreground">
+                <li>
+                  Click Connect your local agent to connect your local coding
+                  agent (such as Claude Code or Codex) to an MCP gateway.
+                </li>
+                <li>
+                  Open MCP Gateways &rarr; your gateway &rarr; Settings &rarr;
+                  Agents, then select Agent access &rarr; Manual &rarr; Add
+                  agent (or Agent access &rarr; All agents).
+                </li>
+                <li>
+                  {`In your local agent, type "hand this over to ${appName}" to start a run with your changes, files, and credentials. Type "bring it back" to get a patch.`}
+                </li>
+              </ol>
             </div>
             <span
               role="img"

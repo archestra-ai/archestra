@@ -254893,6 +254893,12 @@
                     },
                     "active": {
                       "type": "boolean"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -254908,7 +254914,8 @@
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
-                    "active"
+                    "active",
+                    "warnings"
                   ],
                   "additionalProperties": false
                 }

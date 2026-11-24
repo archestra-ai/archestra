@@ -77,7 +77,12 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             (body) => Object.values(body).some((value) => value !== undefined),
             "Set at least one guardrails deployment setting",
           ),
-        response: constructResponseSchema(status),
+        response: constructResponseSchema(
+          status.extend({
+            /** Why sessions these settings route to a line follow Enforce instead. */
+            warnings: z.array(z.string()),
+          }),
+        ),
       },
     },
     async (request) => {

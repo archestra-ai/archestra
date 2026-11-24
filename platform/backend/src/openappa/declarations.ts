@@ -4,6 +4,7 @@ import type {
   ComposedPolicy,
   DispatchPolicy,
   HelperBindingInput,
+  LineRefusal,
   BatteryPackage as NativeBatteryPackage,
   PolicyDeclarations,
   TokenEnvReader,
@@ -553,21 +554,29 @@ class OpenAppaDeclarations {
   /**
    * What a save says about the lines a composed document serves besides
    * Enforce: a line that cannot carry its approvers serves the document alone,
-   * and sessions meant for it follow Enforce. Composed under the deployment's
-   * enforced marks, as a dispatch composes it.
+   * and sessions meant for it follow Enforce. Composed under `settings`, or
+   * under the stored enforced marks for every line, as a dispatch composes it.
    */
-  async lineWarnings(content: string): Promise<string[]> {
+  async lineWarnings(
+    content: string,
+    settings?: {
+      enforcedMarks: string[];
+      lines: ReadonlySet<LineRefusal["variant"]>;
+    },
+  ): Promise<string[]> {
     const native = await loadNative();
-    const { enforcedMarks } = await GuardrailsDeploymentModel.get();
-    const refusals = await native.checkOpenappaLines(
-      content,
-      enforcedMarks ?? [],
-    );
-    return refusals.map(({ variant, error }) =>
-      variant === "observe"
-        ? `Observe can't run with this policy, so new sessions follow Enforce: ${error}`
-        : `Automatic approval for requests a person would answer can't run with this policy, so those requests still ask a person: ${error}`,
-    );
+    const enforcedMarks =
+      settings?.enforcedMarks ??
+      (await GuardrailsDeploymentModel.get()).enforcedMarks ??
+      [];
+    const refusals = await native.checkOpenappaLines(content, enforcedMarks);
+    return refusals
+      .filter(({ variant }) => settings?.lines.has(variant) ?? true)
+      .map(({ variant, error }) =>
+        variant === "observe"
+          ? `Observe can't run with this policy, so new sessions follow Enforce: ${error}`
+          : `Automatic approval for requests a person would answer can't run with this policy, so those requests still ask a person: ${error}`,
+      );
   }
 
   /**

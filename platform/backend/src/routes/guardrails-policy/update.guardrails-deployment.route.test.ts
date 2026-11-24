@@ -12,6 +12,7 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
@@ -77,6 +78,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           annotatorLlmApiKeyId: null,
           featureEnabled,
           active: enabled && featureEnabled,
+          warnings: [],
         });
         expect(await isGuardrailsV2Active()).toBe(enabled && featureEnabled);
       }
@@ -666,6 +668,34 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
     // Turning it off is never refused.
     expect((await set(false)).statusCode).toBe(200);
+  });
+
+  test("a settings save warns when a line it routes sessions to can't carry its approvers", async () => {
+    const capped = `[policy]\nversion = 2\n[policy.limits]\nplanner_cap = 1\n[[policy.tool]]\nname = "read"\ndelta = {}\nrequires = { attention = ["review"] }\n[[policy.authority]]\nname = "human-approval"\n[policy.authority.permits]\nattention = ["*"]\n[externals.authorities.human-approval]\nbuiltin = "hitl"\n`;
+    await GuardrailsPolicyModel.saveDeclarationMigration({
+      organizationId,
+      content: capped,
+      contentHash: createHash("sha256").update(capped).digest("hex"),
+      expectedRevision: 0,
+    });
+    await openappaBatteriesService.recompile(organizationId);
+    const save = async (payload: Record<string, unknown>) => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json().warnings as string[];
+    };
+
+    expect(await save({ mode: "enforce", personApproval: "ask" })).toEqual([]);
+    expect(await save({ personApproval: "auto_unattended" })).toHaveLength(1);
+    expect(await save({ mode: "observe" })).toHaveLength(1);
+    expect(
+      await save({ unsupportedClientAction: "block" }),
+      "a save that routes no session checks nothing",
+    ).toEqual([]);
   });
 
   test("refuses writes without management permission", async () => {

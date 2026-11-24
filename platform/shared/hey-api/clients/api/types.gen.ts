@@ -68649,6 +68649,7 @@ export type UpdateGuardrailsDeploymentResponses = {
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
         active: boolean;
+        warnings: Array<string>;
     };
 };
 

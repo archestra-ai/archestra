@@ -1,4 +1,4 @@
-import type { GuardrailsSettings } from "@archestra/openappa-rs";
+import type { GuardrailsSettings, LineRefusal } from "@archestra/openappa-rs";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -13,6 +13,8 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import UserModel from "@/models/user";
+import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaDeclarations } from "@/openappa/declarations";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
 import type {
@@ -150,7 +152,39 @@ export async function setGuardrailsDeployment(
   const before = await getGuardrailsDeploymentFromSnapshot({ row: stored });
   const after = await getGuardrailsDeployment();
   await announceSwitch(before, after, actor?.userId);
-  return after;
+  const routing =
+    update.mode !== undefined ||
+    update.personApproval !== undefined ||
+    update.enforcedMarks !== undefined ||
+    update.enabled !== undefined ||
+    update.humanApprovalMode !== undefined;
+  return { ...after, warnings: routing ? await lineWarnings() : [] };
+}
+
+/**
+ * Why a line the saved settings open sessions on can't carry its approvers
+ * over some organization's policy, so those sessions follow Enforce instead.
+ */
+async function lineWarnings(): Promise<string[]> {
+  const settings = await guardrailsDispatchSettings();
+  const lines = new Set<LineRefusal["variant"]>(
+    settings.mode === "observe"
+      ? ["observe"]
+      : settings.personApproval === "ask"
+        ? []
+        : ["enforce-approved"],
+  );
+  if (lines.size === 0) return [];
+  const warnings = await Promise.all(
+    (await OrganizationModel.findAllIds()).map(async (organizationId) =>
+      openappaDeclarations.lineWarnings(
+        (await openappaBatteriesService.getEffectivePolicy(organizationId))
+          .content,
+        { enforcedMarks: settings.enforcedMarks, lines },
+      ),
+    ),
+  );
+  return [...new Set(warnings.flat())];
 }
 
 /**

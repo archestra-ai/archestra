@@ -34648,6 +34648,34 @@ export type AssignToolToAppResponses = {
 
 export type AssignToolToAppResponse = AssignToolToAppResponses[keyof AssignToolToAppResponses];
 
+export type GetArchestraCliInstallScriptData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/archestra-cli/install.sh';
+};
+
+export type GetArchestraCliInstallScriptResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetArchestraCliPowershellInstallScriptData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/archestra-cli/install.ps1';
+};
+
+export type GetArchestraCliPowershellInstallScriptResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type DownloadArchestraCliData = {
     body?: never;
     path: {

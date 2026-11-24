@@ -1207,6 +1207,11 @@ export const RouteId = {
   GetDesktopDeviceServerLog: "getDesktopDeviceServerLog",
   // white-label-ok: wire identifier of the `archestra` program's download, not copy
   DownloadArchestraCli: "downloadArchestraCli",
+  // white-label-ok: wire identifier of the `archestra` program's install script, not copy
+  GetArchestraCliInstallScript: "getArchestraCliInstallScript",
+  // white-label-ok: wire identifier of the `archestra` program's install script, not copy
+  GetArchestraCliPowershellInstallScript:
+    "getArchestraCliPowershellInstallScript",
   StartDesktopDeviceSignIn: "startDesktopDeviceSignIn",
   PollDesktopDeviceSignIn: "pollDesktopDeviceSignIn",
   GetDesktopDeviceSignIn: "getDesktopDeviceSignIn",

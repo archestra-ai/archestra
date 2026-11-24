@@ -1,3 +1,4 @@
+import { programUpdatesByItself } from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
@@ -54,7 +55,10 @@ export interface DesktopDeviceView {
    * not known.
    */
   programUpdate: { version: string | null } | null;
-  /** Whether the MCP bridge of a device updates by itself (auto-update). */
+  /**
+   * Whether the MCP bridge of the device updates by itself: auto-update is
+   * on for the deployment, and the program the device runs can do it.
+   */
   programAutoUpdate: boolean;
   /** One MCP server for each desktop MCP catalog item the user installed. */
   servers: DesktopDeviceServerView[];
@@ -193,7 +197,12 @@ async function toView(device: DesktopDevice): Promise<DesktopDeviceView> {
     createdAt: device.createdAt,
     programVersion: device.clientVersion,
     programUpdate,
-    programAutoUpdate: config.mcpBridge.autoUpdateEnabled,
+    programAutoUpdate:
+      config.mcpBridge.autoUpdateEnabled &&
+      programUpdatesByItself({
+        platform: device.platform,
+        version: device.clientVersion,
+      }),
     servers: servers.map((server) => toServerView(server, online)),
   };
 }

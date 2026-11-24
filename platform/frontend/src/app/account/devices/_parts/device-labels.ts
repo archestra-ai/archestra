@@ -97,10 +97,7 @@ export function deviceProgramVersionLabel(
  * See {@link programUpdateInstruction} for who runs the command.
  */
 export function deviceProgramUpdateNotice(
-  device: Pick<
-    DesktopDevice,
-    "platform" | "programUpdate" | "programAutoUpdate"
-  >,
+  device: Pick<DesktopDevice, "programUpdate" | "programAutoUpdate">,
 ): DeviceProgramUpdateNotice | null {
   if (!device.programUpdate) return null;
   const { version } = device.programUpdate;

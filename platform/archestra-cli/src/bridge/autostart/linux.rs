@@ -109,6 +109,61 @@ pub(super) fn remove(home: &Path) -> Result<Removal, AutostartError> {
     )
 }
 
+/// Starts a program that an update downloaded (see
+/// [`super::start_downloaded_program`]). The MCP bridge that calls it is in
+/// the systemd unit when the session has a systemd user manager: the program
+/// then starts in a unit of its own, with `systemd-run --user`. A process
+/// that the MCP bridge starts itself stays in the unit of the MCP bridge,
+/// whatever its process group, and systemd ends it with that unit.
+#[cfg(target_os = "linux")]
+pub(super) fn start_downloaded_program(
+    program: &Path,
+    arguments: &[std::ffi::OsString],
+) -> io::Result<()> {
+    if !has_user_session(&mut SystemSystemctl) {
+        return super::spawn_in_own_process_group(program, arguments);
+    }
+    let search_path = std::env::var_os("PATH");
+    let output = super::run_tool(
+        "systemd-run",
+        systemd_run_arguments(program, arguments, search_path.as_deref()),
+    )?;
+    if output.success {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!(
+            "systemd-run did not start it: {}",
+            output.stderr
+        )))
+    }
+}
+
+/// The arguments of `systemd-run` for a downloaded program. The unit gets
+/// the `PATH` of the MCP bridge: the program writes it to the unit of the MCP
+/// bridge again, and a unit of `systemd-run` has only the short `PATH` of
+/// systemd. `--collect`: systemd forgets the unit also when the program
+/// fails.
+fn systemd_run_arguments(
+    program: &Path,
+    arguments: &[std::ffi::OsString],
+    search_path: Option<&std::ffi::OsStr>,
+) -> Vec<std::ffi::OsString> {
+    let mut run: Vec<std::ffi::OsString> = ["--user", "--collect", "--quiet"]
+        .into_iter()
+        .map(Into::into)
+        .collect();
+    run.push(format!("--description={NAME} update").into());
+    if let Some(search_path) = search_path {
+        let mut assignment = std::ffi::OsString::from("--setenv=PATH=");
+        assignment.push(search_path);
+        run.push(assignment);
+    }
+    run.push("--".into());
+    run.push(program.into());
+    run.extend(arguments.iter().cloned());
+    run
+}
+
 /// Copies the program and starts the MCP bridge in the background now. It
 /// adds the start at login when `add_to_login` says so, and brings an entry
 /// that is there up to date. Returns what runs it and whether it is in the
@@ -927,5 +982,45 @@ mod tests {
         };
         assert!(!unit_file(&command).contains("Environment="));
         assert!(desktop_entry(&command).contains("Exec=\"/h/archestra\" \"bridge\""));
+    }
+
+    #[test]
+    fn a_downloaded_program_starts_in_a_unit_of_its_own_with_the_path_of_the_bridge() {
+        let arguments: Vec<OsString> = ["bridge", "start", "--config", "/h/config.yaml"]
+            .into_iter()
+            .map(OsString::from)
+            .collect();
+        let run = |search_path: Option<&str>| -> Vec<String> {
+            systemd_run_arguments(
+                Path::new("/h/.archestra/bin/archestra-update"),
+                &arguments,
+                search_path.map(std::ffi::OsStr::new),
+            )
+            .iter()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect()
+        };
+        assert_eq!(
+            run(Some("/home/u/.nvm/bin:/usr/bin")),
+            [
+                "--user",
+                "--collect",
+                "--quiet",
+                "--description=Archestra MCP bridge update",
+                "--setenv=PATH=/home/u/.nvm/bin:/usr/bin",
+                "--",
+                "/h/.archestra/bin/archestra-update",
+                "bridge",
+                "start",
+                "--config",
+                "/h/config.yaml",
+            ]
+        );
+        // No `PATH` in the MCP bridge: the unit has the one of systemd.
+        assert!(
+            !run(None)
+                .iter()
+                .any(|argument| argument.starts_with("--setenv"))
+        );
     }
 }

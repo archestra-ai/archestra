@@ -159,7 +159,7 @@ describe("GET /api/desktop-devices", () => {
     });
     await served.writeManifest(JSON.stringify({ version: "0.2.0" }));
     const reported = {
-      "x-tunnel-client-version": "0.1.0",
+      "x-tunnel-client-version": "0.1.9",
       "x-tunnel-client-target": "darwin-arm64",
       "x-tunnel-client-sha256": sha256Of("an older program"),
     };
@@ -171,13 +171,36 @@ describe("GET /api/desktop-devices", () => {
     const autoUpdateOff = await listedAfterPoll(reported);
 
     expect(withManifest).toMatchObject({
-      programVersion: "0.1.0",
+      programVersion: "0.1.9",
       programUpdate: { version: "0.2.0" },
       programAutoUpdate: true,
     });
     expect(withoutVersion.programUpdate).toEqual({ version: null });
     expect(autoUpdateOff).toMatchObject({
       programUpdate: { version: null },
+      programAutoUpdate: false,
+    });
+  });
+
+  test("a macOS device with a program from before the auto-update does not update by itself", async () => {
+    await served.writeProgram({
+      file: "archestra-darwin-arm64",
+      content: "the served program",
+    });
+    await served.writeManifest(JSON.stringify({ version: "0.2.0" }));
+
+    const listed = await listedAfterPoll({
+      "x-tunnel-client-version": "0.1.8",
+      "x-tunnel-client-target": "darwin-arm64",
+      "x-tunnel-client-sha256": sha256Of("an older program"),
+    });
+
+    // Auto-update is on for the deployment, but this program waits for
+    // `archestra update`.
+    expect(config.mcpBridge.autoUpdateEnabled).toBe(true);
+    expect(listed).toMatchObject({
+      programVersion: "0.1.8",
+      programUpdate: { version: "0.2.0" },
       programAutoUpdate: false,
     });
   });

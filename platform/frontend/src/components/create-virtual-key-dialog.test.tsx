@@ -47,6 +47,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", async (importOriginal) => ({
   ...(await importOriginal()),
   useLlmProviderApiKeys: vi.fn(() => ({ data: [] })),
 }));
+vi.mock("next/navigation");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
@@ -520,6 +521,43 @@ describe("CreateVirtualKeyDialog", () => {
     });
   });
 
+  it("filters a long access list by words and by kind", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard", {
+      parentableKeys: MANY_PROVIDER_KEYS,
+      initialProviderApiKeys: null,
+    });
+
+    const providers = screen.getByRole("region", { name: "Providers" });
+    expect(providers).toHaveTextContent("Mistral");
+    expect(providers).toHaveTextContent("Groq");
+    await user.type(
+      screen.getByPlaceholderText("Filter by name, key, owner or model"),
+      "mistral",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("region", { name: "Providers" }),
+      ).not.toHaveTextContent("Groq"),
+    );
+    expect(screen.getByRole("region", { name: "Providers" })).toHaveTextContent(
+      "Mistral",
+    );
+    await user.type(
+      screen.getByPlaceholderText("Filter by name, key, owner or model"),
+      " nothing-like-this",
+    );
+    expect(
+      await screen.findByText("Nothing added matches these filters."),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("region", { name: "Providers" }),
+      ).toHaveTextContent("Groq"),
+    );
+  });
+
   it("blocks Create when no provider is used until one is picked", async () => {
     const user = userEvent.setup();
     renderDialog("standard", {
@@ -741,6 +779,20 @@ const SEVERAL_KEYS = [
   },
   { id: "zhipu-key", name: "Zhipu key", provider: "zhipuai", isPrimary: true },
 ] as never[];
+
+const MANY_PROVIDER_KEYS = [
+  ["openai", "OpenAI key"],
+  ["anthropic", "Anthropic key"],
+  ["gemini", "Gemini key"],
+  ["zhipuai", "Zhipu key"],
+  ["mistral", "Mistral key"],
+  ["groq", "Groq key"],
+].map(([provider, name]) => ({
+  id: `${provider}-key`,
+  name,
+  provider,
+  isPrimary: true,
+})) as never[];
 
 function createdKey(
   keyType: "standard" | "passthrough",

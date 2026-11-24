@@ -27,9 +27,15 @@ import {
   NoProviderKeys,
   PrimaryBadge,
 } from "@/components/credential-billing/provider-key-list";
+import {
+  FilterBar,
+  FilterSelect,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ProviderIcon } from "@/components/provider-icon";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
+import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -207,6 +213,56 @@ export function VirtualKeyAccessField({
     })),
   );
 
+  // Narrowing the list once it is long: words match names, keys, owners and
+  // models, and the kind filter keeps one kind of access.
+  const [filterText, setFilterText] = useState("");
+  const [filterKind, setFilterKind] = useState<AccessKind | "all">("all");
+  const filtering = filterText.trim() !== "" || filterKind !== "all";
+  const shows = (kind: AccessKind, words: (string | undefined)[]) =>
+    (filterKind === "all" || filterKind === kind) &&
+    matchesEveryWord("", filterText, words.filter(isPresent));
+  const shownRouters = listedRouters.filter((router) => {
+    const tiers = tiersByRouter.get(router.id);
+    return shows("routers", [
+      router.name,
+      tiers?.fast?.modelId,
+      tiers?.normal?.modelId,
+      tiers?.smart?.modelId,
+    ]);
+  });
+  const shownPools = listedPools.filter((pool) =>
+    shows("pools", [
+      pool.name,
+      ...pool.members.flatMap((member) => [
+        member.provider,
+        catalog.label(member.provider),
+        member.modelId,
+      ]),
+    ]),
+  );
+  const shownKeys = listedKeys.filter(({ provider, label, option }) =>
+    shows("providers", [
+      label,
+      provider,
+      option.name,
+      option.owner,
+      option.detail,
+    ]),
+  );
+  const showsSharedRow =
+    includeFutureProviders &&
+    shows("providers", [
+      "all shared providers",
+      ...sharedProviders.map((provider) => catalog.label(provider)),
+    ]);
+  const providerCount = listedKeys.length + (includeFutureProviders ? 1 : 0);
+  const listedCount = listedRouters.length + listedPools.length + providerCount;
+  const kindCounts: Record<AccessKind, number> = {
+    routers: listedRouters.length,
+    pools: listedPools.length,
+    providers: providerCount,
+  };
+
   const summary = [
     includeFutureProviders
       ? `all shared providers${
@@ -271,19 +327,69 @@ export function VirtualKeyAccessField({
           onAddKey={addKey}
         />
 
-        <div className="divide-y">
-          {listedRouters.length > 0 && (
+        {(listedCount >= FILTER_FROM || filtering) && (
+          <FilterBar
+            search={
+              <SearchInput
+                syncQueryParams={false}
+                value={filterText}
+                onSearchChange={setFilterText}
+                debounceMs={150}
+                placeholder="Filter by name, key, owner or model"
+                className={filterSearchClass}
+              />
+            }
+            onClearFilters={
+              filtering
+                ? () => {
+                    setFilterText("");
+                    setFilterKind("all");
+                  }
+                : undefined
+            }
+          >
+            <FilterSelect
+              value={filterKind}
+              onValueChange={(next) =>
+                setFilterKind(next as AccessKind | "all")
+              }
+              placeholder="Filter by kind"
+              showSearch={false}
+              items={[
+                { value: "all", label: "All kinds" },
+                ...ACCESS_KINDS.filter((kind) => kindCounts[kind.value]).map(
+                  (kind) => ({
+                    value: kind.value,
+                    label: `${kind.title} · ${kindCounts[kind.value]}`,
+                  }),
+                ),
+              ]}
+            />
+          </FilterBar>
+        )}
+
+        <div>
+          {filtering &&
+            !shownRouters.length &&
+            !shownPools.length &&
+            !shownKeys.length &&
+            !showsSharedRow && (
+              <p className="py-3 text-sm text-muted-foreground">
+                Nothing added matches these filters.
+              </p>
+            )}
+          {shownRouters.length > 0 && (
             <KindSection
-              title="Auto routers"
+              kind="routers"
+              count={listedRouters.length}
               hint="Apps send the router’s name as the model."
               manage={{ href: "/llm/auto-routing", label: "Manage routers" }}
             >
-              {listedRouters.map((router) => (
+              {shownRouters.map((router) => (
                 <div
                   key={router.id}
-                  className="flex min-h-9 items-center gap-2 pl-2"
+                  className="flex min-h-9 items-center gap-2 px-2 py-1.5"
                 >
-                  <Sparkles className="size-3.5 shrink-0" aria-hidden />
                   <span className="shrink-0 font-mono text-sm">
                     {router.name}
                   </span>
@@ -309,13 +415,14 @@ export function VirtualKeyAccessField({
               ))}
             </KindSection>
           )}
-          {listedPools.length > 0 && (
+          {shownPools.length > 0 && (
             <KindSection
-              title="Model pools"
+              kind="pools"
+              count={listedPools.length}
               hint="One model name that fails over across its members."
               manage={{ href: "/llm/model-pools", label: "Manage pools" }}
             >
-              {listedPools.map((pool) => (
+              {shownPools.map((pool) => (
                 <PoolRow
                   key={pool.id}
                   pool={pool}
@@ -328,24 +435,21 @@ export function VirtualKeyAccessField({
               ))}
             </KindSection>
           )}
-          <KindSection
-            title="Providers"
-            hint={
-              includeFutureProviders
-                ? "Each shared provider’s primary key. Add one above to use another key."
-                : "Apps call each provider’s models by name, on the key shown."
-            }
-          >
-            <div className="@container/provider-keys space-y-1.5">
+          {(!filtering || shownKeys.length > 0 || showsSharedRow) && (
+            <KindSection
+              kind="providers"
+              count={providerCount}
+              hint={
+                includeFutureProviders
+                  ? "Each shared provider’s primary key. Add one above to use another key."
+                  : "Apps call each provider’s models by name, on the key shown."
+              }
+            >
               {providers.length === 0 && !includeFutureProviders && (
                 <NoProviderKeys />
               )}
-              {includeFutureProviders && (
-                <div className="flex min-h-9 items-start gap-2 py-1.5 pl-2">
-                  <KeyRound
-                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                    aria-hidden
-                  />
+              {showsSharedRow && (
+                <div className="flex min-h-9 items-start gap-2 px-2 py-1.5">
                   <span className="min-w-0 flex-1 space-y-0.5">
                     <span className="block text-sm">All shared providers</span>
                     <span className="block text-xs text-muted-foreground">
@@ -364,7 +468,7 @@ export function VirtualKeyAccessField({
                   </span>
                 </div>
               )}
-              {listedKeys.map(({ provider, label, several, option }) => (
+              {shownKeys.map(({ provider, label, several, option }) => (
                 <ListedKeyRow
                   key={option.key.id}
                   provider={provider}
@@ -385,12 +489,12 @@ export function VirtualKeyAccessField({
               {providers.length > 0 &&
                 listedProviders.length === 0 &&
                 !includeFutureProviders && (
-                  <p className="py-2 text-xs text-muted-foreground">
+                  <p className="px-2 py-2 text-xs text-muted-foreground">
                     No providers selected — add one above.
                   </p>
                 )}
-            </div>
-          </KindSection>
+            </KindSection>
+          )}
         </div>
       </section>
     </div>
@@ -438,25 +542,53 @@ function ModeCard({
   );
 }
 
-/** One kind of access: its name and what it gives on the left, items on the right. */
+type AccessKind = "routers" | "pools" | "providers";
+
+const ACCESS_KINDS: {
+  value: AccessKind;
+  title: string;
+  icon: typeof Sparkles;
+}[] = [
+  { value: "routers", title: "Auto routers", icon: Sparkles },
+  { value: "pools", title: "Model pools", icon: LayersIcon },
+  { value: "providers", title: "Providers", icon: KeyRound },
+];
+
+/** The list gets a filter bar once it holds this many items. */
+const FILTER_FROM = 6;
+
+/**
+ * One kind of access: its name, count and what it gives on the left, its items
+ * boxed on the right. The label stays in view while a long kind scrolls past.
+ */
 function KindSection({
-  title,
+  kind,
+  count,
   hint,
   manage,
   children,
 }: {
-  title: string;
+  kind: AccessKind;
+  count: number;
   hint: string;
   manage?: { href: string; label: string };
   children: ReactNode;
 }) {
+  const { title, icon: Icon } =
+    ACCESS_KINDS.find((entry) => entry.value === kind) ?? ACCESS_KINDS[0];
   return (
     <section
       aria-label={title}
-      className="grid gap-2 py-3 first:pt-1 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4"
+      className="grid gap-2 py-2.5 first:pt-1 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4"
     >
-      <div className="space-y-1 sm:pt-2">
-        <p className="text-sm font-medium">{title}</p>
+      <div className="space-y-1 sm:sticky sm:top-0 sm:self-start sm:pt-2">
+        <p className="flex items-center gap-1.5 text-sm font-medium">
+          <Icon className="size-3.5 shrink-0" aria-hidden />
+          <span>{title}</span>
+          <span className="rounded bg-muted px-1.5 text-xs font-normal tabular-nums text-muted-foreground">
+            {count}
+          </span>
+        </p>
         <p className="text-xs text-muted-foreground">{hint}</p>
         {manage && (
           <Button variant="link" size="xs" className="h-auto px-0" asChild>
@@ -464,7 +596,9 @@ function KindSection({
           </Button>
         )}
       </div>
-      <div className="min-w-0 space-y-1">{children}</div>
+      <div className="@container/provider-keys min-w-0 divide-y self-start rounded-md border">
+        {children}
+      </div>
     </section>
   );
 }
@@ -486,7 +620,7 @@ type PickerProvider = {
   keys: (KeyOption & { replaces?: string })[];
 };
 
-/** A chosen key: its provider on the left, the key and its owner on the right. */
+/** A chosen key: the provider's name, then the key, its owner and its models. */
 function ListedKeyRow({
   provider,
   label,
@@ -501,19 +635,17 @@ function ListedKeyRow({
   onRemove: () => void;
 }) {
   return (
-    <div className="flex min-h-9 items-center gap-2 pl-2">
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5 @[480px]/provider-keys:flex-row @[480px]/provider-keys:items-center @[480px]/provider-keys:gap-2">
-        <span className="flex min-w-0 items-center gap-2 text-sm @[480px]/provider-keys:w-36 @[480px]/provider-keys:shrink-0">
-          <span aria-hidden className="shrink-0">
-            <ProviderIcon provider={provider} size={16} />
-          </span>
-          <span className="truncate">{label}</span>
-        </span>
-        <span className="min-w-0 flex-1">
-          <KeyTitle option={option} />
-          <span className="block truncate text-xs text-muted-foreground">
-            {option.detail}
-          </span>
+    <div className="flex items-center gap-2 px-2 py-1.5">
+      <span aria-hidden className="shrink-0">
+        <ProviderIcon provider={provider} size={16} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">{label}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+          <span className="truncate">{option.name}</span>
+          {option.key.isPrimary && <PrimaryBadge />}
+          <span className="truncate">{option.detail}</span>
+          {option.models !== null && <ModelCount count={option.models} />}
         </span>
       </span>
       <Button
@@ -536,20 +668,20 @@ function KeyTitle({ option }: { option: KeyOption }) {
     <span className="flex min-w-0 items-center gap-2 text-sm">
       <span className="truncate">{option.name}</span>
       {option.key.isPrimary && <PrimaryBadge />}
-      {option.models !== null && (
-        <span
-          className={cn(
-            "shrink-0 text-xs tabular-nums",
-            option.models
-              ? "text-muted-foreground"
-              : "text-amber-700 dark:text-amber-400",
-          )}
-        >
-          {option.models
-            ? plural(option.models, "model", "models")
-            : "no models"}
-        </span>
+      {option.models !== null && <ModelCount count={option.models} />}
+    </span>
+  );
+}
+
+function ModelCount({ count }: { count: number }) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 text-xs tabular-nums",
+        count ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400",
       )}
+    >
+      {count ? plural(count, "model", "models") : "no models"}
     </span>
   );
 }
@@ -782,6 +914,10 @@ function matchesEveryWord(
 /** What automatic access adds at request time: a shared primary key that still works. */
 function isSharedPrimary(key: LlmProviderApiKeyResponse): boolean {
   return key.userId === null && key.isPrimary && !key.requiresReauthentication;
+}
+
+function isPresent(value: string | undefined): value is string {
+  return !!value;
 }
 
 function plural(count: number, one: string, many: string): string {

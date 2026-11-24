@@ -97,6 +97,14 @@ describe("ClaudeCodeSubscriptionCard", () => {
       `${E2eTestId.SubscriptionProviderCard}-claude-code`,
     );
     expect(within(card).getByText("Claude Code")).toBeVisible();
+    const runtimeNote = within(card).getByText(
+      "This subscription works only with Claude Code agent runtimes.",
+    );
+    expect(runtimeNote).toBeVisible();
+    expect(runtimeNote.closest('[data-slot="inline-notice"]')).toHaveClass(
+      "border-[#EBCB8B]",
+      "dark:border-amber-500/30",
+    );
     expect(await within(card).findByText("Not connected")).toBeVisible();
 
     await user.click(within(card).getByRole("button", { name: "Connect" }));

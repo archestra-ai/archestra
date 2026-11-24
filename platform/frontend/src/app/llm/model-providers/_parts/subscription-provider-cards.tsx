@@ -121,6 +121,7 @@ export function SubscriptionCard({
   provider,
   name,
   description,
+  notice,
   isLoading,
   status,
   onConnect,
@@ -135,6 +136,8 @@ export function SubscriptionCard({
   provider: SupportedProvider;
   name: string;
   description: string;
+  /** Optional inline notice shown directly below the description. */
+  notice?: ReactNode;
   isLoading: boolean;
   status: SubscriptionCardStatus;
   /** Connect when not connected, Reconnect when the credential was refused. */
@@ -169,6 +172,7 @@ export function SubscriptionCard({
         </span>
       </div>
       <p className="text-sm text-muted-foreground">{description}</p>
+      {notice}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
         {isLoading ? (
           <Skeleton className="h-4 w-24" />

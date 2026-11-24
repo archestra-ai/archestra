@@ -1,12 +1,14 @@
 "use client";
 
 import { E2eTestId } from "@archestra/shared";
+import { Info } from "lucide-react";
 import { useState } from "react";
 import {
   ClaudeCodeAccountDialog,
   shouldStartClaudeCodeSignIn,
 } from "@/components/claude-code-account";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
   useDisconnectMyClaudeCodeAccount,
   useMyClaudeCodeAccount,
@@ -79,6 +81,14 @@ export function ClaudeCodeSubscriptionCard({
         provider="anthropic"
         name="Claude Code"
         description={description}
+        notice={
+          <InlineNotice variant="warning" role="note" className="items-start">
+            <Info className="mt-0.5" aria-hidden="true" />
+            <InlineNoticeText>
+              This subscription works only with Claude Code agent runtimes.
+            </InlineNoticeText>
+          </InlineNotice>
+        }
         isLoading={account.isPending}
         status={status}
         onRetry={() => void account.refetch()}

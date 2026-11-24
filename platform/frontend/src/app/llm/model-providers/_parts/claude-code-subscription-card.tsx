@@ -55,9 +55,7 @@ export function ClaudeCodeSubscriptionCard({
     ? "Could not check your Claude Code subscription."
     : expired
       ? "Your sign-in expired or was revoked. Sign in again to use this subscription."
-      : connected
-        ? "Your Claude Code subscription is linked through your Claude account."
-        : "Connect your Claude account to use your subscription";
+      : "Connect your Claude account to use your subscription.";
 
   const openAccountDialog = () => {
     setDialogOpen(true);

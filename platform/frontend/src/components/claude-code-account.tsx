@@ -118,11 +118,7 @@ export function ClaudeCodeAccountDialog({
         if (!value) setCode("");
       }}
       title={connected ? "Claude Code account" : "Connect Claude Code"}
-      description={
-        connected
-          ? "Your Claude Code subscription is linked through your Claude account."
-          : "Connect your Claude account to use your subscription."
-      }
+      description="Connect your Claude account to use your subscription."
       size="small"
       className="sm:max-w-xl"
       footer={

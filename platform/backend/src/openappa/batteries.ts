@@ -380,6 +380,31 @@ class OpenAppaBatteriesService {
     };
   }
 
+  /**
+   * The policy text a battery adds once the policy includes it, for one the
+   * organization can include: a look at it before any install. It is the text
+   * an include shows once every credential the battery reads is bound.
+   */
+  async availableSource(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<BatteryPolicySource> {
+    const { organizationId, name } = params;
+    const found = (await this.availableBatteries(organizationId)).get(name);
+    if (!found) throw new ApiError(404, `No battery is named ${name}`);
+    return {
+      entry:
+        found.contentHash === null
+          ? bundledEntry(name)
+          : uploadedEntry({ name, contentHash: found.contentHash }),
+      name,
+      kind: "battery",
+      content: deployedSource(
+        prospectiveDeployment(found.package, sandboxRuntimeService.isEnabled),
+      ),
+    };
+  }
+
   /** The policy the runtime opens for this organization, recomposed when it moved. */
   async getEffectivePolicy(organizationId: string): Promise<EffectivePolicy> {
     const inFlight = this.reading.get(organizationId);
@@ -893,6 +918,101 @@ class OpenAppaBatteriesService {
       },
     });
     await this.recompile(organizationId);
+  }
+
+  /**
+   * The policy text with one bundled battery attached to, or detached from,
+   * one MCP server's catalog, edited as the Batteries page edits it but not
+   * saved: what a server's editor proposes as a pull request while Git sync
+   * owns the policy. A battery that governs the organization is refused here,
+   * since attaching it changes every server, not one.
+   */
+  async serverChangeContent(params: {
+    organizationId: string;
+    content: string;
+    batteryName: string;
+    catalogId: string;
+    change: "attach" | "detach";
+  }): Promise<string> {
+    const { organizationId, content, batteryName, catalogId, change } = params;
+    // A server's editor proposes bundled batteries only: an uploaded package
+    // runs code someone with the credential permission vouched for.
+    const battery = await openappaDeclarations.resolveInstalled({
+      organizationId,
+      name: batteryName,
+      packageHash: null,
+    });
+    if (!battery) throw new ApiError(404, `Unknown battery ${batteryName}`);
+    if (batteryScope(battery) === "organization")
+      throw new ApiError(
+        403,
+        `${batteryName} governs every tool call in the organization, not one MCP server's, so changing it takes permission to update guardrails.`,
+      );
+    const catalog = await this.requireCatalog({ organizationId, catalogId });
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content,
+    });
+    const included = resolution.entries.find(
+      (entry) => entry.name === batteryName,
+    );
+    // The policy check passes a server's editor only for the bundled
+    // battery's own entry, so an uploaded package of that name stays theirs
+    // to change who may update guardrails.
+    if (included && included.entry !== bundledEntry(batteryName))
+      throw new ApiError(
+        403,
+        `The policy includes ${batteryName} as an uploaded package, not the bundled battery, so changing which servers it governs takes permission to update guardrails.`,
+      );
+    const { targets, readiness } = await this.attachTargets({
+      organizationId,
+      catalogId: catalog.id,
+    });
+    let edits: PolicyEditInput[];
+    if (change === "attach") {
+      assertAttachable({ catalog: catalog.name, readiness });
+      const entry = included?.entry ?? bundledEntry(batteryName);
+      edits = [
+        ...(included ? [] : [{ kind: "addInclude" as const, entry }]),
+        ...bindEdits({ resolution, namespaces: battery.namespaces, targets }),
+      ];
+    } else {
+      if (!included)
+        throw new ApiError(
+          409,
+          `The policy does not include ${batteryName}, so there is nothing to detach from ${catalog.name}.`,
+        );
+      const remaining = battery.namespaces.some(
+        (namespace) =>
+          remainingTargets({ resolution, namespace, targets }).length > 0,
+      );
+      edits = [
+        // With no target left anywhere the battery governs nothing, so the
+        // entry that declares it goes with its last server.
+        ...(remaining
+          ? []
+          : [{ kind: "removeInclude" as const, entry: included.entry }]),
+        ...unbindEdits({
+          resolution,
+          namespaces: battery.namespaces,
+          targets,
+          keep: otherNamespaces(resolution, batteryName),
+        }),
+      ];
+      assertDetaches({ edits, battery: batteryName, catalog: catalog.name });
+    }
+    const native = await loadNative();
+    const edited = await native.editOpenappaPolicy(content, edits);
+    if (edited.content === undefined || edited.content === null)
+      throw new ApiError(400, edited.errors.join("\n"));
+    if (edited.content === content)
+      throw new ApiError(
+        409,
+        change === "attach"
+          ? `${batteryName} is already attached to ${catalog.name}.`
+          : `${batteryName} is not attached to ${catalog.name}.`,
+      );
+    return edited.content;
   }
 
   /**

@@ -1078,6 +1078,7 @@ export const RouteId = {
   UpdateAppaGithubSync: "updateAppaGithubSync",
   GetOpenappaBatteries: "getOpenappaBatteries",
   GetOpenappaBatteryPolicySource: "getOpenappaBatteryPolicySource",
+  GetOpenappaBatterySource: "getOpenappaBatterySource",
   GetOpenappaEffectivePolicy: "getOpenappaEffectivePolicy",
   GetOpenappaBatteryMatches: "getOpenappaBatteryMatches",
   GetOpenappaBatteryInstall: "getOpenappaBatteryInstall",

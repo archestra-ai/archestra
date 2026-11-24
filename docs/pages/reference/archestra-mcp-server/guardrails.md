@@ -38,7 +38,7 @@ lastUpdated: 2026-11-21
 | [`get_remedy_plans`](#get_remedy_plans) | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None |
 | [`execute_remedy_plan`](#execute_remedy_plan) | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None |
 | [`get_guardrails_server_rules`](#get_guardrails_server_rules) | Read one MCP server's own Guardrails rules: its file in the Git sync policy repository's self-service folder (`path`, e.g. | None |
-| [`preview_guardrails_server_rules_change`](#preview_guardrails_server_rules_change) | Check a proposed rules file for one MCP server and return its `diff`, plus `rootChange` when appa.toml does not include the self-service folder yet and gains its `<folder>/*.toml` entry, once for e... | None |
+| [`preview_guardrails_server_rules_change`](#preview_guardrails_server_rules_change) | Check a proposed rules file for one MCP server, or attaching or detaching a bundled battery for it (`battery` instead of `content`), and return its `diff`, plus `rootChange` when appa.toml does not... | None |
 | [`propose_guardrails_server_rules_change`](#propose_guardrails_server_rules_change) | Open a pull request on the policy repository that changes one MCP server's rules file, which governs every server whose tools carry its prefix, and adds the self-service folder's `<folder>/*.toml` ... | None |
 | [`get_guardrails_server_rules_change_status`](#get_guardrails_server_rules_change_status) | Where a pull request propose_guardrails_server_rules_change opened for this server stands: `phase` (check_pending, check_failed, check_passed, merge_pending, merge_refused, merged, applied or close... | None |
 | [`list_runtime_credentials`](#list_runtime_credentials) | List reusable credential definitions visible to the caller, including whether a personal or organization connection is configured. | [`credential:read`](/docs/reference/permissions#credential:read) |
@@ -326,6 +326,8 @@ Required RBAC permission: [`guardrailsPolicy:read`](/docs/reference/permissions#
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `number` | `integer` | Yes |  |
+| `wait` | `boolean` | No | Return only once the phase moves on from `since`, settles, or some forty seconds pass. GitHub App sources only. |
+| `since` | `"check_pending" \| "check_failed" \| "check_passed" \| "merge_pending" \| "merge_refused" \| "merged" \| "applied" \| "closed"` | No | The `phase` the last call returned, to wait past. |
 
 
 ### get_remedy_plans
@@ -382,7 +384,13 @@ Required RBAC permission: None
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
-| `content` | `string` | Yes | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for tools that carry the file's tool prefix only and any [[policy.annotator]] they use, named <tool prefix>.<name>. |
+| `content` | `string` | No | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for tools that carry the file's tool prefix only and any [[policy.annotator]] they use, named <tool prefix>.<name>. |
+| `battery` | `object` | No | Instead of `content`: attach a bundled battery to this server, or detach it. appa.toml then changes only in which batteries govern the servers' tools; a battery that governs every tool call in the organization is refused. |
+| `battery.name` | `string` | Yes | The bundled battery's name, such as microsoft-learn. |
+| `battery.change` | `"attach" \| "detach"` | Yes | Attach the battery to this server, or detach it. |
+| `battery.others` | `object[]` | No | Every other MCP server the same battery is attached to or detached from in this request. When the user asks for several servers at once, call this tool once, for one of them, and name the rest here: one call per server opens pull requests that change the same lines and conflict. The user must be able to edit each one. |
+| `battery.others[].mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
+| `battery.others[].change` | `"attach" \| "detach"` | Yes | Attach the battery to that server, or detach it. |
 | `expectedCommit` | `string` | Yes | `expectedCommit` from get_guardrails_server_rules. |
 
 
@@ -395,7 +403,13 @@ Required RBAC permission: None
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
-| `content` | `string` | Yes | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for tools that carry the file's tool prefix only and any [[policy.annotator]] they use, named <tool prefix>.<name>. |
+| `content` | `string` | No | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for tools that carry the file's tool prefix only and any [[policy.annotator]] they use, named <tool prefix>.<name>. |
+| `battery` | `object` | No | Instead of `content`: attach a bundled battery to this server, or detach it. appa.toml then changes only in which batteries govern the servers' tools; a battery that governs every tool call in the organization is refused. |
+| `battery.name` | `string` | Yes | The bundled battery's name, such as microsoft-learn. |
+| `battery.change` | `"attach" \| "detach"` | Yes | Attach the battery to this server, or detach it. |
+| `battery.others` | `object[]` | No | Every other MCP server the same battery is attached to or detached from in this request. When the user asks for several servers at once, call this tool once, for one of them, and name the rest here: one call per server opens pull requests that change the same lines and conflict. The user must be able to edit each one. |
+| `battery.others[].mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
+| `battery.others[].change` | `"attach" \| "detach"` | Yes | Attach the battery to that server, or detach it. |
 | `expectedCommit` | `string` | Yes | `expectedCommit` from get_guardrails_server_rules. |
 | `summary` | `string` | Yes | What the change does and why, in plain words, for the reviewers. |
 

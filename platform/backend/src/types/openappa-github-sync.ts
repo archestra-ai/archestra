@@ -77,9 +77,10 @@ export const AppaGithubSourceSchema = z
     /** Where each server's rules file lives, beside the policy file. */
     selfServiceDirectory: SelfServiceDirectorySchema.default("mcp"),
     /**
-     * Merge each self-served rules pull request once its policy check
-     * passes. GitHub App sources only; ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE,
-     * while set, wins over it.
+     * Merge each pull request Archestra opens for a policy change (the APPA
+     * Keeper's, Settings', and each server's self-served rules) once its
+     * checks pass. GitHub App sources only, with self-service or without;
+     * ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE, while set, wins over it.
      */
     selfServiceAutoMerge: z.boolean().default(false),
   })
@@ -129,7 +130,7 @@ export const CreateAppaGithubRepositorySchema = z
     selfService: z.boolean().optional(),
     /** Where each server's rules file lives, beside the policy file; mcp unless set. */
     selfServiceDirectory: SelfServiceDirectorySchema.optional(),
-    /** Merge each self-served rules pull request once its check passes; off unless set. */
+    /** Merge each policy pull request Archestra opens once its checks pass; GitHub App sources only, off unless set. */
     selfServiceAutoMerge: z.boolean().optional(),
   })
   .strict()
@@ -281,20 +282,20 @@ export const AppaSelfServiceSchema = z.object({
   leftoverRule: z
     .object({ checkName: z.string(), url: z.string().nullable() })
     .optional(),
-  /**
-   * Whether the GitHub App merges each self-served rules pull request once
-   * its policy check passes, and what decides it.
-   */
-  autoMerge: z.object({
-    /** In force: the environment variable while one is set, else the saved setting. */
-    enabled: z.boolean(),
-    /** The setting saved with the Git sync source. */
-    setting: z.boolean(),
-    /** The environment variable that sets it, while one does, with its value. */
-    environment: z
-      .object({ variable: z.string(), value: SelfServiceChoiceSchema })
-      .optional(),
-  }),
+});
+/**
+ * Whether the GitHub App merges each pull request Archestra opens for a
+ * policy change once its checks pass, and what decides it.
+ */
+const AppaAutoMergeSchema = z.object({
+  /** In force: the environment variable while one is set, else the saved setting. */
+  enabled: z.boolean(),
+  /** The setting saved with the Git sync source. */
+  setting: z.boolean(),
+  /** The environment variable that sets it, while one does, with its value. */
+  environment: z
+    .object({ variable: z.string(), value: SelfServiceChoiceSchema })
+    .optional(),
 });
 /**
  * The files Archestra keeps beside the policy in its repository, from the
@@ -352,6 +353,8 @@ export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
   source: AppaGithubSyncSchema.nullable(),
   selfService: AppaSelfServiceSchema,
+  /** Auto-merge of the policy pull requests Archestra opens; GitHub App sources only. */
+  autoMerge: AppaAutoMergeSchema,
   hasPolicy: z.boolean(),
   validationDirectory: z.string(),
   /** Web origin of the source's host, e.g. https://github.com, for links. */
@@ -379,8 +382,9 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
     })
     .strict(),
   /**
-   * Turn auto-merge of self-served pull requests on or off; refused while
-   * the environment variable sets it, and while self-service is off.
+   * Turn auto-merge of the policy pull requests Archestra opens on or off;
+   * refused while the environment variable sets it, and without a GitHub
+   * App source that syncs.
    */
   z
     .object({

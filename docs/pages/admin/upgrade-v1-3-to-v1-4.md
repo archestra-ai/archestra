@@ -75,7 +75,7 @@ These commands assume the release `archestra-platform` in the namespace `archest
 3. Upgrade the chart. Helm runs the database migrations before it starts v1.4.
 
    ```bash
-   export ARCHESTRA_VERSION="1.4.38" # x-release-please-version
+   export ARCHESTRA_VERSION="1.4.39" # x-release-please-version
    helm upgrade archestra-platform \
      oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" --namespace archestra \
@@ -122,7 +122,7 @@ The v1.4 container migrates the database when it starts. It also rebuilds its em
      -v /var/run/docker.sock:/var/run/docker.sock \
      -v archestra-postgres-data:/var/lib/postgresql/data \
      -v archestra-app-data:/app/data \
-     archestra/platform:1.4.38 # x-release-please-version
+     archestra/platform:1.4.39 # x-release-please-version
    ```
 
 3. Open <http://localhost:3000>, sign in, then recreate what you recorded under [Deleted in v1.4](#deleted-in-v14).

@@ -11,11 +11,13 @@ import type { SSOOptions } from "@better-auth/sso";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
+import { z } from "zod";
 import type { BetterAuth } from "@/auth/better-auth";
 import {
   cacheIdpGroups,
   extractGroupsFromClaims,
 } from "@/auth/idp-team-sync-cache.ee";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -641,18 +643,33 @@ class IdentityProviderModel {
     const { ssoLoginEnabled: _ssoLoginEnabled, ...betterAuthRegistrationData } =
       registrationData;
 
-    // Register with Better Auth
-    await auth.api.registerSSOProvider({
-      body: {
-        ...betterAuthRegistrationData,
-        ...(betterAuthRegistrationData.oidcConfig && {
-          oidcConfig: withoutBlankDiscoveryEndpoint(
-            betterAuthRegistrationData.oidcConfig,
-          ),
-        }),
-      },
-      headers: new Headers(headers),
-    });
+    const body = {
+      ...betterAuthRegistrationData,
+      ...(betterAuthRegistrationData.oidcConfig && {
+        oidcConfig: withoutBlankDiscoveryEndpoint(
+          betterAuthRegistrationData.oidcConfig,
+        ),
+      }),
+    };
+
+    /**
+     * Better Auth's registration endpoint needs a Better Auth session for a
+     * user who is an owner or admin member of the organization. A
+     * service-account caller (for example Terraform or Crossplane signed in
+     * through workload identity) has neither: its bearer token is not an API
+     * key, so the api-key hook rejects it with "Invalid API key", and its
+     * synthetic user id has no `users` or `member` row. The route already
+     * checked the caller's `identityProvider:create` permission, so write the
+     * row here instead, after the checks Better Auth would have made.
+     */
+    if (data.userId && isServiceAccountUserId(data.userId)) {
+      await insertSsoProviderForServiceAccount(body);
+    } else {
+      await auth.api.registerSSOProvider({
+        body,
+        headers: new Headers(headers),
+      });
+    }
 
     // Better Auth automatically creates the database record, so we need to find it
     // The provider ID should be unique, so we can find by providerId and organizationId
@@ -978,6 +995,83 @@ function serializeConfigValue(
   }
 
   return JSON.stringify(value);
+}
+
+/**
+ * Provider ids Better Auth refuses for an SSO provider: its built-in account
+ * providers. Archestra configures no social or trusted providers, so these are
+ * the only reserved ids.
+ */
+const RESERVED_SSO_PROVIDER_IDS = new Set([
+  "credential",
+  "email-otp",
+  "magic-link",
+  "phone-number",
+  "anonymous",
+  "siwe",
+]);
+
+/**
+ * Inserts the SSO provider row Better Auth's `registerSSOProvider` would have
+ * created, for a caller that cannot hold a Better Auth session. It makes the
+ * same checks on the fields Better Auth stores (issuer, provider id, SAML entry
+ * point); `create` then writes every config column itself, as it does after a
+ * Better Auth registration. The owner stays empty because a service account has
+ * no `users` row for the foreign key.
+ */
+async function insertSsoProviderForServiceAccount(body: {
+  providerId: string;
+  issuer: string;
+  domain: string;
+  organizationId: string;
+  samlConfig?: Parameters<typeof hasSamlSignOnTarget>[0];
+}): Promise<void> {
+  if (!z.url().safeParse(body.issuer).success) {
+    throw new ApiError(400, "Invalid issuer. Must be a valid URL");
+  }
+  if (RESERVED_SSO_PROVIDER_IDS.has(body.providerId)) {
+    throw new ApiError(
+      422,
+      "This providerId is reserved and cannot be used for an SSO provider",
+    );
+  }
+  if (body.samlConfig && !hasSamlSignOnTarget(body.samlConfig)) {
+    throw new ApiError(
+      400,
+      "SAML configuration requires either idpMetadata.metadata (IdP metadata XML), idpMetadata.singleSignOnService, or a valid entryPoint URL",
+    );
+  }
+
+  const [existing] = await db
+    .select({ id: schema.identityProvidersTable.id })
+    .from(schema.identityProvidersTable)
+    .where(eq(schema.identityProvidersTable.providerId, body.providerId));
+  if (existing) {
+    throw new ApiError(422, "SSO provider with this providerId already exists");
+  }
+
+  await db.insert(schema.identityProvidersTable).values({
+    id: crypto.randomUUID(),
+    providerId: body.providerId,
+    issuer: body.issuer,
+    domain: body.domain,
+    domainVerified: false,
+    organizationId: body.organizationId,
+    userId: null,
+  });
+}
+
+function hasSamlSignOnTarget(samlConfig: {
+  entryPoint?: string;
+  idpMetadata?: {
+    metadata?: string;
+    singleSignOnService?: unknown[];
+  };
+}): boolean {
+  if (samlConfig.idpMetadata?.metadata) return true;
+  if (samlConfig.idpMetadata?.singleSignOnService?.length) return true;
+  if (!samlConfig.entryPoint) return false;
+  return URL.canParse(samlConfig.entryPoint);
 }
 
 async function hydrateOidcConfigForRegistration<

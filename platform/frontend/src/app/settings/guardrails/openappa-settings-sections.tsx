@@ -30,7 +30,11 @@ import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 
-/** Whether tool calls are checked against the policy at all. */
+/**
+ * Whether tool calls are checked against the policy at all, named for the
+ * state Guardrails run in: Observe checks every call but lets the platform
+ * approve for the agent, so it must not read as enforcing.
+ */
 export function OpenAppaEnforcementSetting() {
   const deployment = useGuardrailsDeployment({ poll: true });
   const update = useUpdateGuardrailsDeployment();
@@ -39,12 +43,24 @@ export function OpenAppaEnforcementSetting() {
   });
   const { isFresh } = useOpenAppaSetupState();
   const enabled = Boolean(deployment.data?.enabled);
+  const observing = deployment.data?.mode === "observe";
+  const label = observing ? "Observe the policy" : "Enforce the policy";
   return (
     <SettingsBlock
       id="enforcement"
-      title="Enforce the policy"
+      title={label}
       description={
-        enabled ? (
+        observing ? (
+          <>
+            <span>
+              Guardrails observe your policy. Every tool call is checked and
+              recorded, but the platform applies remedy plans for the agent, so
+              calls your policy would block still run. Turning this off and on
+              again switches to Enforce.
+            </span>
+            <ModesDocsLink />
+          </>
+        ) : enabled ? (
           "Guardrails are on. Every tool call is checked against your policy before it runs."
         ) : isFresh ? (
           // Saving the first policy turns enforcement on; there is nothing to enforce before it.
@@ -65,7 +81,7 @@ export function OpenAppaEnforcementSetting() {
       control={
         deployment.data ? (
           <Switch
-            aria-label="Enforce the policy"
+            aria-label={label}
             checked={enabled}
             disabled={
               !canManage ||
@@ -289,6 +305,25 @@ export function OpenAppaClientCoverageSetting() {
  * A docs link inside a sentence. A white-labeled deployment hides public docs
  * links; the words then stay as plain text so the sentence still reads whole.
  */
+function ModesDocsLink() {
+  const href = getVisibleDocsUrl(
+    getDocsUrl(DocsPage.PlatformAiToolGuardrails, "off-observe-and-enforce"),
+  );
+  if (!href) return null;
+  return (
+    <>
+      {" "}
+      <ExternalDocsLink
+        href={href}
+        showIcon={false}
+        className="text-primary underline underline-offset-2 hover:text-primary/80"
+      >
+        How Observe differs from Enforce
+      </ExternalDocsLink>
+    </>
+  );
+}
+
 function ClientsDocsLink({
   anchor,
   children,

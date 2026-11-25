@@ -28,6 +28,7 @@ vi.mock("sonner");
 const api = "http://localhost:9000/api";
 const server = setupServer();
 let enabled: boolean;
+let mode: "observe" | "enforce";
 let featureEnabled: boolean;
 let clientAction: "bypass" | "block";
 // Fields the deployment still carries for older clients; no control here.
@@ -54,6 +55,7 @@ beforeEach(() => {
   >);
   vi.mocked(useAppName).mockReturnValue("Archestra");
   enabled = false;
+  mode = "enforce";
   featureEnabled = true;
   clientAction = "bypass";
   revision = 1;
@@ -61,6 +63,7 @@ beforeEach(() => {
     http.get(`${api}/guardrails-deployment`, () =>
       HttpResponse.json({
         enabled,
+        mode: enabled ? mode : "off",
         featureEnabled,
         active: enabled,
         unsupportedClientAction: clientAction,
@@ -134,6 +137,44 @@ test("the enforcement switch turns enforcement on and off", async () => {
   fireEvent.click(toggle);
   await waitFor(() => expect(toggle).not.toBeChecked());
   expect(sent).toEqual([true, false]);
+});
+
+test("under Observe the switch says so, and turning it back on enforces", async () => {
+  enabled = true;
+  mode = "observe";
+  server.use(
+    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
+      enabled = ((await request.json()) as { enabled: boolean }).enabled;
+      // The backend turns the switch back on in Enforce.
+      if (enabled) mode = "enforce";
+      return HttpResponse.json({
+        enabled,
+        mode: enabled ? mode : "off",
+        featureEnabled: true,
+        active: enabled,
+        unsupportedClientAction: clientAction,
+      });
+    }),
+  );
+  show(<OpenAppaEnforcementSetting />);
+  const observing = await screen.findByRole("switch", {
+    name: "Observe the policy",
+  });
+  expect(observing).toBeChecked();
+  expect(
+    screen.queryByRole("switch", { name: "Enforce the policy" }),
+  ).not.toBeInTheDocument();
+  await waitFor(() => expect(observing).toBeEnabled());
+  fireEvent.click(observing);
+  const off = await screen.findByRole("switch", { name: "Enforce the policy" });
+  await waitFor(() => expect(off).not.toBeChecked());
+  await waitFor(() => expect(off).toBeEnabled());
+  fireEvent.click(off);
+  await waitFor(() =>
+    expect(
+      screen.getByRole("switch", { name: "Enforce the policy" }),
+    ).toBeChecked(),
+  );
 });
 
 test("enforcement cannot be turned on before a policy exists", async () => {

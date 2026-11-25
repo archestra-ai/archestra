@@ -69,9 +69,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
     # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
     # go-archive 0.3.0 pulls klauspost/compress 1.18.7; CVE-2026-116591 is fixed in 1.20.2.
-    # Keep all three security floors in the LAST `go get` before `go mod vendor`:
+    # Keep all three security floors in the LAST `go get` before `go mod tidy`:
     # earlier OTel/x/sys and go-archive updates can pull older x/net, grpc, and compress versions.
     go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
+    # Bumped pins can import modules vendor.sum lacks (otel >= 1.47 imports otel/log);
+    # tidy records their go.sum entries so `go mod vendor` succeeds.
+    go mod tidy && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -152,7 +155,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-35469: spdystream resource exhaustion fixed in >= 0.5.1.
     go get github.com/moby/spdystream@v0.5.1 && \
     # cve-2026-29181: OTel resource exhaustion fixed in >= 1.41.0.
-    go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 go.opentelemetry.io/otel/trace@v1.41.0 go.opentelemetry.io/otel/sdk@v1.41.0 && \
+    # otel modules release in lockstep: keep every otel pin in every stage on one version.
+    go get go.opentelemetry.io/otel@v1.43.0 go.opentelemetry.io/otel/metric@v1.43.0 go.opentelemetry.io/otel/trace@v1.43.0 go.opentelemetry.io/otel/sdk@v1.43.0 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
     # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.

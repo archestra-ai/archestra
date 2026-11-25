@@ -1,152 +1,188 @@
 ---
 title: Model Pools
-description: Serve one model name from several provider keys, with load balancing and failover
+description: Serve one model from several providers, with load balancing and failover
 order: 5
-lastUpdated: 2026-11-19
+lastUpdated: 2026-11-24
 beta: "Model Pools are in Beta."
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
-Keep a model answering when one provider key hits its rate limit or goes down. A model pool serves one model name, such as `claude-sonnet-5-5`, from several provider keys: Anthropic first, and Bedrock when Anthropic fails. Clients keep asking for `claude-sonnet-5-5` with the key they already have, and Archestra moves to the next key before they see an error. To route sessions across fast, normal, and smart models within a daily budget instead, use [Auto Routing](/docs/llm-proxy/auto-routing).
+Model pools allow clients to reach for a single model, such as `claude-sonnet-5-5`, but under the hood, Archestra will route them from different providers.
 
-```mermaid
-flowchart LR
-    Client["Claude Code · Your apps"] -->|"claude-sonnet-5-5"| Pool["Model pool"]
-    Pool --> Order1["Order 1: Anthropic key"]
-    Pool -.->|"If order 1 is unavailable"| Order2["Order 2: Bedrock key"]
-    class Pool accent
-```
+Here are some of the common use cases for model pools:
+
+| Goal | How it works |
+| --- | --- |
+| Survive a provider outage | An Anthropic key, with a Bedrock key as the fallback. |
+| Get past a rate limit | Keys from two or three provider accounts sharing traffic. |
+| Fall back to another model | `claude-sonnet-5-5` on Anthropic, with `gpt-6.1-sol` on OpenAI as the fallback in case Anthropic fails. |
+| Use reserved capacity first | An Azure AI Foundry provisioned deployment, with a pay-as-you-go deployment as the fallback while it's rate limited. |
+| Use your subscription first | Your personal GitHub Copilot connection, with a shared OpenAI key as the fallback. |
 
 ## Create a Pool
 
-A pool is a model name and its members. Each member is a provider connection and the model ID that connection uses, since providers spell the same model differently: Bedrock calls `claude-sonnet-5-5` `us.anthropic.claude-sonnet-5-5`.
+A model pool comprises a few moving parts: models, members and orders.
 
-Before you start, add provider keys or connect your subscriptions on [Model Providers](/docs/llm-proxy/providers). You can add shared connections and your own personal connections, including GitHub Copilot. Creating a pool needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
+When creating a pool, we pick a model which will serve as what we would like to provide to the client. From there, we can define members, which are effectively a group of providers that serve the selected model.
 
+Each member has an order: requests go to order 1 and move to order 2 when order 1 can't answer. Members with the same order share its traffic.
+
+For example, a `claude-sonnet-5-5` pool with three members:
+
+| Order | Provider key | Model | Traffic |
+| --- | --- | --- | --- |
+| 1 | Anthropic, team A account | `claude-sonnet-5-5` | 50% |
+| 1 | Anthropic, team B account | `claude-sonnet-5-5` | 50% |
+| 2 | AWS Bedrock | `us.anthropic.claude-sonnet-5-5` | When order 1 can't answer |
+
+Before you start, add provider keys or connect your subscriptions on [Model Providers](/docs/llm-proxy/providers). Creating a pool needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
+
+:::tabs
+@tab Archestra UI
 1. Go to **LLM → Model Pools** and click **Create pool**.
 2. Under **Model name**, pick or type the name clients ask for.
 3. Under **Members**, click **Add member**. Pick a **Provider key**, then the **Model** ID that key uses for this model. If the key has no synced models, type the ID.
-4. Click **Add member** inside the same order to share its traffic. Click **Add order** to add a fallback.
+4. To share an order's traffic, click **Add member** inside that order and set each member's weight under **Traffic**. To add a fallback, click **Add order**. Drag a member to move it to another order.
 5. Click **Create pool**.
+6. Add the pool to the virtual key or OAuth client your apps use, or their requests skip it. See [Who Can Use a Pool](#who-can-use-a-pool).
 
-The dialog then shows that the pool is ready, with a request you can copy. Send it, and the answer carries `x-archestra-pool: claude-sonnet-5-5` and `x-archestra-attempts: 1` headers. The pool name in `x-archestra-pool` is percent-encoded so custom names with spaces or Unicode are safe in HTTP headers.
+@tab Terraform
+Use Terraform if your team already manages infrastructure with it: the pool lives in code, and changes go through review. Otherwise, use the UI.
 
-- A pool named after a model ID takes over that model on the LLM Proxy: every request for `claude-sonnet-5-5` from a caller who can use the pool goes to the pool. Deleting the pool sends those requests back to the caller's own key. In chat and agents, a pool answers only when you [pick it](#use-a-pool-in-chat-and-agents).
-- Switch a member off to stop sending it traffic and keep it in the pool.
+1. Set up the [Archestra Terraform provider](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs/guides/getting-started), with your Archestra URL in `ARCHESTRA_BASE_URL` and a [service account key](/docs/reference/api#service-accounts) in `ARCHESTRA_API_KEY`. The key's role needs [`llmModel:update`](/docs/reference/permissions#llmModel:update), plus [`llmVirtualKey:create`](/docs/reference/permissions#llmVirtualKey:create) if Terraform also creates the virtual key.
+2. Declare the pool, and add it to the virtual key your apps use:
 
-## Order and Weight
+   ```hcl
+   resource "archestra_model_pool" "sonnet" {
+     name = "claude-sonnet-5-5" # the model clients ask for
+     members = [
+       {
+         # A shared provider key, such as archestra_model_provider.anthropic.id
+         provider_api_key_id = var.anthropic_key_id
+         model_id            = "claude-sonnet-5-5"
+         priority            = 1 # the member's order
+       },
+       {
+         provider_api_key_id = var.bedrock_key_id
+         model_id            = "us.anthropic.claude-sonnet-5-5" # Bedrock's ID for the same model
+         priority            = 2
+       },
+     ]
+   }
 
-Order is a member's priority, and weight splits traffic between members of the same priority. A pool picks a member by these two settings alone, not by load, latency, cost, or how much of a key's rate or token limit is left.
+   resource "archestra_virtual_key" "app" {
+     name           = "My app"
+     model_pool_ids = [archestra_model_pool.sonnet.id]
+   }
+   ```
+:::
 
-- **Order:** requests go to order 1. They go to order 2 only when every member of order 1 has failed or is cooling down. Drag a member into another order to move it, or between two orders to give it an order of its own.
-- **Weight:** members of one order share its traffic by weight.
+## Selection Strategy
 
-For example, a `gpt-6.1-sol` pool with an OpenAI key of weight 3 and an Azure AI Foundry key of weight 1 in order 1 sends 75% of requests to OpenAI and 25% to Azure. Add an Azure key in another region as order 2, and it answers only while both are unavailable.
+The selection strategy decides which member gets each request. Different strategies forward the request in different manners. Pick it under **Selection strategy** when you create or edit a pool.
+
+| Selection strategy | Picks | Use it when |
+| --- | --- | --- |
+| **Weighted random** (default) | By weight for each new session, then keeps the session on that member | You want a fixed split. With weights 3 and 1, about 75% of the traffic goes to the first provider key and 25% to the second. |
+| **Least tokens used** | The member that used the fewest tokens this minute | Members have similar per-minute token limits, and you want each to stay under its own. |
+
+- A session is a Claude Code conversation, or requests with the same `X-Archestra-Session-Id` header. Keeping it on one member keeps that provider's prompt cache warm.
+- Least tokens used ignores weight and picks again on every request.
 
 ## When a Member Fails
 
-A request moves to another healthy member when one fails before it starts to answer, within the pool's [retries](#retries). The client sees an error when the last member fails, or when the request itself is at fault.
+When a member fails before it starts to answer, the pool sends the request to another member. The failed member [cools down](#cooldowns), so the next requests skip it. The client sees an error only when no member is left, or when the request itself is at fault.
 
-| When the member | What happens |
-| --- | --- |
-| Answers `429` or a `5xx` error, or can't be reached | The request moves to the next member. |
-| Answers `401`, `403`, or `404`, or its key can't be loaded | The request moves to the next member. The key was revoked, or it doesn't serve that model. |
-| Stays silent: no first chunk of a stream within the [stream timeout](#timeouts-and-cooldown), or no full answer within the timeout | The request moves to the next member. |
-| Reports exhausted credit: `402`, OpenAI-compatible `429 insufficient_quota`, or Anthropic’s `400` credit-balance refusal | The request moves to the next member. The exhausted member is excluded until its cooldown expires. |
-| Rejects another invalid request, such as a `400` | The error goes to the client. Other members would reject it too. |
-| Fails after it starts to answer | The error goes to the client. A pool never switches members mid-answer. |
+| When the member | What happens | Cooldown |
+| --- | --- | --- |
+| Is rate limited (`429`), returns a server error (`5xx`), can't be reached, or passes a [timeout](#configure-failover) | The pool [retries](#retries) another member, then moves to the next order. | 30 s, or as long as the provider's `Retry-After` asks, up to 60 s |
+| Rejects the key or doesn't have the model (`401`, `403`, `404`) | The request skips the rest of its order and goes to the next order. Retries wouldn't help. | 30 s |
+| Is out of credit | The request skips the rest of its order and goes to the next order. | 1 hour |
+| Rejects the request as invalid (`400`) | The error goes to the client. Other members would reject it too. | None |
+| Fails after it starts to answer | The error goes to the client. A pool never switches members mid-answer. | None |
 
-A member with a transient failure cools down for the pool's cooldown time. A longer `Retry-After` header extends it, up to 60 s or the cooldown time if that is longer. With no cooldown time set, the member cools down for 30 s, or for as long as its `Retry-After` header asks, up to 60 s. Other requests skip it while it cools down. The pool's members show **Cooling down** with the seconds left, and the reason on hover.
+- When there is no next order, the client gets the last member's error.
+- The pool's timeouts never cut off the last member left, since there is nowhere else to go.
 
-- The last member has nowhere to move to, so the pool does not time it out.
-- Members cooling down are skipped. If every member is cooling down, the request fails with `503` without contacting a provider.
-- A conversation stays on the same member while that member is healthy, which keeps the provider's prompt cache warm.
+### Cooldowns
+
+A cooldown is a pause on a member that just failed, and one failure is enough to start it. While it lasts, the pool sends that member no requests, so a key that is rate limited or down isn't hit again by every request that follows. When the cooldown ends, the member gets requests again.
+
+- How long it lasts depends on the failure, as the table above shows. Change it with **Cooldown time**.
+- A member in a cooldown shows **Cooling down** in the pool, with the seconds left.
+- If every member is in a cooldown, requests fail until one ends.
 
 ### Retries
 
-Retries are always on. After a temporary failure, the pool selects a healthy deployment again. Change the counts and delays under **Failover** when you edit a pool; a blank field keeps its default, shown on hover of its help icon. Each selection uses order and weight: a healthy member in order 1 takes precedence over order 2.
+A retry sends the request to another healthy member after a temporary failure. With the default of 2 retries, a pool with keys A and B in order 1 and key C in order 2 handles a request like this:
 
-- **Retries:** additional selections after the first, from 0 to 10; the default is 2. Members share this budget, rather than receiving that many attempts each. Once exhausted, each later order gets a separate fallback attempt and retry budget. Set 0 to skip additional selections within the current group, not to disable later-order fallbacks.
-- **Retries by error type:** give connection errors, timeouts, rate limits, or server errors their own retry count. The first failure chooses the budget for that group or order fallback; switching members or encountering a different error does not reset it. Invalid requests are returned immediately; rejected credentials, missing models and exhausted credit move to later-order fallbacks.
-- **Backoff:** starts at 500 ms, doubles up to 8000 ms, and uses 75–100% of that delay. A provider's positive `Retry-After` replaces the delay when within the maximum; longer waits move to a later order instead.
-
-Under **Member overrides**, set a member's retries, delays or retries by error type for when that member has the first failure. Blank fields use the pool's values, and removing a member removes its override. A request can override every retry count with `x-archestra-num-retries: 0` through `10`; it cannot enable retries for permanent failures or after streaming output starts.
-
-- A retry can select a later order when all lower-order members are cooling down. Once an explicit order fallback begins, its retries stay within that order.
-- Cooling members are excluded from selections. If none are healthy, the request fails instead of replaying a cooling member. A pool with only one member gives it its bounded recovery attempts before putting it on cooldown.
-- Each dispatched attempt appears in proxy logs and counts toward `x-archestra-attempts`. Retries can add latency and provider charges, especially after timeouts; set **Retries** to 0 to keep only order fallbacks.
-
-## Timeouts and Cooldown
-
-Set these under **Failover** when you edit a pool; a new pool starts with the defaults. They apply to every member of the pool, and a blank one keeps its default.
-
-| Setting | Default | What it sets |
+| Try | Goes to | If it fails |
 | --- | --- | --- |
-| **Stream timeout** | 30 s | How long a member may take to send the first chunk of a streamed answer. Up to 1800 s. |
-| **Timeout** | Auto: 3 min plus 1 s per 20 tokens the request lets the model write, at most 30 min | How long a member may take to send a full answer that isn't streamed. Up to 1800 s. |
-| **Cooldown time** | 1 hour for exhausted credit; otherwise 30 s, or the `Retry-After` up to 60 s | The shortest time other requests skip a member that failed. Up to 3600 s. |
+| First | A | A cools down, and the pool retries. |
+| Retry 1 | B, the other member of order 1 | B cools down, and the pool retries. |
+| Retry 2 | C, since order 1 has no healthy member left | The client gets C's error. |
 
-Credit exhaustion uses **Cooldown time** when set, including a shorter value for faster recovery after a top-up. Without an override, it waits one hour. Ordinary rate limits keep their shorter cooldown.
+- Each retry waits **Initial delay** first, doubling up to **Maximum delay**, or as long as the provider's `Retry-After` asks.
+- When the retries run out, the request moves to the next order, which gets its own retries.
+- Set **Retries** to 0 to go straight to the next order after the first failure.
+
+## Configure Failover
+
+Failover keeps a pool answering when a member fails: the pool retries another member, then moves to the next order. To change how it does that, edit the pool and go to **Failover**.
+
+| Setting | Default (range) | Change it when |
+| --- | --- | --- |
+| **Retries** | 2 (0–10) | Requests should fail faster (lower), or ride out bursts of rate limits (higher). |
+| **Retries by error type** | Same as **Retries** | Rate limits, server errors, timeouts, or connection errors need their own count. |
+| **Initial delay**, **Maximum delay** | 500 ms, 8000 ms | Your provider needs more time between tries. |
+| **Stream timeout** | 30 s (up to 30 min) | A model takes longer to send its first chunk, such as a reasoning model. |
+| **Timeout** | 3–30 min, scaled to the request's output limit | Answers that aren't streamed time out on a slow model. |
+| **Cooldown time** | 30 s, or 1 hour for exhausted credit (up to 1 hour) | Members recover faster or slower. A set value also applies to exhausted credit. |
+| **Member overrides** | The pool's values | One member needs its own **Retries**, **Initial delay**, or **Maximum delay**, such as a provider that rate limits more often than the others. |
+
+A client can set the retry count for one request with the `x-archestra-num-retries` header, from `0` to `10`.
 
 ## Request Compatibility
 
-A pool skips members whose known input types or estimated context limit cannot accept the request. For example, an image goes to an image-capable member instead of a known text-only member.
+Some members can't take a request because their model doesn't support what it needs. A model that reads only text can't take a request with an image, and a conversation longer than a model's context window doesn't fit it. The pool sends that request only to members whose model can take it.
 
-- Context checks include text, system instructions, tool definitions and results, plus the requested output allowance. Local token counts are estimates; media tokens and remote file contents are not counted.
-- Members with missing metadata remain eligible. Azure input types use evidence for the selected provider key; Azure context checks are deferred until a scoped limit is available. Keep model capabilities and context limits accurate under **Models**.
-- If no member qualifies, the request fails with `400` before contacting a provider. Skipping an incompatible member does not put it on cooldown.
+- Skipping a member doesn't count as a failure. It doesn't cool down, and it still gets the requests it can take.
+- If no member can take the request, it fails without reaching any provider.
 
 ## Who Can Use a Pool
 
-A [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) uses a pool only after you add the pool under **Model pools** when you create or edit the key. The same goes for an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) that [calls as the app](/docs/llm-proxy/authentication#call-as-the-app). Which provider keys the key or client maps doesn't matter: the pool answers with its members' keys. Remove the pool, and the key or client can no longer use it.
+An app uses a pool once you add the pool to its [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or [OAuth client](/docs/llm-proxy/authentication#oauth-clients). People signed in through [Connect](/docs/get-started/connect) or an identity provider use it when they can already use one of its members' keys.
 
-Credentials that have no pools of their own, such as people who signed in through [Connect](/docs/get-started/connect) or an identity provider's token, use a pool when they can already reach one of its members.
+To add a pool, edit the virtual key or OAuth client and pick the pool under **Model pools**. Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
-Personal members only serve requests authenticated as their owner, such as a personal virtual key or a signed-in user. A pool grant does not share a subscription: other callers skip personal members and use shared members. If none remain, the request fails with `403` before contacting a provider.
+## Use a Pool
 
-Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
+Clients ask for the pool's name as the model, the same way they ask for any model on the [LLM Proxy](/docs/llm-proxy#start-using-it). A pool named after a model needs no client change.
 
-A caller who can't use a pool is not refused. Their request for that name goes to their own key, as it would without a pool.
+```bash
+curl "https://<archestra-host>/v1/unified-model/chat/completions" \
+  -H "Authorization: Bearer $ARCHESTRA_VIRTUAL_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":"Hello"}]}'
+```
 
-## Use a Pool in Chat and Agents
-
-In Archestra Chat and in agents, a pool answers only when you pick it. A provider key and a model run on that key alone, even when the key is a pool member.
-
-- **Chat:** open the model menu, go to **Key**, and pick the pool under **Model pools**. The pool picks the member, so there is no model to choose.
+- **Claude Code:** for a pool not named after a Claude model, pick it with `claude --model gpt-6.1-sol`. Set `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the smallest context window among the pool's members, since Claude Code assumes 200k for a model name it doesn't know.
+- **Chat:** open the model menu, go to **Key**, and pick the pool under **Model pools**.
 - **Agents:** in the agent's form, pick the pool under **Model pools** in the key picker. An agent on an [Agent Runtime](/docs/agents/runtime) can't pick a pool. Its requests go through a pool when the agent's model has the pool's name and its provider key is one of the pool's members.
-
-You see the pools that have a member on a key you can use.
-
-## Connect a Client
-
-Point a client at any of these endpoints and ask for the pool's name as the model. Click **Connect** on a pool, pick an **Endpoint** and how to **Sign in with**, and copy the base URL and the request.
-
-| Endpoint | Base URL | Use it for |
-| --- | --- | --- |
-| **Unified Model API** | `https://<archestra-host>/v1/unified-model` | Any OpenAI-compatible client. `/models` lists the pool under its plain name. |
-| **Anthropic API** | `https://<archestra-host>/v1/anthropic` | Claude Code and the Anthropic SDK |
-| **OpenAI API** | `https://<archestra-host>/v1/openai` | The OpenAI SDK, on Chat Completions or Responses |
-
-Claude Code needs nothing for a pool named after a Claude model. For any other pool, pick it as the model, for example `claude --model gpt-6.1-sol`.
-
-- **Context window:** Claude Code assumes a 200k context window for a model name it doesn't know. Set `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the smallest context window among the pool's members.
-- **Members on another API:** Claude Code and OpenAI Chat Completions clients reach every member, whatever API its provider speaks. Archestra translates the request. Anthropic-only features, such as prompt caching hints and thinking blocks, are dropped on the way to a member that doesn't speak Anthropic's API. Claude models on Bedrock keep them.
 
 ## See Which Member Answered
 
-Every attempt is a request in [Logs](/docs/insights/logs) under **Logs → LLM Proxy**, named by the member key it went to. An attempt that failed over shows its status and reason, such as **429 · rate limited**, and the attempt after it is marked **Retry**. Open a request to see, under **Model pool**, each member it tried in order with its outcome and time, and the members it did not need.
+Open a request in [Logs](/docs/insights/logs) under **Logs → LLM Proxy** to see which member answered it. Under **Model pool**, the request lists every member it tried, in order: the one that answered, any that failed and why, such as **429 · rate limited**, and the ones it didn't need.
 
-Each attempt is priced as the member that made it, with that member's provider and model ID:
+- Each try is billed at its member's [token price](/docs/llm-proxy/cost-controls#where-token-prices-come-from). A refused try costs $0.
+- To see a failover before a real outage, change the order 1 member's model to an ID that doesn't exist and send a request. The log shows the failed try and the answer from order 2. Then put the model back.
 
-- An attempt that was refused costs $0.
-- An attempt that was cut off for being silent carries an estimated input cost, because the provider read the prompt and bills it.
-- A member's model with no price in the catalog falls back to the default price. Set its price under **Models**, as for [custom models](/docs/llm-proxy/cost-controls#where-token-prices-come-from).
+## Mixing Providers
 
-## Limits
+A pool can mix providers, such as Anthropic, Bedrock, and OpenAI. Archestra translates each request to the member's API, so text, images, PDFs, and tool calls work on every member. Features that only one provider has don't.
 
-- Responses clients, including Codex and OpenCode, can use pools through `/responses` on the OpenAI or Unified Model API. Every enabled member must serve native Responses on OpenAI, Azure AI Foundry, or GitHub Copilot; other member providers are rejected rather than translated. Send the full conversation in `input`: Stored response, conversation, item, file, prompt, vector-store, container and skill references are not supported because they belong to one provider account. Use inline inputs and synchronous execution.
-- Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. OpenAI Chat Completions, Anthropic Messages, and native Gemini clients can mix these providers for text, inline images/PDFs, and client tool calls. Bedrock Converse clients require a Bedrock-only pool; incompatible members produce an error instead of being skipped.
-- Provider-hosted tools, provider-specific cache references, custom Gemini safety settings, structured output, and non-text output are not portable across providers. Incompatible requests fail explicitly; use a pool on the original provider for those features. Reasoning budgets and private thought signatures do not transfer between providers. Each destination uses its own reasoning defaults, so leave room in the output limit for models that think before answering.
-- Timeouts and cooldown are set for the whole pool, not for one member.
+- Provider-hosted tools, structured output, non-text output, provider cache references, and custom Gemini safety settings fail on a mixed pool. Use a pool on one provider for those.
+- Prompt caching hints and thinking blocks are dropped on members that don't speak Anthropic's API, except Claude models on Bedrock. Each member uses its own reasoning defaults, so leave room in the output limit for models that think before answering.
+- Responses clients, such as Codex and OpenCode, need every member on OpenAI, Azure AI Foundry, or GitHub Copilot, and must send the full conversation in each request. Bedrock Converse clients need a Bedrock-only pool.

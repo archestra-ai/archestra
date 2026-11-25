@@ -1,4 +1,9 @@
-import type { AnyRoleName, CursorQuery } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  type AnyRoleName,
+  type CursorQuery,
+  OWNER_ROLE_NAME,
+} from "@archestra/shared";
 import {
   and,
   count,
@@ -6,6 +11,7 @@ import {
   exists,
   gte,
   inArray,
+  isNull,
   ne,
   notExists,
   notInArray,
@@ -152,6 +158,35 @@ class MemberModel {
       "MemberModel.getFirstMembershipForUser: completed",
     );
     return member;
+  }
+
+  /**
+   * The organization's longest-standing active admin other than `excludeUserId`.
+   * Receives a departing member's shared resources when nobody else is named.
+   * `role` can hold several comma-separated roles; better-auth's `owner` role
+   * counts as admin.
+   */
+  static async findLongestStandingAdmin(params: {
+    organizationId: string;
+    excludeUserId: string;
+  }): Promise<string | null> {
+    const members = schema.membersTable;
+    const users = schema.usersTable;
+    const [row] = await db
+      .select({ userId: members.userId })
+      .from(members)
+      .innerJoin(users, eq(users.id, members.userId))
+      .where(
+        and(
+          eq(members.organizationId, params.organizationId),
+          ne(members.userId, params.excludeUserId),
+          isNull(users.softDeleted),
+          sql`string_to_array(${members.role}, ',') && ARRAY[${ADMIN_ROLE_NAME}, ${OWNER_ROLE_NAME}]::text[]`,
+        ),
+      )
+      .orderBy(members.createdAt, members.id)
+      .limit(1);
+    return row?.userId ?? null;
   }
 
   /**

@@ -76,7 +76,11 @@ export function EditVirtualKeyDialog({
   // through once they load.
   const [modelPoolIds, setModelPoolIds] = useState<string[]>();
   const canSetModelPools = useCanSetModelPools();
-  const { data: pools } = useModelPools({ enabled: canSetModelPools });
+  const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
+  const { data: pools, isLoading: poolsLoading } = useModelPools({
+    enabled: canSetModelPools || canReadPools === true,
+    toastOnError: false,
+  });
   const grantedPoolIds = useMemo(
     () =>
       (pools ?? [])
@@ -95,9 +99,13 @@ export function EditVirtualKeyDialog({
   // Undefined until edited, like the pools.
   const [autoRouterIds, setAutoRouterIds] = useState<string[]>();
   const canSetAutoRouters = useCanSetAutoRouters();
-  const { data: autoRouters } = useAvailableAutoRouters({
-    enabled: canSetAutoRouters,
+  const { data: canReadRouters } = useHasPermissions({
+    llmProviderApiKey: ["read"],
   });
+  const { data: autoRouters, isLoading: routersLoading } =
+    useAvailableAutoRouters({
+      enabled: canSetAutoRouters || canReadRouters === true,
+    });
   const grantedRouterIds = useMemo(
     () =>
       (autoRouters ?? [])
@@ -426,6 +434,23 @@ export function EditVirtualKeyDialog({
           keyType={virtualKey.keyType}
           mappedProviderKeys={virtualKey.providerApiKeys}
           includeFutureProviders={virtualKey.includeFutureProviders}
+          hasGrantedRoutes={
+            grantedPoolIds.length > 0 ||
+            grantedRouterIds.length > 0 ||
+            // Preserve the guide for legacy pool/router-only keys when this
+            // viewer cannot confirm the routes. If both lists have loaded,
+            // don't infer a grant: the last pool, router or provider may have
+            // been deleted after the key was saved.
+            ((pools === undefined || autoRouters === undefined) &&
+              virtualKey.keyType === "standard" &&
+              !virtualKey.includeFutureProviders &&
+              virtualKey.providerApiKeys.length === 0)
+          }
+          routesPending={poolsLoading || routersLoading}
+          routesUnavailable={
+            virtualKey.keyType === "standard" &&
+            (pools === undefined || autoRouters === undefined)
+          }
           connectionBaseUrl={connectionBaseUrl}
           name={virtualKey.name}
           expiration={formatExpiration(virtualKey.expiresAt)}

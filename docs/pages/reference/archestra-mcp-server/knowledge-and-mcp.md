@@ -86,7 +86,7 @@ Required RBAC permission: [`knowledgeSource:read`](/docs/reference/permissions#k
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my knowledge bases". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output
@@ -370,7 +370,7 @@ Required RBAC permission: [`mcpRegistry:read`](/docs/reference/permissions#mcpRe
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Optional search query to filter MCP servers by name or description. |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my MCP servers". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output
@@ -395,7 +395,7 @@ Required RBAC permission: [`mcpRegistry:read`](/docs/reference/permissions#mcpRe
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my MCP servers". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output

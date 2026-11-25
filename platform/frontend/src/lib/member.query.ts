@@ -20,7 +20,8 @@ import {
   RoleAssignmentBlockedError,
 } from "./role-assignment-blocked";
 
-const { bulkDeleteMembers, getMembers } = archestraApiSdk;
+const { bulkDeleteMembers, getMemberOwnedResources, getMembers } =
+  archestraApiSdk;
 
 /**
  * Query keys for member/invitation queries
@@ -284,28 +285,62 @@ export function useUpdateMemberRole() {
   });
 }
 
+export type MemberOwnedResources =
+  archestraApiTypes.GetMemberOwnedResourcesResponses["200"];
+
 /**
- * Remove a member from the organization via better-auth
+ * What a member owns: what others use (which moves to a new owner when they
+ * are removed) and how many personal items are deleted with them.
+ */
+export function useMemberOwnedResources(
+  userId: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: [...memberKeys.all, "owned-resources", userId] as const,
+    queryFn: async () => {
+      const { data, error } = await getMemberOwnedResources({
+        path: { userId },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? { shared: [], personal: [] };
+    },
+    enabled,
+  });
+}
+
+/**
+ * Remove one accepted member. Everything they shared with others goes to
+ * `newOwnerId`, or to you when it is omitted.
  */
 export function useRemoveMember() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (memberId: string) => {
-      const response = await authClient.organization.removeMember({
-        memberIdOrEmail: memberId,
+    mutationFn: async (params: { memberId: string; newOwnerId?: string }) => {
+      const response = await bulkDeleteMembers({
+        body: {
+          targets: [{ kind: "member", id: params.memberId }],
+          newOwnerId: params.newOwnerId,
+        },
       });
       if (response.error) {
-        throw new Error(response.error.message ?? "Failed to remove member");
+        handleApiError(response.error);
+        throw toApiError(response.error);
+      }
+      const failed = response.data?.failed[0];
+      if (failed) {
+        toast.error("Failed to remove member", { description: failed.error });
+        throw new Error(failed.error);
       }
       return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["auth"] });
-      queryClient.invalidateQueries({ queryKey: memberKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: memberKeys.all });
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.memberSignupStatus(),
+      });
       toast.success("Member removed");
-    },
-    onError: (error: Error) => {
-      toast.error("Failed to remove member", { description: error.message });
     },
   });
 }

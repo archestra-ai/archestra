@@ -4642,6 +4642,13 @@
       "when": 1795615480238,
       "tag": "0662_silent_bulldozer",
       "breakpoints": true
+    },
+    {
+      "idx": 663,
+      "version": "7",
+      "when": 1795627645770,
+      "tag": "0663_gigantic_klaw",
+      "breakpoints": true
     }
   ]
 }

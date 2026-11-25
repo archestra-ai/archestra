@@ -2,6 +2,7 @@
 import { AccountModel, MemberModel, UserModel } from "@/models";
 import SessionModel from "@/models/session";
 import { cancelUnfinishedTasksOfUser } from "@/services/agent-runtime/start-task";
+import { handOffSharedResources } from "@/services/owned-resource-handoff";
 import { createPendingSignupMember } from "@/services/pending-signup-member";
 import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -103,8 +104,9 @@ class ScimProvisioningService {
   }
 
   /**
-   * Deactivate or delete: soft-delete the user, end their sessions and cancel
-   * their tasks in progress. A user soft-deleted earlier keeps the first date.
+   * Deactivate or delete: soft-delete the user, end their sessions, cancel
+   * their tasks in progress and hand the resources they shared with others to
+   * an admin. A user soft-deleted earlier keeps the first date.
    */
   async softDeleteUser(params: {
     organizationId: string;
@@ -125,6 +127,7 @@ class ScimProvisioningService {
       organizationId: params.organizationId,
       statusReason: "The task's user was deactivated in the identity provider.",
     });
+    await handOffSharedResources(params);
     return this.getUser(params);
   }
 

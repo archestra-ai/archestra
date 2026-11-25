@@ -102,10 +102,7 @@ describe("PoolDialog", () => {
       "glm-5{Enter}",
     );
     await user.click(screen.getByRole("button", { name: "Add member" }));
-    const advanced = screen.getByRole("button", {
-      name: "Advanced",
-      exact: true,
-    });
+    const advanced = screen.getByRole("button", { name: "Advanced" });
     const submit = screen.getByRole("button", { name: "Create pool" });
     expect(advanced).toHaveAttribute("aria-expanded", "false");
     expect(submit).toBeEnabled();

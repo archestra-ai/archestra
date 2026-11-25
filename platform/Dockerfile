@@ -10,13 +10,14 @@ ARG DAGGER_VERSION=v0.21.11
 ARG DAGGER_COMMIT=631cdb609aaddc0037c2ba713e7642cadf645ff4
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
-FROM golang:1.26.11-alpine@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab AS go-builder-base
+# Docker's hardened Go image; its -dev variant ships git, so the builders add no packages.
+FROM dhi.io/golang:1.26.11-alpine3.23-dev@sha256:4c427bdf5ab99a6b4aeb8e93237a5fcbe2b0f6285dc5fd01669a26149e0b991d AS go-builder-base
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi && \
-    apk add --no-cache git
+    git --version
 
 # Build the four pinned Go tools in independent stages so BuildKit schedules
 # them concurrently. Go caches stay outside exported layers, and each clone is

@@ -20,12 +20,16 @@ RUN apt-get update -qq \
 
 # Upstream gh 2.103.2 and 2.103.3 embed x/net 0.60.0 (CVE-2026-78661).
 # Rebuild the existing CLI release with the fixed module until upstream ships it.
-FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS gh-build
+# Docker's hardened Go image has no curl or gzip: BuildKit fetches and checks the
+# source, and apt adds gzip to unpack it.
+FROM dhi.io/golang:1.27.4-debian13-dev@sha256:a56385e6b77b61ccaf807d5ea72d8593ad7a390fdd1c6552c4e127a90730b05f AS gh-build
 WORKDIR /src
-RUN curl -fsSL --retry 3 \
-      https://codeload.github.com/cli/cli/tar.gz/4f2cfe92e3499f8581bf39db77e0a1431fa7b55c \
-      -o /tmp/gh-source.tar.gz \
- && echo '0eda9a553f1e191d7d63214dd1373f184a8f922b221387af510e63252c1d5419  /tmp/gh-source.tar.gz' | sha256sum -c - \
+ADD --checksum=sha256:0eda9a553f1e191d7d63214dd1373f184a8f922b221387af510e63252c1d5419 \
+    https://codeload.github.com/cli/cli/tar.gz/4f2cfe92e3499f8581bf39db77e0a1431fa7b55c \
+    /tmp/gh-source.tar.gz
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gzip \
+ && rm -rf /var/lib/apt/lists/* \
  && tar -xzf /tmp/gh-source.tar.gz --strip-components=1 \
  && rm /tmp/gh-source.tar.gz \
  && go get golang.org/x/net@v0.62.0 \

@@ -437,6 +437,8 @@ export default function ChatSessionHook({
         preserveQueuedMessagesOnAbortRef.current = null;
       }
       setOptimisticToolCalls([]);
+      // No call waits once its stream has ended, however it ended.
+      setQueuedToolCallIds(NO_QUEUED_TOOL_CALLS);
       // An errored stream keeps its questions: onError either clears them
       // (terminal) or is about to retry/reattach into the same run, whose
       // replay re-sends them — clearing here would unmount the card and lose
@@ -589,6 +591,9 @@ export default function ChatSessionHook({
     onError: (chatError) => {
       errorSeqRef.current += 1;
       setOptimisticToolCalls([]);
+      // The "started" signal of a queued call can be lost with the stream. A
+      // recovery replays the run's signals, so start from none.
+      setQueuedToolCallIds(NO_QUEUED_TOOL_CALLS);
       clearActiveContextCompaction();
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],

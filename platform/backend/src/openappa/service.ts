@@ -1155,11 +1155,10 @@ async function approveToolResult(params: {
  * user decide. A client or the gateway wrote it, not a tool, so it goes
  * through after a line that says the plan is not applied.
  *
- * Only when an automated check refused it, not the user, does a closing line
- * say how to ask: Claude Code's auto-mode classifier accepts the plan only
- * after the user, shown what was blocked, approves it, and a question that
- * quotes the ruling gives the user that, where a bare "approve" typed in chat
- * did not. A user who declined has decided, so nothing invites asking again.
+ * The closing line says how to ask when the user must decide. Claude Code's
+ * auto-mode classifier accepts the plan only after the user, shown what was
+ * blocked, approves it: a question that quotes the ruling gives the user
+ * that, where a bare "approve" typed in chat did not.
  */
 const UNEXECUTED_REMEDY_QUESTION_HINT =
   "[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
@@ -1182,24 +1181,15 @@ const INTEGRITY: RefusalOutcome = { kind: "integrity" };
 /** The runtime holds no released call that a reported result could answer. */
 export const UNRELEASED_CALL_CODE = "unreleased_call";
 
-/** The refusal Claude Code's auto-mode classifier writes, before the user decides. */
-const CLASSIFIER_REFUSAL = /denied by the Claude Code auto mode classifier/i;
-
 /**
  * A remedy result the runtime did not release. Nothing proves the client ran
- * the remedy, so its body is not passed on; it is read only to tell a
- * classifier's refusal from the user's.
+ * the remedy, so its body is not passed on.
  */
-function unexecutedControlResult(
-  result: CommonToolResult,
-): ProcessedToolResult {
-  const undecided = CLASSIFIER_REFUSAL.test(resultOutput(result));
-  return {
-    content: `[appa] The remedy did not run, so the plan is not applied.${undecided ? `\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}` : ""}`,
-    outputSource: "runtime",
-    code: UNRELEASED_CALL_CODE,
-  };
-}
+const UNEXECUTED_CONTROL_RESULT: ProcessedToolResult = {
+  content: `[appa] The remedy did not run, so the plan is not applied.\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}`,
+  outputSource: "runtime",
+  code: UNRELEASED_CALL_CODE,
+};
 
 function statedOutcomeOf(
   decision: NativeDecision,
@@ -1356,7 +1346,7 @@ export async function processProxyResults(params: {
       ? { content: pendingReview, outputSource: "runtime" }
       : approved.code === UNRELEASED_CALL_CODE &&
           params.isControlResult?.(result) === true
-        ? unexecutedControlResult(result)
+        ? UNEXECUTED_CONTROL_RESULT
         : approved;
   }
   return {

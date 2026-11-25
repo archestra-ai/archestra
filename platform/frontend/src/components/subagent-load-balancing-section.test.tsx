@@ -105,7 +105,7 @@ describe("SubagentLoadBalancingSection", () => {
     const { onChange } = renderSection(null);
 
     const select = screen.getByRole("combobox", {
-      name: "Subagents Load Balancing",
+      name: "Agent Runtime Delegation",
     });
     expect(select).toHaveTextContent("Disabled");
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
@@ -212,7 +212,7 @@ describe("SubagentLoadBalancingSection", () => {
       { isGateway: false, isAllSubagentsMode: true },
     );
 
-    expect(screen.getByText("Subagents Load Balancing")).toBeInTheDocument();
+    expect(screen.getByText("Agent Runtime Delegation")).toBeInTheDocument();
     expect(screen.queryByText("Beta")).not.toBeInTheDocument();
     expect(
       screen.getByText("Split runs between subagents with dedicated runtimes."),

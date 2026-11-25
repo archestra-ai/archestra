@@ -11,8 +11,54 @@ export async function transferAgentOwnership(params: {
   organizationId: string;
 }): Promise<void> {
   const { agentId, ownerId, userId, organizationId } = params;
-  const agent = await AgentModel.findById(agentId, userId, true);
-  if (!agent || agent.organizationId !== organizationId) {
+  const { agent, resource } = await loadTransferableAgent({
+    agentId,
+    organizationId,
+    userId,
+  });
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.authorizeOwnershipTransfer({
+    organizationId,
+    userId,
+    resource,
+    scope: agentId,
+    ownerId,
+  });
+  // SPDX-SnippetEnd
+  await reassignAgent({ agent, resource, ownerId, organizationId });
+}
+
+/**
+ * Give an agent or gateway to a new owner without checking who asked: the
+ * caller already decided the handoff (a member leaving the organization).
+ * Every other transfer rule still applies.
+ */
+export async function handOffAgentOwnership(params: {
+  agentId: string;
+  ownerId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { agent, resource } = await loadTransferableAgent({
+    agentId: params.agentId,
+    organizationId: params.organizationId,
+    userId: params.ownerId,
+  });
+  await reassignAgent({ ...params, agent, resource });
+}
+
+// ===================================================================
+// Internal helpers
+// ===================================================================
+
+async function loadTransferableAgent(params: {
+  agentId: string;
+  organizationId: string;
+  userId: string;
+}) {
+  const agent = await AgentModel.findById(params.agentId, params.userId, true);
+  if (!agent || agent.organizationId !== params.organizationId) {
     throw new ApiError(404, "Agent not found");
   }
   if (
@@ -27,17 +73,17 @@ export async function transferAgentOwnership(params: {
   if (resource !== "agent" && resource !== "mcpGateway") {
     throw new ApiError(400, "Platform-managed resources cannot be transferred");
   }
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  await ResourcePermissions.authorizeOwnershipTransfer({
-    organizationId,
-    userId,
-    resource,
-    scope: agentId,
-    ownerId,
-  });
-  // SPDX-SnippetEnd
+  return { agent, resource };
+}
+
+async function reassignAgent(params: {
+  agent: NonNullable<Awaited<ReturnType<typeof AgentModel.findById>>>;
+  resource: "agent" | "mcpGateway";
+  ownerId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { agent, resource, ownerId, organizationId } = params;
+  const agentId = agent.id;
   if (ownerId === agent.authorId) {
     throw new ApiError(400, "Choose a different owner");
   }

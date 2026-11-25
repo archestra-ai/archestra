@@ -447,6 +447,10 @@ export function EditVirtualKeyDialog({
               virtualKey.providerApiKeys.length === 0)
           }
           routesPending={poolsLoading || routersLoading}
+          routesUnavailable={
+            virtualKey.keyType === "standard" &&
+            (pools === undefined || autoRouters === undefined)
+          }
           connectionBaseUrl={connectionBaseUrl}
           name={virtualKey.name}
           expiration={formatExpiration(virtualKey.expiresAt)}

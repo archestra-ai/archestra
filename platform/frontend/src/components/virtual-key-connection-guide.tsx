@@ -59,6 +59,7 @@ import {
   type RequestCredential,
   type RequestTarget,
 } from "@/components/virtual-key-request-example";
+import { useScopedCapabilities } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -79,6 +80,7 @@ export function VirtualKeyConnectionGuide({
   includeFutureProviders = false,
   hasGrantedRoutes = false,
   routesPending = false,
+  routesUnavailable = false,
   editKeyHref,
   onEditKeyNavigate,
   connectionBaseUrl,
@@ -99,6 +101,7 @@ export function VirtualKeyConnectionGuide({
   /** The key was granted a model pool or auto router. */
   hasGrantedRoutes?: boolean;
   routesPending?: boolean;
+  routesUnavailable?: boolean;
   editKeyHref?: string;
   onEditKeyNavigate?: () => void;
   connectionBaseUrl: string;
@@ -112,6 +115,16 @@ export function VirtualKeyConnectionGuide({
   const appName = useAppName();
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
+  const { data: capabilities, isPending: capabilitiesPending } =
+    useScopedCapabilities(includeFutureProviders);
+  // Routing can use a shared primary key the current viewer cannot read.
+  // An empty list is conclusive only when the viewer can read all keys.
+  const canReadAllProviders = capabilities?.some(
+    (grant) =>
+      grant.resource === "llmProviderApiKey" &&
+      grant.action === "read" &&
+      grant.scope === "*",
+  );
   const {
     data: providerApiKeys = [],
     isPending: providerKeysPending,
@@ -223,8 +236,11 @@ export function VirtualKeyConnectionGuide({
 
   if (!target) {
     const checkingAccess =
-      routesPending || (includeFutureProviders && providerKeysPending);
-    const accessUnavailable = includeFutureProviders && providerKeysError;
+      routesPending ||
+      (includeFutureProviders && (providerKeysPending || capabilitiesPending));
+    const accessUnavailable =
+      routesUnavailable ||
+      (includeFutureProviders && (providerKeysError || !canReadAllProviders));
     return (
       <div className="space-y-3">
         {keyDetails}

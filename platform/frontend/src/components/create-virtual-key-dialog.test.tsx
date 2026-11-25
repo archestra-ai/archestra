@@ -430,9 +430,17 @@ describe("CreateVirtualKeyDialog", () => {
     await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
   });
 
-  it("copies and allows editing a future-provider key without showing unavailable endpoints", async () => {
+  it.each([
+    false,
+    true,
+  ])("copies and allows editing a future-provider key without known endpoints (can read all provider keys: %s)", async (canReadAllProviders) => {
     vi.mocked(useScopedCapabilities).mockReturnValue({
-      data: [{ resource: "llmProviderApiKey", action: "use", scope: "*" }],
+      data: [
+        { resource: "llmProviderApiKey", action: "use", scope: "*" },
+        ...(canReadAllProviders
+          ? [{ resource: "llmProviderApiKey", action: "read", scope: "*" }]
+          : []),
+      ],
     } as unknown as ReturnType<typeof useScopedCapabilities>);
     mutateAsync.mockResolvedValueOnce({
       ...createdKey("standard", []),
@@ -455,7 +463,13 @@ describe("CreateVirtualKeyDialog", () => {
       }),
     });
     expect(screen.getByRole("button", { name: "Copy key" })).toBeVisible();
-    expect(screen.getByText(/No providers are available/)).toBeVisible();
+    expect(
+      screen.getByText(
+        canReadAllProviders
+          ? /No providers are available/
+          : /Couldn't check which endpoints/,
+      ),
+    ).toBeVisible();
     expect(screen.getByRole("link", { name: "Edit key" })).toHaveAttribute(
       "href",
       "/llm/proxy/virtual-keys?edit=vk-future-only",

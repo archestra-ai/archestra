@@ -589,7 +589,7 @@ async fn read(
         HookDecision::Ack => Err(invariant(
             "OpenAPPA acknowledged a peer read without binding its stored label",
         )),
-        HookDecision::Refuse { class, detail } => Err(failure(
+        HookDecision::Refuse { class, detail, .. } => Err(failure(
             Failure::Refused(*class),
             format!("OpenAPPA refused the peer read: {detail}"),
         )),

@@ -137,6 +137,7 @@ The `permits` table defines the specific categories of preconditions an authorit
 | `trust_below` | Authorizes calls where trajectory trust is below the required rank (up to the rank specified here). |
 | `audience_missing` | Authorizes sharing data with recipients outside the trajectory's audience (up to the audience specified here). |
 | `effects_containing` | Authorizes calls blocked by an `excludes` effect precondition when that effect is already present. |
+| `prior_effects_containing` | Authorizes calls blocked by a `contains` effect precondition when that effect is not yet present. |
 | `attention` | Authorizes declared attention marks (or all declared marks except `blocked` when set to `["*"]`). |
 
 Example granting broad authority across trust, audience, effect, and attention boundaries:

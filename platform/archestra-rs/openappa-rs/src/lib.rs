@@ -1478,7 +1478,7 @@ impl State {
             // Only the runtime's own refusal text is named: any other answer carries output.
             let answered = match &decision {
                 HookDecision::Block { reason, .. } => format!("a block: {reason}"),
-                HookDecision::Refuse { class, detail } => {
+                HookDecision::Refuse { class, detail, .. } => {
                     format!("a refusal ({class:?}): {detail}")
                 }
                 other => wire(other)?
@@ -1507,7 +1507,7 @@ impl State {
             HookDecision::Block { reason, .. } => {
                 format!("[appa] Tool output withheld: {reason}")
             }
-            HookDecision::Refuse { class, detail } => {
+            HookDecision::Refuse { class, detail, .. } => {
                 return Err(failure(
                     Failure::Refused(*class),
                     format!("OpenAPPA result refused: {detail}"),

@@ -47,6 +47,38 @@ annotator = "classify-command"
 
 This configuration forwards the tool name, description, and arguments to Claude Code without requiring a `parameters` schema. If a tool omits `description`, it is omitted from the consult payload.
 
+### Fallback to human review
+
+An annotator timeout, failed request, or invalid answer refuses the call by default. The policy records no decision. A later proposal asks again.
+
+An annotated tool can instead declare `on_no_answer`. This is a complete static annotation for that route. It MUST state `forwards`. Write `forwards = {}` when the call sends only its arguments. It MUST contain a `requires.attention` mark. Its audiences MUST be literal; placeholders are refused.
+
+Declare an authority that permits the mark. Bind it to `hitl` to ask a person before the exact call can run:
+
+```toml
+[[policy.annotator]]
+name = "classify-command"
+ranks = ["suspicious", "trusted"]
+
+[[policy.tool]]
+name = "Bash"
+annotator = "classify-command"
+on_no_answer = { delta = { trust = "suspicious" }, forwards = {}, requires = { attention = ["annotator-unavailable"] } }
+
+[[policy.authority]]
+name = "operator"
+permits = { attention = ["annotator-unavailable"] }
+
+[externals.authorities.operator]
+builtin = "hitl"
+```
+
+The fallback supplies the restrictions, requirements, and effects that the annotator did not produce. Set them conservatively for the route. Any label floor declared beside the annotator still narrows the fallback.
+
+OpenAPPA pins the fallback to the exact call and presents its normal remedy plans. A route without `on_no_answer` still refuses the call.
+
+A fallback that requires human attention keeps an interactive harness usable: a person approves each refused call. An autonomous agent still stops and waits for that approval. Use `on_no_answer` on a route only when that pause is acceptable.
+
 ### Inputs
 
 By default, an annotator receives the complete tool call. Use `inputs` to restrict the payload to specific call attributes. In the example below, the annotator receives only the `customer_id` argument (renamed to `subject`):

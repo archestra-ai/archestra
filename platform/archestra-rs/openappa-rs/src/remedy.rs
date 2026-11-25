@@ -509,7 +509,7 @@ pub(crate) fn render_remedy_outcome(
         // The offer stands and the feedback tells the model what to do next:
         // an answer for it, not a runtime failure that ends the turn. It is an
         // error result because nothing was released.
-        RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, true, feedback),
+        RemedyOutcome::NoAnswer { feedback, .. } => (OutputSource::Runtime, None, true, feedback),
         RemedyOutcome::Refused {
             reason: appa_runtime::api::RemedyRefusal::Runtime { detail },
         } => {
@@ -1428,6 +1428,7 @@ mod remedy_tests {
         let response = render(
             RemedyOutcome::NoAnswer {
                 feedback: feedback.to_owned(),
+                retry: None,
             },
             &owner(None),
             None,

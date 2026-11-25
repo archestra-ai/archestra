@@ -77,16 +77,17 @@ crate-type = ["cdylib"]
 # server rules tools (#965); then OpenAPPA 0.47, whose Rig 0.46 needs Rust 1.97.1
 # (#879), and a deferral notice that tells the parent what to say (#1016); then,
 # temporarily from the t2278-core-v2 branch, refusals typed with their deciding
-# outcome, prior-effect waivers, and session settings (`auto_apply`,
-# `line_variant`) pinned when a family opens.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5ef6b2cae45b94db262d7e32a58e7e925c4b407e", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5ef6b2cae45b94db262d7e32a58e7e925c4b407e" }
+# outcome, prior-effect waivers, session settings (`auto_apply`,
+# `line_variant`) pinned when a family opens, retry hints on refusals, and a
+# child's return floor observed, not held, where a family accepts narrowings.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7" }
 # The composed policy as the engine reads it, from which the host's approvers are
 # computed (`src/fragments.rs`).
-appa-engine = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5ef6b2cae45b94db262d7e32a58e7e925c4b407e" }
-appa-policy = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5ef6b2cae45b94db262d7e32a58e7e925c4b407e" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5ef6b2cae45b94db262d7e32a58e7e925c4b407e", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5ef6b2cae45b94db262d7e32a58e7e925c4b407e" }
+appa-engine = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7" }
+appa-policy = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

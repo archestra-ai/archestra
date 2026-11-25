@@ -926,7 +926,7 @@ delta = { audience = ["internal"] }
         assert_eq!(pin(&other, &unaliased).0, 2, "another process publishes");
         let stale = hooks::handle(&view, call(&open, prod)).await;
         assert!(
-            matches!(&stale, HookDecision::Refuse { class: RefusalClass::PolicyMoved, detail } if detail.contains("moved to policy revision 2")),
+            matches!(&stale, HookDecision::Refuse { class: RefusalClass::PolicyMoved, detail, .. } if detail.contains("moved to policy revision 2")),
             "a view pinned behind the head refuses retryably: {stale:?}"
         );
 

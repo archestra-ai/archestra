@@ -70,11 +70,12 @@ effects = ["egress"]
 | `requires` | Preconditions for executing the call: audience, trust, effects, or attention requirements. |
 | `effects` | Side-effect identifiers recorded in trajectory history after successful execution. |
 | `annotator` | Name of a registered [annotator](#annotators) that dynamically computes the contract for each call. |
+| `on_no_answer` | Optional static annotation used when the selected annotator gives no answer. It MUST state `forwards` and MUST require attention. |
 | `recorder` | Name of a registered [recorder](#recorders) that receives audit records for released calls. |
 
 If omitted, `delta` and `forwards` add no restrictions, and `requires` imposes no preconditions.
 
-A tool contract uses either static fields (`delta`, `forwards`, `requires`, `effects`) or an `annotator`. Beside an annotator, a tool can declare only a [label floor](#annotators); any other static field causes a configuration load error.
+A tool contract uses either static fields (`delta`, `forwards`, `requires`, `effects`) or an `annotator`. Beside an annotator, a tool can declare only a [label floor](#annotators) and an optional `on_no_answer` fallback; any other static field causes a configuration load error.
 
 OpenAPPA evaluates `requires` before dispatching a tool call. The engine checks the outbound flow label: the trajectory's current label combined with the tool's `forwards`. The tool's `delta` applies only to the returned result, so it does not affect pre-call evaluation.
 
@@ -276,7 +277,7 @@ name = "*"
 annotator = "classify_unknown_tool"
 ```
 
-A policy may declare at most one wildcard entry. The wildcard contract requires an `annotator`. Beside it, the wildcard can declare only a [label floor](#annotators); it cannot define other static fields, metadata, or argument selectors.
+A policy may declare at most one wildcard entry. The wildcard contract requires an `annotator`. Beside it, the wildcard can declare only a [label floor](#annotators) and `on_no_answer`; it cannot define other static fields, metadata, or argument selectors.
 
 Explicit tool contracts always take precedence over the wildcard, regardless of declaration order. If an explicit contract matches but fails argument schema validation, the engine rejects the call rather than falling back to the wildcard. If no wildcard is configured, any call lacking a matching contract is denied immediately.
 
@@ -707,6 +708,38 @@ annotator = "classify-command"
 ```
 
 This configuration forwards the tool name, description, and arguments to Claude Code without requiring a `parameters` schema. If a tool omits `description`, it is omitted from the consult payload.
+
+### Fallback to human review
+
+An annotator timeout, failed request, or invalid answer refuses the call by default. The policy records no decision. A later proposal asks again.
+
+An annotated tool can instead declare `on_no_answer`. This is a complete static annotation for that route. It MUST state `forwards`. Write `forwards = {}` when the call sends only its arguments. It MUST contain a `requires.attention` mark. Its audiences MUST be literal; placeholders are refused.
+
+Declare an authority that permits the mark. Bind it to `hitl` to ask a person before the exact call can run:
+
+```toml
+[[policy.annotator]]
+name = "classify-command"
+ranks = ["suspicious", "trusted"]
+
+[[policy.tool]]
+name = "Bash"
+annotator = "classify-command"
+on_no_answer = { delta = { trust = "suspicious" }, forwards = {}, requires = { attention = ["annotator-unavailable"] } }
+
+[[policy.authority]]
+name = "operator"
+permits = { attention = ["annotator-unavailable"] }
+
+[externals.authorities.operator]
+builtin = "hitl"
+```
+
+The fallback supplies the restrictions, requirements, and effects that the annotator did not produce. Set them conservatively for the route. Any label floor declared beside the annotator still narrows the fallback.
+
+OpenAPPA pins the fallback to the exact call and presents its normal remedy plans. A route without `on_no_answer` still refuses the call.
+
+A fallback that requires human attention keeps an interactive harness usable: a person approves each refused call. An autonomous agent still stops and waits for that approval. Use `on_no_answer` on a route only when that pause is acceptable.
 
 ### Inputs
 
@@ -1163,6 +1196,7 @@ The `permits` table defines the specific categories of preconditions an authorit
 | `trust_below` | Authorizes calls where trajectory trust is below the required rank (up to the rank specified here). |
 | `audience_missing` | Authorizes sharing data with recipients outside the trajectory's audience (up to the audience specified here). |
 | `effects_containing` | Authorizes calls blocked by an `excludes` effect precondition when that effect is already present. |
+| `prior_effects_containing` | Authorizes calls blocked by a `contains` effect precondition when that effect is not yet present. |
 | `attention` | Authorizes declared attention marks (or all declared marks except `blocked` when set to `["*"]`). |
 
 Example granting broad authority across trust, audience, effect, and attention boundaries:
@@ -1225,6 +1259,7 @@ OpenAPPA transmits consult requests detailing the proposed tool call and unmet p
 | Public audience | `{"kind":"audience","required":"public"}` |
 | Restricted audience | `{"kind":"audience","required":["internal","@finance","alice@corp.com"]}` (ordered by built-in audience, `@` references, then literal reader IDs). |
 | Effect exclusion | `{"kind":"effect","excludes":"email.sent"}` |
+| Required prior effect | `{"kind":"prior","contains":"backup.completed"}` |
 | Attention | `{"kind":"attention","mark":"finance-signoff"}` |
 
 Consult requests do not disclose the trajectory's current label or existing audience members.

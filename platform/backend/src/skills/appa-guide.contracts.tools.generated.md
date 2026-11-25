@@ -57,11 +57,12 @@ effects = ["egress"]
 | `requires` | Preconditions for executing the call: audience, trust, effects, or attention requirements. |
 | `effects` | Side-effect identifiers recorded in trajectory history after successful execution. |
 | `annotator` | Name of a registered [annotator](references/contracts/annotators.md#annotators) that dynamically computes the contract for each call. |
+| `on_no_answer` | Optional static annotation used when the selected annotator gives no answer. It MUST state `forwards` and MUST require attention. |
 | `recorder` | Name of a registered [recorder](references/contracts/annotators.md#recorders) that receives audit records for released calls. |
 
 If omitted, `delta` and `forwards` add no restrictions, and `requires` imposes no preconditions.
 
-A tool contract uses either static fields (`delta`, `forwards`, `requires`, `effects`) or an `annotator`. Beside an annotator, a tool can declare only a [label floor](references/contracts/annotators.md#annotators); any other static field causes a configuration load error.
+A tool contract uses either static fields (`delta`, `forwards`, `requires`, `effects`) or an `annotator`. Beside an annotator, a tool can declare only a [label floor](references/contracts/annotators.md#annotators) and an optional `on_no_answer` fallback; any other static field causes a configuration load error.
 
 OpenAPPA evaluates `requires` before dispatching a tool call. The engine checks the outbound flow label: the trajectory's current label combined with the tool's `forwards`. The tool's `delta` applies only to the returned result, so it does not affect pre-call evaluation.
 
@@ -263,7 +264,7 @@ name = "*"
 annotator = "classify_unknown_tool"
 ```
 
-A policy may declare at most one wildcard entry. The wildcard contract requires an `annotator`. Beside it, the wildcard can declare only a [label floor](references/contracts/annotators.md#annotators); it cannot define other static fields, metadata, or argument selectors.
+A policy may declare at most one wildcard entry. The wildcard contract requires an `annotator`. Beside it, the wildcard can declare only a [label floor](references/contracts/annotators.md#annotators) and `on_no_answer`; it cannot define other static fields, metadata, or argument selectors.
 
 Explicit tool contracts always take precedence over the wildcard, regardless of declaration order. If an explicit contract matches but fails argument schema validation, the engine rejects the call rather than falling back to the wildcard. If no wildcard is configured, any call lacking a matching contract is denied immediately.
 

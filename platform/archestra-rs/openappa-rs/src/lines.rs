@@ -220,7 +220,7 @@ impl Family {
         self.settings
             .line_variant
             .as_ref()
-            .is_some_and(|token| token.as_str().ends_with(UNATTENDED_SUFFIX))
+            .is_some_and(|token| TOKENS.iter().any(|[_, unattended]| unattended == token))
     }
 
     /// Whether `presenter` may act in the family: an unattended one only by its run, a
@@ -290,11 +290,8 @@ mod tests {
     fn every_variant_token_is_a_line_variant_and_records_its_opener() {
         for variant in VARIANTS {
             assert_eq!(
-                variant
-                    .settings(false)
-                    .line_variant
-                    .map(|token| token.as_str().to_owned()),
-                Some(variant.token().to_owned())
+                variant.settings(false).line_variant,
+                Some(LineVariant::parse(variant.token()).expect("a variant token"))
             );
             for unattended in [false, true] {
                 assert_eq!(

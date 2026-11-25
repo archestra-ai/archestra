@@ -547,8 +547,8 @@ RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 # The same hardened Node release without the -dev tools: no shell, no apk, only
 # node and its libraries. The Kubernetes image is built on it (unified-slim).
 # Keep its digest on the same Node release as the -dev pin below.
-FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb4c1b88473096ec9c3660345cb54 AS runtime-base-distroless
-FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS runtime
+FROM dhi.io/node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS runtime-base-distroless
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256: AS runtime
 WORKDIR /app
 # The hardened image runs as UID 1000 by default. This stage installs packages,
 # and the full image starts as root (see the archestra user below).

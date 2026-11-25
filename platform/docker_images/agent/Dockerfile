@@ -42,7 +42,7 @@ RUN apt-get update \
  && /out/gh api --help >/dev/null \
  && /out/gh auth git-credential --help >/dev/null
 
-FROM dhi.io/node:24.22.3-debian13-dev@sha256:aa2362cc595c51bcaaed8820482ff4cde2c610d4a9af4fcd281909954bd861ac AS agent-base
+FROM dhi.io/node:24.22.3-debian13-dev@sha256:814292ce93474f3f95274f5b444cbc49af8c8d6b241340047749c1b3930083ed AS agent-base
 ARG TARGETARCH
 # DHI's apt mirror can serve a stale archive after its signed index changes.
 # Request fresh packages while retaining apt's index and archive verification.

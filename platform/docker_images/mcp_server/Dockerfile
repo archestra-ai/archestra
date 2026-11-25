@@ -14,7 +14,7 @@ FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb
 # Multi-stage build for minimal final image
 # Alpine is pinned to 3.23 (not the floating `-alpine`): 3.24's git and musl
 # are reported vulnerable until 3.24 publishes the fixes 3.23 already has.
-FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:c42f2ca2c28720226e87f0a86a1edb05cea9d307f4556591a7bd852fea74f900 AS python-builder
+FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:e7fad2d54fd070b112f45884a9645f83a0daf9dbc34ee1161d342cef67224dee AS python-builder
 
 # Install Python build dependencies
 RUN apk add --no-cache \
@@ -116,7 +116,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Final stage - minimal runtime image with Python 3.12
-FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:c42f2ca2c28720226e87f0a86a1edb05cea9d307f4556591a7bd852fea74f900
+FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:e7fad2d54fd070b112f45884a9645f83a0daf9dbc34ee1161d342cef67224dee
 
 # Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \

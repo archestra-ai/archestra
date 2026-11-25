@@ -8,13 +8,29 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { SubagentLoadBalancingSection } from "./subagent-load-balancing-section";
 
 vi.mock("@/lib/agent-options.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
+
+beforeAll(() => {
+  // Radix Select calls pointer-capture and scrollIntoView APIs absent in jsdom.
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false;
+  }
+  if (!Element.prototype.setPointerCapture) {
+    Element.prototype.setPointerCapture = () => {};
+  }
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = () => {};
+  }
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+  }
+});
 
 const AGENT_A_ID = "00000000-0000-4000-8000-00000000000a";
 const AGENT_B_ID = "00000000-0000-4000-8000-00000000000b";
@@ -84,24 +100,48 @@ beforeEach(() => {
 });
 
 describe("SubagentLoadBalancingSection", () => {
-  it("enables load balancing with round-robin defaults and toggles off", async () => {
+  it("selects an algorithm from the Load Balancing dropdown and switches back to Disabled", async () => {
     const user = userEvent.setup();
     const { onChange } = renderSection(null);
 
-    const toggle = screen.getByRole("switch", {
-      name: "Enable Load Balancing",
+    const select = screen.getByRole("combobox", {
+      name: "Load Balancing",
     });
-    expect(toggle).not.toBeChecked();
+    expect(select).toHaveTextContent("Disabled");
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
 
-    await user.click(toggle);
+    await user.click(select);
+    expect(
+      screen.getByRole("option", { name: /Disabled/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Round robin \(rotate\)/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Weighted/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Random/ })).toBeInTheDocument();
 
-    expect(toggle).toBeChecked();
+    await user.click(
+      screen.getByRole("option", { name: /Round robin \(rotate\)/ }),
+    );
+    expect(select).toHaveTextContent("Round robin (rotate)");
     expect(onChange).toHaveBeenLastCalledWith({
       enabled: true,
       algorithm: "round_robin",
     });
 
-    await user.click(toggle);
+    await user.click(select);
+    await user.click(screen.getByRole("option", { name: /Random/ }));
+    expect(select).toHaveTextContent("Random");
+    expect(onChange).toHaveBeenLastCalledWith({
+      enabled: true,
+      algorithm: "random",
+    });
+
+    await user.click(select);
+    await user.click(screen.getByRole("option", { name: /Disabled/ }));
+    expect(select).toHaveTextContent("Disabled");
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         enabled: false,

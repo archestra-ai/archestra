@@ -2073,9 +2073,7 @@ describe("APPA feature boundary", () => {
     const REFUSAL =
       "Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Auto-Mode Bypass]. STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed.";
     const NOT_APPLIED =
-      "[appa] The remedy did not run, so the plan is not applied.";
-    const ASK =
-      "\n\n[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
+      "[appa] The remedy did not run, so the plan is not applied. If the user has not decided on it, you may ask them; if they declined, do not retry it.";
     const isControlResult = (result: { name: string }) =>
       result.name === CONTROL;
 
@@ -2111,10 +2109,14 @@ describe("APPA feature boundary", () => {
       });
 
     // Nothing proves the client ran the remedy, so its body never passes:
-    // whatever it holds, the model reads one fixed notice.
+    // whatever it holds, a classifier's refusal or the user's decline, the
+    // model reads one fixed notice.
     test.each([
       { label: "a client refusal", content: [{ type: "text", text: REFUSAL }] },
-      { label: "a bare string", content: "The user rejected this tool call." },
+      {
+        label: "the user's decline",
+        content: "The user rejected this tool call.",
+      },
       { label: "no content", content: null },
       { label: "a long body", content: `${"a".repeat(3999)}\u{1F600}tail` },
     ])("says the plan is not applied and never echoes $label", async ({
@@ -2124,7 +2126,7 @@ describe("APPA feature boundary", () => {
         const result = await process({ name: CONTROL, content, isError });
 
         expect(result.toolResultUpdates.remedy).toEqual({
-          content: `${NOT_APPLIED}${ASK}`,
+          content: NOT_APPLIED,
           outputSource: "runtime",
           code: "unreleased_call",
         });

@@ -1147,23 +1147,6 @@ async function approveToolResult(params: {
 // SPDX-SnippetEnd
 
 /**
- * A remedy call whose remedy never ran: the client declined it (a permission
- * prompt the user rejected, an auto-mode classifier block), or the gateway
- * refused it before the remedy (no live offer). Only a remedy that runs leaves
- * a record, so the runtime would withhold this result, and the model would
- * lose what it says, such as the client's instruction to stop and let the
- * user decide. A client or the gateway wrote it, not a tool, so it goes
- * through after a line that says the plan is not applied.
- *
- * The closing line says how to ask when the user must decide. Claude Code's
- * auto-mode classifier accepts the plan only after the user, shown what was
- * blocked, approves it: a question that quotes the ruling gives the user
- * that, where a bare "approve" typed in chat did not.
- */
-const UNEXECUTED_REMEDY_QUESTION_HINT =
-  "[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
-
-/**
  * The body handed to the runtime for a result: a string as it is, anything
  * else as JSON. The runtime records this body, so the payload of each binary
  * part the client sent is a marker here, never its bytes.
@@ -1182,11 +1165,15 @@ const INTEGRITY: RefusalOutcome = { kind: "integrity" };
 export const UNRELEASED_CALL_CODE = "unreleased_call";
 
 /**
- * A remedy result the runtime did not release. Nothing proves the client ran
- * the remedy, so its body is not passed on.
+ * A remedy result the runtime did not release: the client declined the remedy
+ * (a permission prompt the user rejected, a classifier block), or the gateway
+ * refused it before the remedy ran. Nothing proves the remedy ran, so the body
+ * is neither passed on nor read: every such result gets this one notice, which
+ * neither asks for approval nor invites a retry of what the user declined.
  */
 const UNEXECUTED_CONTROL_RESULT: ProcessedToolResult = {
-  content: `[appa] The remedy did not run, so the plan is not applied.\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}`,
+  content:
+    "[appa] The remedy did not run, so the plan is not applied. If the user has not decided on it, you may ask them; if they declined, do not retry it.",
   outputSource: "runtime",
   code: UNRELEASED_CALL_CODE,
 };

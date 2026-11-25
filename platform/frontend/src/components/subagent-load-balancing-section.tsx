@@ -161,11 +161,11 @@ export function SubagentLoadBalancingSection({
 
   return (
     <div className="space-y-3 border-t pt-4">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 sm:flex sm:items-center">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 sm:flex sm:items-start">
         <SettingIcon tone={isEnabled ? "on" : "off"}>
           <Scale className="h-4 w-4" />
         </SettingIcon>
-        <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="min-w-0 flex-1 space-y-1">
           <Label htmlFor={modeSelectId}>
             <span>Load Balancing</span>
           </Label>

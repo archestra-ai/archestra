@@ -2,7 +2,7 @@
 title: Environments
 description: Separate staging and production resources and workload networks
 order: 3
-lastUpdated: 2026-11-20
+lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -14,8 +14,6 @@ Keep a staging agent away from production tools and knowledge, and give its work
 <span id="cost-limits"></span>
 
 <span id="domain-presets"></span>
-
-<span id="the-public-internet-floor"></span>
 
 ## Creating an Environment
 
@@ -77,16 +75,35 @@ These rules apply to both manual assignments and execution. An app created from 
 
 ## Network Egress Policies
 
-Choose what workloads can reach from the environment's namespace. Archestra uses the agent's own policy, then the environment policy, then the organization default, then Public internet.
+Archestra runs self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [coding agent workspaces](/docs/agents/runtime#environments-and-network-egress) in your Kubernetes cluster. So you can use Kubernetes network policies to limit what they can connect to. For example, let staging reach the public internet, and let production reach only your own APIs.
 
-| Need | Mode |
+To set a policy, go to **Settings → Environments**, edit an environment, and open the **Network Egress Policy** tab. Under **Egress**, pick one:
+
+| Egress | What they can reach |
 | --- | --- |
-| No outbound access | Block all (`off`). |
-| Only selected endpoints | Allowlist (`restricted`), with their domains or CIDRs. |
-| Public destinations | Public internet (`unrestricted`), which blocks private and reserved ranges. |
-| Public destinations plus a private service | Public internet, with that service's range under **Additional allowed CIDRs**. |
+| **Block all** | Nothing. |
+| **Allowlist** | Only the domains and CIDRs that you list. |
+| **Public internet** | The public internet, but not your internal network. To add one internal service, enter its range under **Additional allowed CIDRs**. |
 
-Self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [coding agent workspaces](/docs/agents/runtime#environments-and-network-egress) inherit the policy. The cluster must enforce the relevant policy type; creating a policy object alone does not isolate workloads.
+An environment without a policy uses the policy of the default environment. If that has none, the built-in default policy applies.
+
+Your cluster must [enforce network policies](/docs/admin/deployment/networking#enforce-workload-egress). Creating a policy alone does not prevent MCP servers, agents, and code sandboxes from reaching an address that the policy blocks.
+
+### Built-in Default Policy
+
+<span id="the-public-internet-floor"></span>
+
+By default, Archestra applies a built-in network policy. MCP servers, agents, and code sandboxes can reach the public internet, but not your internal network. For example, an MCP server can call `api.github.com`, but it can't connect to your database or get the cloud credentials of the machine it runs on.
+
+It blocks the addresses below:
+
+| Blocked | Examples | Ranges |
+| --- | --- | --- |
+| Internal networks | Your databases, other services in the cluster, company systems on the same network | `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `fc00::/7` |
+| Cloud metadata service | The address on every AWS, Google Cloud, or Azure machine that hands out the machine's cloud credentials | `169.254.0.0/16`, `168.63.129.16/32`, `fe80::/10` |
+| Loopback and reserved ranges | `localhost` | `127.0.0.0/8`, `0.0.0.0/8`, `::1/128`, `64:ff9b::/96` |
+
+To add an allowed address, change the environment's policy to **Public internet** and add the service's range under **Additional allowed CIDRs**.
 
 ### Give One Agent Its Own Policy
 

@@ -45999,8 +45999,12 @@ export type GetBootstrapResponses = {
                     hidden?: boolean;
                     displayName?: string | null;
                     plans?: {
+                        apiKey?: {
+                            hidden?: boolean;
+                        };
                         personal?: {
                             hidden?: boolean;
+                            displayName?: string | null;
                         };
                         enterprise?: {
                             hidden?: boolean;
@@ -132707,8 +132711,12 @@ export type GetOrganizationResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -133192,8 +133200,12 @@ export type UpdateAppearanceSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -133441,8 +133453,12 @@ export type UpdateSecuritySettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -133686,8 +133702,12 @@ export type UpdateMcpSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -133930,8 +133950,12 @@ export type UpdateSkillsSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -134598,8 +134622,12 @@ export type UpdateAgentSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -134866,8 +134894,12 @@ export type UpdateConnectionSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -134968,8 +135000,12 @@ export type UpdateIntegrationSettingsData = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -135170,8 +135206,12 @@ export type UpdateIntegrationSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -135424,8 +135464,12 @@ export type UpdateDefaultEnvironmentResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -135674,8 +135718,12 @@ export type UpdateAuthSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -135925,8 +135973,12 @@ export type UpdateKnowledgeSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -136166,8 +136218,12 @@ export type DropEmbeddingConfigResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -136769,8 +136825,12 @@ export type CompleteOnboardingResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;

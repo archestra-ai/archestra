@@ -96,6 +96,48 @@ describe("ensureConnectionVirtualKey", () => {
     expect(secondId).toBe(firstId);
   });
 
+  test("refuses an API key once the provider's API keys are turned off, and not for a personal subscription switch", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await makeLlmProviderApiKey(org.id, (await makeSecret()).id, {
+      provider: "anthropic",
+    });
+    const connect = () =>
+      ensureConnectionVirtualKey({
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "anthropic",
+      });
+
+    await OrganizationModel.patch(org.id, {
+      modelProviderOverrides: {
+        anthropic: { plans: { personal: { hidden: true } } },
+      },
+    });
+    await expect(connect()).resolves.toMatchObject({
+      virtualApiKeyId: expect.any(String),
+    });
+
+    await OrganizationModel.patch(org.id, {
+      modelProviderOverrides: {
+        anthropic: { plans: { apiKey: { hidden: true } } },
+      },
+    });
+    await expect(connect()).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining("Anthropic API keys are turned off"),
+    });
+  });
+
   test("per-user provider: provisions a personal key mapped to the connecting user's own key", async ({
     makeOrganization,
     makeUser,

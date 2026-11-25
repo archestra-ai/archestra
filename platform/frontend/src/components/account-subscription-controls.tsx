@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  personalSubscriptionTurnedOffMessage,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
 } from "@archestra/shared";
@@ -21,13 +22,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useDeleteLlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 
 // A person's own subscription other than Claude's, signed in to and
 // disconnected where their runs of an agent say they use it. Claude keeps an
 // account of its own, in `ClaudeCodeAccount`.
 
-/** Signs the viewer in to their subscription, in a dialog on this page. */
+/**
+ * Signs the viewer in to their subscription, in a dialog on this page. A
+ * subscription the admins turned off says so instead: its sign-in would be
+ * refused.
+ */
 export function SubscriptionSignInButton({
   kind,
   size = "sm",
@@ -42,7 +48,21 @@ export function SubscriptionSignInButton({
 }) {
   const [open, setOpen] = useState(false);
   const refresh = useRefreshAgentAccounts();
+  const providerCatalog = useModelProviderCatalog();
   const { provider, label, marker, connect } = SUBSCRIPTION_CREDENTIALS[kind];
+  if (!providerCatalog.canAddPersonalSubscription(provider)) {
+    return (
+      <span
+        className="text-xs text-muted-foreground"
+        title={personalSubscriptionTurnedOffMessage(
+          providerCatalog.overrides,
+          provider,
+        )}
+      >
+        Turned off
+      </span>
+    );
+  }
   return (
     <>
       <Button
@@ -61,7 +81,7 @@ export function SubscriptionSignInButton({
           title={connect.signInTitle}
           description={connect.signInDescription}
           defaultValues={{
-            name: label,
+            name: providerCatalog.personalSubscriptionLabel(provider, label),
             provider,
             shared: false,
             // A subscription that shares its provider with ordinary API keys

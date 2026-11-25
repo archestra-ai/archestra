@@ -171906,11 +171906,25 @@
                               "plans": {
                                 "type": "object",
                                 "properties": {
+                                  "apiKey": {
+                                    "type": "object",
+                                    "properties": {
+                                      "hidden": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
                                   "personal": {
                                     "type": "object",
                                     "properties": {
                                       "hidden": {
                                         "type": "boolean"
+                                      },
+                                      "displayName": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "maxLength": 60
                                       }
                                     },
                                     "additionalProperties": false
@@ -514655,11 +514669,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -516477,11 +516505,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -518023,11 +518065,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -519177,11 +519233,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -520328,11 +520398,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -522963,11 +523047,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -524249,11 +524347,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -524963,11 +525075,25 @@
                         "plans": {
                           "type": "object",
                           "properties": {
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "hidden": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
                             "personal": {
                               "type": "object",
                               "properties": {
                                 "hidden": {
                                   "type": "boolean"
+                                },
+                                "displayName": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "maxLength": 60
                                 }
                               },
                               "additionalProperties": false
@@ -525595,11 +525721,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -526816,11 +526956,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -527986,11 +528140,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -529182,11 +529350,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -530315,11 +530497,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -532652,11 +532848,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false

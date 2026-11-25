@@ -1,7 +1,7 @@
 import {
-  copilotPlanTurnedOffMessage,
-  isCopilotPlanHidden,
+  isProviderPlanHidden,
   providerDisplayNames,
+  providerPlanTurnedOffMessage,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -177,23 +177,19 @@ export async function ensureConnectionVirtualKey(params: {
         : `No ${provider} API key is configured for your account, teams, or organization. Ask an admin to add one under LLM provider keys.`,
     );
   }
-  // Each GitHub Copilot plan has its own switch: an account of a plan the
-  // admins turned off is not set up again, though it keeps serving the
-  // setups that already use it. (assertCopilotPlanAllowed says the same, but
-  // lives outside this project.)
-  if (provider === "github-copilot") {
-    const plan = (await LlmProviderApiKeyModel.isGithubAppKey(
-      providerApiKey.id,
-    ))
-      ? "enterprise"
-      : "personal";
-    const { modelProviderOverrides } =
-      await OrganizationModel.getIntegrationOverrides(organizationId);
-    if (isCopilotPlanHidden(modelProviderOverrides, plan))
-      throw new ApiError(
-        400,
-        copilotPlanTurnedOffMessage(modelProviderOverrides, plan),
-      );
+  // Each plan has its own switch (API keys, a personal subscription, a
+  // GitHub Copilot enterprise plan): an account of a plan the admins turned
+  // off is not set up again, though it keeps serving the setups that already
+  // use it. (assertProviderPlanAllowed says the same, but lives outside this
+  // project.)
+  const plan = await LlmProviderApiKeyModel.findPlan(providerApiKey);
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(organizationId);
+  if (isProviderPlanHidden(modelProviderOverrides, provider, plan)) {
+    throw new ApiError(
+      400,
+      providerPlanTurnedOffMessage(modelProviderOverrides, provider, plan),
+    );
   }
 
   // Anthropic keys can pass the (free) /v1/models test at creation yet be out of

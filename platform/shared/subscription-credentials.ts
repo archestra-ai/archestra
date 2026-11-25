@@ -165,16 +165,36 @@ export const SUBSCRIPTION_CREDENTIAL_KINDS = Object.keys(
 ) as SubscriptionCredentialKind[];
 
 /**
- * Providers that are a personal subscription and nothing else: each key is a
- * person's own sign-in (a GitHub Copilot enterprise plan aside). Derived from
- * the registry, so a new provider-level subscription joins this list without a
- * second edit. Credential-level subscriptions (ChatGPT, SuperGrok) are not
- * listed: their providers also take ordinary API keys.
+ * The name Claude Code's own account goes by. Claude Code is not in the
+ * registry above: it signs in through the Claude Code CLI of an agent runtime
+ * and keeps that account itself, so no provider key ever holds it.
  */
-export const PERSONAL_SUBSCRIPTION_PROVIDERS: readonly SupportedProvider[] =
-  SUBSCRIPTION_CREDENTIAL_KINDS.filter(
-    (kind) => SUBSCRIPTION_CREDENTIALS[kind].marker === null,
-  ).map((kind) => SUBSCRIPTION_CREDENTIALS[kind].provider);
+export const CLAUDE_CODE_SUBSCRIPTION_LABEL = "Claude Code";
+
+/**
+ * Every personal subscription a person can connect, by the provider it runs
+ * on, with the name it ships under: the four registry subscriptions plus
+ * Claude Code on `anthropic`. Admins turn each one off and rename it under
+ * Settings → LLM → Model providers.
+ */
+export const PERSONAL_SUBSCRIPTION_LABELS = {
+  anthropic: CLAUDE_CODE_SUBSCRIPTION_LABEL,
+  openai: SUBSCRIPTION_CREDENTIALS.chatgpt.displayName,
+  "github-copilot": SUBSCRIPTION_CREDENTIALS["github-copilot"].displayName,
+  xai: SUBSCRIPTION_CREDENTIALS["x-premium"].displayName,
+  "microsoft-365-copilot":
+    SUBSCRIPTION_CREDENTIALS["microsoft-365-copilot"].displayName,
+} as const satisfies Partial<Record<SupportedProvider, string>>;
+
+export type PersonalSubscriptionProvider =
+  keyof typeof PERSONAL_SUBSCRIPTION_LABELS;
+
+/** True when people can connect a personal subscription of this provider. */
+export function isPersonalSubscriptionProvider(
+  provider: string,
+): provider is PersonalSubscriptionProvider {
+  return Object.hasOwn(PERSONAL_SUBSCRIPTION_LABELS, provider);
+}
 
 /** Wire schema for the kind, derived from the registry so the two can't drift. */
 export const SubscriptionCredentialKindSchema = z.enum(

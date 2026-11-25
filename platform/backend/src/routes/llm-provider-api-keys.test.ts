@@ -2098,6 +2098,35 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     expect(secretManager().updateSecret).not.toHaveBeenCalled();
   });
 
+  test("refuses to reconnect a ChatGPT sign-in once ChatGPT is off", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: storedCredential } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      userId: memberUser.id,
+    });
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: {
+        openai: { plans: { personal: { hidden: true } } },
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: freshCredential },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "ChatGPT is turned off for this organization",
+    );
+    const { secretManager } = await import("@/secrets-manager");
+    expect(secretManager().updateSecret).not.toHaveBeenCalled();
+  });
+
   test("404s for another user's personal key", async ({
     makeSecret,
     makeLlmProviderApiKey,
@@ -2390,6 +2419,164 @@ describe("LLM Provider API Keys — GitHub Copilot plans the organization turned
       payload: { name: "Renamed" },
     });
     expect(update.statusCode, update.body).toBe(200);
+  });
+});
+
+describe("LLM Provider API Keys — API keys and personal subscriptions the organization turned off", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  const chatgptCredential = encodeOpenAiCodexCredential({
+    refreshToken: "rt-chatgpt",
+    accountId: "acc-chatgpt",
+  });
+  const superGrokCredential = encodeXaiSubscriptionCredential({
+    refreshToken: "rt-supergrok",
+    userId: "x-user-id",
+  });
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupAdminApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    mockAnthropicWifIsEnabled.mockReturnValue(false);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const turnOff = async (
+    provider: "openai" | "xai" | "anthropic",
+    plan: "apiKey" | "personal",
+  ) => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/integration-settings",
+      payload: {
+        modelProviderOverrides: {
+          [provider]: { plans: { [plan]: { hidden: true } } },
+        },
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+  };
+
+  const createKey = (
+    provider: "openai" | "xai" | "anthropic",
+    apiKey: string,
+  ) =>
+    app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: { name: `${provider} key`, provider, apiKey },
+    });
+
+  test("refuses a ChatGPT sign-in once ChatGPT is off, and still takes OpenAI API keys", async () => {
+    await turnOff("openai", "personal");
+
+    const signIn = await createKey("openai", chatgptCredential);
+    expect(signIn.statusCode).toBe(400);
+    expect(signIn.json().error.message).toBe(
+      "ChatGPT is turned off for this organization. Ask an administrator to turn it on under Settings → LLM → Model providers.",
+    );
+
+    const apiKey = await createKey("openai", "sk-openai-allowed");
+    expect(apiKey.statusCode, apiKey.body).toBe(200);
+  });
+
+  test("refuses new OpenAI API keys once API keys are off, and still takes a ChatGPT sign-in", async () => {
+    await turnOff("openai", "apiKey");
+
+    const apiKey = await createKey("openai", "sk-openai-blocked");
+    expect(apiKey.statusCode).toBe(400);
+    expect(apiKey.json().error.message).toContain(
+      "OpenAI API keys are turned off for this organization",
+    );
+
+    const signIn = await createKey("openai", chatgptCredential);
+    expect(signIn.statusCode, signIn.body).toBe(200);
+  });
+
+  test("refuses a SuperGrok sign-in once SuperGrok is off, and still takes xAI API keys", async () => {
+    await turnOff("xai", "personal");
+
+    const signIn = await createKey("xai", superGrokCredential);
+    expect(signIn.statusCode).toBe(400);
+    expect(signIn.json().error.message).toContain("SuperGrok is turned off");
+
+    const apiKey = await createKey("xai", "xai-allowed");
+    expect(apiKey.statusCode, apiKey.body).toBe(200);
+  });
+
+  test("refuses new Anthropic API keys once API keys are off", async () => {
+    await turnOff("anthropic", "apiKey");
+
+    const response = await createKey("anthropic", "sk-ant-blocked");
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "Anthropic API keys are turned off",
+    );
+  });
+
+  test("freezes an existing API key once API keys are off, but keeps it deletable", async () => {
+    const created = await createKey("openai", "sk-openai-existing");
+    expect(created.statusCode, created.body).toBe(200);
+    const keyId = created.json().id;
+
+    await turnOff("openai", "apiKey");
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode).toBe(400);
+
+    const removal = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+    });
+    expect(removal.statusCode).toBe(200);
+  });
+
+  test("leaves an API key editable when only the personal subscription is off", async () => {
+    const created = await createKey("xai", "xai-existing");
+    const keyId = created.json().id;
+
+    await turnOff("xai", "personal");
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode, update.body).toBe(200);
+  });
+
+  test("freezes an existing ChatGPT sign-in once ChatGPT is off", async () => {
+    const created = await createKey("openai", chatgptCredential);
+    expect(created.statusCode, created.body).toBe(200);
+    const keyId = created.json().id;
+
+    await turnOff("openai", "personal");
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode).toBe(400);
+    expect(update.json().error.message).toContain("ChatGPT is turned off");
   });
 });
 

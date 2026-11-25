@@ -3,12 +3,15 @@ import {
   isCredentialLevelSubscriptionProvider,
   isGithubAppCredential,
   PROVIDERS_REQUIRING_BASE_URL,
+  type ProviderPlan,
   providerHasEndpointLocalModels,
+  providerKeyPlan,
   providerRequiresPerUserCredential,
   type ResourcePermissionGrant,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindForProvider,
   subscriptionKindFromCredential,
 } from "@archestra/shared";
 import {
@@ -1392,6 +1395,27 @@ class LlmProviderApiKeyModel {
             : readApiKeyValue(row.secret),
       })),
     );
+  }
+
+  /**
+   * Which of its provider's plans a key belongs to (API key, personal
+   * subscription, or GitHub Copilot enterprise plan), read from its recorded
+   * credential kind. A key whose secret could not be classified counts as a
+   * personal subscription on a provider that offers one.
+   */
+  static async findPlan(apiKey: {
+    id: string;
+    provider: SupportedProvider;
+  }): Promise<ProviderPlan> {
+    const kind = await LlmProviderApiKeyModel.findCredentialKind(apiKey.id);
+    return providerKeyPlan({
+      provider: apiKey.provider,
+      isGithubAppKey: kind === "github_app",
+      subscriptionKind:
+        kind === null
+          ? subscriptionKindForProvider(apiKey.provider)
+          : subscriptionKindOf(apiKey.provider, kind),
+    });
   }
 
   /** True when the key stores an organization's GitHub App credential. */

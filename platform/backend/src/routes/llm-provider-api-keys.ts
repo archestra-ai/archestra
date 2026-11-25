@@ -9,9 +9,11 @@ import {
   isProviderApiKeyOptional,
   isSubscriptionCredential,
   MAX_BULK_IDS,
+  type ProviderPlan,
   parseLabelsParam,
   perUserCredentialLabel,
   providerDisplayNames,
+  providerRequiresPerUserCredential,
   ResourceAccessQuerySchema,
   ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
@@ -55,8 +57,8 @@ import {
 } from "@/secrets-manager";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
 import {
-  assertCopilotPlanAllowed,
-  assertModelProviderAllowed,
+  assertPersonalSubscriptionAllowed,
+  assertProviderPlanAllowed,
 } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -469,16 +471,18 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       // Prevent creating Gemini API keys when Vertex AI is enabled
       validateProviderAllowed(body.provider);
-      // …and providers the organization's admins switched off entirely.
-      await assertModelProviderAllowed({
+      // …and providers, or a provider's API keys or personal subscriptions,
+      // the organization's admins switched off. A GitHub Copilot key made
+      // here is always a personal sign-in: the organization's plan comes only
+      // from the GitHub App setup.
+      await assertProviderPlanAllowed({
         organizationId,
         provider: body.provider,
+        plan: credentialPlan({
+          provider: body.provider,
+          apiKey: body.apiKey,
+        }),
       });
-      // A GitHub Copilot key made here is always a personal sign-in: the
-      // organization's plan comes only from the GitHub App setup.
-      if (body.provider === "github-copilot") {
-        await assertCopilotPlanAllowed({ organizationId, plan: "personal" });
-      }
 
       assertPerUserCredentialOwnership({
         provider: body.provider,
@@ -911,17 +915,26 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // A key for a provider the admins switched off is frozen: it can be
       // deleted, but not renamed, rescoped, or rotated back into service.
-      // The same holds for a GitHub Copilot key whose plan is turned off.
-      await assertModelProviderAllowed({
+      // The same holds for a key whose plan is turned off (API keys, a
+      // personal subscription, or a GitHub Copilot enterprise plan), and for
+      // a new secret of a plan that is turned off.
+      const currentPlan = await LlmProviderApiKeyModel.findPlan(apiKeyFromDB);
+      await assertProviderPlanAllowed({
         organizationId,
         provider: apiKeyFromDB.provider,
+        plan: currentPlan,
       });
-      if (apiKeyFromDB.provider === "github-copilot") {
-        await assertCopilotPlanAllowed({
+      const newPlan = body.apiKey
+        ? credentialPlan({
+            provider: apiKeyFromDB.provider,
+            apiKey: body.apiKey,
+          })
+        : currentPlan;
+      if (newPlan !== currentPlan) {
+        await assertProviderPlanAllowed({
           organizationId,
-          plan: (await LlmProviderApiKeyModel.isGithubAppKey(apiKeyFromDB.id))
-            ? "enterprise"
-            : "personal",
+          provider: apiKeyFromDB.provider,
+          plan: newPlan,
         });
       }
 
@@ -1263,11 +1276,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Only personal subscription keys can be reconnected — shared keys use the regular edit flow.",
         );
       }
-      // A reconnect puts a sign-in back into service, so a personal Copilot
-      // key whose plan the admins turned off stays as it is.
-      if (keyRow.provider === "github-copilot") {
-        await assertCopilotPlanAllowed({ organizationId, plan: "personal" });
-      }
+      // A reconnect puts a sign-in back into service, so a personal
+      // subscription the admins turned off stays as it is.
+      await assertPersonalSubscriptionAllowed({
+        organizationId,
+        provider: keyRow.provider,
+      });
       // The new credential must be subscription material for this key's
       // provider: a per-user provider's own token (GitHub/Microsoft Copilot) or
       // a marker-encoded subscription credential (ChatGPT, X Premium). A plain
@@ -1511,6 +1525,22 @@ function assertPerUserCredentialOwnership(params: {
       `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so they cannot be shared.`,
     );
   }
+}
+
+/**
+ * The plan a credential set up through this API belongs to: a personal
+ * subscription (a sign-in on a per-user provider, or a ChatGPT or SuperGrok
+ * sign-in) or an ordinary API key. GitHub App credentials never come through
+ * here: the enterprise plan has its own setup.
+ */
+function credentialPlan(params: {
+  provider: SupportedProvider;
+  apiKey: string | null | undefined;
+}): ProviderPlan {
+  return providerRequiresPerUserCredential(params.provider) ||
+    isSubscriptionCredential(params.apiKey)
+    ? "personal"
+    : "apiKey";
 }
 
 /**

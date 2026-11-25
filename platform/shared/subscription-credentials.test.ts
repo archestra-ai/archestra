@@ -6,9 +6,10 @@ import {
 import {
   credentialRequiresPerUserScope,
   isCredentialLevelSubscriptionProvider,
+  isPersonalSubscriptionProvider,
   isSharedGithubAppCredential,
   isSubscriptionCredential,
-  PERSONAL_SUBSCRIPTION_PROVIDERS,
+  PERSONAL_SUBSCRIPTION_LABELS,
   perUserCredentialLabel,
   SUBSCRIPTION_CREDENTIAL_KINDS,
   SUBSCRIPTION_CREDENTIALS,
@@ -245,12 +246,27 @@ describe("GitHub App credentials on github-copilot", () => {
   });
 });
 
-describe("PERSONAL_SUBSCRIPTION_PROVIDERS", () => {
-  it("lists exactly the providers whose keys are personal sign-ins", () => {
-    // Derived from the registry, so it must agree with the hand-kept set the
-    // backend enforces per-user scope with.
-    expect(new Set(PERSONAL_SUBSCRIPTION_PROVIDERS)).toEqual(
-      PROVIDERS_REQUIRING_PER_USER_CREDENTIAL,
-    );
+describe("PERSONAL_SUBSCRIPTION_LABELS", () => {
+  it("names every registry subscription as the registry does, plus Claude Code on Anthropic", () => {
+    for (const kind of SUBSCRIPTION_CREDENTIAL_KINDS) {
+      const { provider, displayName } = SUBSCRIPTION_CREDENTIALS[kind];
+      expect(
+        PERSONAL_SUBSCRIPTION_LABELS[
+          provider as keyof typeof PERSONAL_SUBSCRIPTION_LABELS
+        ],
+      ).toBe(displayName);
+    }
+    expect(PERSONAL_SUBSCRIPTION_LABELS.anthropic).toBe("Claude Code");
+    // The subscriptions that are a whole provider agree with the hand-kept
+    // set the backend enforces per-user scope with.
+    expect(
+      new Set(
+        SUBSCRIPTION_CREDENTIAL_KINDS.filter(
+          (kind) => SUBSCRIPTION_CREDENTIALS[kind].marker === null,
+        ).map((kind) => SUBSCRIPTION_CREDENTIALS[kind].provider),
+      ),
+    ).toEqual(PROVIDERS_REQUIRING_PER_USER_CREDENTIAL);
+    expect(isPersonalSubscriptionProvider("anthropic")).toBe(true);
+    expect(isPersonalSubscriptionProvider("gemini")).toBe(false);
   });
 });

@@ -519,18 +519,13 @@ export function ConnectCommandPanel({
 
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
-  // A GitHub Copilot account whose plan the admins turned off is never offered,
-  // so a setup can't bind it: each plan's own switch decides. Other providers
-  // keep their own rules here (the provider list already drops hidden ones).
+  // An account whose plan the admins turned off (API keys, a personal
+  // subscription, a GitHub Copilot plan) is never offered, so a setup can't
+  // bind it: each plan's own switch decides, as the server's check does.
   const { data: allAvailableKeys, isPending: availableKeysPending } =
     useAvailableLlmProviderApiKeys();
   const availableKeys = useMemo(
-    () =>
-      allAvailableKeys?.filter(
-        (key) =>
-          key.provider !== "github-copilot" ||
-          !providerCatalog.isKeyHidden(key),
-      ),
+    () => allAvailableKeys?.filter((key) => !providerCatalog.isKeyHidden(key)),
     [allAvailableKeys, providerCatalog],
   );
   const usableOpenCodeKeys = useMemo(
@@ -1384,7 +1379,7 @@ export function ConnectCommandPanel({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="native-session">
-              Your SuperGrok subscription (native login)
+              {`Your ${providerCatalog.personalSubscriptionLabel("xai")} subscription (native login)`}
             </SelectItem>
             <SelectItem value="provider-key">
               Your own API key (passthrough)
@@ -2260,7 +2255,7 @@ export function ConnectCommandPanel({
                     ownKeyLabel:
                       client.id === "grok-build"
                         ? proxyAuth === "native-session"
-                          ? "Your SuperGrok subscription (native login)"
+                          ? `Your ${providerCatalog.personalSubscriptionLabel("xai")} subscription (native login)`
                           : "Your own API key (passthrough)"
                         : undefined,
                     providerLabels:

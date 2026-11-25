@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  personalSubscriptionTurnedOffMessage,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   subscriptionKindForProvider,
@@ -12,6 +13,7 @@ import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useSession } from "@/lib/auth/auth.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
@@ -40,7 +42,7 @@ interface ProviderAuthRequiredCardProps {
  */
 export function ProviderAuthRequiredCard({
   provider,
-  providerLabel,
+  providerLabel: builtInLabel,
   agentName,
   variant = "error",
   onConnected,
@@ -57,6 +59,16 @@ export function ProviderAuthRequiredCard({
   // ChatGPT mode, since the provider itself is not per-user. Anything else
   // falls back to the Model Providers link.
   const subscriptionKind = subscriptionKindForProvider(provider);
+  // The organization's name for the subscription, and whether it may still
+  // be connected: a turned-off subscription says so instead of a sign-in
+  // the server would refuse.
+  const providerCatalog = useModelProviderCatalog();
+  const providerLabel = subscriptionKind
+    ? providerCatalog.personalSubscriptionLabel(provider, builtInLabel)
+    : builtInLabel;
+  const turnedOff =
+    subscriptionKind !== null &&
+    !providerCatalog.canAddPersonalSubscription(provider);
 
   // The user's existing personal key for this subscription, if any. A sign-in
   // then RECONNECTS that key in place instead of minting a duplicate row: the
@@ -104,12 +116,22 @@ export function ProviderAuthRequiredCard({
           </InlineNoticeText>
         </div>
 
-        {subscriptionKind ? (
+        {turnedOff ? (
+          <InlineNoticeText className="block">
+            {personalSubscriptionTurnedOffMessage(
+              providerCatalog.overrides,
+              provider,
+            )}
+          </InlineNoticeText>
+        ) : subscriptionKind ? (
           <SubscriptionSignIn
             kind={subscriptionKind}
             disabled={createKey.isPending || reconnectKey.isPending}
             onSecret={async (secret) => {
-              const { label } = SUBSCRIPTION_CREDENTIALS[subscriptionKind];
+              const label = providerCatalog.personalSubscriptionLabel(
+                provider,
+                SUBSCRIPTION_CREDENTIALS[subscriptionKind].label,
+              );
               // The mutation hooks surface provider/validation failures. Let
               // a rejected promise reach the device-flow component so it
               // resets to a retryable state instead of claiming success.

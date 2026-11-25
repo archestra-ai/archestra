@@ -222,7 +222,18 @@ describe("ClaudeCodeSubscriptionCard", () => {
     expect(await screen.findByText("Not connected")).toBeVisible();
   });
 
-  it("hides an unconnected card when Anthropic is turned off, but keeps an existing connection disconnectable", async () => {
+  it("shows the name the organization gave Claude Code", async () => {
+    server.use(
+      http.get(accountUrl, () => HttpResponse.json({ state: "disconnected" })),
+    );
+
+    renderCard(true, "Claude for Work");
+
+    expect(await screen.findByText("Claude for Work")).toBeVisible();
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+  });
+
+  it("hides an unconnected card when Claude Code is turned off, but keeps an existing connection disconnectable", async () => {
     let account: archestraApiTypes.GetMyClaudeCodeAccountResponses["200"] = {
       state: "disconnected",
     };
@@ -241,7 +252,7 @@ describe("ClaudeCodeSubscriptionCard", () => {
     await queryClient.invalidateQueries({ queryKey: ["claude-code-account"] });
     rerender(
       <QueryClientProvider client={queryClient}>
-        <ClaudeCodeSubscriptionCard canAddAnthropic={false} />
+        <ClaudeCodeSubscriptionCard canConnect={false} />
       </QueryClientProvider>,
     );
 
@@ -250,10 +261,10 @@ describe("ClaudeCodeSubscriptionCard", () => {
   });
 });
 
-function renderCard(canAddAnthropic: boolean) {
+function renderCard(canConnect: boolean, name?: string) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <ClaudeCodeSubscriptionCard canAddAnthropic={canAddAnthropic} />
+      <ClaudeCodeSubscriptionCard canConnect={canConnect} name={name} />
     </QueryClientProvider>,
   );
 }

@@ -1175,6 +1175,19 @@ describe("Cursor hooks report chats to Guardrails", () => {
       /could not check the result of tool call call-7:Read:[0-9a-f]{12}\. Treat that result as unchecked\. The call already ran: do not make it again\.$/,
     );
     expect(contexts[1]).toBe(contexts[0]);
+    const mcp = await report("postToolUse", {
+      tool_use_id: "call-8",
+      tool_name: "MCP:docs__search",
+      tool_input: { query: "notes" },
+      tool_output: "UNRULED",
+    });
+    expect(mcp.statusCode, mcp.body).toBe(200);
+    const withheld = mcp.json();
+    expect(
+      withheld.updated_mcp_tool_output,
+      "an unchecked MCP result never reaches the model",
+    ).toEqual(expect.any(String));
+    expect(withheld.updated_mcp_tool_output).not.toMatch(/UNRULED/);
   });
 
   test("the remedy call carries the chat's trajectory to the gateway", async () => {

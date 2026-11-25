@@ -693,8 +693,15 @@ async function reportResult(
       { err: error, sessionId: session.session_id, toolCallId: id },
       "Guardrails could not check a Cursor tool result",
     );
+    const unchecked = `${guardrails()} could not check the result of tool call ${id}.`;
+    const ran = "The call already ran: do not make it again.";
+    // An MCP result is replaced before the model reads it, so it is withheld.
+    if (/^mcp:/i.test(rawName))
+      return {
+        updated_mcp_tool_output: `[${unchecked} Its result is withheld. ${ran}]`,
+      };
     return {
-      additional_context: `${guardrails()} could not check the result of tool call ${id}. Treat that result as unchecked. The call already ran: do not make it again.`,
+      additional_context: `${unchecked} Treat that result as unchecked. ${ran}`,
     };
   }
   const update = toolResultUpdates[id];

@@ -4,6 +4,8 @@ import { NewChatComposer } from "./new-chat-composer";
 
 const state = vi.hoisted(() => ({
   promptProps: null as Record<string, unknown> | null,
+  runtime: true,
+  routerId: null as string | null,
   preflightData: {
     ready: true,
     missing: [] as Array<Record<string, unknown>>,
@@ -59,7 +61,7 @@ vi.mock("@/lib/agent.query", () => ({
       {
         id: "runtime-agent",
         name: "Builder",
-        runtime: { credentials: state.credentials },
+        runtime: state.runtime ? { credentials: state.credentials } : null,
         llmApiKeyId: null,
       },
     ],
@@ -76,7 +78,8 @@ vi.mock("@/lib/chat/use-initial-chat-model-state", () => ({
     modelId: "model-1",
     apiKeyId: null,
     provider: "openai",
-    modelSource: "agent",
+    modelSource: state.runtime ? "agent" : null,
+    hasModelOverride: false,
     setApiKeyId: vi.fn(),
     onAgentChange: vi.fn(),
     onModelChange: vi.fn(),
@@ -101,6 +104,13 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => ({ data: [] }),
 }));
 
+vi.mock("@/lib/hooks/use-organization-default-model", () => ({
+  useOrganizationDefaultModel: () => ({
+    autoRouters: state.routerId ? [{ id: state.routerId }] : [],
+    defaultAutoRouterId: state.routerId,
+  }),
+}));
+
 vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
     data: { allowChatFileUploads: true },
@@ -115,6 +125,8 @@ vi.mock("@/lib/view-transition", () => ({
 describe("NewChatComposer", () => {
   beforeEach(() => {
     state.promptProps = null;
+    state.runtime = true;
+    state.routerId = null;
     state.preflightData = {
       ready: true,
       missing: [],
@@ -154,6 +166,24 @@ describe("NewChatComposer", () => {
       runtimeMode: true,
       sendDisabled: false,
     });
+  });
+
+  it("hands an inherited Auto selection to the project without treating its preview as a pick", () => {
+    state.runtime = false;
+    state.routerId = "router-1";
+    const onSubmit = vi.fn();
+    render(<NewChatComposer onSubmit={onSubmit} />);
+
+    expect(state.promptProps).toMatchObject({ sendDisabled: false });
+    fireEvent.click(screen.getByRole("button", { name: "Submit run" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeMode: false,
+        followDefaults: true,
+        modelId: "model-1",
+      }),
+    );
   });
 
   it("submits an Agent Runtime agent with its files and runtime mode", () => {

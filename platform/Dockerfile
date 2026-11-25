@@ -10,13 +10,14 @@ ARG DAGGER_VERSION=v0.21.11
 ARG DAGGER_COMMIT=631cdb609aaddc0037c2ba713e7642cadf645ff4
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
-FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-builder-base
+# Docker's hardened Go image; its -dev variant ships git, so the builders add no packages.
+FROM dhi.io/golang:1.26.11-alpine3.23-dev@sha256:4c427bdf5ab99a6b4aeb8e93237a5fcbe2b0f6285dc5fd01669a26149e0b991d AS go-builder-base
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi && \
-    apk add --no-cache git
+    git --version
 
 # Build the four pinned Go tools in independent stages so BuildKit schedules
 # them concurrently. Go caches stay outside exported layers, and each clone is
@@ -34,7 +35,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0
     # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
-    go get golang.org/x/net@v0.62.0 && \
+    go get golang.org/x/net@v0.63.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary . && \
     cd / && rm -rf /kind
 
@@ -50,15 +51,15 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
     go mod edit -go=1.25.11 && \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
-    go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
+    go get go.opentelemetry.io/otel/sdk@v1.47.0 && \
     # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
+    go get github.com/go-jose/go-jose/v4@v4.1.9 && \
     # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
-    go get github.com/moby/go-archive@v0.3.0 && \
+    go get github.com/moby/go-archive@v0.3.3 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
     # x/net@v0.62.0 requires x/sys >= v0.49.0 and x/term >= v0.47.0.
-    go get golang.org/x/sys@v0.49.0 && \
-    go get golang.org/x/term@v0.47.0 && \
+    go get golang.org/x/sys@v0.50.0 && \
+    go get golang.org/x/term@v0.48.0 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0.
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0.
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3.
@@ -70,7 +71,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # go-archive 0.3.0 pulls klauspost/compress 1.18.7; CVE-2026-116591 is fixed in 1.20.2.
     # Keep all three security floors in the LAST `go get` before `go mod tidy`:
     # earlier OTel/x/sys and go-archive updates can pull older x/net, grpc, and compress versions.
-    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
+    go get golang.org/x/net@v0.63.0 google.golang.org/grpc@v1.85.0 github.com/klauspost/compress@v1.20.4 && \
     # Bumped pins can import modules vendor.sum lacks (otel >= 1.47 imports otel/log);
     # tidy records their go.sum entries so `go mod vendor` succeeds.
     go mod tidy && \
@@ -97,43 +98,43 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
     # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
+    go get github.com/go-jose/go-jose/v4@v4.1.9 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
     # cve-2026-71556: go-git link following fixed in >= 5.19.2
-    go get github.com/go-git/go-git/v5@v5.19.2 && \
+    go get github.com/go-git/go-git/v5@v5.19.3 && \
     # cve-2026-44973: go-billy path traversal fixed in >= 5.9.0
-    go get github.com/go-git/go-billy/v5@v5.9.0 && \
+    go get github.com/go-git/go-billy/v5@v5.9.2 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
     # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
-    go get golang.org/x/net@v0.62.0 && \
+    go get golang.org/x/net@v0.63.0 && \
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     # cve-2026-78662 / cve-2026-56855: x/crypto HIGH fixed in >= 0.56.0.
     # Keep >= 0.58.0 to satisfy x/net@v0.62.0 without downgrading it.
-    go get golang.org/x/crypto@v0.58.0 && \
+    go get golang.org/x/crypto@v0.59.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
     # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs
     # an explicit requirement rather than a bump of any single dependency.
     # Keep the patched x/mod floor when updating transitive dependencies.
-    go get golang.org/x/mod@v0.41.0 && \
+    go get golang.org/x/mod@v0.43.0 && \
     # cve-2026-17106: go-archive path traversal fixed in >= 0.3.0 (matches dockercompat's floor).
     # sys/user must be >= 0.4.1 here — go-archive 0.3.0 requires it, and asking for 0.4.0 in the
     # same `go get` would make go resolve the conflict by downgrading go-archive below 0.3.0.
-    go get github.com/moby/go-archive@v0.3.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.1 && \
+    go get github.com/moby/go-archive@v0.3.3 github.com/moby/profiles/seccomp@v0.3.0 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.5.0 && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
     # cve-2026-95837: containerd improper privilege management (HIGH) fixed in >= 2.2.7
     # CVE-2026-95839: containerd uncaught exception (HIGH) fixed in >= 2.2.10
-    go get github.com/containerd/containerd/v2@v2.2.10 && \
+    go get github.com/containerd/containerd/v2@v2.4.2 && \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
     # CVE-2026-116591: Dagger's transitive zstd decoder must use compress >= 1.20.2.
     # Keep these security floors in the LAST `go get` before `go mod tidy` — earlier
     # dependency updates can otherwise downgrade the explicit requirements.
-    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
+    go get golang.org/x/net@v0.63.0 google.golang.org/grpc@v1.85.0 github.com/klauspost/compress@v1.20.4 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
@@ -155,17 +156,17 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go get github.com/moby/spdystream@v0.5.1 && \
     # cve-2026-29181: OTel resource exhaustion fixed in >= 1.41.0.
     # otel modules release in lockstep: keep every otel pin in every stage on one version.
-    go get go.opentelemetry.io/otel@v1.43.0 go.opentelemetry.io/otel/metric@v1.43.0 go.opentelemetry.io/otel/trace@v1.43.0 go.opentelemetry.io/otel/sdk@v1.43.0 && \
+    go get go.opentelemetry.io/otel@v1.47.0 go.opentelemetry.io/otel/metric@v1.47.0 go.opentelemetry.io/otel/trace@v1.47.0 go.opentelemetry.io/otel/sdk@v1.47.0 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
     # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
-    go get golang.org/x/net@v0.62.0 && \
+    go get golang.org/x/net@v0.63.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
     # Keep the patched x/mod floor when updating transitive dependencies.
-    go get golang.org/x/mod@v0.41.0 && \
+    go get golang.org/x/mod@v0.43.0 && \
     # Keep the patched x/net after all transitive dependency updates.
-    go get golang.org/x/net@v0.62.0 && \
+    go get golang.org/x/net@v0.63.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
     -o /kubectl-binary ./cmd/kubectl && \
@@ -547,7 +548,7 @@ RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 # node and its libraries. The Kubernetes image is built on it (unified-slim).
 # Keep its digest on the same Node release as the -dev pin below.
 FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb4c1b88473096ec9c3660345cb54 AS runtime-base-distroless
-FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:abe5e2eb4166f422dea213c4181c1ab069f63bb5d4b4bb0878abba2039fefec6 AS runtime
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS runtime
 WORKDIR /app
 # The hardened image runs as UID 1000 by default. This stage installs packages,
 # and the full image starts as root (see the archestra user below).

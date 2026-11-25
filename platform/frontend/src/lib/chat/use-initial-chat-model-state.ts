@@ -1,4 +1,7 @@
-import type { ThinkingEffortSetting } from "@archestra/shared";
+import {
+  providerRequiresPerUserCredential,
+  type ThinkingEffortSetting,
+} from "@archestra/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveChatModelState,
@@ -21,6 +24,7 @@ type InitialChatAgent = {
   id: string;
   modelId?: string | null;
   llmApiKeyId?: string | null;
+  resolvedLlmProvider?: string | null;
 };
 
 type InitialChatOrganization = {
@@ -38,7 +42,7 @@ type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
   defaultAgentId: string | null | undefined;
   modelsByProvider: Record<string, LlmModel[]>;
   /** Keys the viewer may use (the available-keys list), not merely see. */
-  chatApiKeys: { id: string; provider: string }[];
+  chatApiKeys: { id: string; provider: string; isGithubAppKey?: boolean }[];
   // ---- caller-owned policy, kept explicit at the boundary ----
   /** Resolve to this agent if it is present (page passes the URL param). */
   urlAgentId?: string | null;
@@ -84,12 +88,14 @@ export type InitialChatModelState = {
   apiKeyId: string | null;
   provider: SupportedProvider | undefined;
   modelSource: ModelSource | null;
+  hasModelOverride: boolean;
+  isUrlModelSelectionPending: boolean;
   setApiKeyId: (apiKeyId: string | null) => void;
   thinkingEffort: ThinkingEffortSetting;
   setThinkingEffort: (effort: ThinkingEffortSetting) => void;
   onAgentChange: (agentId: string) => void;
-  onModelChange: (modelId: string) => void;
-  onProviderChange: (provider: SupportedProvider) => void;
+  onModelChange: (modelId: string, automatic?: true, personal?: true) => void;
+  onProviderChange: (provider: SupportedProvider, apiKeyId?: string) => void;
   onResetModelOverride: () => void;
 };
 
@@ -130,6 +136,16 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   // composer at once. Only a choice that this browser's saved pick cannot
   // change resolves here; the effect below resolves the rest as before.
   const [initial] = useState(() => resolveOnFirstRender(params));
+  const [modelOverride, setModelOverride] = useState<
+    "model" | "personal" | null
+  >(initial?.modelOverride ?? null);
+  const [processedUrlModelId, setProcessedUrlModelId] = useState(
+    initial ? (urlModelId ?? null) : null,
+  );
+  const isUrlModelSelectionPending =
+    !!urlModelId && processedUrlModelId !== urlModelId;
+  const hasModelOverride = modelOverride !== null;
+  const usesPersonalCredential = modelOverride === "personal";
   const [agentId, setAgentId] = useState<string | null>(
     initial?.agent.id ?? null,
   );
@@ -182,7 +198,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   );
 
   const applyAgentSelection = useCallback(
-    (agent: TAgent) => {
+    (agent: TAgent, useUrlModel = true) => {
       setAgentId(agent.id);
       setSelectedAgent(agent);
       resolvedAgentRef.current = agent;
@@ -194,12 +210,18 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
         organization: organizationDefaults,
       });
 
-      const chosen =
-        resolveUrlModelSelection({
-          urlModelId,
-          modelsByProvider,
-          chatApiKeys,
-        }) ?? resolved;
+      const urlSelection = useUrlModel
+        ? resolveUrlModelSelection({
+            urlModelId,
+            modelsByProvider,
+            chatApiKeys,
+          })
+        : null;
+      const chosen = urlSelection ?? resolved;
+      setProcessedUrlModelId(urlModelId ?? null);
+      setModelOverride(
+        urlSelection ? (urlSelection.personal ? "personal" : "model") : null,
+      );
       if (chosen) {
         setModelId(chosen.modelId);
         setApiKeyId(chosen.apiKeyId);
@@ -298,7 +320,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   // which would cause an early return and skip the proper priority chain.
   useEffect(() => {
     if (!agentId) return;
-    if (modelInitializedRef.current) return;
+    if (modelInitializedRef.current && !isUrlModelSelectionPending) return;
     if (isApiKeysLoading) return;
 
     const resolved = resolveChatModelState({
@@ -308,15 +330,23 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       organization: organizationDefaults,
     });
 
-    if (!resolved) return; // No models available yet
-
-    const chosen =
-      resolveUrlModelSelection({ urlModelId, modelsByProvider, chatApiKeys }) ??
-      resolved;
-    setModelId(chosen.modelId);
-    if (chosen.apiKeyId) {
-      setApiKeyId(chosen.apiKeyId);
+    if (!resolved) {
+      setProcessedUrlModelId(urlModelId ?? null);
+      return;
     }
+
+    const urlSelection = resolveUrlModelSelection({
+      urlModelId,
+      modelsByProvider,
+      chatApiKeys,
+    });
+    const chosen = urlSelection ?? resolved;
+    setProcessedUrlModelId(urlModelId ?? null);
+    setModelOverride(
+      urlSelection ? (urlSelection.personal ? "personal" : "model") : null,
+    );
+    setModelId(chosen.modelId);
+    setApiKeyId(chosen.apiKeyId);
     modelInitializedRef.current = true;
   }, [
     agentId,
@@ -324,6 +354,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     chatApiKeys,
     organizationDefaults,
     urlModelId,
+    isUrlModelSelectionPending,
     isApiKeysLoading,
   ]);
 
@@ -347,6 +378,8 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       setAgentId(null);
       setSelectedAgent(null);
       setHasResolvedAgent(false);
+      setProcessedUrlModelId(null);
+      setModelOverride(null);
       setModelId("");
       setApiKeyId(null);
       modelInitializedRef.current = false;
@@ -354,22 +387,84 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     }
   }, [routeConversationId]);
 
-  const onModelChange = useCallback((nextModelId: string) => {
-    setModelId(nextModelId);
-  }, []);
+  const onModelChange = useCallback(
+    (nextModelId: string, automatic?: true, personal?: true) => {
+      if (automatic && hasModelOverride) return;
+      if (!automatic) {
+        setProcessedUrlModelId(urlModelId ?? null);
+        setModelOverride(personal ? "personal" : "model");
+        modelInitializedRef.current = true;
+      }
+      setModelId(nextModelId);
+      if (personal) return;
+      const candidates = Object.values(modelsByProvider)
+        .flat()
+        .filter((model) => model.dbId === nextModelId);
+      setApiKeyId((currentKey) => {
+        const personalModel = candidates.find(
+          (model) => model.requiresUserConnection,
+        );
+        if (
+          personalModel &&
+          currentKey &&
+          chatApiKeys.some(
+            (key) =>
+              key.id === currentKey &&
+              key.provider === personalModel.provider &&
+              !key.isGithubAppKey,
+          )
+        )
+          return currentKey;
+        if (
+          currentKey &&
+          candidates.some((model) => model.apiKeyIds?.includes(currentKey))
+        )
+          return currentKey;
+        const agent = resolvedAgentRef.current;
+        if (
+          currentKey &&
+          currentKey === agent?.llmApiKeyId &&
+          candidates.some(
+            (model) =>
+              model.provider === agent.resolvedLlmProvider ||
+              modelsByProvider[model.provider]?.some(
+                (entry) => entry.dbId === agent.modelId,
+              ),
+          )
+        )
+          return currentKey;
+        const linkedKey = chatApiKeys.find((key) =>
+          candidates.some((model) => model.apiKeyIds?.includes(key.id)),
+        );
+        return (
+          linkedKey?.id ??
+          (candidates.some((model) => model.requiresUserConnection)
+            ? null
+            : currentKey)
+        );
+      });
+    },
+    [chatApiKeys, hasModelOverride, modelsByProvider, urlModelId],
+  );
 
   // API key change — preselect the best model for the new key's provider.
   const onProviderChange = useCallback(
-    (provider: SupportedProvider) => {
+    (provider: SupportedProvider, keyId?: string) => {
+      setProcessedUrlModelId(urlModelId ?? null);
+      const personal =
+        providerRequiresPerUserCredential(provider) &&
+        !chatApiKeys.find((key) => key.id === keyId)?.isGithubAppKey;
+      setModelOverride(personal ? "personal" : "model");
+      modelInitializedRef.current = true;
       const preferred = resolvePreferredModelForProvider({
         provider,
+        apiKeyId: keyId,
+        allowPersonalModels: personal,
         modelsByProvider,
       });
-      if (preferred) {
-        setModelId(preferred.modelId);
-      }
+      setModelId(preferred?.modelId ?? "");
     },
-    [modelsByProvider],
+    [chatApiKeys, modelsByProvider, urlModelId],
   );
 
   const onAgentChange = useCallback(
@@ -378,7 +473,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
         agents.find((a) => a.id === nextAgentId) ?? resolveAgent?.(nextAgentId);
       if (!agent) return;
       agentManuallySelectedRef.current = true;
-      applyAgentSelection(agent);
+      applyAgentSelection(agent, false);
       saveAgent(agent.id);
     },
     [agents, applyAgentSelection, resolveAgent],
@@ -386,6 +481,8 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
 
   // Reset to the agent/org default model (shown when on a custom model).
   const onResetModelOverride = useCallback(() => {
+    setProcessedUrlModelId(urlModelId ?? null);
+    setModelOverride(null);
     modelInitializedRef.current = false;
 
     const resolved = resolveChatModelState({
@@ -400,7 +497,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       setApiKeyId(resolved.apiKeyId);
     }
     modelInitializedRef.current = true;
-  }, [modelsByProvider, chatApiKeys, organizationDefaults]);
+  }, [modelsByProvider, chatApiKeys, organizationDefaults, urlModelId]);
 
   const provider = useMemo((): SupportedProvider | undefined => {
     if (!modelId) return undefined;
@@ -414,12 +511,21 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
 
   const modelSource = useMemo(() => {
     const agent = agents.find((a) => a.id === agentId) ?? selectedAgent;
-    return deriveModelSource({
+    if (hasModelOverride) return "user";
+    const source = deriveModelSource({
       selectedModelId: modelId,
       agentModelId: agent?.modelId,
       orgModelId: organization?.defaultModelId,
     });
-  }, [modelId, agentId, agents, selectedAgent, organization?.defaultModelId]);
+    return source === "user" ? null : source;
+  }, [
+    hasModelOverride,
+    modelId,
+    agentId,
+    agents,
+    selectedAgent,
+    organization?.defaultModelId,
+  ]);
 
   return {
     selectedAgent,
@@ -429,9 +535,11 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       !hasResolvedAgent &&
       (isAgentsLoading === true || agents.length > 0),
     modelId,
-    apiKeyId,
+    apiKeyId: usesPersonalCredential ? null : apiKeyId,
     provider,
     modelSource,
+    hasModelOverride,
+    isUrlModelSelectionPending,
     setApiKeyId,
     thinkingEffort,
     setThinkingEffort,
@@ -453,10 +561,16 @@ function resolveUrlModelSelection(params: {
     .find((entry) => entry.dbId === params.urlModelId);
   if (!model) return null;
   const key = params.chatApiKeys.find(
-    (entry) => entry.provider === model.provider,
+    (entry) =>
+      entry.provider === model.provider &&
+      (model.apiKeyIds?.includes(entry.id) ?? true),
   );
-  if (!key) return null;
-  return { modelId: model.dbId, apiKeyId: key.id };
+  if (!key && !model.requiresUserConnection) return null;
+  return {
+    modelId: model.dbId,
+    apiKeyId: key?.id ?? null,
+    personal: !key && !!model.requiresUserConnection,
+  };
 }
 
 /**
@@ -473,6 +587,7 @@ function resolveOnFirstRender<TAgent extends InitialChatAgent>(
   model: { modelId: string; apiKeyId: string | null } | null;
   fromUrl: boolean;
   fromProjectDefault: boolean;
+  modelOverride: "model" | "personal" | null;
 } | null {
   if (
     params.isAgentsLoading ||
@@ -521,16 +636,21 @@ function resolveOnFirstRender<TAgent extends InitialChatAgent>(
         }
       : null,
   });
-  const model =
-    resolveUrlModelSelection({
-      urlModelId: params.urlModelId,
-      modelsByProvider: params.modelsByProvider,
-      chatApiKeys: params.chatApiKeys,
-    }) ?? resolved;
+  const urlSelection = resolveUrlModelSelection({
+    urlModelId: params.urlModelId,
+    modelsByProvider: params.modelsByProvider,
+    chatApiKeys: params.chatApiKeys,
+  });
+  const model = urlSelection ?? resolved;
   return {
     agent,
     model: model ? { modelId: model.modelId, apiKeyId: model.apiKeyId } : null,
     fromUrl,
     fromProjectDefault,
+    modelOverride: urlSelection
+      ? urlSelection.personal
+        ? "personal"
+        : "model"
+      : null,
   };
 }

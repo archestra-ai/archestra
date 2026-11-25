@@ -1892,6 +1892,7 @@ describe("APPA GitHub sync", () => {
     expect(git.state.commits).toBe(2);
     const files = git.written();
     expect(files[".github/workflows/validate.yml"]).toBeUndefined();
+    expect(files[".github/workflows/actions.lock"]).toBeUndefined();
     expect(files).toMatchObject({
       "appa.toml": root,
       "rules/current.toml": current,
@@ -1909,7 +1910,10 @@ describe("APPA GitHub sync", () => {
     expect(workflowTokens).toBe(1);
     expect(response.json().templateFiles).toMatchObject({
       state: "needs_permission",
-      paths: [".github/workflows/validate.yml"],
+      paths: [
+        ".github/workflows/actions.lock",
+        ".github/workflows/validate.yml",
+      ],
       detail: expect.stringContaining("Workflows (read and write)"),
     });
   });

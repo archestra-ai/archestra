@@ -178,10 +178,10 @@ impl Deployments {
         policy: &HostedPolicy,
         agent_yell: bool,
     ) -> Result<PublishedDeployment, DeploymentError> {
-        Ok(self
+        let pinned = self
             .pinned(runtime, store, line, policy, agent_yell)
-            .await?
-            .published)
+            .await?;
+        Ok(current(store, line, policy, pinned).await?.published)
     }
 
     /// Whether `line` serves the saved composition without its approvers, which a new
@@ -194,6 +194,7 @@ impl Deployments {
         policy: &HostedPolicy,
         agent_yell: bool,
     ) -> Result<bool, DeploymentError> {
+        // This picks the line a new session opens on; its dispatch checks the marks.
         Ok(self
             .pinned(runtime, store, line, policy, agent_yell)
             .await?
@@ -275,7 +276,7 @@ impl Deployments {
         agent_yell: bool,
     ) -> Result<Pinned, DeploymentError> {
         if let Some(pinned) = self.serving(line, policy) {
-            return current(store, line, policy, pinned).await;
+            return Ok(pinned);
         }
         let gate = self
             .preparing
@@ -286,7 +287,7 @@ impl Deployments {
             .clone();
         let _preparing = gate.lock().await;
         if let Some(pinned) = self.serving(line, policy) {
-            return current(store, line, policy, pinned).await;
+            return Ok(pinned);
         }
         if let Some(held) = self.held(line)
             && let Some(composition) = &policy.composition

@@ -3085,8 +3085,12 @@ async function forgetUnansweredNotices(
 ): Promise<void> {
   if (callIds.length === 0) return;
   try {
+    // A ruling carried on a stand-in call goes too: the id now names another call.
     await cacheManager.getAndDeleteMany(
-      callIds.map((callId) => unansweredNoticeKey({ session, callId })),
+      callIds.flatMap((callId) => [
+        unansweredNoticeKey({ session, callId }),
+        carriedRulingKey({ session, callId }),
+      ]),
     );
   } catch (err) {
     logger.warn({ err }, "OpenAPPA could not drop superseded denial reasons");

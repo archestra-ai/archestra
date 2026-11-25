@@ -102,11 +102,13 @@ describe("PoolDialog", () => {
       "glm-5{Enter}",
     );
     await user.click(screen.getByRole("button", { name: "Add member" }));
-    const advanced = screen.getByRole("button", { name: "Advanced" });
+    const failover = screen.getByRole("button", { name: "Failover" });
     const submit = screen.getByRole("button", { name: "Create pool" });
-    expect(advanced).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: "Connect" }),
+    ).not.toBeInTheDocument();
     expect(submit).toBeEnabled();
-    await user.click(advanced);
+    await user.click(failover);
 
     await user.type(screen.getByLabelText("Stream timeout"), "45");
     const overrideRow = screen
@@ -125,7 +127,10 @@ describe("PoolDialog", () => {
       }),
       "4",
     );
-    await user.click(advanced);
+    await user.click(screen.getByRole("button", { name: "Pool" }));
+    expect(
+      screen.getByRole("combobox", { name: "Model name" }),
+    ).toHaveTextContent("glm-5");
     await user.click(submit);
     expect(createPool).toHaveBeenCalledWith(
       expect.objectContaining({

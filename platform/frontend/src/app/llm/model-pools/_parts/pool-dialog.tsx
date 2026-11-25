@@ -4,11 +4,11 @@ import { MODEL_POOL_RETRY_DEFAULTS } from "@archestra/shared/model-pool-retries"
 import { Info, Layers, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { AdvancedSection } from "@/components/advanced-section";
-import { FormDialog } from "@/components/form-dialog";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import {
+  type TabbedDialogNavItem,
+  TabbedDialogShell,
+} from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -55,8 +55,9 @@ export function PoolDialog({
   /** Called with a new pool once it is saved. */
   onCreated?: (pool: ModelPool) => void;
 }) {
-  const [activeSection, setActiveSection] =
-    useState<PoolDialogSection>(initialSection);
+  const [activeSection, setActiveSection] = useState<PoolDialogSection>(
+    !pool && initialSection === "connect" ? "pool" : initialSection,
+  );
   const { data: canEdit } = useHasPermissions({ llmModel: ["update"] });
   const disabled = pool !== null && !canEdit;
   const form = useForm<PoolFormValues>({ defaultValues: toFormValues(pool) });
@@ -69,6 +70,7 @@ export function PoolDialog({
   const { data: pools = [] } = useModelPools({ toastOnError: false });
   const live = pools.find((row) => row.id === pool?.id) ?? pool;
   const isDirty = form.formState.isDirty;
+  const members = form.watch("members");
   const retries =
     form.watch("retrySettings")?.numRetries ??
     MODEL_POOL_RETRY_DEFAULTS.numRetries;
@@ -110,11 +112,9 @@ export function PoolDialog({
         disabled={disabled}
         savedMembers={live?.members ?? []}
       />
-      {form
-        .watch("members")
-        .some(
-          (member) => options.keysById.get(member.providerApiKeyId)?.userId,
-        ) ? (
+      {members.some(
+        (member) => options.keysById.get(member.providerApiKeyId)?.userId,
+      ) ? (
         <InlineNotice variant="info">
           <Info />
           <span className="font-medium">Personal connections stay private</span>
@@ -150,85 +150,66 @@ export function PoolDialog({
     </Button>
   );
 
-  if (pool) {
-    const memberCount = live?.members.length ?? 0;
-    return (
-      <TabbedDialogShell
-        open
-        onOpenChange={onOpenChange}
-        title={pool.name}
-        description="Edit the pool's members, what happens when one fails, or see how clients call it."
-        sidebarLabel={pool.name}
-        sidebarDescription="Model pool"
-        sidebarIcon={<Layers className="h-4 w-4 text-muted-foreground" />}
-        isDirty={isDirty}
-        activeSection={activeSection}
-        navItems={[
-          {
-            id: "pool",
-            label: "Pool",
-            status: `${memberCount} ${memberCount === 1 ? "member" : "members"}`,
-          },
-          {
-            id: "failover",
-            label: "Failover",
-            status: `${retries} ${retries === 1 ? "retry" : "retries"}`,
-          },
-          { id: "connect", label: "Connect", status: "Code samples" },
-        ]}
-        onActiveSectionChange={setActiveSection}
-        onSubmit={(event) => void onSubmit(event)}
-        footer={
-          activeSection === "connect" && !isDirty ? (
-            <DialogCancelButton>Close</DialogCancelButton>
-          ) : (
-            <>
-              <DialogCancelButton>Cancel</DialogCancelButton>
-              {saveButton}
-            </>
-          )
-        }
-      >
-        <div hidden={activeSection !== "pool"} className="space-y-6">
-          {fields}
-        </div>
-        <div hidden={activeSection !== "failover"} className="space-y-6">
-          {failoverFields}
-        </div>
-        {activeSection === "connect" && (
-          <PoolConnectSection pool={live ?? pool} />
-        )}
-      </TabbedDialogShell>
-    );
-  }
+  const title = pool?.name ?? "New model pool";
+  const description = pool
+    ? "Edit the pool's members, what happens when one fails, or see how clients call it."
+    : "Serve one model name from several provider keys, with failover between them.";
+  const memberCount = live?.members.length ?? members.length;
+  const navItems: TabbedDialogNavItem<PoolDialogSection>[] = [
+    {
+      id: "pool",
+      label: "Pool",
+      status: `${memberCount} ${memberCount === 1 ? "member" : "members"}`,
+    },
+    {
+      id: "failover",
+      label: "Failover",
+      status: `${retries} ${retries === 1 ? "retry" : "retries"}`,
+    },
+  ];
+  if (pool)
+    navItems.push({ id: "connect", label: "Connect", status: "Code samples" });
 
   return (
-    <FormDialog
+    <TabbedDialogShell
       open
       onOpenChange={onOpenChange}
-      title="New model pool"
-      description="Serve one model name from several provider keys, with failover between them."
-      size="small"
-      className="sm:max-w-[860px]"
+      title={title}
+      description={description}
+      headerDescription={!pool ? description : undefined}
+      sidebarLabel={title}
+      sidebarDescription="Model pool"
+      sidebarIcon={<Layers className="h-4 w-4 text-muted-foreground" />}
       isDirty={isDirty}
+      activeSection={activeSection}
+      navItems={navItems}
+      onActiveSectionChange={setActiveSection}
+      onSubmit={(event) => void onSubmit(event)}
+      footer={
+        activeSection === "connect" && !isDirty ? (
+          <DialogCancelButton>Close</DialogCancelButton>
+        ) : (
+          <>
+            {!pool && options.availableKeys.length === 0 && (
+              <p className="mr-auto text-xs text-muted-foreground">
+                Add a provider connection first.
+              </p>
+            )}
+            <DialogCancelButton>Cancel</DialogCancelButton>
+            {saveButton}
+          </>
+        )
+      }
     >
-      <form onSubmit={onSubmit} className="flex min-h-0 flex-col">
-        <DialogBody className="space-y-6">
-          {fields}
-          <AdvancedSection keepMounted>
-            <div className="space-y-6">{failoverFields}</div>
-          </AdvancedSection>
-        </DialogBody>
-        <DialogStickyFooter className="mt-0">
-          {options.availableKeys.length === 0 ? (
-            <p className="mr-auto text-xs text-muted-foreground">
-              <span>Add a provider connection first.</span>
-            </p>
-          ) : null}
-          <DialogCancelButton>Cancel</DialogCancelButton>
-          {saveButton}
-        </DialogStickyFooter>
-      </form>
-    </FormDialog>
+      <div hidden={activeSection !== "pool"} className="space-y-6">
+        {fields}
+      </div>
+      <div hidden={activeSection !== "failover"} className="space-y-6">
+        {failoverFields}
+      </div>
+      {activeSection === "connect" && live && (
+        <PoolConnectSection pool={live} />
+      )}
+    </TabbedDialogShell>
   );
 }

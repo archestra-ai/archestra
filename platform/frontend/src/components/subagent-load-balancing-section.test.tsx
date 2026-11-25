@@ -217,9 +217,7 @@ describe("SubagentLoadBalancingSection", () => {
     expect(screen.getByText("Subagents Load Balancing")).toBeInTheDocument();
     expect(screen.queryByText("Beta")).not.toBeInTheDocument();
     expect(
-      screen.getByText(
-        "When this agent delegates to Agent Runtime subagents, split runs across them with automatic retries and failover. Other subagents run directly.",
-      ),
+      screen.getByText("Split runs between subagents with dedicated runtimes."),
     ).toBeInTheDocument();
     expect(screen.getByText("Subagent weights")).toBeInTheDocument();
     expect(
@@ -246,9 +244,7 @@ describe("SubagentLoadBalancingSection", () => {
     );
 
     expect(
-      screen.getByText(
-        "When clients run Agent Runtime agents through this gateway, split runs across them with automatic retries and failover. Other agents run directly.",
-      ),
+      screen.getByText("Split runs between agents with dedicated runtimes."),
     ).toBeInTheDocument();
     expect(screen.getByText("Agent weights")).toBeInTheDocument();
     expect(

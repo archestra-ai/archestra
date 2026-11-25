@@ -94,8 +94,8 @@ export function SubagentLoadBalancingSection({
     ? "Agent Runtime agents"
     : "Agent Runtime subagents";
   const sectionDescription = isGateway
-    ? "When clients run Agent Runtime agents through this gateway, split runs across them with automatic retries and failover. Other agents run directly."
-    : "When this agent delegates to Agent Runtime subagents, split runs across them with automatic retries and failover. Other subagents run directly.";
+    ? "Split runs between agents with dedicated runtimes."
+    : "Split runs between subagents with dedicated runtimes.";
   const modeOptions = getModeOptions({ runtimeNoun, runtimeNouns });
 
   const isEnabled = value?.enabled === true;

@@ -138,8 +138,14 @@ beforeEach(() => {
 });
 
 describe("CreateVirtualKeyDialog", () => {
-  it("creates with only a model pool, blocks empty access, and shows its connection guide", async () => {
+  it.each([
+    false,
+    true,
+  ])("keeps the Unified endpoint for a pool-only key (future providers: %s)", async (includeFutureProviders) => {
     const user = userEvent.setup();
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "llmProviderApiKey", action: "use", scope: "*" }],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as unknown as ReturnType<typeof useHasPermissions>);
@@ -208,14 +214,21 @@ describe("CreateVirtualKeyDialog", () => {
     await user.click(
       await screen.findByRole("option", { name: /subscription-pool/ }),
     );
+    if (includeFutureProviders) {
+      await user.click(
+        screen.getByRole("radio", { name: /Current and future providers/ }),
+      );
+    }
     mutateAsync.mockResolvedValueOnce({
       ...createdKey("standard", []),
       id: "vk-pool-only",
+      includeFutureProviders,
     });
     await user.click(create);
     expect(mutateAsync).toHaveBeenCalledWith({
       data: expect.objectContaining({
         keyType: "standard",
+        includeFutureProviders,
         providerApiKeys: [],
         modelPoolIds: ["pool-1"],
       }),

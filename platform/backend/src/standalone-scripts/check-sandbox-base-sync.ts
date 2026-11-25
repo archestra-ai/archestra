@@ -76,6 +76,7 @@ if (baseImage && !dockerfile.includes(`FROM ${baseImage}@sha256:`)) {
     `Dockerfile uv source is not the DEFAULT_BASE_IMAGE tag "${baseImage}"`,
   );
 }
+// DHI tags may carry an image revision after the Python version (3.14.10-6).
 if (
   !/^FROM dhi\.io\/python:3\.14\.\d+(?:-\d+)?-debian13-dev@sha256:[0-9a-f]{64}$/m.test(
     dockerfile,

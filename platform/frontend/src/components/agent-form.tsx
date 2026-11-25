@@ -437,7 +437,7 @@ function SubagentPill({
             variant="outline"
             size="sm"
             className={cn(
-              "max-w-[340px] rounded-r-none border-r-0 text-xs",
+              "group max-w-[280px] rounded-r-none border-r-0 text-xs",
               !isSelected && "border-dashed opacity-50",
             )}
           >
@@ -457,7 +457,7 @@ function SubagentPill({
             />
             <span className="font-medium truncate">{agent.name}</span>
             {agent.runtime ? (
-              <AgentRuntimeChip runtime={agent.runtime} />
+              <AgentRuntimeChip runtime={agent.runtime} appearance="icon" />
             ) : (
               <span className="rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
                 Local

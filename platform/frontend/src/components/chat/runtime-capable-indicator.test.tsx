@@ -361,4 +361,13 @@ describe("AgentRuntimeChip", () => {
     expect(await screen.findByText("Review sandbox")).toBeInTheDocument();
     expect(screen.getByText("Custom image")).toBeInTheDocument();
   });
+
+  it("renders icon-only appearance with an accessible runtime label and no visible text label", () => {
+    mount(<AgentRuntimeChip runtime={claudeCodeRuntime} appearance="icon" />);
+
+    expect(
+      screen.getByRole("img", { name: "Agent Runtime: Claude Code" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+  });
 });

@@ -281,8 +281,8 @@ export function AgentRuntimeBadge({
 }
 
 /**
- * Compact, non-interactive runtime badge for pills, cards, and dense rows
- * (such as assigned subagent pills and load-balancing weight rows).
+ * Compact, non-interactive runtime indicator for pills, cards, and dense rows
+ * (such as assigned subagent cards and load-balancing weight rows).
  * Renders whenever an agent has a saved `runtime` object — even when the
  * cluster's Agent Runtime feature is currently off — so people can tell at a
  * glance which assigned agents run in an Agent Runtime and which runtime they
@@ -290,10 +290,17 @@ export function AgentRuntimeBadge({
  */
 export function AgentRuntimeChip({
   runtime,
+  appearance = "chip",
   className,
 }: {
   /** The agent's saved runtime config, or null/undefined for a regular agent. */
   runtime: unknown;
+  /**
+   * `chip` shows the runtime icon and name (for popovers and wider rows).
+   * `icon` shows just the runtime mark with a tooltip naming it, matching the
+   * agent details page header (for compact cards and pills).
+   */
+  appearance?: "chip" | "icon";
   className?: string;
 }) {
   const runtimeObj =
@@ -338,15 +345,45 @@ export function AgentRuntimeChip({
   const name = resolvedBuiltInId
     ? AGENT_CATALOG_TEMPLATE_NAMES[resolvedBuiltInId]
     : (custom?.name ?? (image ? "Custom image" : "Runtime"));
+  const iconSize = appearance === "icon" ? 14 : 12;
+  const fallbackIconClass = appearance === "icon" ? "size-3.5" : "size-3";
   const mark = resolvedBuiltInId ? (
-    <CatalogAgentIcon id={resolvedBuiltInId} size={12} />
+    <CatalogAgentIcon id={resolvedBuiltInId} size={iconSize} />
   ) : custom?.icon ? (
-    <AgentIcon icon={custom.icon} size={12} />
+    <AgentIcon icon={custom.icon} size={iconSize} />
   ) : custom ? (
-    <Box />
+    <Box className={fallbackIconClass} aria-hidden="true" />
   ) : (
-    <TerminalSquare />
+    <TerminalSquare className={fallbackIconClass} aria-hidden="true" />
   );
+
+  if (appearance === "icon") {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            role="img"
+            aria-label={`Agent Runtime: ${name}`}
+            className={cn(
+              // Match the agent details page header runtime icon: muted until
+              // the card is hovered or focused so it reads as metadata beside
+              // the agent name rather than competing with the agent icon.
+              "inline-flex shrink-0 items-center justify-center text-muted-foreground opacity-70 grayscale transition group-hover:opacity-100 group-hover:grayscale-0 group-focus-visible:opacity-100 group-focus-visible:grayscale-0",
+              className,
+            )}
+          >
+            {mark}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="px-2.5 py-1">
+          <span className="flex flex-col leading-snug">
+            <span className="font-medium">{name}</span>
+            <span className="text-muted-foreground">Agent Runtime</span>
+          </span>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
     <span

@@ -1957,10 +1957,13 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="agent" agent={customAgent} />);
 
+    const runtimePill = await screen.findByRole("button", {
+      name: /Lobster Claude Code.*Agent Runtime: Claude Code/,
+    });
+    expect(runtimePill).toBeInTheDocument();
+    expect(runtimePill).not.toHaveTextContent(/Local/);
     expect(
-      await screen.findByRole("button", {
-        name: /Lobster Claude Code.*Claude Code/,
-      }),
+      screen.getByRole("img", { name: "Agent Runtime: Claude Code" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Target AgentLocal/ }),

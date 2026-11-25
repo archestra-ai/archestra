@@ -1,5 +1,5 @@
 {
-  "id": "c4116048-d403-4de3-b3ef-c3fe8f06ec51",
+  "id": "b536949d-f756-485c-9487-4208c2c7c26b",
   "prevId": "cc45e750-a7b8-42fa-a6ff-11d55e040150",
   "version": "7",
   "dialect": "postgresql",
@@ -1585,73 +1585,6 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.a2a_task_release_receipts": {
-      "name": "a2a_task_release_receipts",
-      "schema": "",
-      "columns": {
-        "task_id": {
-          "name": "task_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "session": {
-          "name": "session",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fact_position": {
-          "name": "fact_position",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "digest": {
-          "name": "digest",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "a2a_task_release_receipts_task_id_a2a_task_id_fk": {
-          "name": "a2a_task_release_receipts_task_id_a2a_task_id_fk",
-          "tableFrom": "a2a_task_release_receipts",
-          "tableTo": "a2a_task",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "a2a_task_release_receipts_task_id_session_fact_position_pk": {
-          "name": "a2a_task_release_receipts_task_id_session_fact_position_pk",
-          "columns": [
-            "task_id",
-            "session",
-            "fact_position"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -8608,80 +8541,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.chatops_delivery_receipts": {
-      "name": "chatops_delivery_receipts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "provider": {
-          "name": "provider",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "channel_id": {
-          "name": "channel_id",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "message_id": {
-          "name": "message_id",
-          "type": "varchar(512)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content_digest": {
-          "name": "content_digest",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "receipts": {
-          "name": "receipts",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "chatops_delivery_receipts_message_key_uq": {
-          "name": "chatops_delivery_receipts_message_key_uq",
-          "nullsNotDistinct": true,
-          "columns": [
-            "provider",
-            "workspace_id",
-            "channel_id",
-            "message_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

@@ -393,10 +393,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "A2A protocol approval state",
   },
-  a2aTaskReleaseReceiptsTable: {
-    audited: false,
-    reason: "OpenAPPA receipts of A2A task content (runtime state)",
-  },
 
   // =========================================================================
   // Better-auth runtime (auth events come from handleAfterHook)
@@ -999,10 +995,6 @@ export const AUDIT_DECISIONS = {
   chatopsThreadContextsTable: {
     audited: false,
     reason: "ChatOps thread → A2A context mapping; runtime state",
-  },
-  chatopsDeliveryReceiptsTable: {
-    audited: false,
-    reason: "OpenAPPA receipts of delivered ChatOps messages; runtime state",
   },
 
   // =========================================================================

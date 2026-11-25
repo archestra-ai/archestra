@@ -54,7 +54,6 @@ export { default as a2aRemoteAgentUsersTable } from "./a2a-remote-agent-user";
 export { default as a2aTasksTable } from "./a2a-task";
 export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-request";
 export { default as a2aTaskEventsTable } from "./a2a-task-event";
-export { default as a2aTaskReleaseReceiptsTable } from "./a2a-task-release-receipt";
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentActivationSkillRulesTable } from "./agent-activation-skill-rule";
@@ -110,7 +109,6 @@ export {
   chatActiveRunsTable,
 } from "./chat-active-run";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
-export { default as chatopsDeliveryReceiptsTable } from "./chatops-delivery-receipt";
 export { default as chatopsMsTeamsUserConnectionsTable } from "./chatops-ms-teams-user-connection";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadContextsTable } from "./chatops-thread-context";

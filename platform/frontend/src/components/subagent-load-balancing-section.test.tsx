@@ -115,17 +115,15 @@ describe("SubagentLoadBalancingSection", () => {
       screen.getByRole("option", { name: /Disabled/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: /Round robin \(rotate\)/ }),
+      screen.getByRole("option", { name: /Round robin/ }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("option", { name: /Weighted/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /Random/ })).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("option", { name: /Round robin \(rotate\)/ }),
-    );
-    expect(select).toHaveTextContent("Round robin (rotate)");
+    await user.click(screen.getByRole("option", { name: /Round robin/ }));
+    expect(select).toHaveTextContent("Round robin");
     expect(onChange).toHaveBeenLastCalledWith({
       enabled: true,
       algorithm: "round_robin",

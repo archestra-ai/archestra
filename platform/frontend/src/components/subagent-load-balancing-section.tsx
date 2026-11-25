@@ -31,34 +31,34 @@ const DEFAULT_LOAD_BALANCING_CONFIG: SubagentLoadBalancingConfig = {
 };
 
 function getModeOptions(params: {
-  runtimeNoun: string;
-  runtimeNouns: string;
+  noun: string;
+  nouns: string;
 }): ReadonlyArray<{
   value: LoadBalancingMode;
   label: string;
   description: string;
 }> {
-  const { runtimeNoun, runtimeNouns } = params;
+  const { noun, nouns } = params;
   return [
     {
       value: "disabled",
       label: "Disabled",
-      description: `Run each ${runtimeNoun} directly without load balancing.`,
+      description: `Call each ${noun} directly.`,
     },
     {
       value: "round_robin",
-      label: "Round robin (rotate)",
-      description: `Send each run to the next ${runtimeNoun} in turn.`,
+      label: "Round robin",
+      description: `Rotate through ${nouns} in turn.`,
     },
     {
       value: "weighted",
       label: "Weighted",
-      description: `Split runs across ${runtimeNouns} based on their weights.`,
+      description: "Split runs by custom weights.",
     },
     {
       value: "random",
       label: "Random",
-      description: `Pick a random ${runtimeNoun} for each run.`,
+      description: `Pick ${noun === "agent" ? "an agent" : "a subagent"} at random.`,
     },
   ];
 }
@@ -86,17 +86,15 @@ export function SubagentLoadBalancingSection({
 
   // Only runs of Agent Runtime agents are balanced, retried, and failed over:
   // a delegation to any other agent always goes to that agent directly.
+  const noun = isGateway ? "agent" : "subagent";
   const nouns = isGateway ? "agents" : "subagents";
   const runtimeNoun = isGateway
     ? "Agent Runtime agent"
     : "Agent Runtime subagent";
-  const runtimeNouns = isGateway
-    ? "Agent Runtime agents"
-    : "Agent Runtime subagents";
   const sectionDescription = isGateway
     ? "Split runs between agents with dedicated runtimes."
     : "Split runs between subagents with dedicated runtimes.";
-  const modeOptions = getModeOptions({ runtimeNoun, runtimeNouns });
+  const modeOptions = getModeOptions({ noun, nouns });
 
   const isEnabled = value?.enabled === true;
   const currentConfig: SubagentLoadBalancingConfig = value ?? {
@@ -188,7 +186,7 @@ export function SubagentLoadBalancingSection({
           <SelectContent
             position="popper"
             align="end"
-            className="w-[24rem] max-w-[calc(100vw-2rem)]"
+            className="w-72 max-w-[calc(100vw-2rem)]"
           >
             {modeOptions.map((option) => (
               <SelectItem

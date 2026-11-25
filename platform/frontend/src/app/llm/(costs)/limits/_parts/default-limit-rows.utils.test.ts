@@ -9,6 +9,7 @@ import {
   defaultLimitNotice,
   defaultLimitScope,
   defaultLimitScopeName,
+  defaultLimitWhoIsLimited,
   matchesDefaultLimitFilters,
   mergeLimitRows,
 } from "./default-limit-rows.utils";
@@ -182,6 +183,17 @@ describe("default limit scope", () => {
     expect(
       defaultLimitScopeName({ environmentId: "env-gone" }, environments),
     ).toBe("Unknown environment");
+  });
+});
+
+describe("defaultLimitWhoIsLimited", () => {
+  it("says who a default is for, under its row's name", () => {
+    expect(defaultLimitWhoIsLimited({ environmentId: null })).toBe(
+      "Limit for every user",
+    );
+    expect(defaultLimitWhoIsLimited({ environmentId: "env-prod" })).toBe(
+      "Limit for every user in this environment",
+    );
   });
 });
 

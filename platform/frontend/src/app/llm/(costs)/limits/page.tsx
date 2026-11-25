@@ -283,6 +283,7 @@ import {
   defaultLimitNotice,
   defaultLimitScope,
   defaultLimitScopeName,
+  defaultLimitWhoIsLimited,
   type LimitTableRow,
   matchesDefaultLimitFilters,
   mergeLimitRows,
@@ -813,6 +814,7 @@ export default function LimitsPage() {
                   row.original.limit,
                   environments,
                 )}
+                whoIsLimited={defaultLimitWhoIsLimited(row.original.limit)}
               />
             );
           }
@@ -2501,17 +2503,26 @@ function LimitUsage({
 }
 
 /** A default user limit's "Applied to" cell: its scope, then what it is. */
-/** "Default user limit" first; where it applies ("All environments" or one) under it. */
-function DefaultLimitAppliedTo({ scopeName }: { scopeName: string }) {
+/**
+ * Named like every other row: where it applies first ("All environments" or
+ * one environment), then what it is, here who the limit is for.
+ */
+function DefaultLimitAppliedTo({
+  scopeName,
+  whoIsLimited,
+}: {
+  scopeName: string;
+  whoIsLimited: string;
+}) {
   return (
     <div className="flex min-w-0 items-center gap-2">
       <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted">
         <UsersRound className="h-4 w-4 shrink-0 text-muted-foreground" />
       </span>
       <div className="min-w-0">
-        <div className="truncate">Default user limit</div>
+        <div className="truncate">{scopeName}</div>
         <div className="truncate text-xs text-muted-foreground">
-          {scopeName}
+          {whoIsLimited}
         </div>
       </div>
     </div>

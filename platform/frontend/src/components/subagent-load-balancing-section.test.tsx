@@ -64,7 +64,7 @@ describe("SubagentLoadBalancingSection", () => {
     const { onChange } = renderSection(null);
 
     const toggle = screen.getByRole("switch", {
-      name: "Enable load balancing",
+      name: "Enable Agent Runtime load balancing & failover",
     });
     expect(toggle).not.toBeChecked();
 
@@ -86,7 +86,7 @@ describe("SubagentLoadBalancingSection", () => {
     );
   });
 
-  it("allows configuring per-subagent weights and retry/fallback policy", async () => {
+  it("allows configuring per-agent weights and retry/failover policy", async () => {
     const user = userEvent.setup();
     const { onChange } = renderSection({
       enabled: true,
@@ -112,10 +112,10 @@ describe("SubagentLoadBalancingSection", () => {
       true,
     );
 
-    const fallbackSwitch = screen.getByRole("switch", {
-      name: "Fall back to other subagents",
+    const failoverSwitch = screen.getByRole("switch", {
+      name: "Fail over to other agents",
     });
-    await user.click(fallbackSwitch);
+    await user.click(failoverSwitch);
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         fallbackEnabled: false,
@@ -167,24 +167,49 @@ describe("SubagentLoadBalancingSection", () => {
     );
 
     expect(
-      screen.getByText(
-        "Distributes delegated runs across the Agent Runtime subagents assigned to this agent only, with retries, out-of-memory tier upgrades, and failover.",
-      ),
+      screen.getByText("Agent Runtime load balancing & failover"),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /In "All agents" mode, all accessible runtime subagents receive equal weight/i,
+        "When this agent delegates to Agent Runtime subagents, choose how to split runs and handle failures. Other subagents run directly.",
       ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Subagent weights")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'In "All agents" mode, every Agent Runtime subagent gets weight 1. Switch to Manual mode above to set custom weights.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Retries on same subagent")).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: "Fail over to other subagents" }),
     ).toBeInTheDocument();
   });
 
-  it("renders single-sentence gateway copy naming Agent Runtime agents", () => {
-    renderSection(null, [AGENT_A_ID], { isGateway: true });
+  it("renders gateway copy using agent terminology consistently", () => {
+    renderSection(
+      {
+        enabled: true,
+        algorithm: "weighted",
+        retries: 1,
+        fallbackEnabled: true,
+      },
+      [],
+      { isGateway: true, isAllSubagentsMode: false },
+    );
 
     expect(
       screen.getByText(
-        "Distributes delegated runs across the Agent Runtime agents assigned to this gateway only, with retries, out-of-memory tier upgrades, and failover.",
+        "When clients run Agent Runtime agents through this gateway, choose how to split runs and handle failures. Other agents run directly.",
       ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Agent weights")).toBeInTheDocument();
+    expect(
+      screen.getByText("Assign agents above to set custom weights."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Retries on same agent")).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: "Fail over to other agents" }),
     ).toBeInTheDocument();
   });
 

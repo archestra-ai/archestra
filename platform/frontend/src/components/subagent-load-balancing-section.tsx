@@ -32,29 +32,29 @@ const DEFAULT_LOAD_BALANCING_CONFIG: SubagentLoadBalancingConfig = {
 };
 
 function getAlgorithmOptions(params: {
-  targetLabel: string;
-  runtimeAgents: string;
+  runtimeNoun: string;
+  runtimeNouns: string;
 }): ReadonlyArray<{
   value: SubagentLoadBalancingAlgorithm;
   label: string;
   description: string;
 }> {
-  const { targetLabel, runtimeAgents } = params;
+  const { runtimeNoun, runtimeNouns } = params;
   return [
     {
       value: "round_robin",
       label: "Round robin (rotate)",
-      description: `Give delegated runs to the ${runtimeAgents} assigned to ${targetLabel} in turn.`,
+      description: `Send each run to the next ${runtimeNoun} in turn.`,
     },
     {
       value: "weighted",
       label: "Weighted",
-      description: `Spread delegated runs across the assigned ${runtimeAgents} in proportion to their weights.`,
+      description: `Split runs across ${runtimeNouns} based on their weights.`,
     },
     {
       value: "random",
       label: "Random",
-      description: `Give each delegated run to one of the assigned ${runtimeAgents}, picked at random.`,
+      description: `Pick a random ${runtimeNoun} for each run.`,
     },
   ];
 }
@@ -96,13 +96,21 @@ export function SubagentLoadBalancingSection({
   const retriesSelectId = useId();
   const fallbackSwitchId = useId();
 
-  const targetLabel = isGateway ? "this gateway" : "this agent";
-  // Only runs of Agent Runtime agents are balanced, retried and failed over:
-  // a delegation to any other agent always goes to that agent.
-  const runtimeAgents = isGateway
+  // Only runs of Agent Runtime agents are balanced, retried, and failed over:
+  // a delegation to any other agent always goes to that agent directly.
+  const noun = isGateway ? "agent" : "subagent";
+  const nouns = isGateway ? "agents" : "subagents";
+  const runtimeNoun = isGateway
+    ? "Agent Runtime agent"
+    : "Agent Runtime subagent";
+  const runtimeNouns = isGateway
     ? "Agent Runtime agents"
     : "Agent Runtime subagents";
-  const algorithmOptions = getAlgorithmOptions({ targetLabel, runtimeAgents });
+  const sectionDescription = isGateway
+    ? "When clients run Agent Runtime agents through this gateway, choose how to split runs and handle failures. Other agents run directly."
+    : "When this agent delegates to Agent Runtime subagents, choose how to split runs and handle failures. Other subagents run directly.";
+  const failoverLabel = `Fail over to other ${nouns}`;
+  const algorithmOptions = getAlgorithmOptions({ runtimeNoun, runtimeNouns });
 
   const isEnabled = value?.enabled === true;
   const currentConfig: SubagentLoadBalancingConfig = value ?? {
@@ -175,21 +183,19 @@ export function SubagentLoadBalancingSection({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Label htmlFor={enableSwitchId}>
-                <span>Load balancing &amp; failover</span>
+                <span>Agent Runtime load balancing &amp; failover</span>
               </Label>
               <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
                 Beta
               </Badge>
             </div>
             <FieldDescription>
-              <span>
-                {`Distributes delegated runs across the ${runtimeAgents} assigned to ${targetLabel} only, with retries, out-of-memory tier upgrades, and failover.`}
-              </span>
+              <span>{sectionDescription}</span>
             </FieldDescription>
           </div>
           <Switch
             id={enableSwitchId}
-            aria-label="Enable load balancing"
+            aria-label="Enable Agent Runtime load balancing & failover"
             checked={isEnabled}
             disabled={readOnly}
             onCheckedChange={handleToggleEnabled}
@@ -229,11 +235,13 @@ export function SubagentLoadBalancingSection({
               <div className="space-y-2 border-t pt-3">
                 <div className="space-y-0.5">
                   <Label>
-                    <span>Subagent weights</span>
+                    <span>
+                      {isGateway ? "Agent weights" : "Subagent weights"}
+                    </span>
                   </Label>
                   <FieldDescription>
                     <span>
-                      {`Give each ${isGateway ? "Agent Runtime agent" : "Agent Runtime subagent"} a weight from ${SUBAGENT_LOAD_BALANCING_MIN_WEIGHT} to ${SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}. A higher weight gets a larger share of delegated runs.`}
+                      {`Set a weight from ${SUBAGENT_LOAD_BALANCING_MIN_WEIGHT} to ${SUBAGENT_LOAD_BALANCING_MAX_WEIGHT} for each ${runtimeNoun}. Higher weights get more runs.`}
                     </span>
                   </FieldDescription>
                 </div>
@@ -241,8 +249,8 @@ export function SubagentLoadBalancingSection({
                   <p className="text-xs text-muted-foreground">
                     <span>
                       {isAllSubagentsMode
-                        ? 'In "All agents" mode, all accessible runtime subagents receive equal weight (1). Switch to Manual mode above to assign custom weights to specific subagents.'
-                        : "Assign subagents above to configure individual weights."}
+                        ? `In "All agents" mode, every ${runtimeNoun} gets weight 1. Switch to Manual mode above to set custom weights.`
+                        : `Assign ${nouns} above to set custom weights.`}
                     </span>
                   </p>
                 ) : (
@@ -296,7 +304,7 @@ export function SubagentLoadBalancingSection({
             <div className="space-y-3 border-t pt-3">
               <div className="space-y-1.5">
                 <Label htmlFor={retriesSelectId}>
-                  <span>Retries on same subagent</span>
+                  <span>{`Retries on same ${noun}`}</span>
                 </Label>
                 <Select
                   value={String(currentConfig.retries)}
@@ -318,7 +326,7 @@ export function SubagentLoadBalancingSection({
                 </Select>
                 <FieldDescription>
                   <span>
-                    {`How many times a failed run is retried on the same ${isGateway ? "Agent Runtime agent" : "Agent Runtime subagent"}, when the failure allows a retry.`}
+                    {`Retry a failed run on the same ${runtimeNoun} this many times after a temporary failure.`}
                   </span>
                 </FieldDescription>
               </div>
@@ -326,17 +334,17 @@ export function SubagentLoadBalancingSection({
               <div className="flex items-start justify-between gap-4 pt-1">
                 <div className="space-y-1">
                   <Label htmlFor={fallbackSwitchId}>
-                    <span>Fall back to other subagents</span>
+                    <span>{failoverLabel}</span>
                   </Label>
                   <FieldDescription>
                     <span>
-                      {`When a run still fails after its retries, it goes to the other assigned ${runtimeAgents}, one after another, until one succeeds.`}
+                      {`When a run fails after retries, try the other ${runtimeNouns} one by one until one succeeds.`}
                     </span>
                   </FieldDescription>
                 </div>
                 <Switch
                   id={fallbackSwitchId}
-                  aria-label="Fall back to other subagents"
+                  aria-label={failoverLabel}
                   checked={currentConfig.fallbackEnabled}
                   disabled={readOnly}
                   onCheckedChange={(fallbackEnabled) =>

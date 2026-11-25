@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
 import {
+  resolveCrossProviderMetadata,
   resolveCrossProviderPrices,
   resolveDiscoveredModelRegistryEntry,
   resolveSelfHostedModelMetadata,
@@ -102,6 +103,84 @@ const MODELS_DEV: ModelsDevApiResponse = {
 };
 
 describe("resolveCrossProviderPrices — Bedrock", () => {
+  test("uses distinct exact profile rates before canonical prices and preserves metadata precedence", () => {
+    const modelId = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0";
+    const data: ModelsDevApiResponse = structuredClone(MODELS_DEV);
+    data["amazon-bedrock"].models[modelId] = {
+      id: modelId,
+      name: "Regional profile",
+      cost: { input: 3.3, output: 16.5, cache_read: 0.33, cache_write: 0 },
+      limit: { context: 250000, output: 9000 },
+    };
+    const args = { provider: "bedrock" as const, modelId, modelsDevData: data };
+    const metadata = resolveCrossProviderMetadata(args);
+    const expected = {
+      promptPricePerToken: "0.0000033",
+      completionPricePerToken: "0.0000165",
+      cacheReadPricePerToken: "3.3e-7",
+      cacheWritePricePerToken: "0",
+    };
+    expect(resolveCrossProviderPrices(args)).toEqual(expected);
+    expect(resolveDiscoveredModelRegistryEntry(args)?.prices).toEqual(expected);
+    // The pricing override must not change the separately resolved limits.
+    delete data["amazon-bedrock"].models[modelId];
+    expect(resolveCrossProviderMetadata(args)).toEqual(metadata);
+  });
+
+  test("preserves the global profile id even when an underlying model name is known", () => {
+    const data: ModelsDevApiResponse = {
+      "amazon-bedrock": {
+        id: "amazon-bedrock",
+        name: "Amazon Bedrock",
+        models: {
+          "openai.example-model": {
+            id: "openai.example-model",
+            name: "Regional",
+            cost: { input: 1.1, output: 5.5 },
+          },
+          "global.openai.example-model": {
+            id: "global.openai.example-model",
+            name: "Global",
+            cost: { input: 1, output: 5 },
+          },
+        },
+      },
+    };
+    expect(
+      resolveCrossProviderPrices({
+        provider: "bedrock",
+        modelId: "global.openai.example-model",
+        underlyingModelName: "openai.example-model",
+        modelsDevData: data,
+      }),
+    ).toMatchObject({
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000005",
+    });
+  });
+
+  test("fills omitted exact-profile meters from the existing fallback", () => {
+    const modelId = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0";
+    const data = structuredClone(MODELS_DEV);
+    data["amazon-bedrock"].models[modelId] = {
+      id: modelId,
+      name: "Regional profile",
+      cost: { input: 3.3, output: 16.5 },
+    };
+    expect(
+      resolveCrossProviderPrices({
+        provider: "bedrock",
+        modelId,
+        modelsDevData: data,
+      }),
+    ).toEqual({
+      promptPricePerToken: "0.0000033",
+      completionPricePerToken: "0.0000165",
+      cacheReadPricePerToken: "3e-7",
+      cacheWritePricePerToken: "0.00000375",
+    });
+  });
+
   test("resolves a region-prefixed, dated inference-profile id to the anthropic entry (with cache prices)", () => {
     const prices = resolveCrossProviderPrices({
       provider: "bedrock",

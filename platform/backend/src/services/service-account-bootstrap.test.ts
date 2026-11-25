@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 import { enterpriseTier } from "@/enterprise-tier";
+import logger from "@/logging";
 import ServiceAccountModel from "@/models/service-account";
 import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { bootstrapServiceAccounts } from "./service-account-bootstrap";
 
 const ACCOUNT_ID = "6f1d7d2e-4a52-4c3e-9c1f-0d5b8a7e2b10";
@@ -112,6 +113,28 @@ describe("bootstrapServiceAccounts", () => {
         existing.id,
       ),
     ).toBe(1);
+  });
+
+  test("replicas bootstrapping the same account at once end with one account", async () => {
+    const declared = [
+      {
+        name: "crossplane",
+        roles: ["member"],
+        federatedCredentials: [CREDENTIAL],
+      },
+    ];
+    const logError = vi.spyOn(logger, "error");
+
+    await Promise.all([
+      bootstrapServiceAccounts(declared),
+      bootstrapServiceAccounts(declared),
+    ]);
+
+    // The replica that loses the race treats the account as already there.
+    expect(logError).not.toHaveBeenCalled();
+    const accounts =
+      await ServiceAccountModel.listByOrganizationId(organizationId);
+    expect(accounts.map((account) => account.name)).toEqual(["crossplane"]);
   });
 
   test("skips an account it cannot create and still creates the others", async () => {

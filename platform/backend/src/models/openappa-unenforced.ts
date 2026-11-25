@@ -118,7 +118,9 @@ class OpenAppaUnenforcedModel {
     const inserted = await db
       .insert(calls)
       .values(
-        [...new Set(params.toolCallIds)].map((toolCallId) => ({
+        // One order for every writer, so concurrent batches never lock each
+        // other's rows in turn.
+        [...new Set(params.toolCallIds)].sort().map((toolCallId) => ({
           organizationId: params.organizationId,
           sessionId: params.sessionId,
           toolCallId,

@@ -106,6 +106,13 @@ vi.mock("@/lib/agent-runtime-templates.query", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
+  useRuntimeTemplateCatalogShared: () => ({
+    data: [],
+    isFetching: false,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
   useBuiltInRuntimeDefaults: () => () => undefined,
   // The runtime has no account rule unless a test gives it one: it names no
@@ -1925,6 +1932,38 @@ describe("AgentForm delegation state", () => {
     expect(subagentMode("Manual")).toBeChecked();
     expect(
       within(subagentAccess()).getByText("1 assigned"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the runtime badge on assigned Agent Runtime subagent pills and Local on regular ones", async () => {
+    const customAgent = { ...baseAgent, accessAllSubagents: false };
+    const runtimeTargetAgent = {
+      ...targetAgent,
+      id: "agent-runtime-target-1",
+      name: "Lobster Claude Code",
+      runtime: {
+        image: "ghcr.io/archestra-ai/agent-claude-code:latest",
+        command: ["archestra-claude-code"],
+      },
+    };
+    useProfileMock.mockReturnValue({ data: customAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [runtimeTargetAgent, targetAgent],
+    });
+    useAgentDelegationsMock.mockReturnValue({
+      data: [runtimeTargetAgent, targetAgent],
+      isSuccess: true,
+    });
+
+    render(<AgentForm agentType="agent" agent={customAgent} />);
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Lobster Claude Code.*Claude Code/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Target AgentLocal/ }),
     ).toBeInTheDocument();
   });
 

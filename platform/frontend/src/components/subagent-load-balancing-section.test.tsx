@@ -13,9 +13,12 @@ import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { SubagentLoadBalancingSection } from "./subagent-load-balancing-section";
 
 vi.mock("@/lib/agent-options.query");
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 
 const AGENT_A_ID = "00000000-0000-4000-8000-00000000000a";
 const AGENT_B_ID = "00000000-0000-4000-8000-00000000000b";
+const AGENT_C_ID = "00000000-0000-4000-8000-00000000000c";
 
 function renderSection(
   initial: SubagentLoadBalancingConfig | null = null,
@@ -52,8 +55,30 @@ function renderSection(
 beforeEach(() => {
   vi.mocked(useAgentOptionsByIds).mockReturnValue({
     data: [
-      { id: AGENT_A_ID, name: "Lobster Claude", description: null },
-      { id: AGENT_B_ID, name: "Lobster Codex", description: null },
+      {
+        id: AGENT_A_ID,
+        name: "Lobster Claude",
+        description: null,
+        runtime: {
+          image: "ghcr.io/archestra-ai/agent-claude-code:latest",
+          command: ["archestra-claude-code"],
+        },
+      },
+      {
+        id: AGENT_B_ID,
+        name: "Lobster Codex",
+        description: null,
+        runtime: {
+          image: "ghcr.io/archestra-ai/agent-codex:latest",
+          command: ["archestra-codex"],
+        },
+      },
+      {
+        id: AGENT_C_ID,
+        name: "Regular Chat Agent",
+        description: null,
+        runtime: null,
+      },
     ],
   } as unknown as ReturnType<typeof useAgentOptionsByIds>);
 });
@@ -209,6 +234,23 @@ describe("SubagentLoadBalancingSection", () => {
     expect(
       screen.getByRole("switch", { name: "Fail over to other agents" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows each subagent's runtime chip or No runtime in weighted rows", () => {
+    renderSection(
+      {
+        enabled: true,
+        algorithm: "weighted",
+        retries: 1,
+        fallbackEnabled: true,
+      },
+      [AGENT_A_ID, AGENT_B_ID, AGENT_C_ID],
+      { isGateway: false },
+    );
+
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    expect(screen.getByText("Codex")).toBeInTheDocument();
+    expect(screen.getByText("No runtime")).toBeInTheDocument();
   });
 
   it("clamps stored retry counts above 3 on read so UI and supervisor agree", () => {

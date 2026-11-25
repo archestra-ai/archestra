@@ -9,6 +9,7 @@ import {
 } from "@archestra/shared";
 import { Scale } from "lucide-react";
 import { useId } from "react";
+import { AgentRuntimeChip } from "@/components/chat/runtime-capable-indicator";
 import { SettingIcon } from "@/components/setting-icon";
 import { Badge } from "@/components/ui/badge";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -123,9 +124,7 @@ export function SubagentLoadBalancingSection({
     enabled:
       canReadAgents && isEnabled && currentConfig.algorithm === "weighted",
   });
-  const agentNameById = new Map(
-    assignedAgents.map((agent) => [agent.id, agent.name]),
-  );
+  const agentById = new Map(assignedAgents.map((agent) => [agent.id, agent]));
 
   const selectedAlgorithm =
     algorithmOptions.find((opt) => opt.value === currentConfig.algorithm) ??
@@ -261,17 +260,27 @@ export function SubagentLoadBalancingSection({
                         totalWeight > 0
                           ? Math.round((weight / totalWeight) * 100)
                           : 0;
-                      const displayName =
-                        agentNameById.get(agentId) ?? agentId.slice(0, 8);
+                      const agent = agentById.get(agentId);
+                      const displayName = agent?.name ?? agentId.slice(0, 8);
                       return (
                         <div
                           key={agentId}
                           className="flex items-center justify-between gap-3 rounded border bg-background px-3 py-1.5"
                         >
-                          <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
                             <span className="truncate text-xs font-medium">
                               {displayName}
                             </span>
+                            {agent?.runtime ? (
+                              <AgentRuntimeChip runtime={agent.runtime} />
+                            ) : agent ? (
+                              <Badge
+                                variant="outline"
+                                className="shrink-0 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+                              >
+                                <span>No runtime</span>
+                              </Badge>
+                            ) : null}
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge

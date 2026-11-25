@@ -280,6 +280,93 @@ export function AgentRuntimeBadge({
   );
 }
 
+/**
+ * Compact, non-interactive runtime badge for pills, cards, and dense rows
+ * (such as assigned subagent pills and load-balancing weight rows).
+ * Renders whenever an agent has a saved `runtime` object — even when the
+ * cluster's Agent Runtime feature is currently off — so people can tell at a
+ * glance which assigned agents run in an Agent Runtime and which runtime they
+ * use. Safe inside interactive triggers like `<Button>`.
+ */
+export function AgentRuntimeChip({
+  runtime,
+  className,
+}: {
+  /** The agent's saved runtime config, or null/undefined for a regular agent. */
+  runtime: unknown;
+  className?: string;
+}) {
+  const runtimeObj =
+    runtime && typeof runtime === "object"
+      ? (runtime as { image?: unknown; command?: unknown })
+      : null;
+  const image = typeof runtimeObj?.image === "string" ? runtimeObj.image : "";
+  const command = Array.isArray(runtimeObj?.command)
+    ? runtimeObj.command.filter(
+        (item): item is string => typeof item === "string",
+      )
+    : null;
+  const catalogImages = useAgentCatalogImages();
+  const builtInId = runtimeObj
+    ? (resolveAgentCatalogId(runtimeObj) ??
+      (image ? agentCatalogIdForImage({ image, catalogImages }) : null))
+    : null;
+  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const administers =
+    useHasPermissions(RUNTIME_SETTINGS_PERMISSIONS)?.data === true;
+  const templates = useRuntimeTemplateCatalogShared(
+    Boolean(runtimeObj) && !builtInId && runtimeEnabled && administers,
+  );
+
+  if (!runtimeObj) return null;
+
+  const customTemplates = templates?.data ?? [];
+  const ref =
+    !builtInId && image
+      ? resolveAgentRuntimeTemplate({
+          runtime: { image, command },
+          catalogImages,
+          customTemplates,
+        })
+      : null;
+  const custom =
+    ref?.kind === "custom"
+      ? customTemplates.find((item) => item.id === ref.id)
+      : undefined;
+  const resolvedBuiltInId =
+    builtInId ?? (ref?.kind === "built-in" ? ref.id : null);
+  const name = resolvedBuiltInId
+    ? AGENT_CATALOG_TEMPLATE_NAMES[resolvedBuiltInId]
+    : (custom?.name ?? (image ? "Custom image" : "Runtime"));
+  const mark = resolvedBuiltInId ? (
+    <CatalogAgentIcon id={resolvedBuiltInId} size={12} />
+  ) : custom?.icon ? (
+    <AgentIcon icon={custom.icon} size={12} />
+  ) : custom ? (
+    <Box />
+  ) : (
+    <TerminalSquare />
+  );
+
+  return (
+    <span
+      title={`Agent Runtime: ${name}`}
+      className={cn(
+        "inline-flex min-w-0 shrink-0 items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium leading-none text-secondary-foreground",
+        className,
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className="inline-flex shrink-0 items-center [&>svg]:size-3"
+      >
+        {mark}
+      </span>
+      <span className="max-w-28 truncate">{name}</span>
+    </span>
+  );
+}
+
 /** What opens Settings → Agents → Runtimes: that page's own permission. */
 const RUNTIME_SETTINGS_PERMISSIONS =
   requiredPagePermissionsMap["/settings/agents/runtimes"];

@@ -80,6 +80,7 @@ import {
   type AgentHooksEditorRef,
 } from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agent-icon";
 import {
   type AgentIdentityBindingDrafts,
   AgentIdentityBindingsField,
@@ -126,6 +127,7 @@ import {
 import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { AgentRuntimeChip } from "@/components/chat/runtime-capable-indicator";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
 import { noCompanyConnection } from "@/components/claude-connection-pickers.utils";
 import {
@@ -435,7 +437,7 @@ function SubagentPill({
             variant="outline"
             size="sm"
             className={cn(
-              "max-w-[200px] rounded-r-none border-r-0 text-xs",
+              "max-w-[340px] rounded-r-none border-r-0 text-xs",
               !isSelected && "border-dashed opacity-50",
             )}
           >
@@ -447,11 +449,20 @@ function SubagentPill({
                 )}
               />
             )}
-            <Bot className="h-3 w-3 shrink-0" />
+            <AgentIcon
+              icon={agent.icon}
+              size={14}
+              fallbackType="agent"
+              className="shrink-0"
+            />
             <span className="font-medium truncate">{agent.name}</span>
-            <span className="rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
-              Local
-            </span>
+            {agent.runtime ? (
+              <AgentRuntimeChip runtime={agent.runtime} />
+            ) : (
+              <span className="rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+                Local
+              </span>
+            )}
           </Button>
         </PopoverTrigger>
         {!readOnly && (
@@ -498,6 +509,13 @@ function SubagentPill({
             <X className="h-4 w-4" />
           </Button>
         </div>
+
+        {agent.runtime && (
+          <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2 text-xs">
+            <span className="text-muted-foreground">Agent Runtime</span>
+            <AgentRuntimeChip runtime={agent.runtime} />
+          </div>
+        )}
 
         <div className="p-4">
           <AgentToolsList agentId={agent.id} />

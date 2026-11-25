@@ -12,7 +12,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { RemoteUserSelect } from "@/components/remote-user-select";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ import {
   useRemoveMember,
 } from "@/lib/member.query";
 import { useMemberOptionsReferences } from "@/lib/member-options.query";
+import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -51,10 +52,16 @@ export function RemoveUserDialog({
   const hasShared = shared.length > 0;
   const personalTotal = personal.reduce((sum, p) => sum + p.count, 0);
 
-  const [newOwnerId, setNewOwnerId] = useState(currentUserId);
-  useEffect(() => {
-    if (currentUserId) setNewOwnerId((id) => id || currentUserId);
-  }, [currentUserId]);
+  // Start on the organization's configured new owner, unless that is the
+  // person being removed; else on you.
+  const { data: organization } = useOrganization();
+  const configuredOwnerId = organization?.departingMemberOwnerId;
+  const defaultOwnerId =
+    configuredOwnerId && configuredOwnerId !== member.userId
+      ? configuredOwnerId
+      : currentUserId;
+  const [pickedOwnerId, setNewOwnerId] = useState<string | null>(null);
+  const newOwnerId = pickedOwnerId ?? defaultOwnerId;
 
   const ownerLookup = useMemberOptionsReferences({
     ids: newOwnerId && newOwnerId !== currentUserId ? [newOwnerId] : [],
@@ -94,6 +101,7 @@ export function RemoveUserDialog({
               placeholder="Choose a member"
               ariaLabel="New owner"
               className="w-full"
+              excludeIds={[member.userId]}
               pinnedOption={
                 session
                   ? {
@@ -118,12 +126,7 @@ export function RemoveUserDialog({
           </div>
         )}
 
-        <div
-          className={cn(
-            "grid overflow-hidden rounded-md border",
-            hasShared && personalTotal > 0 && "sm:grid-cols-[1fr_13rem]",
-          )}
-        >
+        <div className="overflow-hidden rounded-md border">
           {hasShared && (
             <section className="min-w-0">
               <LedgerHeader
@@ -176,7 +179,7 @@ export function RemoveUserDialog({
             <section
               className={cn(
                 "min-w-0 bg-destructive/[0.03]",
-                hasShared && "border-t sm:border-t-0 sm:border-l",
+                hasShared && "border-t",
               )}
             >
               <LedgerHeader

@@ -234,6 +234,19 @@ describe("RuntimeTemplateSection", () => {
       name: "Edit Claude Code runtime",
     });
     await user.click(
+      within(dialog).getByRole("button", { name: /^Container/ }),
+    );
+    expect(
+      within(dialog).getByText(
+        "Updates automatically for every agent with each Test Platform release. It can't be changed.",
+      ),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByText(
+        "Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save.",
+      ),
+    ).toBeInTheDocument();
+    await user.click(
       within(dialog).getByRole("button", { name: /^Accounts that can run it/ }),
     );
     await user.click(within(dialog).getByRole("button", { name: /^Limits/ }));

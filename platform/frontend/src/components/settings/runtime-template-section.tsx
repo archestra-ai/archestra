@@ -907,6 +907,7 @@ function BuiltInRuntimeDialog({
   onSave: (value: BuiltInRuntime) => void;
 }) {
   const name = AGENT_CATALOG_NAMES[id];
+  const appName = useAppName();
   const [runtime, setRuntime] = useState<AgentRuntimeConfig>(() =>
     withAgentRuntimeDefaults({
       runtime: buildAgentCatalogRuntime({ id, image }),
@@ -980,7 +981,8 @@ function BuiltInRuntimeDialog({
                   {image}
                 </code>
                 <FieldDescription>
-                  {name} keeps this image up to date with each release.
+                  Updates automatically for every agent with each {appName}{" "}
+                  release. It can't be changed.
                 </FieldDescription>
               </div>
             </ConfigurationRow>
@@ -1032,7 +1034,7 @@ function RuntimeAccountsRow({
       id={id}
       value="accounts"
       title="Accounts that can run it"
-      description="The accounts every agent on this runtime can use."
+      description="Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save."
       summary={accounts.summary}
       attention={accounts.noAccount ? "Select at least one option." : undefined}
     >

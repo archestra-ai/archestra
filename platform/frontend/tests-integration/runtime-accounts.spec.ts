@@ -168,6 +168,11 @@ test("an administrator sees both account cards on the Claude Code runtime with n
   await expect(
     accounts.getByRole("checkbox", { name: /A company API key/ }),
   ).toBeChecked();
+  await expect(
+    dialog.getByText(
+      "Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save.",
+    ),
+  ).toBeVisible();
 
   // One card left names that kind for every agent of the runtime.
   await subscription.click();

@@ -2,7 +2,6 @@
 title: "API Reference"
 description: "Find Archestra API endpoints by task, with request and response fields alongside each operation"
 order: 3
-lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -2,7 +2,6 @@
 title: Cloud SQL and AlloyDB
 description: Connect Archestra to Google Cloud SQL or AlloyDB for PostgreSQL through Google's auth proxy and Workload Identity
 order: 2
-lastUpdated: 2026-11-14
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

@@ -2,7 +2,6 @@
 title: "Skills, Files, and Sandbox"
 description: "Archestra MCP Server tools for skills, files, and sandbox"
 order: 2
-lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

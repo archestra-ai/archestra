@@ -2,7 +2,6 @@
 title: "Organization"
 description: "Archestra MCP Server tools for organization"
 order: 7
-lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

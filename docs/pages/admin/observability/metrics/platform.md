@@ -2,7 +2,6 @@
 title: Platform Metrics
 description: Look up HTTP, database pool, audit, storage, and process metrics.
 order: 8
-lastUpdated: 2026-10-28
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

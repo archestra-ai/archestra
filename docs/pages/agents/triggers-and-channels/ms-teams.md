@@ -2,7 +2,6 @@
 title: MS Teams
 description: Connect Archestra agents to Microsoft Teams channels
 order: 4
-lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

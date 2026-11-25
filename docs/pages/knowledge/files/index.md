@@ -3,7 +3,6 @@ title: Knowledge Files
 sidebarTitle: Files
 description: Upload reference files, control access, and index them into a Knowledge Base
 order: 2
-lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

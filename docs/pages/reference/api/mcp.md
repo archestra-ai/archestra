@@ -2,7 +2,6 @@
 title: MCP Servers and Catalog
 description: Manage MCP servers, catalog entries, and OAuth clients
 order: 4
-lastUpdated: 2026-11-04
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

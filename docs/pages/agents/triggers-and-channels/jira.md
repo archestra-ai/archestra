@@ -3,7 +3,6 @@ title: Jira
 description: Connect a Jira service account to an Archestra agent and answer issue comments
 order: 6
 beta: "Jira messaging channels are in Beta."
-lastUpdated: 2026-11-09
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

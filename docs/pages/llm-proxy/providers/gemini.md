@@ -2,7 +2,6 @@
 title: Google Gemini
 description: Connect Gemini using Google AI Studio or Vertex AI.
 order: 4
-lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

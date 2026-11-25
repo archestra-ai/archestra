@@ -2,7 +2,6 @@
 title: Blob Providers
 description: Connect an Amazon S3 bucket, a Google Cloud Storage bucket, or an Azure Blob Storage container once, so features that write files, such as scheduled cost exports, send them there
 order: 6
-lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

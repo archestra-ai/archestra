@@ -2,7 +2,6 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 1
-lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

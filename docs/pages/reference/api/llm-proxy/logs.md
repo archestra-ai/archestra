@@ -2,7 +2,6 @@
 title: LLM Proxy Logs
 description: List saved model requests and inspect their usage, cost, and routing decisions
 order: 1
-lastUpdated: 2026-11-04
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

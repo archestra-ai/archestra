@@ -2,7 +2,6 @@
 title: Amazon Bedrock
 description: Connect Amazon Bedrock with an API key, AWS access keys, or the IAM identity of your Archestra deployment.
 order: 1
-lastUpdated: 2026-11-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

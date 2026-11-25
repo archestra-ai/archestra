@@ -2,7 +2,6 @@
 title: Incoming Email
 description: Give each agent an email address that runs the agent and replies in the thread
 order: 2
-lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -2,7 +2,6 @@
 title: Webhook (A2A)
 description: Call an agent over HTTP with the A2A protocol
 order: 1
-lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

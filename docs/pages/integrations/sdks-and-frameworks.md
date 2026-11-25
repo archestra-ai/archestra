@@ -2,7 +2,6 @@
 title: AI SDKs and Frameworks
 description: Route Vercel AI SDK, Pydantic AI, and Mastra requests through the LLM Proxy
 order: 5
-lastUpdated: 2026-10-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

@@ -63186,6 +63186,9 @@
                                   "accessAllSubagents": {
                                     "type": "boolean"
                                   },
+                                  "progressiveSubagentLoading": {
+                                    "type": "boolean"
+                                  },
                                   "subagentLoadBalancing": {
                                     "nullable": true,
                                     "type": "object",
@@ -63210,23 +63213,11 @@
                                           "minimum": 1,
                                           "maximum": 1000
                                         }
-                                      },
-                                      "retries": {
-                                        "default": 3,
-                                        "type": "integer",
-                                        "minimum": 0,
-                                        "maximum": 3
-                                      },
-                                      "fallbackEnabled": {
-                                        "default": true,
-                                        "type": "boolean"
                                       }
                                     },
                                     "required": [
                                       "enabled",
-                                      "algorithm",
-                                      "retries",
-                                      "fallbackEnabled"
+                                      "algorithm"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -63655,6 +63646,7 @@
                                   "activationSkillMode",
                                   "activationSkillPolicyRevision",
                                   "accessAllSubagents",
+                                  "progressiveSubagentLoading",
                                   "builtInAgentConfig",
                                   "builtIn",
                                   "latestVersion",
@@ -65047,6 +65039,9 @@
                           "accessAllSubagents": {
                             "type": "boolean"
                           },
+                          "progressiveSubagentLoading": {
+                            "type": "boolean"
+                          },
                           "subagentLoadBalancing": {
                             "nullable": true,
                             "type": "object",
@@ -65071,23 +65066,11 @@
                                   "minimum": 1,
                                   "maximum": 1000
                                 }
-                              },
-                              "retries": {
-                                "default": 3,
-                                "type": "integer",
-                                "minimum": 0,
-                                "maximum": 3
-                              },
-                              "fallbackEnabled": {
-                                "default": true,
-                                "type": "boolean"
                               }
                             },
                             "required": [
                               "enabled",
-                              "algorithm",
-                              "retries",
-                              "fallbackEnabled"
+                              "algorithm"
                             ],
                             "additionalProperties": false
                           },
@@ -65516,6 +65499,7 @@
                           "activationSkillMode",
                           "activationSkillPolicyRevision",
                           "accessAllSubagents",
+                          "progressiveSubagentLoading",
                           "builtInAgentConfig",
                           "builtIn",
                           "latestVersion",
@@ -66203,6 +66187,9 @@
                   "accessAllSubagents": {
                     "type": "boolean"
                   },
+                  "progressiveSubagentLoading": {
+                    "type": "boolean"
+                  },
                   "subagentLoadBalancing": {
                     "nullable": true,
                     "type": "object",
@@ -66227,16 +66214,6 @@
                           "minimum": 1,
                           "maximum": 1000
                         }
-                      },
-                      "retries": {
-                        "default": 1,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 3
-                      },
-                      "fallbackEnabled": {
-                        "default": true,
-                        "type": "boolean"
                       }
                     }
                   },
@@ -67204,6 +67181,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -67228,23 +67208,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -67656,6 +67624,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -72717,6 +72686,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -72741,23 +72713,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -73181,6 +73141,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -74267,6 +74228,9 @@
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
+                        "progressiveSubagentLoading": {
+                          "type": "boolean"
+                        },
                         "subagentLoadBalancing": {
                           "nullable": true,
                           "type": "object",
@@ -74291,23 +74255,11 @@
                                 "minimum": 1,
                                 "maximum": 1000
                               }
-                            },
-                            "retries": {
-                              "default": 3,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 3
-                            },
-                            "fallbackEnabled": {
-                              "default": true,
-                              "type": "boolean"
                             }
                           },
                           "required": [
                             "enabled",
-                            "algorithm",
-                            "retries",
-                            "fallbackEnabled"
+                            "algorithm"
                           ],
                           "additionalProperties": false
                         },
@@ -74719,6 +74671,7 @@
                         "activationSkillMode",
                         "activationSkillPolicyRevision",
                         "accessAllSubagents",
+                        "progressiveSubagentLoading",
                         "builtInAgentConfig",
                         "builtIn",
                         "latestVersion",
@@ -75490,6 +75443,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -75514,23 +75470,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -75942,6 +75886,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -76624,6 +76569,9 @@
                   "accessAllSubagents": {
                     "type": "boolean"
                   },
+                  "progressiveSubagentLoading": {
+                    "type": "boolean"
+                  },
                   "subagentLoadBalancing": {
                     "nullable": true,
                     "type": "object",
@@ -76648,16 +76596,6 @@
                           "minimum": 1,
                           "maximum": 1000
                         }
-                      },
-                      "retries": {
-                        "default": 1,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 3
-                      },
-                      "fallbackEnabled": {
-                        "default": true,
-                        "type": "boolean"
                       }
                     }
                   },
@@ -77287,6 +77225,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -77311,23 +77252,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -77739,6 +77668,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -79662,6 +79592,10 @@
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
+                        "progressiveSubagentLoading": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "activationSkillMode": {
                           "default": "all",
                           "type": "string",
@@ -79800,23 +79734,11 @@
                                 "minimum": 1,
                                 "maximum": 1000
                               }
-                            },
-                            "retries": {
-                              "default": 3,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 3
-                            },
-                            "fallbackEnabled": {
-                              "default": true,
-                              "type": "boolean"
                             }
                           },
                           "required": [
                             "enabled",
-                            "algorithm",
-                            "retries",
-                            "fallbackEnabled"
+                            "algorithm"
                           ],
                           "additionalProperties": false
                         },
@@ -80033,6 +79955,7 @@
                         "missingCredentialBehavior",
                         "accessAllTools",
                         "accessAllSubagents",
+                        "progressiveSubagentLoading",
                         "activationSkillMode",
                         "passthroughHeaders",
                         "incomingEmailEnabled",
@@ -80825,6 +80748,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -80849,23 +80775,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -81277,6 +81191,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -82192,6 +82107,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -82216,23 +82134,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -82644,6 +82550,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -90343,6 +90250,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -90367,23 +90277,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -90795,6 +90693,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -171564,6 +171463,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "departingMemberOwnerId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "defaultAgentId": {
                           "nullable": true,
                           "type": "string",
@@ -172111,6 +172014,7 @@
                         "defaultUserLimitModel",
                         "defaultUserLimitCleanupInterval",
                         "defaultMemberRole",
+                        "departingMemberOwnerId",
                         "defaultAgentId",
                         "favicon",
                         "appName",
@@ -174144,6 +174048,12 @@
                           "isBest": {
                             "type": "boolean"
                           },
+                          "apiKeyIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "isFree": {
                             "type": "boolean"
                           },
@@ -174633,6 +174543,9 @@
                             "accessAllSubagents": {
                               "type": "boolean"
                             },
+                            "progressiveSubagentLoading": {
+                              "type": "boolean"
+                            },
                             "subagentLoadBalancing": {
                               "nullable": true,
                               "type": "object",
@@ -174657,23 +174570,11 @@
                                     "minimum": 1,
                                     "maximum": 1000
                                   }
-                                },
-                                "retries": {
-                                  "default": 3,
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 3
-                                },
-                                "fallbackEnabled": {
-                                  "default": true,
-                                  "type": "boolean"
                                 }
                               },
                               "required": [
                                 "enabled",
-                                "algorithm",
-                                "retries",
-                                "fallbackEnabled"
+                                "algorithm"
                               ],
                               "additionalProperties": false
                             },
@@ -175085,6 +174986,7 @@
                             "activationSkillMode",
                             "activationSkillPolicyRevision",
                             "accessAllSubagents",
+                            "progressiveSubagentLoading",
                             "builtInAgentConfig",
                             "builtIn",
                             "latestVersion",
@@ -175601,6 +175503,12 @@
                               },
                               "isBest": {
                                 "type": "boolean"
+                              },
+                              "apiKeyIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               },
                               "isFree": {
                                 "type": "boolean"
@@ -177606,6 +177514,12 @@
                               "isBest": {
                                 "type": "boolean"
                               },
+                              "apiKeyIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
                               "isFree": {
                                 "type": "boolean"
                               },
@@ -178095,6 +178009,9 @@
                                 "accessAllSubagents": {
                                   "type": "boolean"
                                 },
+                                "progressiveSubagentLoading": {
+                                  "type": "boolean"
+                                },
                                 "subagentLoadBalancing": {
                                   "nullable": true,
                                   "type": "object",
@@ -178119,23 +178036,11 @@
                                         "minimum": 1,
                                         "maximum": 1000
                                       }
-                                    },
-                                    "retries": {
-                                      "default": 3,
-                                      "type": "integer",
-                                      "minimum": 0,
-                                      "maximum": 3
-                                    },
-                                    "fallbackEnabled": {
-                                      "default": true,
-                                      "type": "boolean"
                                     }
                                   },
                                   "required": [
                                     "enabled",
-                                    "algorithm",
-                                    "retries",
-                                    "fallbackEnabled"
+                                    "algorithm"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -178547,6 +178452,7 @@
                                 "activationSkillMode",
                                 "activationSkillPolicyRevision",
                                 "accessAllSubagents",
+                                "progressiveSubagentLoading",
                                 "builtInAgentConfig",
                                 "builtIn",
                                 "latestVersion",
@@ -179063,6 +178969,12 @@
                                   },
                                   "isBest": {
                                     "type": "boolean"
+                                  },
+                                  "apiKeyIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
                                   },
                                   "isFree": {
                                     "type": "boolean"
@@ -182967,6 +182879,9 @@
                       "medium",
                       "high"
                     ]
+                  },
+                  "strictModelSelection": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -185509,6 +185424,9 @@
                       "medium",
                       "high"
                     ]
+                  },
+                  "strictModelSelection": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -428832,6 +428750,12 @@
                       "isBest": {
                         "type": "boolean"
                       },
+                      "apiKeyIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "isFree": {
                         "type": "boolean"
                       },
@@ -451145,6 +451069,372 @@
         }
       }
     },
+    "/api/members/{userId}/owned-resources": {
+      "get": {
+        "operationId": "getMemberOwnedResources",
+        "tags": [
+          "Member"
+        ],
+        "description": "What a member owns: the resources others use, which move to a new owner when the member is removed, and counts of the personal resources deleted with them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`member:delete`](/docs/reference/permissions#member:delete): Remove members from the organization",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "shared": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "mcpGateway",
+                              "skill",
+                              "plugin",
+                              "catalog",
+                              "app",
+                              "remoteAgent"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "sharedWith": {
+                            "type": "object",
+                            "properties": {
+                              "organization": {
+                                "type": "boolean"
+                              },
+                              "teams": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "people": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "organization",
+                              "teams",
+                              "people"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "name",
+                          "sharedWith"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "Resources others use. They move to the new owner."
+                    },
+                    "personal": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "mcpGateway",
+                              "skill",
+                              "plugin",
+                              "catalog",
+                              "app",
+                              "remoteAgent"
+                            ]
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "count"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "Resources only this member can reach, by kind. They are deleted with the member."
+                    }
+                  },
+                  "required": [
+                    "shared",
+                    "personal"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "member:delete"
+          ]
+        }
+      }
+    },
     "/api/members/bulk": {
       "delete": {
         "operationId": "bulkDeleteMembers",
@@ -451208,6 +451498,10 @@
                       ]
                     },
                     "description": "Member targets to remove. Duplicates are collapsed by kind and id."
+                  },
+                  "newOwnerId": {
+                    "description": "User id of an active member who becomes the owner of everything the removed members shared with others (agents, MCP gateways, skills, plugins, MCP registry entries, apps, remote agents). Defaults to you.",
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -513894,6 +514188,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -514441,6 +514739,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -514741,6 +515040,19 @@
           "Organization"
         ],
         "description": "Get the model agents and chats on the organization default run on, and the tiers auto routing routes them across\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            },
+            "in": "query",
+            "name": "forChat",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -514816,6 +515128,14 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "name": {
+                            "type": "string"
+                          },
+                          "unavailableReason": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "normalOnlyReason": {
+                            "nullable": true,
                             "type": "string"
                           },
                           "tiers": {
@@ -515690,6 +516010,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -516237,6 +516561,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -517231,6 +517556,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -517778,6 +518107,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -518380,6 +518710,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -518927,6 +519261,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -519526,6 +519861,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -520073,6 +520412,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -522156,6 +522496,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -522703,6 +523047,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -523437,6 +523782,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -523984,6 +524333,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -524778,6 +525128,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -525325,6 +525679,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -525994,6 +526349,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -526541,6 +526900,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -526868,6 +527228,11 @@
                     "type": "string",
                     "pattern": "^[a-z0-9_:-]+(?:,[a-z0-9_:-]+)*$",
                     "description": "One or more organization role identifiers, separated by commas"
+                  },
+                  "departingMemberOwnerId": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
                   }
                 }
               }
@@ -527151,6 +527516,10 @@
                       ]
                     },
                     "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "departingMemberOwnerId": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -527701,6 +528070,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -528345,6 +528715,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -528892,6 +529266,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -529473,6 +529848,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -530020,6 +530399,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -531805,6 +532185,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -532352,6 +532736,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",

@@ -2,7 +2,6 @@
 title: LLM Metrics
 description: Look up LLM latency, token usage, prompt caching, and cost metrics.
 order: 1
-lastUpdated: 2026-11-03
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

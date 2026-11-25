@@ -2,7 +2,6 @@
 title: Importing Skills
 description: Bring skills in from GitHub, GitLab, MCP servers, and plugins
 order: 2
-lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -2,7 +2,6 @@
 title: Skills
 description: Reusable SKILL.md instruction sets that agents load on demand
 order: 3
-lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

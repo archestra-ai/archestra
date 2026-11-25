@@ -221,6 +221,18 @@ describe("ChatSetupMenu", () => {
     expect(props.close).toHaveBeenCalled();
   });
 
+  it("keeps the model when a draft's current connection is picked again", async () => {
+    const user = userEvent.setup();
+    const props = renderMenu({
+      conversationId: undefined,
+      onApiKeyChange: vi.fn(),
+    });
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    await user.click(screen.getByRole("option", { name: /Org vLLM/ }));
+    expect(props.onApiKeyChange).not.toHaveBeenCalled();
+    expect(props.onProviderChange).not.toHaveBeenCalled();
+  });
+
   it("switches a conversation's key in one update and stays open", async () => {
     const user = userEvent.setup();
     const props = renderMenu();
@@ -273,6 +285,12 @@ describe("ChatSetupMenu", () => {
         autoRouters: [
           { id: "router-a", name: "auto", tiers },
           { id: "router-b", name: "auto:support", tiers: supportTiers },
+          {
+            id: "router-c",
+            name: "auto:restricted",
+            tiers,
+            unavailableReason: "Ask an admin for access to this router.",
+          },
         ],
       },
     } as never);
@@ -287,6 +305,15 @@ describe("ChatSetupMenu", () => {
     expect(support).toHaveTextContent(
       /Support fast.*Support normal.*Support smart/,
     );
+    const restricted = screen.getByRole("option", {
+      name: /^Auto · restricted/,
+    });
+    expect(restricted).toHaveAttribute("aria-disabled", "true");
+    expect(restricted).toHaveTextContent(
+      "Ask an admin for access to this router.",
+    );
+    await user.click(restricted);
+    expect(props.onModelPoolChange).not.toHaveBeenCalled();
     await user.click(support);
 
     expect(props.onModelPoolChange).toHaveBeenCalledWith(

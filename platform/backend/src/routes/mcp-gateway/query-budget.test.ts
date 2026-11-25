@@ -15,7 +15,9 @@ import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
   AgentModel,
+  AgentToolModel,
   TeamModel,
+  ToolModel,
   UserTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -39,7 +41,7 @@ describe("MCP gateway tools/list query budget", () => {
     await app.close();
   });
 
-  test("compact gateways skip hidden delegation expansion while search and full mode retain it", async ({
+  test("a gateway lists Manual subagents, and keeps All agents and progressively loaded ones behind search without reading them", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -117,22 +119,70 @@ describe("MCP gateway tools/list query budget", () => {
     });
     expect(skillSearch.statusCode).toBe(200);
     expect(JSON.stringify(skillSearch.json().result)).toContain(skillName);
+    const toolNames = (response: Awaited<ReturnType<typeof list>>) =>
+      response.json().result.tools.map((tool: { name: string }) => tool.name);
+    const searchToolsDescription = (
+      response: Awaited<ReturnType<typeof list>>,
+    ) =>
+      response
+        .json()
+        .result.tools.find(
+          (tool: { name: string }) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+        ).description;
+
+    // "All agents" stays behind search_tools/run_tool whatever the tools do,
+    // so a gateway that lists every tool still lists that pair to reach them.
     await AgentModel.update(gateway.id, { toolExposureMode: "full" });
     const full = await recordQueries(list);
     expect(full.result.statusCode).toBe(200);
-    expect(
-      full.result
-        .json()
-        .result.tools.map((tool: { name: string }) => tool.name),
-    ).toContain(name);
-    expect(
-      full.result
-        .json()
-        .result.tools.map((tool: { name: string }) => tool.name),
-    ).toContain(skillName);
-    // This guard proves the SQL matcher still recognizes the full-mode scans;
-    // the compact zero-query assertion must never pass due to matcher drift.
+    expect(toolNames(full.result)).not.toContain(name);
+    expect(toolNames(full.result)).toEqual(
+      expect.arrayContaining([
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
+      ]),
+    );
+    expect(searchToolsDescription(full.result)).toContain(
+      `tools named ${AGENT_TOOL_PREFIX}<name>`,
+    );
+    expect(toolNames(full.result)).toContain(skillName);
+    // This guard proves the SQL matcher still recognizes the scans (here the
+    // listed skill resolving its agent); the compact zero-query assertion
+    // must never pass due to matcher drift.
     expect(expanded(full.statements).length).toBeGreaterThan(0);
+
+    // Manual subagents are listed as tools of their own, also while the
+    // gateway's tools are loaded progressively.
+    await AgentModel.update(gateway.id, {
+      accessAllSubagents: false,
+      toolExposureMode: "search_and_run_only",
+    });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      target.id,
+    );
+    await AgentToolModel.create(gateway.id, delegationTool.id);
+    const manual = await list();
+    expect(toolNames(manual)).toEqual(
+      expect.arrayContaining([name, TOOL_SEARCH_TOOLS_FULL_NAME]),
+    );
+
+    // Progressive subagent loading takes them out of the list; search_tools
+    // names them instead.
+    await AgentModel.update(gateway.id, { progressiveSubagentLoading: true });
+    const progressive = await list();
+    expect(toolNames(progressive)).not.toContain(name);
+    expect(searchToolsDescription(progressive)).toContain(
+      `Agents to delegate work to are found here too: ${name}.`,
+    );
+
+    // With no subagent assigned there is nothing to name, and nothing is read
+    // to find that out.
+    await AgentToolModel.removeDelegation(gateway.id, target.id);
+    const unassigned = await recordQueries(list);
+    expect(searchToolsDescription(unassigned.result)).not.toContain(
+      "Agents to delegate work to",
+    );
+    expect(expanded(unassigned.statements)).toHaveLength(0);
   });
 
   test("search shares authorization reads within a request and observes revoked team access on the next request", async ({

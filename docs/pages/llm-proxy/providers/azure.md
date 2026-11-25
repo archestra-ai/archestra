@@ -2,7 +2,6 @@
 title: Azure AI Foundry
 description: Connect Azure model deployments with an API key or Microsoft Entra ID
 order: 2
-lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

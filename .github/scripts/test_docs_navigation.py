@@ -61,6 +61,15 @@ class DocsTreeTest(unittest.TestCase):
         self.assertIn("numeric `order` frontmatter: get-started/no-order.md", errors)
         self.assertIn("`description` frontmatter: get-started/no-description.md", errors)
 
+    def test_agentic_docs_need_no_frontmatter_only_a_page_beside_them(self):
+        self.write("index.md", page("Docs", 0))
+        self.write("index-agentic.md", "<!-- TODO -->\n")
+        self.write("get-started/quickstart-agentic.md", "## Steps\n")
+        self.write("get-started/connect/index-agentic.md", "")
+        self.assertEqual(self.errors(), "")
+        self.write("get-started/orphan-agentic.md", "## Steps\n")
+        self.assertEqual(self.errors(), "Agentic docs have no page beside them: get-started/orphan-agentic.md")
+
     def test_sibling_order_clash_counts_folder_index_with_its_siblings(self):
         self.write("get-started/migrate.md", page(order=2))
         self.assertIn("share order 2", self.errors())

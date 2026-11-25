@@ -2,7 +2,6 @@
 title: "SPIFFE Agent Identities"
 description: "Give every agent a SPIFFE ID that Archestra vouches for, so your identity provider can name the agent in each token without a client per agent"
 order: 4
-lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

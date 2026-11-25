@@ -5,6 +5,7 @@ import AgentModel from "@/models/agent";
 import InvitationModel from "@/models/invitation";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
+import { port } from "@/models/ports";
 import SkillMarketplaceCredentialModel from "@/models/skill-marketplace-credential";
 import UserModel from "@/models/user";
 import UserTokenModel from "@/models/user-token";
@@ -28,6 +29,8 @@ type MemberRemovalResult =
 export async function removeMemberTarget(params: {
   organizationId: string;
   actorUserId?: string;
+  /** Receives the member's shared resources; defaults to the actor. */
+  newOwnerId?: string;
   target: MemberRemovalTarget;
 }): Promise<MemberRemovalResult> {
   const { organizationId, target } = params;
@@ -96,6 +99,7 @@ export async function removeMemberTarget(params: {
   await cleanupAfterMembershipRemoval({
     userId: member.userId,
     organizationId,
+    recipientId: params.newOwnerId ?? params.actorUserId,
     deleteUserIfNoMemberships: !accountAfterRemoval || target.kind === "member",
   });
   return { status: "removed" };
@@ -103,14 +107,25 @@ export async function removeMemberTarget(params: {
 
 /**
  * Cleans up resources that exist only because a user belonged to an
- * organization. The membership must already be gone when this runs.
+ * organization, and hands the resources they shared with others to
+ * `recipientId` (the admin who removed them) or, failing that, the
+ * organization's longest-standing admin. The membership must already be gone
+ * when this runs.
  */
 export async function cleanupAfterMembershipRemoval(params: {
   userId: string;
   organizationId: string;
+  recipientId?: string | null;
   deleteUserIfNoMemberships?: boolean;
 }): Promise<void> {
   const { userId, organizationId } = params;
+  // First, while the user row still exists: the purges below and the user
+  // delete only touch what is left once shared resources have moved.
+  await (await port("ownedResourceHandoff")).handOffSharedResources({
+    userId,
+    organizationId,
+    recipientId: params.recipientId,
+  });
   try {
     await purgePersonalAppsForUser({ userId, organizationId });
     await McpServerModel.purgePersonalServersForUserInOrganization(

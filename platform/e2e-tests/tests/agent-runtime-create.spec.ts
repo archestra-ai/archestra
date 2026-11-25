@@ -180,7 +180,9 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await change();
     expect((await response).ok()).toBe(true);
     await expect(
-      page.getByRole("button", { name: "Add runtime", exact: true }),
+      page.getByRole("button", {
+        name: /^(Add runtime|Create custom runtime)$/,
+      }),
     ).toBeEnabled();
   };
   const remove = (name: string) =>

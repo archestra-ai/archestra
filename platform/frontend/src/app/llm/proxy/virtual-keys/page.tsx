@@ -101,6 +101,7 @@ import {
   useBulkDeleteVirtualApiKeys,
   useDeleteVirtualApiKey,
   useFetchVirtualApiKeyValue,
+  useVirtualKey,
 } from "@/lib/virtual-api-keys.query";
 
 type VirtualKeyRow =
@@ -171,15 +172,17 @@ function VirtualKeysTable() {
     editParam ?? undefined,
   );
   const editId = canEditFromUrl ? editParam : null;
+  const editKeyFromList = query.data?.data.find((key) => key.id === editId);
+  const { data: editKeyDetail } = useVirtualKey(
+    editKeyFromList ? undefined : (editId ?? undefined),
+  );
   const {
     entity: editingKey,
     open: openEditDialog,
     close: closeEditDialog,
   } = useDialogUrlParam<VirtualKeyRow>({
     paramName: "edit",
-    entityFromUrl: editId
-      ? (query.data?.data.find((key) => key.id === editId) ?? null)
-      : null,
+    entityFromUrl: editKeyFromList ?? editKeyDetail ?? null,
   });
   const [deletingKey, setDeletingKey] = useState<VirtualKeyRow | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);

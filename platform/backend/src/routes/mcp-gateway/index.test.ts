@@ -468,7 +468,7 @@ describe("MCP Gateway (stateless mode)", () => {
     }
   });
 
-  test("Auto subagent mode: tools/list advertises caller-accessible delegation tools without explicit assignment, honoring exclusions", async ({
+  test("All agents: tools/list lists no agent, and search_tools finds the caller-accessible ones without explicit assignment, honoring exclusions", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -497,33 +497,50 @@ describe("MCP Gateway (stateless mode)", () => {
       name: "Gateway Auto Excluded",
     });
     await AgentExcludedSubagentModel.replaceForAgent(caller.id, [excluded.id]);
+    const targetName = `${AGENT_TOOL_PREFIX}${slugify(target.name)}`;
+    const excludedName = `${AGENT_TOOL_PREFIX}${slugify(excluded.name)}`;
 
-    // A user token so the gateway resolves a real caller; Auto expansion is
-    // gated on an authenticated user.
+    // A user token so the gateway resolves a real caller; All agents only
+    // expands for an authenticated user.
     const token = await UserTokenModel.create(user.id, org.id);
+    const request = (method: string, params: Record<string, unknown>) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${caller.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method, params, id: 1 },
+      });
 
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/mcp/${caller.id}`,
-      headers: makeMcpHeaders(token.value),
-      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 1 },
-    });
+    const response = await request("tools/list", {});
 
     expect(response.statusCode).toBe(200);
     const toolNames = response
       .json()
       .result.tools.map((tool: { name: string }) => tool.name);
 
-    // No agent_tools rows exist for the caller: the delegation surface must
-    // come from the Auto resolver, not the assigned-tools query.
-    expect(toolNames).toContain(`${AGENT_TOOL_PREFIX}${slugify(target.name)}`);
-    expect(toolNames).not.toContain(
-      `${AGENT_TOOL_PREFIX}${slugify(excluded.name)}`,
+    // Every agent the caller can access is one tool each, without a bound,
+    // so none is listed. The gateway lists search_tools and run_tool to reach
+    // them, although its own tools are all listed.
+    expect(toolNames).not.toContain(targetName);
+    expect(toolNames).toEqual(
+      expect.arrayContaining([
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
+      ]),
     );
+
+    // No agent_tools rows exist for the caller: what search finds comes from
+    // the All agents resolver, not the assigned-tools query.
+    const search = await request("tools/call", {
+      name: TOOL_SEARCH_TOOLS_FULL_NAME,
+      arguments: { query: `^${AGENT_TOOL_PREFIX}`, mode: "regex" },
+    });
+    expect(search.statusCode).toBe(200);
+    const found = JSON.stringify(search.json().result);
+    expect(found).toContain(targetName);
+    expect(found).not.toContain(excludedName);
     // The agent never delegates to itself.
-    expect(toolNames).not.toContain(
-      `${AGENT_TOOL_PREFIX}${slugify(caller.name)}`,
-    );
+    expect(found).not.toContain(`${AGENT_TOOL_PREFIX}${slugify(caller.name)}`);
   });
 
   test("skill delegation: tools/list advertises skill__ tools and tools/call routes them to the skill-delegation dispatch", async ({

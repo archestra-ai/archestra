@@ -2,7 +2,6 @@
 title: IdP Token Exchange
 description: Give every person their own account in an MCP server, from their company sign-in, with no installs
 order: 4
-lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

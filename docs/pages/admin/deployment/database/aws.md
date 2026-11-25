@@ -2,7 +2,6 @@
 title: Amazon RDS and Aurora
 description: Connect Archestra to Amazon RDS or Aurora PostgreSQL with IAM database authentication, directly or through RDS Proxy
 order: 1
-lastUpdated: 2026-11-14
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

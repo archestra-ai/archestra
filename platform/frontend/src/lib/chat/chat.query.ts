@@ -538,6 +538,17 @@ type WithThinkingEffortSetting<TBody> = Omit<TBody, "thinkingEffort"> & {
   thinkingEffort?: ThinkingEffortSetting;
 };
 
+function invalidateProjectRecents(
+  queryClient: QueryClient,
+  projectId: string | null,
+) {
+  if (projectId) {
+    void queryClient.invalidateQueries({
+      queryKey: ["projects", projectId, "conversations"],
+    });
+  }
+}
+
 export function useCreateConversation() {
   const queryClient = useQueryClient();
 
@@ -548,6 +559,7 @@ export function useCreateConversation() {
       chatApiKeyId,
       modelPoolId,
       autoRouterId,
+      strictModelSelection,
       title,
       projectId,
       encryptedChat,
@@ -572,6 +584,7 @@ export function useCreateConversation() {
               chatApiKeyId: chatApiKeyId ?? undefined,
               modelPoolId: modelPoolId ?? undefined,
               autoRouterId: autoRouterId ?? undefined,
+              strictModelSelection,
               title,
               projectId: projectId ?? undefined,
               encryptedChat: encryptedChat || undefined,
@@ -594,6 +607,7 @@ export function useCreateConversation() {
         storeEncryptedChatKey(newConversation.id, variables.encryptedChatKey);
       }
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      invalidateProjectRecents(queryClient, newConversation.projectId);
       // Immediately populate the individual conversation cache to avoid loading state
       queryClient.setQueryData(
         ["conversation", newConversation.id],
@@ -614,6 +628,7 @@ export function useUpdateConversation() {
       chatApiKeyId,
       modelPoolId,
       autoRouterId,
+      strictModelSelection,
       agentId,
       projectId,
       pinnedAt,
@@ -631,6 +646,7 @@ export function useUpdateConversation() {
               chatApiKeyId,
               modelPoolId,
               autoRouterId,
+              strictModelSelection,
               agentId,
               projectId,
               pinnedAt,
@@ -1021,6 +1037,7 @@ export function useGenerateConversationTitle() {
             : c,
         ),
       );
+      invalidateProjectRecents(queryClient, data.projectId);
     },
   });
 }

@@ -131,6 +131,19 @@ export interface SelfServiceIncludePort {
   ) => Promise<{ number: number; url: string } | null>;
 }
 
+/**
+ * Gives the resources a departing member shared with others to an admin
+ * (services/owned-resource-handoff), for the member removal and user
+ * deletion paths. Never throws.
+ */
+export interface OwnedResourceHandoffPort {
+  handOffSharedResources: (params: {
+    userId: string;
+    organizationId: string;
+    recipientId?: string | null;
+  }) => Promise<unknown>;
+}
+
 /** Every port, by name. */
 export interface Ports {
   mcpServerRuntime: McpServerRuntimePort;
@@ -145,6 +158,7 @@ export interface Ports {
   embeddingFinalization: EmbeddingFinalizationPort;
   scopedPermissions: ScopedPermissionsPort;
   selfServiceInclude: SelfServiceIncludePort;
+  ownedResourceHandoff: OwnedResourceHandoffPort;
 }
 
 /** A binding for each port: loads the implementation when the port is first used. */
@@ -204,6 +218,7 @@ const PORT_NAMES = [
   "scopedPermissions",
   "embeddingFinalization",
   "selfServiceInclude",
+  "ownedResourceHandoff",
 ] as const satisfies readonly (keyof Ports)[];
 
 /** Fails to compile when a port is missing from PORT_NAMES. */

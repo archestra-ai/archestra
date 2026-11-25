@@ -185,14 +185,12 @@ function generateCustomRolesPermissionsTable(): string {
 
 /**
  * Generate the frontmatter for the markdown file.
- * @param lastUpdated - The date string for the lastUpdated field
  */
-function generateFrontmatter(lastUpdated: string): string {
+function generateFrontmatter(): string {
   return `---
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: ${lastUpdated}
 ---`;
 }
 
@@ -232,48 +230,8 @@ ${generateCustomRolesPermissionsTable()}
 `;
 }
 
-/**
- * Extract the body content from a markdown file (everything after the frontmatter closing ---).
- */
-function extractBodyFromMarkdown(content: string): string {
-  // Find the closing --- of frontmatter
-  const frontmatterEnd = content.indexOf("---", 4); // Skip the opening ---
-  if (frontmatterEnd === -1) return content;
-  return content.slice(frontmatterEnd + 3).trim();
-}
-
-/**
- * Extract the lastUpdated value from existing frontmatter.
- */
-function extractLastUpdatedFromMarkdown(content: string): string | null {
-  const match = content.match(/lastUpdated:\s*(\d{4}-\d{2}-\d{2})/);
-  return match ? match[1] : null;
-}
-
-function generateMarkdownContent(existingContent: string | null): string {
-  const newBody = generateMarkdownBody();
-
-  // Determine the lastUpdated date
-  let lastUpdated: string;
-
-  if (existingContent) {
-    const existingBody = extractBodyFromMarkdown(existingContent);
-    const existingLastUpdated = extractLastUpdatedFromMarkdown(existingContent);
-
-    // Only update the date if the actual content changed
-    if (existingBody === newBody.trim() && existingLastUpdated) {
-      // Content unchanged, keep the existing date
-      lastUpdated = existingLastUpdated;
-    } else {
-      // Content changed, use today's date
-      lastUpdated = new Date().toISOString().split("T")[0];
-    }
-  } else {
-    // New file, use today's date
-    lastUpdated = new Date().toISOString().split("T")[0];
-  }
-
-  return `${generateFrontmatter(lastUpdated)}${newBody}`;
+function generateMarkdownContent(): string {
+  return `${generateFrontmatter()}${generateMarkdownBody()}`;
 }
 
 async function main() {
@@ -290,13 +248,7 @@ async function main() {
     fs.mkdirSync(docsDir, { recursive: true });
   }
 
-  // Read existing content if file exists (to preserve lastUpdated if content unchanged)
-  let existingContent: string | null = null;
-  if (fs.existsSync(docsFilePath)) {
-    existingContent = fs.readFileSync(docsFilePath, "utf-8");
-  }
-
-  const markdownContent = generateMarkdownContent(existingContent);
+  const markdownContent = generateMarkdownContent();
 
   // Write the generated content
   fs.writeFileSync(docsFilePath, `${markdownContent.trimEnd()}\n`);

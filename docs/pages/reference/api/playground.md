@@ -2,7 +2,6 @@
 title: API Playground
 description: Explore the complete OpenAPI document and try requests against your own backend
 order: 11
-lastUpdated: 2026-11-04
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

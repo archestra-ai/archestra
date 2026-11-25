@@ -85,7 +85,7 @@ export function useChatSetupOptions(params: {
   /** The menu's query while the agent tab is open; searched server-side. */
   agentSearch: string;
   selectedModel: string;
-  onModelChange: (dbId: string) => void;
+  onModelChange: (dbId: string, automatic?: true, personal?: true) => void;
   fallbackModelName?: string;
   /** Keep a pinned per-user model selected instead of auto-switching away. */
   suppressAutoSelect: boolean;
@@ -246,7 +246,7 @@ export function useChatSetupOptions(params: {
       })),
       isLoading: modelsLoading,
     });
-    if (next) onModelChange(next);
+    if (next) onModelChange(next, true);
   }, [
     isPlaceholderData,
     suppressAutoSelect,
@@ -299,6 +299,7 @@ export function useChatSetupOptions(params: {
   // ---- auto routers: picked in place of a key like a pool
   const organizationDefault = useOrganizationDefaultModel({
     enabled: poolsSupported,
+    forChat: true,
   });
   const selectedAutoRouterId = poolsSupported
     ? autoRouterIdOfChoice(params.modelPoolId)
@@ -313,6 +314,9 @@ export function useChatSetupOptions(params: {
         (router) => router.id === selectedAutoRouterId,
       )
     : undefined;
+  const autoModelName = selectedAutoRouter?.normalOnlyReason
+    ? selectedAutoRouter.tiers.normal.displayName
+    : (selectedAutoRouter?.label ?? "Auto");
   const activePool =
     poolsSupported && params.modelPoolId && !autoSelected
       ? pools.find((pool) => pool.id === params.modelPoolId)
@@ -371,14 +375,22 @@ export function useChatSetupOptions(params: {
     modelsLoading,
     activeModel,
     modelName:
-      (autoSelected ? (selectedAutoRouter?.label ?? "Auto") : undefined) ??
+      (autoSelected ? autoModelName : undefined) ??
       activePool?.name ??
       activeModel?.displayName ??
       params.fallbackModelName ??
       "Choose a model",
     modelSections,
-    selectModel: (dbId: string) => {
-      if (dbId !== params.selectedModel) params.onModelChange(dbId);
+    selectModel: (model: LlmModel) => {
+      if (isPlaceholderData) return;
+      if (model.requiresUserConnection) {
+        params.onModelChange(model.dbId, undefined, true);
+      } else if (
+        model.dbId !== params.selectedModel ||
+        !params.conversationId
+      ) {
+        params.onModelChange(model.dbId);
+      }
     },
     // model pools
     pools,

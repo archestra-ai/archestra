@@ -2,7 +2,6 @@
 title: "Skills, Files, and Sandbox"
 description: "Archestra MCP Server tools for skills, files, and sandbox"
 order: 2
-lastUpdated: 2026-11-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -87,8 +86,8 @@ Required RBAC permission: `update` on the skill (granted per item)
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | The current name of the skill to edit, as named by list_skills. |
-| `baseVersion` | `integer` | Yes | The version the edit is based on — the `version` shown on the <skill_content>/<skill_file> frame you loaded with load_skill. The edit is rejected if the skill's head has moved past it. |
-| `path` | `string` | No | Omit (or pass an empty string) to edit the SKILL.md body; pass a bundled file path (from the <skill_resources> list) to edit that file instead. Only text (utf8) files are editable — binary assets are not. |
+| `baseVersion` | `integer` | Yes | The version the edit is based on — the `version` shown on the &lt;skill_content&gt;/&lt;skill_file&gt; frame you loaded with load_skill. The edit is rejected if the skill's head has moved past it. |
+| `path` | `string` | No | Omit (or pass an empty string) to edit the SKILL.md body; pass a bundled file path (from the &lt;skill_resources&gt; list) to edit that file instead. Only text (utf8) files are editable — binary assets are not. |
 | `edits` | `object[]` | No | str_replace edits applied in order to the target; the whole edit is atomic (any failure leaves the skill unchanged). This is the way to change a large SKILL.md without resending it all. Pass either edits or replacementContent, never both. |
 | `edits[].old_str` | `string` | Yes | Exact text to replace; must occur exactly once in the target (add surrounding context to disambiguate). |
 | `edits[].new_str` | `string` | Yes | Replacement text (may be empty to delete). |

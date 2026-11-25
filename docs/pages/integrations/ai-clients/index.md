@@ -2,7 +2,6 @@
 title: AI Clients
 description: Connect desktop assistants, terminal clients, and hosted agents to Archestra
 order: 1
-lastUpdated: 2026-10-30
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

@@ -26,8 +26,11 @@ import {
   MAX_SUGGESTED_PROMPTS,
   providerSupportsChat,
   resolveAgentCatalogId,
+  resolveEffectiveSubagentLoadBalancingConfig,
   runtimeRequestsClaudeSubscription,
   runtimeSupportsClaudeSubscription,
+  SUBAGENT_LOAD_BALANCING_MAX_WEIGHT,
+  SUBAGENT_LOAD_BALANCING_MIN_WEIGHT,
   SUBSCRIPTION_CREDENTIALS,
   type SubagentLoadBalancingConfig,
   type SupportedProvider,
@@ -43,6 +46,7 @@ import {
   InfoIcon,
   Loader2,
   Lock,
+  Minus,
   Plus,
   RotateCcw,
   X,
@@ -80,6 +84,7 @@ import {
   type AgentHooksEditorRef,
 } from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
+import { AgentIcon } from "@/components/agent-icon";
 import {
   type AgentIdentityBindingDrafts,
   AgentIdentityBindingsField,
@@ -113,6 +118,7 @@ import {
   type EditableSkill,
 } from "@/components/agent-skills-editor";
 import type { GatewayLike } from "@/components/agent-skills-editor.utils";
+import { AgentSubagentLoadingSetting } from "@/components/agent-subagent-loading-setting";
 import { AgentToolBehaviorSettings } from "@/components/agent-tool-behavior-settings";
 import {
   AgentToolExclusionsEditor,
@@ -125,7 +131,9 @@ import {
 } from "@/components/agent-tools-editor";
 import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
+import { BetaBadge } from "@/components/beta-badge";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { AgentRuntimeChip } from "@/components/chat/runtime-capable-indicator";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
 import { noCompanyConnection } from "@/components/claude-connection-pickers.utils";
 import {
@@ -212,6 +220,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
 import {
@@ -379,29 +388,205 @@ function useRememberedSkills(
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {
   const { data: tools = [], isLoading } = useChatProfileMcpTools(agentId);
+  const [expanded, setExpanded] = useState(false);
 
   if (isLoading) {
-    return <p className="text-xs text-muted-foreground">Loading tools...</p>;
+    return (
+      <p className="text-xs text-muted-foreground">
+        <span>Loading tools...</span>
+      </p>
+    );
   }
 
   if (tools.length === 0) {
-    return <p className="text-xs text-muted-foreground">No tools available</p>;
+    return (
+      <p className="text-xs text-muted-foreground">
+        <span>No tools available</span>
+      </p>
+    );
   }
 
   return (
-    <div className="space-y-1">
-      <p className="text-xs font-medium text-muted-foreground mb-2">
-        Available tools ({tools.length}):
-      </p>
-      <div className="flex flex-wrap gap-1 max-h-[200px] overflow-y-auto">
-        {tools.map((tool) => (
-          <span
-            key={tool.name}
-            className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded"
-          >
-            {tool.name}
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="flex min-h-0 flex-col"
+    >
+      <CollapsibleTrigger asChild>
+        <UnstyledButton className="group flex w-full shrink-0 items-center justify-between gap-2 rounded-md py-0.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+            <ChevronRight
+              className={cn(
+                "size-3.5 text-muted-foreground transition-transform duration-150 group-hover:text-foreground",
+                expanded && "rotate-90",
+              )}
+              aria-hidden="true"
+            />
+            <span>Available tools</span>
           </span>
-        ))}
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {tools.length}
+          </span>
+        </UnstyledButton>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="min-h-0">
+        <div className="mt-2.5 flex max-h-[200px] flex-wrap gap-1 overflow-y-auto">
+          {tools.map((tool) => (
+            <span
+              key={tool.name}
+              className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs"
+            >
+              {tool.name}
+            </span>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/**
+ * Load balancing weight controls shown inside a runtime `SubagentPill` popover
+ * when Weighted delegation is active.
+ */
+function SubagentWeightSection({
+  agentName,
+  noun = "subagent",
+  weight,
+  sharePercent,
+  readOnly,
+  onWeightChange,
+}: {
+  agentName: string;
+  noun?: "subagent" | "agent";
+  weight: number;
+  sharePercent: number;
+  readOnly: boolean;
+  onWeightChange: (rawValue: string) => void;
+}) {
+  const inputId = useId();
+  const [draft, setDraft] = useState(() => String(weight));
+
+  useEffect(() => {
+    setDraft(String(weight));
+  }, [weight]);
+
+  const commitNumber = (next: number) => {
+    const clamped = Math.max(
+      SUBAGENT_LOAD_BALANCING_MIN_WEIGHT,
+      Math.min(SUBAGENT_LOAD_BALANCING_MAX_WEIGHT, next),
+    );
+    setDraft(String(clamped));
+    if (clamped !== weight) {
+      onWeightChange(String(clamped));
+    }
+  };
+
+  const handleDraftChange = (raw: string) => {
+    setDraft(raw);
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const parsed = Number.parseInt(trimmed, 10);
+    if (
+      !Number.isNaN(parsed) &&
+      parsed >= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT &&
+      parsed <= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT
+    ) {
+      onWeightChange(String(parsed));
+    }
+  };
+
+  const handleBlur = () => {
+    const trimmed = draft.trim();
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!trimmed || Number.isNaN(parsed)) {
+      setDraft(String(weight));
+      return;
+    }
+    commitNumber(parsed);
+  };
+
+  return (
+    <div className="shrink-0 space-y-3 border-b p-4">
+      <div className="flex items-center justify-between gap-3">
+        {readOnly ? (
+          <>
+            <span className="shrink-0 text-sm font-medium text-foreground">
+              Load balancing weight
+            </span>
+            <span className="text-sm font-medium tabular-nums text-foreground">
+              {weight}
+            </span>
+          </>
+        ) : (
+          <>
+            <Label
+              htmlFor={inputId}
+              className="shrink-0 text-sm font-medium text-foreground"
+            >
+              Load balancing weight
+            </Label>
+            <div className="inline-flex items-center divide-x divide-border/70 overflow-hidden rounded-md border border-border bg-background transition-[border-color,box-shadow] has-[:focus-visible]:border-ring has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50 dark:bg-muted/30">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="rounded-none text-muted-foreground hover:text-foreground focus-visible:ring-0"
+                disabled={weight <= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+                onClick={() => commitNumber(weight - 1)}
+                aria-label={`Decrease weight for ${agentName}`}
+              >
+                <Minus className="size-3.5" />
+              </Button>
+              <Input
+                id={inputId}
+                type="number"
+                inputMode="numeric"
+                min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+                max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+                aria-label={`Weight for ${agentName}`}
+                value={draft}
+                onChange={(event) => handleDraftChange(event.target.value)}
+                onBlur={handleBlur}
+                className="h-7 w-12 rounded-none border-0 bg-transparent px-1 text-center text-sm font-medium tabular-nums shadow-none focus-visible:ring-0 dark:bg-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="rounded-none text-muted-foreground hover:text-foreground focus-visible:ring-0"
+                disabled={weight >= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+                onClick={() => commitNumber(weight + 1)}
+                aria-label={`Increase weight for ${agentName}`}
+              >
+                <Plus className="size-3.5" />
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="relative overflow-hidden rounded-md border border-border/60 bg-muted/25 px-3 py-2">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 bg-primary/[0.08] transition-[width] duration-200 ease-out"
+          style={{ width: `${sharePercent}%` }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-primary/15"
+        >
+          <div
+            className="h-full bg-primary transition-[width] duration-200 ease-out"
+            style={{ width: `${sharePercent}%` }}
+          />
+        </div>
+        <p className="relative text-xs leading-snug text-muted-foreground">
+          <span className="font-semibold tabular-nums text-foreground">
+            {sharePercent}%
+          </span>{" "}
+          {`of runs will be delegated to this ${noun}.`}
+        </p>
       </div>
     </div>
   );
@@ -416,6 +601,11 @@ interface SubagentPillProps {
   // "delegate" pills read as an active delegation target (green); "exclude"
   // pills read as a target removed from the Auto surface (red).
   tone?: "delegate" | "exclude";
+  noun?: "subagent" | "agent";
+  /** Weight & traffic share shown via top progress hairline and edited inside the popover. */
+  weight?: number;
+  sharePercent?: number;
+  onWeightChange?: (rawValue: string) => void;
 }
 
 function SubagentPill({
@@ -424,18 +614,48 @@ function SubagentPill({
   onToggle,
   readOnly = false,
   tone = "delegate",
+  noun = "subagent",
+  weight,
+  sharePercent,
+  onWeightChange,
 }: SubagentPillProps) {
   const [open, setOpen] = useState(false);
+  const showWeight =
+    weight !== undefined &&
+    sharePercent !== undefined &&
+    Boolean(agent.runtime) &&
+    tone === "delegate";
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
-      <div className="flex items-center">
+      <div className="relative flex items-center">
+        {showWeight && (
+          <div
+            role="progressbar"
+            aria-label={`Traffic share for ${agent.name}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={sharePercent}
+            className="pointer-events-none absolute inset-x-[1px] top-0 z-10 h-[2px] overflow-hidden rounded-t-[5px] bg-primary/15"
+          >
+            <span
+              className="block h-full bg-primary transition-[width] duration-150"
+              style={{ width: `${sharePercent}%` }}
+            />
+          </div>
+        )}
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             size="sm"
+            title={
+              showWeight
+                ? `Weight ${weight} (${sharePercent}% of runs)`
+                : undefined
+            }
             className={cn(
-              "max-w-[200px] rounded-r-none border-r-0 text-xs",
+              "group max-w-[280px] text-xs",
+              !readOnly && "rounded-r-none border-r-0",
               !isSelected && "border-dashed opacity-50",
             )}
           >
@@ -447,11 +667,20 @@ function SubagentPill({
                 )}
               />
             )}
-            <Bot className="h-3 w-3 shrink-0" />
+            <AgentIcon
+              icon={agent.icon}
+              size={14}
+              fallbackType="agent"
+              className="shrink-0"
+            />
             <span className="font-medium truncate">{agent.name}</span>
-            <span className="rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
-              Local
-            </span>
+            {agent.runtime ? (
+              <AgentRuntimeChip runtime={agent.runtime} appearance="icon" />
+            ) : (
+              <span className="rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+                Local
+              </span>
+            )}
           </Button>
         </PopoverTrigger>
         {!readOnly && (
@@ -471,15 +700,24 @@ function SubagentPill({
         )}
       </div>
       <PopoverContent
-        className="w-[350px] p-0"
+        className="flex max-h-(--radix-popover-content-available-height) w-[350px] flex-col overflow-hidden p-0"
         side="bottom"
         align="start"
         sideOffset={8}
+        collisionPadding={16}
         avoidCollisions
       >
-        <div className="p-4 border-b flex items-start justify-between gap-2">
+        <div className="flex shrink-0 items-start justify-between gap-2 border-b p-4">
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold truncate">{agent.name}</h4>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h4 className="font-semibold truncate">{agent.name}</h4>
+              {agent.runtime && (
+                <AgentRuntimeChip
+                  runtime={agent.runtime}
+                  appearance="icon-link"
+                />
+              )}
+            </div>
             {agent.description && (
               <ExpandableText
                 text={agent.description}
@@ -499,7 +737,18 @@ function SubagentPill({
           </Button>
         </div>
 
-        <div className="p-4">
+        {showWeight && onWeightChange && (
+          <SubagentWeightSection
+            agentName={agent.name}
+            noun={noun}
+            weight={weight}
+            sharePercent={sharePercent}
+            readOnly={readOnly}
+            onWeightChange={onWeightChange}
+          />
+        )}
+
+        <div className="flex min-h-0 flex-1 flex-col p-4">
           <AgentToolsList agentId={agent.id} />
         </div>
       </PopoverContent>
@@ -536,6 +785,10 @@ interface SubagentsEditorProps {
    * agents on a gateway, whose clients call them.
    */
   noun?: "subagent" | "agent";
+  /** Show top share bars on assigned runtime pills and weight controls in their popovers when Weighted round robin is active. */
+  weightedMode?: boolean;
+  weights?: Record<string, number>;
+  onWeightChange?: (agentId: string, rawValue: string) => void;
 }
 
 function SubagentsEditor({
@@ -549,14 +802,22 @@ function SubagentsEditor({
   onDisabledSelectionChange,
   emptyDescription = "Every task is handled here, with nothing handed on.",
   noun = "subagent",
+  weightedMode = false,
+  weights,
+  onWeightChange,
 }: SubagentsEditorProps) {
+  const [showAllPills, setShowAllPills] = useState(false);
   const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
-  const visibleIds = selectedIds.slice(0, 20);
+  const showInlineWeights = weightedMode && localMode === "selected";
+  // Weighted shares depend on the full assigned runtime pool (matching backend
+  // routing), not just the first 20 pills shown by default.
+  const lookupIds =
+    showInlineWeights || showAllPills ? selectedIds : selectedIds.slice(0, 20);
   // Every pick changes the id list, and so the lookup's key. Without the
   // previous rows the assigned pills would all vanish until it answers.
   const { data: availableAgents = [], isFetching: agentsFetching } =
     useAgentOptionsByIds({
-      ids: visibleIds,
+      ids: lookupIds,
       enabled: canReadAgents,
       keepPreviousData: true,
     });
@@ -566,28 +827,57 @@ function SubagentsEditor({
       localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
     setIds(ids);
   };
+  const resolvedTargetIds = lookupIds.filter(
+    (id) => id !== agentId && (agentsById.has(id) || agentsFetching),
+  );
+  const visibleTargetIds = showAllPills
+    ? resolvedTargetIds
+    : resolvedTargetIds.slice(0, 20);
+  const runtimeAssignedAgents = showInlineWeights
+    ? resolvedTargetIds
+        .map((id) => agentsById.get(id))
+        .filter((agent): agent is AgentOption => Boolean(agent?.runtime))
+    : [];
+  const totalRuntimeWeight = runtimeAssignedAgents.reduce(
+    (sum, agent) => sum + (weights?.[agent.id] ?? 1),
+    0,
+  );
   // In pick order, so a new pick holds its place as a loading pill until the
   // lookup names it, and the pills around it do not move.
-  const pills = visibleIds
-    .filter((id) => id !== agentId && (agentsById.has(id) || agentsFetching))
-    .map((id) => {
-      const agent = agentsById.get(id);
-      if (!agent) return <PendingSubagentPill key={id} />;
-      return (
-        <SubagentPill
-          key={id}
-          agent={agent}
-          isSelected={true}
-          readOnly={readOnly}
-          onToggle={() =>
-            handleSelectionChange(
-              selectedIds.filter((selectedId) => selectedId !== id),
-            )
-          }
-          tone={localMode === "all" ? "exclude" : "delegate"}
-        />
-      );
-    });
+  const pills = visibleTargetIds.map((id) => {
+    const agent = agentsById.get(id);
+    if (!agent) return <PendingSubagentPill key={id} />;
+    const hasInlineWeight = showInlineWeights && Boolean(agent.runtime);
+    const weight = hasInlineWeight ? (weights?.[id] ?? 1) : undefined;
+    const sharePercent =
+      weight !== undefined
+        ? totalRuntimeWeight > 0
+          ? Math.round((weight / totalRuntimeWeight) * 100)
+          : 0
+        : undefined;
+    return (
+      <SubagentPill
+        key={id}
+        agent={agent}
+        isSelected={true}
+        readOnly={readOnly}
+        onToggle={() =>
+          handleSelectionChange(
+            selectedIds.filter((selectedId) => selectedId !== id),
+          )
+        }
+        tone={localMode === "all" ? "exclude" : "delegate"}
+        noun={noun}
+        weight={weight}
+        sharePercent={sharePercent}
+        onWeightChange={
+          hasInlineWeight
+            ? (rawValue) => onWeightChange?.(id, rawValue)
+            : undefined
+        }
+      />
+    );
+  });
   const hasSelectedTargets = selectedAgentIds.length > 0;
 
   return (
@@ -628,10 +918,21 @@ function SubagentsEditor({
       )}
 
       {selectedIds.length > 20 && (
-        <p className="text-xs text-muted-foreground">
-          Showing 20 of {selectedIds.length} selections. Search the picker to
-          change another selection.
-        </p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            {showAllPills
+              ? `Showing all ${selectedIds.length} selections.`
+              : `Showing 20 of ${selectedIds.length} selections.`}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => setShowAllPills((prev) => !prev)}
+          >
+            {showAllPills ? "Show fewer" : `Show all ${selectedIds.length}`}
+          </Button>
+        </div>
       )}
 
       {!readOnly && (
@@ -1449,6 +1750,32 @@ export function AgentForm({
     useState<GitHubActionsAccess | null>(null);
   const [subagentLoadBalancing, setSubagentLoadBalancing] =
     useState<SubagentLoadBalancingConfig | null>(null);
+  const handleSubagentWeightChange = useCallback(
+    (targetAgentId: string, rawValue: string) => {
+      const parsed = Number.parseInt(rawValue, 10);
+      setSubagentLoadBalancing((prev) => {
+        const base: SubagentLoadBalancingConfig = prev ?? {
+          enabled: true,
+          algorithm: "weighted",
+        };
+        const nextWeights = { ...(base.weights ?? {}) };
+        if (Number.isNaN(parsed)) {
+          delete nextWeights[targetAgentId];
+        } else {
+          nextWeights[targetAgentId] = Math.max(
+            SUBAGENT_LOAD_BALANCING_MIN_WEIGHT,
+            Math.min(SUBAGENT_LOAD_BALANCING_MAX_WEIGHT, parsed),
+          );
+        }
+        return {
+          ...base,
+          weights:
+            Object.keys(nextWeights).length > 0 ? nextWeights : undefined,
+        };
+      });
+    },
+    [],
+  );
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const originalRuntimeId =
     initialRuntimeId ??
@@ -1495,6 +1822,10 @@ export function AgentForm({
   // Auto subagent mode: new agents default to Auto (may delegate to any agent
   // the caller can access); editing overwrites this from the stored value.
   const [accessAllSubagents, setAccessAllSubagents] = useState(true);
+  // "Progressive subagent loading": only a choice for Manual subagents. All
+  // agents is always loaded that way, whatever this holds.
+  const [progressiveSubagentLoading, setProgressiveSubagentLoading] =
+    useState(false);
   // Delegation targets excluded from the Auto surface ("Auto All Except Some").
   // Inert while in Custom subagent mode. Seeded async from the backend.
   const [disabledSubagentIds, setDisabledSubagentIds] = useState<string[]>([]);
@@ -1940,15 +2271,19 @@ export function AgentForm({
             initialGrants: [],
             passthroughHeaders: agentData.passthroughHeaders ?? [],
             githubActionsAccess: agentData.githubActionsAccess ?? null,
-            subagentLoadBalancing:
+            subagentLoadBalancing: resolveEffectiveSubagentLoadBalancingConfig(
               (agentData.subagentLoadBalancing as SubagentLoadBalancingConfig | null) ??
-              null,
+                null,
+              agentData.accessAllSubagents ?? false,
+            ),
             runtime: (agentData.runtime as AgentRuntimeConfig | null) ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
               agentData.missingCredentialBehavior ?? "allow",
             accessAllTools: agentData.accessAllTools ?? false,
             accessAllSubagents: agentData.accessAllSubagents ?? false,
+            progressiveSubagentLoading:
+              agentData.progressiveSubagentLoading ?? false,
           }
         : {
             name: initialValues?.name ?? "",
@@ -1985,6 +2320,7 @@ export function AgentForm({
             missingCredentialBehavior: "allow",
             accessAllTools: initialValues?.accessAllTools ?? true,
             accessAllSubagents: true,
+            progressiveSubagentLoading: false,
           };
 
       setName(nextValues.name);
@@ -2017,6 +2353,7 @@ export function AgentForm({
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
       setAccessAllSubagents(nextValues.accessAllSubagents);
+      setProgressiveSubagentLoading(nextValues.progressiveSubagentLoading);
       if (!agentData) {
         // Create mode only: edit mode remounts per agent and seeds each set
         // from its own request, and clearing here would instead wipe pending
@@ -2742,11 +3079,16 @@ export function AgentForm({
       persistedAgent.githubActionsAccess ?? null,
       githubActionsAccess,
     );
+  const effectiveSubagentLoadBalancing =
+    resolveEffectiveSubagentLoadBalancingConfig(
+      subagentLoadBalancing,
+      accessAllSubagents,
+    );
   const subagentLoadBalancingChanged =
     !!persistedAgent &&
     hasUnsavedChanges(
       persistedAgent.subagentLoadBalancing ?? null,
-      subagentLoadBalancing,
+      effectiveSubagentLoadBalancing,
     );
   // The API validates the key and the model against each other, so whichever
   // one moved, both go.
@@ -3028,10 +3370,13 @@ export function AgentForm({
               toolExposureMode,
               missingCredentialBehavior,
               accessAllTools,
-              ...(supportsSubagents && { accessAllSubagents }),
+              ...(supportsSubagents && {
+                accessAllSubagents,
+                progressiveSubagentLoading,
+              }),
               ...(supportsSubagents &&
                 subagentLoadBalancingChanged && {
-                  subagentLoadBalancing,
+                  subagentLoadBalancing: effectiveSubagentLoadBalancing,
                 }),
             }),
           },
@@ -3085,7 +3430,10 @@ export function AgentForm({
           accessAllTools,
           ...(supportsSubagents && {
             accessAllSubagents,
-            ...(subagentLoadBalancing && { subagentLoadBalancing }),
+            progressiveSubagentLoading,
+            ...(effectiveSubagentLoadBalancing && {
+              subagentLoadBalancing: effectiveSubagentLoadBalancing,
+            }),
           }),
           labels: updatedLabels,
           ...(agentType === "mcp_gateway" && {
@@ -3386,7 +3734,7 @@ export function AgentForm({
     showGitHubActionsAccess,
     githubActionsAccess,
     githubActionsAccessChanged,
-    subagentLoadBalancing,
+    effectiveSubagentLoadBalancing,
     subagentLoadBalancingChanged,
     networkPolicy,
     networkPolicyChanged,
@@ -3394,6 +3742,7 @@ export function AgentForm({
     missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
+    progressiveSubagentLoading,
     supportsEnvironment,
     supportsSubagents,
     agentRuntimeEnabled,
@@ -3517,6 +3866,7 @@ export function AgentForm({
     missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
+    progressiveSubagentLoading,
     runtime,
   });
   const isDirty =
@@ -5054,9 +5404,18 @@ export function AgentForm({
                           isInternalAgent ? "Subagent access" : "Agent access"
                         }
                         mode={accessAllSubagents ? "all" : "manual"}
-                        onModeChange={(mode) =>
-                          setAccessAllSubagents(mode === "all")
-                        }
+                        onModeChange={(mode) => {
+                          const nextAll = mode === "all";
+                          setAccessAllSubagents(nextAll);
+                          if (nextAll) {
+                            setSubagentLoadBalancing((prev) =>
+                              resolveEffectiveSubagentLoadBalancingConfig(
+                                prev,
+                                true,
+                              ),
+                            );
+                          }
+                        }}
                         all={{
                           title: "All agents",
                           rule: "Every local agent, including ones added later. Exclude the ones you don't want.",
@@ -5073,7 +5432,33 @@ export function AgentForm({
                             "assigned",
                           ),
                         }}
+                        footnote={
+                          accessAllSubagents ? (
+                            <p>
+                              <span>
+                                {`To save context, the ${isInternalAgent ? "subagents" : "agents"} are not listed as tools: the ${agentType === "mcp_gateway" ? "gateway's client" : "agent"} looks one up with `}
+                              </span>
+                              <code className="font-mono">search_tools</code>
+                              <span> and runs it with </span>
+                              <code className="font-mono">run_tool</code>
+                              <span>.</span>
+                            </p>
+                          ) : null
+                        }
                       />
+                      {/* Only a choice for Manual: All agents is always loaded
+                          progressively, which its own footnote says. It sits
+                          right under the mode it belongs to, above the list. */}
+                      {!accessAllSubagents && (
+                        <div className="border-b pb-4">
+                          <AgentSubagentLoadingSetting
+                            progressive={progressiveSubagentLoading}
+                            onProgressiveChange={setProgressiveSubagentLoading}
+                            readOnly={readOnly}
+                            noun={isInternalAgent ? "subagent" : "agent"}
+                          />
+                        </div>
+                      )}
                       <SubagentsEditor
                         agentId={agent?.id}
                         readOnly={readOnly}
@@ -5089,13 +5474,19 @@ export function AgentForm({
                             : "No delegation tools appear in this gateway's tool list."
                         }
                         noun={isInternalAgent ? "subagent" : "agent"}
+                        weightedMode={
+                          supportsSubagents &&
+                          subagentLoadBalancing?.enabled === true &&
+                          subagentLoadBalancing.algorithm === "weighted"
+                        }
+                        weights={subagentLoadBalancing?.weights}
+                        onWeightChange={handleSubagentWeightChange}
                       />
                       {supportsSubagents && (
                         <SubagentLoadBalancingSection
                           value={subagentLoadBalancing}
                           onChange={setSubagentLoadBalancing}
                           selectedAgentIds={selectedDelegationTargetIds}
-                          canReadAgents={canReadAgents === true}
                           readOnly={readOnly}
                           isGateway={agentType === "mcp_gateway"}
                           isAllSubagentsMode={accessAllSubagents}
@@ -5124,8 +5515,25 @@ export function AgentForm({
                   create. */}
               {showsHooks && (
                 <SettingsSection
-                  title="Hooks"
-                  description="Commands this agent runs around its own tool calls, inside its sandbox."
+                  title={
+                    <span className="flex items-center gap-2">
+                      <span>Hooks</span>
+                      <BetaBadge />
+                    </span>
+                  }
+                  description={
+                    <>
+                      Scripts this agent runs in its sandbox when a lifecycle
+                      event fires.{" "}
+                      <ExternalDocsLink
+                        href={getDocsUrl(DocsPage.PlatformAgentHooks)}
+                        className="underline"
+                        showIcon={false}
+                      >
+                        Learn more
+                      </ExternalDocsLink>
+                    </>
+                  }
                 >
                   <AgentHooksEditor
                     ref={agentHooksEditorRef}
@@ -5762,6 +6170,7 @@ type AgentFormFields = {
   missingCredentialBehavior: MissingCredentialBehavior;
   accessAllTools: boolean;
   accessAllSubagents: boolean;
+  progressiveSubagentLoading: boolean;
 };
 
 // Normalizes set-like id arrays (order-independent) so reselecting the same

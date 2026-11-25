@@ -2,7 +2,6 @@
 title: Salesforce
 description: Connect Salesforce documents to Knowledge and configure source access
 order: 14
-lastUpdated: 2026-10-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

@@ -47,6 +47,7 @@ export function ClientMarkTile({
         viewBox={mark.viewBox}
         width={size * 0.6}
         height={size * 0.6}
+        style={{ width: size * 0.6, height: size * 0.6 }}
         role="img"
         aria-label={`${label} logo`}
       >

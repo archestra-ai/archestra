@@ -33,7 +33,11 @@ import {
   terminalCodeClass,
 } from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   RadioGroup,
@@ -244,15 +248,17 @@ export function VirtualKeyConnectionGuide({
     return (
       <div className="space-y-3">
         {keyDetails}
-        <InlineNotice variant="info" className="items-start">
-          <Info className="mt-px" />
-          <InlineNoticeText>
-            {checkingAccess
-              ? "Checking which endpoints this key can use…"
-              : accessUnavailable
-                ? "Couldn't check which endpoints this key can use."
-                : "No providers are available for this key yet. Add access before using it."}
-          </InlineNoticeText>
+        <InlineNotice variant="info">
+          <Info />
+          <InlineNoticeBody>
+            <InlineNoticeText>
+              {checkingAccess
+                ? "Checking which endpoints this key can use…"
+                : accessUnavailable
+                  ? "Couldn't check which endpoints this key can use."
+                  : "No providers are available for this key yet. Add access before using it."}
+            </InlineNoticeText>
+          </InlineNoticeBody>
           {!checkingAccess && editKeyHref && (
             <Button
               variant="link"

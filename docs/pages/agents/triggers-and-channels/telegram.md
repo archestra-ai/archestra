@@ -2,7 +2,6 @@
 title: Telegram
 description: Connect Archestra agents to Telegram chats and groups
 order: 5
-lastUpdated: 2026-10-12
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

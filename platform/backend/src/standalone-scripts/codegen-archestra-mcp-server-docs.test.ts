@@ -1,43 +1,33 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import {
+  escapeTableCell,
   generateDocsFiles,
   renderSchemaRows,
 } from "./codegen-archestra-mcp-server-docs";
 
 describe("codegen-archestra-mcp-server-docs", () => {
-  test("keeps the committed date when no page changed, and moves it when one did", () => {
-    const committed = generateDocsFiles({
-      readFile: () => null,
-      today: "2026-01-01",
-    });
-    expect(Object.keys(committed)).toContain("index.md");
-    expect(Object.keys(committed).length).toBeGreaterThan(1);
-
-    const rerun = generateDocsFiles({
-      readFile: (name) => committed[name] ?? null,
-      today: "2026-01-02",
-    });
-    expect(rerun).toEqual(committed);
-
-    const [topicPage] = Object.keys(committed).filter(
-      (name) => name !== "index.md",
-    );
-    const afterToolChange = generateDocsFiles({
-      readFile: (name) =>
-        name === topicPage ? "stale page" : (committed[name] ?? null),
-      today: "2026-01-02",
-    });
-    for (const content of Object.values(afterToolChange)) {
-      expect(content).toContain("lastUpdated: 2026-01-02");
+  test("renders the same pages on every run, without a date", () => {
+    const files = generateDocsFiles();
+    expect(Object.keys(files)).toContain("index.md");
+    expect(Object.keys(files).length).toBeGreaterThan(1);
+    expect(generateDocsFiles()).toEqual(files);
+    for (const content of Object.values(files)) {
+      expect(content).not.toContain("lastUpdated");
     }
   });
 
+  test("escapes table cells so placeholders are not read as HTML tags", () => {
+    expect(escapeTableCell("UUID or agent__<slug> | role:<roleId>")).toBe(
+      "UUID or agent__&lt;slug&gt; \\| role:&lt;roleId&gt;",
+    );
+    expect(escapeTableCell("Call `agent__<slug>` (>= 1)")).toBe(
+      "Call `agent__<slug>` (&gt;= 1)",
+    );
+  });
+
   test("puts the docs writer skill pointer under the frontmatter of every page", () => {
-    const files = generateDocsFiles({
-      readFile: () => null,
-      today: "2026-01-01",
-    });
+    const files = generateDocsFiles();
     for (const content of Object.values(files)) {
       expect(content).toContain(
         "\n---\n\n<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->\n\n",

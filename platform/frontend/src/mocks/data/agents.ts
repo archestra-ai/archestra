@@ -46,6 +46,7 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     missingCredentialBehavior: "allow",
     accessAllTools: false,
     accessAllSubagents: false,
+    progressiveSubagentLoading: false,
     accessAllSkills: false,
     activationSkillMode: "all",
     activationSkillPolicyRevision: 0,

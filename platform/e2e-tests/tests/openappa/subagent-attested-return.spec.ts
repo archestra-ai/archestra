@@ -177,10 +177,17 @@ test.beforeAll(async ({ request, makeApiRequest, createAgent, syncModels }) => {
     });
     return id;
   };
-  const parentId = await create(`Attest parent ${suffix}`, {
-    accessAllSubagents: true,
-  });
+  const parentId = await create(`Attest parent ${suffix}`, {});
   const childId = await create(`Attest reader ${suffix}`, {});
+  // Assigned by hand, so the parent lists the reader as a tool of its own and
+  // the scripted model can call it directly. With "All agents" a subagent is
+  // reached through search_tools and run_tool instead.
+  await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/agents/${parentId}/delegations`,
+    data: { targetAgentIds: [childId] },
+  });
   const readToolId = await findToolId(makeApiRequest, request, READ_TOOL);
   await makeApiRequest({
     request,

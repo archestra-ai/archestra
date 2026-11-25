@@ -33,7 +33,11 @@ import {
   terminalCodeClass,
 } from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   RadioGroup,
@@ -59,6 +63,7 @@ import {
   type RequestCredential,
   type RequestTarget,
 } from "@/components/virtual-key-request-example";
+import { useScopedCapabilities } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -77,6 +82,11 @@ export function VirtualKeyConnectionGuide({
   keyType,
   mappedProviderKeys: explicitKeys,
   includeFutureProviders = false,
+  hasGrantedRoutes = false,
+  routesPending = false,
+  routesUnavailable = false,
+  editKeyHref,
+  onEditKeyNavigate,
   connectionBaseUrl,
   name,
   expiration,
@@ -92,6 +102,12 @@ export function VirtualKeyConnectionGuide({
   }>;
   /** The key also reaches each provider's shared primary key. */
   includeFutureProviders?: boolean;
+  /** The key was granted a model pool or auto router. */
+  hasGrantedRoutes?: boolean;
+  routesPending?: boolean;
+  routesUnavailable?: boolean;
+  editKeyHref?: string;
+  onEditKeyNavigate?: () => void;
   connectionBaseUrl: string;
   name: string;
   expiration: string;
@@ -103,9 +119,21 @@ export function VirtualKeyConnectionGuide({
   const appName = useAppName();
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
-  const isPoolOnly =
-    !isPassthrough && !includeFutureProviders && explicitKeys.length === 0;
-  const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
+  const { data: capabilities, isPending: capabilitiesPending } =
+    useScopedCapabilities(includeFutureProviders);
+  // Routing can use a shared primary key the current viewer cannot read.
+  // An empty list is conclusive only when the viewer can read all keys.
+  const canReadAllProviders = capabilities?.some(
+    (grant) =>
+      grant.resource === "llmProviderApiKey" &&
+      grant.action === "read" &&
+      grant.scope === "*",
+  );
+  const {
+    data: providerApiKeys = [],
+    isPending: providerKeysPending,
+    isError: providerKeysError,
+  } = useLlmProviderApiKeys({ enabled: includeFutureProviders });
   // As the proxy resolves it: a provider the key doesn't map falls back to
   // that provider's shared primary key, if that key is usable.
   const mappedProviderKeys = useMemo(() => {
@@ -141,12 +169,11 @@ export function VirtualKeyConnectionGuide({
   const routerProviders = isPassthrough
     ? []
     : providers.filter(isModelRouterSupportedProvider);
-  const routerAvailable = isPoolOnly || routerProviders.length > 0;
+  const routerAvailable =
+    !isPassthrough && (hasGrantedRoutes || routerProviders.length > 0);
+  const isRoutedOnly = hasGrantedRoutes && routerProviders.length === 0;
 
-  const [pickedEndpoint, setEndpoint] = useState<Endpoint>(
-    routerAvailable ? "model-router" : "provider",
-  );
-  const endpoint = isPoolOnly ? "model-router" : pickedEndpoint;
+  const [pickedEndpoint, setEndpoint] = useState<Endpoint | null>(null);
   const [pickedProvider, setPickedProvider] =
     useState<SupportedProvider | null>(null);
   const provider =
@@ -154,42 +181,44 @@ export function VirtualKeyConnectionGuide({
       ? pickedProvider
       : providers[0];
 
-  const target: RequestTarget =
-    endpoint === "model-router"
-      ? { kind: "model-router" }
-      : { kind: "provider", provider };
-  const baseUrl = getProxyBaseUrl(connectionBaseUrl, target);
+  const target: RequestTarget | null =
+    provider && (pickedEndpoint === "provider" || !routerAvailable)
+      ? { kind: "provider", provider }
+      : routerAvailable
+        ? { kind: "model-router" }
+        : null;
+  const endpoint = target?.kind;
+  const useRoutedGuide = endpoint === "model-router" && isRoutedOnly;
 
-  return (
-    <ol>
-      <Step
-        number={1}
-        title={keyValue ? "Copy your key" : "Use your saved key"}
-      >
+  const keyDetails = (
+    <>
+      {target && (
         <p className="text-sm text-muted-foreground">
           {isPassthrough
             ? "Send it alongside your own provider key so requests are attributed to you."
             : "Use it anywhere you would use a provider API key."}
         </p>
-        {/* Same no-wrap layout as agent-form's notices: the icon stays beside
+      )}
+      {/* Same no-wrap layout as agent-form's notices: the icon stays beside
             the text instead of wrapping onto its own line. */}
-        {keyValue ? (
-          <>
-            <InlineNotice className="flex-nowrap items-start">
-              <AlertTriangle className="mt-px" />
-              <InlineNoticeText>
-                Store it in a secret manager or your app&apos;s environment. Its
-                owner can copy it again from the virtual keys list.
-              </InlineNoticeText>
-            </InlineNotice>
-            <CopyField
-              value={keyValue}
-              copyLabel="Copy key"
-              primary
-              data-testid={E2eTestId.VirtualKeyValue}
-            />
-          </>
-        ) : (
+      {keyValue ? (
+        <>
+          <InlineNotice className="flex-nowrap items-start">
+            <AlertTriangle className="mt-px" />
+            <InlineNoticeText>
+              Store it in a secret manager or your app&apos;s environment. Its
+              owner can copy it again from the virtual keys list.
+            </InlineNoticeText>
+          </InlineNotice>
+          <CopyField
+            value={keyValue}
+            copyLabel="Copy key"
+            primary
+            data-testid={E2eTestId.VirtualKeyValue}
+          />
+        </>
+      ) : (
+        target && (
           <InlineNotice className="flex-nowrap items-start" variant="info">
             <Info className="mt-px" />
             <InlineNoticeText>
@@ -199,12 +228,62 @@ export function VirtualKeyConnectionGuide({
               keys list.
             </InlineNoticeText>
           </InlineNotice>
-        )}
-        <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <KeyFact label="Name" value={name} />
-          <KeyFact label="Expires" value={expiration} />
-          {visibleTo && <KeyFact label="Visible to" value={visibleTo} />}
-        </dl>
+        )
+      )}
+      <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <KeyFact label="Name" value={name} />
+        <KeyFact label="Expires" value={expiration} />
+        {visibleTo && <KeyFact label="Visible to" value={visibleTo} />}
+      </dl>
+    </>
+  );
+
+  if (!target) {
+    const checkingAccess =
+      routesPending ||
+      (includeFutureProviders && (providerKeysPending || capabilitiesPending));
+    const accessUnavailable =
+      routesUnavailable ||
+      (includeFutureProviders && (providerKeysError || !canReadAllProviders));
+    return (
+      <div className="space-y-3">
+        {keyDetails}
+        <InlineNotice variant="info">
+          <Info />
+          <InlineNoticeBody>
+            <InlineNoticeText>
+              {checkingAccess
+                ? "Checking which endpoints this key can use…"
+                : accessUnavailable
+                  ? "Couldn't check which endpoints this key can use."
+                  : "No providers are available for this key yet. Add access before using it."}
+            </InlineNoticeText>
+          </InlineNoticeBody>
+          {!checkingAccess && editKeyHref && (
+            <Button
+              variant="outline"
+              size="xs"
+              className="ml-auto shrink-0"
+              data-slot="inline-notice-action"
+              asChild
+            >
+              <Link href={editKeyHref} onNavigate={onEditKeyNavigate}>
+                Edit key
+              </Link>
+            </Button>
+          )}
+        </InlineNotice>
+      </div>
+    );
+  }
+
+  return (
+    <ol>
+      <Step
+        number={1}
+        title={keyValue ? "Copy your key" : "Use your saved key"}
+      >
+        {keyDetails}
       </Step>
 
       <Step number={2} title={`Point your app at ${appName}`}>
@@ -214,10 +293,10 @@ export function VirtualKeyConnectionGuide({
             : `Choose how your app talks to ${appName}.`}
         </p>
         <EndpointPicker
-          value={endpoint}
+          value={target.kind}
           onChange={setEndpoint}
           routerAvailable={routerAvailable}
-          providerAvailable={!isPoolOnly}
+          providerAvailable={!!provider}
         />
         {endpoint === "provider" && providers.length > 1 && (
           <Select
@@ -238,11 +317,14 @@ export function VirtualKeyConnectionGuide({
             </SelectContent>
           </Select>
         )}
-        <CopyField label="Base URL" value={baseUrl} />
+        <CopyField
+          label="Base URL"
+          value={getProxyBaseUrl(connectionBaseUrl, target)}
+        />
         <EndpointDetails
           target={target}
           isPassthrough={isPassthrough}
-          isPoolOnly={isPoolOnly}
+          isPoolOnly={useRoutedGuide}
           providerLabel={provider ? providerCatalog.label(provider) : ""}
         />
       </Step>
@@ -251,18 +333,17 @@ export function VirtualKeyConnectionGuide({
         {virtualApiKeyId && endpoint === "model-router" && !isPassthrough && (
           <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
         )}
-        {isPoolOnly ? (
+        {useRoutedGuide ? (
           <p className="text-sm text-muted-foreground">
-            Open{" "}
+            Send the name of a model pool or auto router assigned to this key as
+            the model. For pool request examples, open{" "}
             <Link
               href="/llm/model-pools"
               className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
             >
               Model pools
             </Link>
-            , select a pool assigned to this key, then open its Connect section
-            for a request example. Send the name of the pool, or of an auto
-            router on this key, as the model.
+            and select the pool's Connect section.
           </p>
         ) : (
           <RequestExample
@@ -359,7 +440,10 @@ function EndpointPicker({
           key={option.value}
           htmlFor={`${id}-${option.value}`}
           className={cn(
-            "flex cursor-pointer flex-col items-start gap-1 rounded-md p-3 font-normal",
+            "flex flex-col items-start gap-1 rounded-md p-3 font-normal",
+            option.disabled
+              ? "cursor-not-allowed opacity-50"
+              : "cursor-pointer",
             radioCardClass({ checked: value === option.value }),
           )}
         >

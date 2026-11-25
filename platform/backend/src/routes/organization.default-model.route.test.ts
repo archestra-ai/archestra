@@ -5,6 +5,7 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import OrganizationModel from "@/models/organization";
 import autoRoutingRoutes from "@/routes/auto-routing/auto-routing.routes";
 import organizationRoutes from "@/routes/organization";
@@ -32,7 +33,7 @@ describe("GET /api/organization/default-model", () => {
       const user = await makeUser();
       // A member who may use agents but not read the auto routers.
       const { role } = await makeCustomRole(organizationId, {
-        permission: { agent: ["read"] },
+        permission: { agent: ["read"], llmProviderApiKey: ["read"] },
       });
       await makeMember(user.id, organizationId, { role });
       const session = await makeSession(user.id, {
@@ -84,6 +85,26 @@ describe("GET /api/organization/default-model", () => {
         },
       ],
     });
+  });
+
+  test("describes Auto availability in chat for the actual caller", async ({
+    makeSecret,
+  }) => {
+    await configureAutoRouting(organizationId);
+    const key = await LlmProviderApiKeyModel.findOrganizationWideKey(
+      organizationId,
+      "openai",
+    );
+    if (!key) throw new Error("missing test key");
+    const secret = await makeSecret({
+      secret: { apiKey: "synthetic-tier-key" },
+    });
+    await LlmProviderApiKeyModel.update(key.id, { secretId: secret.id });
+    const response = await get("/api/organization/default-model?forChat=true");
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().autoRouters).toMatchObject([
+      { id: await autoRouterId(organizationId), unavailableReason: null },
+    ]);
   });
 
   test("names the organization's default model, and offers the auto routers, while the default is not a router", async () => {

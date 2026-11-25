@@ -8,6 +8,7 @@ import {
   OrganizationRoleModel,
   ServiceAccountModel,
 } from "@/models";
+import { ServiceAccountNameTakenError } from "@/models/service-account";
 import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import { assertPublicIssuer } from "@/services/workload-identity/federated-token";
 import {
@@ -162,7 +163,12 @@ async function findOrCreateServiceAccount(params: {
     );
     return created.id;
   } catch (error) {
-    if (!isUniqueViolation(error)) throw error;
+    if (
+      !isUniqueViolation(error) &&
+      !(error instanceof ServiceAccountNameTakenError)
+    ) {
+      throw error;
+    }
     // Another replica created it first.
     const racedId = await ServiceAccountModel.findIdByName(
       organizationId,

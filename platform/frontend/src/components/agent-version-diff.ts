@@ -679,6 +679,10 @@ const CONFIGURATION_FIELDS: {
     render: (s) => renderBoolean(s.accessAllSubagents),
   },
   {
+    label: "Progressive subagent loading",
+    render: (s) => renderBoolean(s.progressiveSubagentLoading ?? false),
+  },
+  {
     label: "Skill access",
     render: (s) => (s.activationSkillMode === "all" ? "All" : "Manual"),
   },

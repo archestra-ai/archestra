@@ -2,7 +2,6 @@
 title: Ollama
 description: Connect an Ollama server and choose its native or OpenAI-compatible transport
 order: 6
-lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

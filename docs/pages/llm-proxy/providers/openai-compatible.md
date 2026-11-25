@@ -2,7 +2,6 @@
 title: OpenAI-compatible Servers
 description: Connect vLLM, llama.cpp, LM Studio, or another OpenAI-compatible server
 order: 5
-lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

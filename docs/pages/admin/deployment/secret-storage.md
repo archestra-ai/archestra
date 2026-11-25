@@ -2,7 +2,6 @@
 title: Secret Storage
 description: Choose database or Vault storage and rotate credential encryption keys
 order: 6
-lastUpdated: 2026-11-09
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

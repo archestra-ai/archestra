@@ -2,7 +2,6 @@
 title: Background Task Metrics
 description: Look up task queue attempts, retries, duration, and scheduled runs.
 order: 7
-lastUpdated: 2026-10-31
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

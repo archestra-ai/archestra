@@ -10,11 +10,11 @@
 # Debian mirror.
 # TODO: move to python 3.15 (lazy imports) once ML wheels such as torch and
 # onnxruntime ship cp315 on PyPI.
-FROM dhi.io/node:24.22.3-debian13@sha256:927ecf24d99ce7bffe8abd063177242bdfe79a4f41aa6c5ad548f3be0a31f030 AS node-runtime
+FROM dhi.io/node:24.22.3-debian13@sha256:ec4735f913e91c733bee00cf5274f5db4e7c6736cfd6ec704d105a6fbf39a918 AS node-runtime
 
 FROM ghcr.io/astral-sh/uv:0.13.8-python3.14-trixie-slim@sha256:81a1340fea1e72ad4a8e9a016128b0c61041cf182ea49fd788023e52842bc147 AS uv-bin
 
-FROM dhi.io/python:3.14.10-debian13-dev@sha256:e84d616360a8ca598446289cadeeeaba36aa7d6e5d83878923e0c6123b268b0f
+FROM dhi.io/python:3.14.10-7-debian13-dev@sha256:bc56234775ad310962009c99d2f2545dfc69a16549fefe8f2708d5ad680c5a16
 COPY --from=uv-bin /usr/local/bin/uv /usr/local/bin/uv
 COPY --from=uv-bin /usr/local/bin/uvx /usr/local/bin/uvx
 RUN ln -s /usr/bin/python3 /usr/local/bin/python3

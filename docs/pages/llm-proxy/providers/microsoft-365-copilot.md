@@ -2,7 +2,6 @@
 title: Microsoft 365 Copilot
 description: Connect Microsoft 365 Copilot to answer questions using the signed-in user’s work data.
 order: 8
-lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

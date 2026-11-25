@@ -2,7 +2,6 @@
 title: Credentials
 description: Save and share credentials across integrations
 order: 5
-lastUpdated: 2026-11-09
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

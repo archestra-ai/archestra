@@ -2,7 +2,6 @@
 title: "Identity, Chat, and Tool Discovery"
 description: "Archestra MCP Server tools for identity, chat, and tool discovery"
 order: 1
-lastUpdated: 2026-11-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -85,7 +84,7 @@ Required RBAC permission: None
 | Tool | Description | Permission |
 |------|-------------|--------------------------|
 | [`search_tools`](#search_tools) | Search the tools available to this agent and to you on demand. | None |
-| [`run_tool`](#run_tool) | Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. | None |
+| [`run_tool`](#run_tool) | Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent__&lt;name&gt;'), or third-party MCP tools exposed through the MCP Gateway (e.g. | None |
 
 ### search_tools
 
@@ -105,7 +104,7 @@ Required RBAC permission: None
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `total` | `integer` | Yes | Number of returned tools. |
-| `matchCount` | `integer` | Yes | Total tools matching the query before offset and limit were applied (>= total). |
+| `matchCount` | `integer` | Yes | Total tools matching the query before offset and limit were applied (&gt;= total). |
 | `truncated` | `boolean` | Yes | True when more matches follow this page (results cut by limit). |
 | `nextOffset` | `integer \| null` | Yes | The offset that returns the next page of matches, or null when no matches follow this page. |
 | `hint` | `string \| null` | Yes | Actionable guidance when results were truncated or empty (a truncated result names the offset of the next page; an empty result also names which query terms matched no tool text). |
@@ -116,7 +115,7 @@ Required RBAC permission: None
 | `tools[].server` | `string \| null` | Yes | MCP server prefix for third-party MCP tools when available. |
 | `tools[].available` | `boolean` | Yes | False when the tool's MCP connection is not installed; it stays discoverable but cannot run until reconnected. |
 | `tools[].unavailableReason` | `string \| null` | Yes | Compact reason and recovery action when available is false; null otherwise. |
-| `tools[].params` | `string` | Yes | Compact one-line input signature — a summary, not the full schema. Parameters are joined by '; ', each rendered as `name<!\|?>:<type>` where `!` marks required and `?` optional. Object parameters are expanded up to two levels as `{child<!\|?>:type{grandchild<!\|?>:type}, …}`, enums as `enum(<json-values>)`, and a trailing ` — description` is added when available. A trailing `…` on a type marks an object whose content is not fully shown (freeform or more deeply nested) — consult the task instructions or the full schema for its shape. Empty string when the tool takes no input. Pass matching values inside tool_args when calling run_tool; if a call is rejected as invalid, the error describes the expected input (for third-party tools, the full input schema). |
+| `tools[].params` | `string` | Yes | Compact one-line input signature — a summary, not the full schema. Parameters are joined by '; ', each rendered as `name<!\|?>:<type>` where `!` marks required and `?` optional. Object parameters are expanded up to two levels as `{child<!\|?>:type{grandchild<!\|?>:type}, …}`, enums as `enum(<json-values>)`, and a trailing ` — description` is added when available. A trailing `…` on a type marks an object whose content is not fully shown (freeform or more deeply nested) — consult the task instructions or the full schema for its shape. Empty string when the tool takes no input. Pass matching values inside tool_args when calling run_tool; if a call is rejected as invalid, the error describes the expected input (for third-party tools, the full input schema). A long description that an earlier tool in this result already gave for the same parameter is not repeated: it reads `same as in <toolName>`. |
 
 ### run_tool
 
@@ -126,5 +125,5 @@ Required RBAC permission: None
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `tool_name` | `string` | Yes | Name of the tool to invoke. Use the exact name as it appears in the tools list, e.g. 'archestra__whoami', 'context7__resolve-library-id', or an agent delegation name 'agent-<id>'. |
+| `tool_name` | `string` | Yes | Name of the tool to invoke. Use the exact name as it appears in the tools list, e.g. 'archestra__whoami', 'context7__resolve-library-id', or an agent delegation name 'agent__&lt;name&gt;'. |
 | `tool_args` | `object` | No | Arguments object for the target tool; must match its input schema. |

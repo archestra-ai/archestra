@@ -46,6 +46,7 @@ export function RemoteUserSelect({
   searchMode = "name_or_email",
   source = "members",
   disabled,
+  excludeIds,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -56,6 +57,8 @@ export function RemoteUserSelect({
   searchMode?: "name" | "name_or_email";
   source?: UserOptionSource;
   disabled?: boolean;
+  /** Users left out of the list, such as someone who cannot be chosen here. */
+  excludeIds?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -80,8 +83,13 @@ export function RemoteUserSelect({
     pageIndex,
     Math.max(0, (pageQuery.pages?.length ?? 1) - 1),
   );
-  const rows =
-    search === debouncedSearch ? (pageQuery.pages?.[page] ?? []) : [];
+  // A pinned option that names a user stands in for that user's row, so the
+  // row is left out rather than listed (and checked) twice.
+  const rows = (
+    search === debouncedSearch ? (pageQuery.pages?.[page] ?? []) : []
+  ).filter(
+    (row) => row.id !== pinnedOption?.value && !excludeIds?.includes(row.id),
+  );
   const hasNext =
     search === debouncedSearch &&
     (page + 1 < (pageQuery.pages?.length ?? 0) || pageQuery.hasNextPage);
@@ -171,7 +179,7 @@ export function RemoteUserSelect({
                     </CommandItem>
                   );
                 })}
-                {rows.length === 0 && (
+                {rows.length === 0 && (search || !pinnedOption) && (
                   <p className="p-3 text-sm">
                     <span>No matching users</span>
                   </p>

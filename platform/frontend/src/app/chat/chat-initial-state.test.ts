@@ -336,6 +336,29 @@ describe("resolvePreferredModelForProvider", () => {
 });
 
 describe("buildCreateConversationInput", () => {
+  test("does not serialize a preview pair for a chat inheriting its configuration", () => {
+    expect(
+      buildCreateConversationInput({
+        agentId: "agent-1",
+        followDefaults: true,
+        modelId: "fallback-model",
+        chatApiKeyId: "fallback-key",
+      }),
+    ).toEqual({ agentId: "agent-1" });
+    expect(
+      buildCreateConversationInput({
+        agentId: "agent-1",
+        followDefaults: false,
+        modelId: "fallback-model",
+        chatApiKeyId: "fallback-key",
+      }),
+    ).toMatchObject({
+      modelId: "fallback-model",
+      chatApiKeyId: "fallback-key",
+      strictModelSelection: true,
+    });
+  });
+
   test("sends the picked auto router in place of the key and model", () => {
     expect(
       buildCreateConversationInput({

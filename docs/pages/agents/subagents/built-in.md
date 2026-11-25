@@ -2,7 +2,6 @@
 title: Built-in Subagents
 description: The system subagents Archestra seeds into every organization, and what each one does
 order: 1
-lastUpdated: 2026-10-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

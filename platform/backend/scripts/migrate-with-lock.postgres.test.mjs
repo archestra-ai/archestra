@@ -399,10 +399,15 @@ export default defineConfig({ dialect: "postgresql", out: "./src/database/migrat
       path.join(migrations, "meta/_journal.json"),
       JSON.stringify({ version: "7", dialect: "postgresql", entries }),
     );
+  // Autovacuum is off for the log table: the million seeded rows invite it,
+  // and the rerun's ADD COLUMN IF NOT EXISTS then queues for its lock behind
+  // autovacuum until deadlock_timeout (1s) cancels it, stalling the writer
+  // past its 1s statement_timeout. That wait is not what the test measures,
+  // and it runs ANALYZE itself.
   await writeFile(
     path.join(migrations, "bootstrap.sql"),
     `CREATE TABLE service_accounts (id uuid PRIMARY KEY);--> statement-breakpoint
-CREATE TABLE mcp_tool_calls (id bigserial PRIMARY KEY, payload text, created_at timestamptz NOT NULL DEFAULT now());`,
+CREATE TABLE mcp_tool_calls (id bigserial PRIMARY KEY, payload text, created_at timestamptz NOT NULL DEFAULT now()) WITH (autovacuum_enabled = false);`,
   );
   await writeJournal();
   return {

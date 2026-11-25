@@ -2,7 +2,6 @@
 title: "Apps and Projects"
 description: "Archestra MCP Server tools for apps and projects"
 order: 3
-lastUpdated: 2026-11-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -131,7 +130,7 @@ Required RBAC permission: [`app:read`](/docs/reference/permissions#app:read)
 | `labels[].value` | `string` | Yes |  |
 | `limit` | `integer` | No |  |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my apps". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output
@@ -595,7 +594,7 @@ Additional access requirement: Returns only projects the caller owns or that are
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Case-insensitive substring matched against the project name and description. Omit to list everything the caller can reach. |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my projects". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output

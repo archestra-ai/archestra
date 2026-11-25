@@ -117,6 +117,7 @@ import {
   type EditableSkill,
 } from "@/components/agent-skills-editor";
 import type { GatewayLike } from "@/components/agent-skills-editor.utils";
+import { AgentSubagentLoadingSetting } from "@/components/agent-subagent-loading-setting";
 import { AgentToolBehaviorSettings } from "@/components/agent-tool-behavior-settings";
 import {
   AgentToolExclusionsEditor,
@@ -129,6 +130,7 @@ import {
 } from "@/components/agent-tools-editor";
 import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
+import { BetaBadge } from "@/components/beta-badge";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { AgentRuntimeChip } from "@/components/chat/runtime-capable-indicator";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
@@ -1801,6 +1803,10 @@ export function AgentForm({
   // Auto subagent mode: new agents default to Auto (may delegate to any agent
   // the caller can access); editing overwrites this from the stored value.
   const [accessAllSubagents, setAccessAllSubagents] = useState(true);
+  // "Progressive subagent loading": only a choice for Manual subagents. All
+  // agents is always loaded that way, whatever this holds.
+  const [progressiveSubagentLoading, setProgressiveSubagentLoading] =
+    useState(false);
   // Delegation targets excluded from the Auto surface ("Auto All Except Some").
   // Inert while in Custom subagent mode. Seeded async from the backend.
   const [disabledSubagentIds, setDisabledSubagentIds] = useState<string[]>([]);
@@ -2255,6 +2261,8 @@ export function AgentForm({
               agentData.missingCredentialBehavior ?? "allow",
             accessAllTools: agentData.accessAllTools ?? false,
             accessAllSubagents: agentData.accessAllSubagents ?? false,
+            progressiveSubagentLoading:
+              agentData.progressiveSubagentLoading ?? false,
           }
         : {
             name: initialValues?.name ?? "",
@@ -2291,6 +2299,7 @@ export function AgentForm({
             missingCredentialBehavior: "allow",
             accessAllTools: initialValues?.accessAllTools ?? true,
             accessAllSubagents: true,
+            progressiveSubagentLoading: false,
           };
 
       setName(nextValues.name);
@@ -2323,6 +2332,7 @@ export function AgentForm({
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
       setAccessAllSubagents(nextValues.accessAllSubagents);
+      setProgressiveSubagentLoading(nextValues.progressiveSubagentLoading);
       if (!agentData) {
         // Create mode only: edit mode remounts per agent and seeds each set
         // from its own request, and clearing here would instead wipe pending
@@ -3334,7 +3344,10 @@ export function AgentForm({
               toolExposureMode,
               missingCredentialBehavior,
               accessAllTools,
-              ...(supportsSubagents && { accessAllSubagents }),
+              ...(supportsSubagents && {
+                accessAllSubagents,
+                progressiveSubagentLoading,
+              }),
               ...(supportsSubagents &&
                 subagentLoadBalancingChanged && {
                   subagentLoadBalancing,
@@ -3391,6 +3404,7 @@ export function AgentForm({
           accessAllTools,
           ...(supportsSubagents && {
             accessAllSubagents,
+            progressiveSubagentLoading,
             ...(subagentLoadBalancing && { subagentLoadBalancing }),
           }),
           labels: updatedLabels,
@@ -3700,6 +3714,7 @@ export function AgentForm({
     missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
+    progressiveSubagentLoading,
     supportsEnvironment,
     supportsSubagents,
     agentRuntimeEnabled,
@@ -3823,6 +3838,7 @@ export function AgentForm({
     missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
+    progressiveSubagentLoading,
     runtime,
   });
   const isDirty =
@@ -5387,7 +5403,33 @@ export function AgentForm({
                             "assigned",
                           ),
                         }}
+                        footnote={
+                          accessAllSubagents ? (
+                            <p>
+                              <span>
+                                {`To save context, the ${isInternalAgent ? "subagents" : "agents"} are not listed as tools: the ${agentType === "mcp_gateway" ? "gateway's client" : "agent"} looks one up with `}
+                              </span>
+                              <code className="font-mono">search_tools</code>
+                              <span> and runs it with </span>
+                              <code className="font-mono">run_tool</code>
+                              <span>.</span>
+                            </p>
+                          ) : null
+                        }
                       />
+                      {/* Only a choice for Manual: All agents is always loaded
+                          progressively, which its own footnote says. It sits
+                          right under the mode it belongs to, above the list. */}
+                      {!accessAllSubagents && (
+                        <div className="border-b pb-4">
+                          <AgentSubagentLoadingSetting
+                            progressive={progressiveSubagentLoading}
+                            onProgressiveChange={setProgressiveSubagentLoading}
+                            readOnly={readOnly}
+                            noun={isInternalAgent ? "subagent" : "agent"}
+                          />
+                        </div>
+                      )}
                       <SubagentsEditor
                         agentId={agent?.id}
                         readOnly={readOnly}
@@ -5444,8 +5486,25 @@ export function AgentForm({
                   create. */}
               {showsHooks && (
                 <SettingsSection
-                  title="Hooks"
-                  description="Commands this agent runs around its own tool calls, inside its sandbox."
+                  title={
+                    <span className="flex items-center gap-2">
+                      <span>Hooks</span>
+                      <BetaBadge />
+                    </span>
+                  }
+                  description={
+                    <>
+                      Scripts this agent runs in its sandbox when a lifecycle
+                      event fires.{" "}
+                      <ExternalDocsLink
+                        href={getDocsUrl(DocsPage.PlatformAgentHooks)}
+                        className="underline"
+                        showIcon={false}
+                      >
+                        Learn more
+                      </ExternalDocsLink>
+                    </>
+                  }
                 >
                   <AgentHooksEditor
                     ref={agentHooksEditorRef}
@@ -6082,6 +6141,7 @@ type AgentFormFields = {
   missingCredentialBehavior: MissingCredentialBehavior;
   accessAllTools: boolean;
   accessAllSubagents: boolean;
+  progressiveSubagentLoading: boolean;
 };
 
 // Normalizes set-like id arrays (order-independent) so reselecting the same

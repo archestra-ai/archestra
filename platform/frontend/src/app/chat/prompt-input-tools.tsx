@@ -64,7 +64,7 @@ import { cn } from "@/lib/utils/tailwind";
 
 export interface ChatPromptInputToolsProps {
   selectedModel: string;
-  onModelChange: (model: string) => void;
+  onModelChange: (model: string, automatic?: true, personal?: true) => void;
   /** Optional - if not provided, it's initial chat mode (no conversation yet) */
   conversationId?: string;
   currentConversationChatApiKeyId?: string | null;

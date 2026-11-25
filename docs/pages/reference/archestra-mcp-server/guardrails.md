@@ -2,7 +2,6 @@
 title: "Guardrails"
 description: "Archestra MCP Server tools for guardrails"
 order: 6
-lastUpdated: 2026-11-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -384,7 +383,7 @@ Required RBAC permission: None
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
-| `content` | `string` | No | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for tools that carry the file's tool prefix only and any [[policy.annotator]] they use, named <tool prefix>.<name>. |
+| `content` | `string` | No | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for tools that carry the file's tool prefix only and any [[policy.annotator]] they use, named &lt;tool prefix&gt;.&lt;name&gt;. |
 | `battery` | `object` | No | Instead of `content`: attach a bundled battery to this server, or detach it. appa.toml then changes only in which batteries govern the servers' tools; a battery that governs every tool call in the organization is refused. |
 | `battery.name` | `string` | Yes | The bundled battery's name, such as microsoft-learn. |
 | `battery.change` | `"attach" \| "detach"` | Yes | Attach the battery to this server, or detach it. |
@@ -403,7 +402,7 @@ Required RBAC permission: None
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
-| `content` | `string` | No | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for tools that carry the file's tool prefix only and any [[policy.annotator]] they use, named <tool prefix>.<name>. |
+| `content` | `string` | No | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for tools that carry the file's tool prefix only and any [[policy.annotator]] they use, named &lt;tool prefix&gt;.&lt;name&gt;. |
 | `battery` | `object` | No | Instead of `content`: attach a bundled battery to this server, or detach it. appa.toml then changes only in which batteries govern the servers' tools; a battery that governs every tool call in the organization is refused. |
 | `battery.name` | `string` | Yes | The bundled battery's name, such as microsoft-learn. |
 | `battery.change` | `"attach" \| "detach"` | Yes | Attach the battery to this server, or detach it. |

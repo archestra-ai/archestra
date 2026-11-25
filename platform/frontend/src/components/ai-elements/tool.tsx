@@ -257,7 +257,7 @@ export const SectionLabel = ({
  * button copies the raw value, ready to paste into a terminal. Everything
  * else keeps the compact pretty-printed JSON view.
  */
-const ToolInputBody = ({ input }: { input: ToolUIPart["input"] }) => {
+export const ToolInputBody = ({ input }: { input: ToolUIPart["input"] }) => {
   const entries = getEntriesWithMultilineStrings(input);
 
   if (!entries) {

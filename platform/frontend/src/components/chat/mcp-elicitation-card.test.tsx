@@ -112,7 +112,7 @@ describe("McpElicitationCard", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the reviewed arguments immediately beside the approval controls", async () => {
+  it("asks about the reviewed call as a question, with its arguments beside the approval controls", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
     const request = openappaReview();
@@ -122,8 +122,14 @@ describe("McpElicitationCard", () => {
 
     const card = screen.getByTestId("mcp-elicitation-card");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByText("archestra__todo_write")).toBeInTheDocument();
-    expect(screen.getByText("Approval requested")).toBeInTheDocument();
+    // The question names the call. It is not laid out as that call's own
+    // card: no call status and no Request section.
+    expect(card).toHaveTextContent("Run archestra__todo_write?");
+    expect(screen.getByText("archestra__todo_write").tagName).toBe("CODE");
+    expect(card).toHaveTextContent("It runs only after you approve.");
+    expect(screen.queryByText("Approval requested")).not.toBeInTheDocument();
+    expect(screen.queryByText("Request")).not.toBeInTheDocument();
+    expect(screen.getByText("Arguments")).toBeVisible();
     expect(screen.getByText(/qa-hitl/)).toBeInTheDocument();
     expect(card).not.toHaveTextContent(/\\"/);
 
@@ -142,8 +148,7 @@ describe("McpElicitationCard", () => {
     });
   });
 
-  it("keeps accepted review coverage and decision controls visible when arguments are collapsed", async () => {
-    const user = userEvent.setup();
+  it("lists what approving also accepts, between the arguments and the decision", () => {
     const coverage = [
       "after this, the agent can't use `archestra__list_skills` or `archestra__load_skill` in this conversation",
       "the readers must be the public audience",
@@ -177,12 +182,18 @@ describe("McpElicitationCard", () => {
         .getAllByRole("code")
         .map((code) => code.textContent),
     ).toEqual(["archestra__list_skills", "archestra__load_skill"]);
-    await user.click(screen.getByText("archestra__todo_write"));
-    expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
+    // The arguments are always in view: a person approves what they can read.
+    const argumentsBlock = screen.getByText(/qa-hitl/);
+    const approve = screen.getByRole("button", { name: "Approve" });
+    expect(approve).toBeVisible();
     expect(screen.getByRole("button", { name: "Deny" })).toBeVisible();
-    expect(card).toHaveTextContent("the readers must be the public audience");
-    expect(consequences).toBeVisible();
-    expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
+    const follows = (first: Element, second: Element) =>
+      Boolean(
+        first.compareDocumentPosition(second) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    expect(follows(argumentsBlock, consequences)).toBe(true);
+    expect(follows(consequences, approve)).toBe(true);
   });
 
   it("shows skill fields and Markdown instructions while retaining the exact copyable request", async () => {

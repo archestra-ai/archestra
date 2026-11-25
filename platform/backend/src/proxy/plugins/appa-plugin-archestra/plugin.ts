@@ -3096,12 +3096,8 @@ async function forgetSupersededRulings(
     await cacheManager.getAndDeleteMany(
       decided.flatMap(({ callId, keepsNotice }) => [
         notLoadedRulingKey({ session, callId }),
-        ...(keepsNotice
-          ? []
-          : [
-              unansweredNoticeKey({ session, callId }),
-              carriedRulingKey({ session, callId }),
-            ]),
+        carriedRulingKey({ session, callId }),
+        ...(keepsNotice ? [] : [unansweredNoticeKey({ session, callId })]),
       ]),
     );
   } catch (err) {

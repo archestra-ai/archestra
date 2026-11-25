@@ -138,7 +138,6 @@ import { startedUnenforced } from "@/openappa/unenforced";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
-  ActiveChatRunShutdownError,
   activeChatRunService,
 } from "@/services/active-chat-run";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
@@ -196,6 +195,7 @@ import { broadcastConversationUpdated } from "@/websocket";
 import {
   createAbortiveTurnTracker,
   hasUnfinishedToolInput,
+  isAbortWithCause,
 } from "./abortive-turn";
 import { buildAnthropicProviderOptions } from "./anthropic-provider-options";
 import {
@@ -2243,15 +2243,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // A stopped run's in-flight tool calls keep their place in
                     // the transcript, as calls that were stopped. Only a stop
                     // counts: a run that failed keeps its error as the turn's
-                    // last word, and a run this pod ends as it shuts down is
-                    // retried on another one.
+                    // last word, and an abort that names its own cause (this
+                    // pod shutting down, the run failing to save) is not one.
                     const stopped =
                       (isAborted || chatAbortController.signal.aborted) &&
                       !activeRunError &&
-                      !(
-                        chatAbortController.signal.reason instanceof
-                        ActiveChatRunShutdownError
-                      );
+                      !isAbortWithCause(chatAbortController.signal);
                     const finalMessages = stopped
                       ? markTurnStopped(
                           settleStoppedToolCalls(streamedMessages),

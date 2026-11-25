@@ -8,6 +8,7 @@ import {
   type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
+  isTurnStoppedPart,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
   markTurnStopped,
@@ -1379,7 +1380,8 @@ export default function ChatSessionHook({
           transport.abortReconnect();
         } else if (
           sameTurn &&
-          (result as { stopped?: boolean } | undefined)?.stopped
+          (result as { stopped?: boolean } | undefined)?.stopped &&
+          (await storedTurnWasStopped(conversationId))
         ) {
           // The server ended the stream before its answer to the stop came
           // back, so the stream finished as any other does and nothing above
@@ -1645,6 +1647,29 @@ function settleStoppedTurn(messages: UIMessage[]): UIMessage[] {
   return pruneEmptyTrailingAssistantMessage(
     stripDanglingToolCalls(markTurnStopped(settleStoppedToolCalls(messages))),
   );
+}
+
+/**
+ * Whether the backend stored the conversation's last turn as a stopped one.
+ * A stop can arrive just after the turn ended by itself, and the stop call
+ * still answers "stopped" then, so the stored turn is what tells the two
+ * apart. A failed lookup reads as "not stopped": the open chat then keeps
+ * what it streamed, and a reload shows the stored turn.
+ */
+async function storedTurnWasStopped(conversationId: string): Promise<boolean> {
+  try {
+    const conversation = await fetchConversation(conversationId);
+    const last = conversation?.messages?.at(-1) as
+      | { role?: unknown; parts?: unknown }
+      | undefined;
+    return (
+      last?.role === "assistant" &&
+      Array.isArray(last.parts) &&
+      last.parts.some(isTurnStoppedPart)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** One shared empty set, so a session with no queued call keeps its identity. */

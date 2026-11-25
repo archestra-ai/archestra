@@ -331,7 +331,7 @@ export function RuntimeTemplateSection({
               onClick={() => setEditing("new")}
             >
               <Plus />
-              <span>Add runtime</span>
+              <span>Create custom runtime</span>
             </Button>
           )}
         </div>

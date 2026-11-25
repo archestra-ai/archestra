@@ -239,7 +239,11 @@ function mount() {
 /** Each change saves at once; the list takes the next one when that is done. */
 const saved = () =>
   waitFor(() =>
-    expect(screen.getByRole("button", { name: "Add runtime" })).toBeEnabled(),
+    expect(
+      screen.getByRole("button", {
+        name: /^(Add runtime|Create custom runtime)$/,
+      }),
+    ).toBeEnabled(),
   );
 
 const subscriptionCard = (dialog: HTMLElement) =>
@@ -737,9 +741,11 @@ describe("RuntimeTemplateSection", () => {
       expect(overrides?.["custom-image"]).toEqual({ hidden: true }),
     );
     await saved();
-    // Not a runtime, so it is nothing to restore: Add runtime still goes
-    // straight to the custom runtime form.
-    await user.click(screen.getByRole("button", { name: "Add runtime" }));
+    // Not a runtime, so it is nothing to restore: Create custom runtime still
+    // goes straight to the custom runtime form.
+    await user.click(
+      screen.getByRole("button", { name: "Create custom runtime" }),
+    );
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(
       screen.getByRole("dialog", { name: "Add custom runtime" }),
@@ -765,19 +771,24 @@ describe("RuntimeTemplateSection", () => {
     );
   });
 
-  it("opens the custom runtime form from Add runtime while nothing is removed", async () => {
+  it("names the button Create custom runtime and opens the form directly while nothing is removed", async () => {
     mount();
     const user = userEvent.setup();
-    const add = await screen.findByRole("button", { name: "Add runtime" });
-    await waitFor(() => expect(add).toBeEnabled());
-    await user.click(add);
+    const create = await screen.findByRole("button", {
+      name: "Create custom runtime",
+    });
+    await waitFor(() => expect(create).toBeEnabled());
+    expect(
+      screen.queryByRole("button", { name: "Add runtime" }),
+    ).not.toBeInTheDocument();
+    await user.click(create);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(
       screen.getByRole("dialog", { name: "Add custom runtime" }),
     ).toBeInTheDocument();
   });
 
-  it("offers removed runtimes from Add runtime, and opens the form directly again once the last is restored", async () => {
+  it("offers removed runtimes from Add runtime, and returns to Create custom runtime once the last is restored", async () => {
     mount();
     const user = userEvent.setup();
     const actions = await screen.findByRole("button", {
@@ -796,7 +807,12 @@ describe("RuntimeTemplateSection", () => {
     await user.click(screen.getByRole("menuitem", { name: /Codex/ }));
     await waitFor(() => expect(overrides?.codex?.hidden).toBe(false));
     await saved();
-    await user.click(screen.getByRole("button", { name: "Add runtime" }));
+    expect(
+      screen.queryByRole("button", { name: "Add runtime" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Create custom runtime" }),
+    );
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(
       screen.getByRole("dialog", { name: "Add custom runtime" }),
@@ -820,7 +836,9 @@ describe("RuntimeTemplateSection", () => {
     expect(
       await screen.findByRole("button", { name: "Actions for Workspace 99" }),
     ).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Add runtime" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Create custom runtime" }),
+    ).toBeDisabled();
   });
 
   it("appends new templates after existing choices when saved positions contain gaps", async () => {
@@ -840,11 +858,11 @@ describe("RuntimeTemplateSection", () => {
     }));
     mount();
     const user = userEvent.setup();
-    const add = await screen.findByRole("button", {
-      name: "Add runtime",
+    const create = await screen.findByRole("button", {
+      name: "Create custom runtime",
     });
-    await waitFor(() => expect(add).toBeEnabled());
-    await user.click(add);
+    await waitFor(() => expect(create).toBeEnabled());
+    await user.click(create);
     await user.type(
       screen.getByRole("textbox", { name: "Name" }),
       "New workspace",

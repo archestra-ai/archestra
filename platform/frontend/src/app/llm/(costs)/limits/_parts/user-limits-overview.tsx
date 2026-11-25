@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, Info } from "lucide-react";
+import { ArrowRight, Info } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { useImperativeHandle, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -256,6 +256,9 @@ function AffectedByLimits({
   const spent = summary?.spent ?? 0;
   const spenders = summary?.spenders ?? 0;
   const custom = summary?.custom ?? 0;
+  // Nobody at or near a limit; with no limits at all, nobody spending either.
+  const noOneAffected =
+    Boolean(summary) && (allUnlimited ? spenders === 0 : flagged === 0);
 
   const stack = allUnlimited
     ? rows.filter((row) => row.spent > 0)
@@ -274,7 +277,7 @@ function AffectedByLimits({
       }
     : null;
   const unlimitedItem: DotItem | null =
-    unlimited > 0 && !allUnlimited
+    unlimited > 0 && (!allUnlimited || noOneAffected)
       ? {
           key: "unlimited",
           node: (
@@ -308,23 +311,9 @@ function AffectedByLimits({
   if (!summary) {
     main = <div className="h-6 w-40 animate-pulse rounded-md bg-muted" />;
     meta = [];
-  } else if (spent === 0 && flagged === 0) {
-    main = (
-      <p className="text-sm text-muted-foreground">
-        No one has used a model this window
-      </p>
-    );
-    meta = [
-      {
-        key: "later",
-        node: <span>Limits apply once someone sends traffic</span>,
-      },
-      {
-        key: "shared",
-        node: <span>Shared virtual keys are not counted per person</span>,
-      },
-      customItem,
-    ];
+  } else if (noOneAffected) {
+    main = null;
+    meta = [unlimitedItem, customItem, resetsItem];
   } else if (allUnlimited) {
     main = (
       <>
@@ -362,14 +351,6 @@ function AffectedByLimits({
         ),
       },
     ];
-  } else if (flagged === 0) {
-    main = (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Check aria-hidden className="size-4 text-emerald-500" />
-        <span>No one is near their limit</span>
-      </div>
-    );
-    meta = [unlimitedItem, customItem, resetsItem];
   } else {
     main = (
       <>
@@ -414,23 +395,24 @@ function AffectedByLimits({
           id="user-limits-affected"
           className="text-sm font-medium text-muted-foreground"
         >
-          Affected by Limits
+          {noOneAffected ? "No one affected by limits" : "Affected by Limits"}
         </h2>
         <PrecedenceHint />
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        {main}
-      </div>
+      {main ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          {main}
+        </div>
+      ) : null}
       <DotList className="text-xs text-muted-foreground" items={meta} />
       {total > 0 ? (
         <Button
           variant="ghost"
           size="xs"
           className="-mr-2 ml-auto shrink-0 text-muted-foreground"
-          aria-label={`View all ${total.toLocaleString("en-US")} users`}
           onClick={() => onOpen({})}
         >
-          <span className="tabular-nums">{`All ${total.toLocaleString("en-US")}`}</span>
+          <span>Users and their limits</span>
           <ArrowRight aria-hidden />
         </Button>
       ) : null}

@@ -113,7 +113,7 @@ describe("UserLimitsOverview", () => {
     expect(screen.getByRole("button", { name: /1\s*near/ })).toBeVisible();
     expect(screen.getByRole("button", { name: "1 custom" })).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "View all 3 users" }),
+      screen.getByRole("button", { name: "Users and their limits" }),
     ).toBeVisible();
     // The default user limit is a row of the table now, not a card here.
     expect(screen.queryByText("Default user limit")).not.toBeInTheDocument();

@@ -261,9 +261,10 @@ export function VirtualKeyConnectionGuide({
           </InlineNoticeBody>
           {!checkingAccess && editKeyHref && (
             <Button
-              variant="link"
+              variant="outline"
               size="xs"
               className="ml-auto shrink-0"
+              data-slot="inline-notice-action"
               asChild
             >
               <Link href={editKeyHref} onNavigate={onEditKeyNavigate}>

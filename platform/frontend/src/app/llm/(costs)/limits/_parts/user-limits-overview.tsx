@@ -227,8 +227,7 @@ function PrecedenceHint() {
       </TooltipTrigger>
       <TooltipContent className="max-w-64">
         Every user gets the default user limit. A default user limit for their
-        environment replaces it, and a hard custom user limit replaces both.
-        Soft custom limits only observe usage.
+        environment replaces it, and a custom user limit replaces both.
       </TooltipContent>
     </Tooltip>
   );

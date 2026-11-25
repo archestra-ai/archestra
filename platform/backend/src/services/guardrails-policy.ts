@@ -98,23 +98,21 @@ async function deploymentRefusal(params: {
   organizationId: string;
   content: string;
   previous: string;
-  /** Whether a kept refusal reads the composition the deployment retains. */
-  retained: boolean;
 }): Promise<{
   errors: string[];
   warnings: string[];
   /**
    * What the deployment would serve: the document's composition, or the one
-   * it retains under an accepted refusal.
+   * it retains under an accepted refusal, read only when asked.
    */
-  composed: string | null;
+  composed: () => Promise<string | null>;
 }> {
   const { organizationId, content, previous } = params;
   const submitted = await openappaBatteriesService.composeInDeployment({
     organizationId,
     content,
   });
-  const { composed } = submitted;
+  const composed = async () => submitted.composed;
   if (submitted.refusal.length === 0)
     return { errors: [], warnings: [], composed };
   const kept = new Set(
@@ -143,11 +141,9 @@ async function deploymentRefusal(params: {
       (line) => inDeployment(line) + keptNote,
     ),
     // The deployment keeps serving the composition it retained.
-    composed:
-      composed ??
-      (params.retained
-        ? await openappaBatteriesService.servedComposition(organizationId)
-        : null),
+    composed: async () =>
+      submitted.composed ??
+      (await openappaBatteriesService.servedComposition(organizationId)),
   };
 }
 
@@ -155,9 +151,14 @@ async function deploymentRefusal(params: {
  * The lines' fallback warnings for a valid document. They advise and decide
  * nothing, so a check that fails says so and leaves the save to go ahead.
  */
-async function advisoryLineWarnings(composed: string): Promise<string[]> {
+async function advisoryLineWarnings(
+  composedOf: () => Promise<string | null>,
+): Promise<string[]> {
   try {
-    return await openappaDeclarations.lineWarnings(composed);
+    const composed = await composedOf();
+    return composed === null
+      ? []
+      : await openappaDeclarations.lineWarnings(composed);
   } catch (error) {
     logger.error({ err: error }, "Guardrails line check failed");
     return [LINE_CHECK_FAILED];
@@ -288,11 +289,10 @@ export const guardrailsPolicyService = {
           organizationId,
           content,
           previous,
-          retained: params.lineWarnings !== false,
         });
         errors.push(...deployed.errors);
         warnings.push(...deployed.warnings);
-        if (params.lineWarnings !== false && deployed.composed !== null)
+        if (params.lineWarnings !== false)
           warnings.push(...(await advisoryLineWarnings(deployed.composed)));
       }
     }

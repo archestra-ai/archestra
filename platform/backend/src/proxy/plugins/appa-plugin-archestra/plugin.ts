@@ -2122,18 +2122,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : "run_tool";
         clarification = `\n\n[appa] This call already went through the ${wrapper} wrapper ${JSON.stringify(identity.dispatch)}${namespace}, with tool_name targeting ${JSON.stringify(identity.name)}. Calling the target directly or retrying the same wrapper call is the same blocked call, not a routing correction.`;
       }
-      // The runtime's own ruling states why it refused, as does a host refusal
-      // that names its outcome; the host acts on that and on nothing else. A
-      // notice the proxy answers says itself whether to retry.
-      const action =
-        decision.recorded ||
-        (decision.outcome !== undefined && decision.proxyNotice !== true)
-          ? refusalAction({
-              outcome: decision.outcome,
-              offers: decision.offers,
-              review: decision.review,
-            })
-          : undefined;
+      // The runtime's own ruling states why it refused; the host acts on that
+      // and on nothing else. A notice the proxy answers was refused before
+      // any ruling, so it says itself whether to retry.
+      const action = decision.recorded
+        ? refusalAction({
+            outcome: decision.outcome,
+            offers: decision.offers,
+            review: decision.review,
+          })
+        : undefined;
       // The call was not judged, or was refused before any ruling, so there
       // is no ruling to remedy: the gateway's remedy tools would change
       // nothing, and nothing is held against the client for not carrying

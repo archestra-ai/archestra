@@ -222,7 +222,7 @@ const NavPrimary = ({
       <SidebarMenuButton
         asChild
         tooltip={item.tooltipLabel ?? item.title}
-        className={cn(item.nested && "h-7 text-[13px]", item.className)}
+        className={cn(item.nested && "h-7", item.className)}
         isActive={
           item.customIsActive?.(pathname, searchParams) ??
           pathname.startsWith(item.url)

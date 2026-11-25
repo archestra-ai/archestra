@@ -243,7 +243,7 @@ export function RosterSheet({
                     selectedContent: "All environments",
                   },
                   ...environments.map((env) => {
-                    const override = defaults.find(
+                    const environmentDefault = defaults.find(
                       (d) => d.environmentId === env.id,
                     );
                     const users =
@@ -256,7 +256,7 @@ export function RosterSheet({
                       content: (
                         <OptionLabel
                           label={env.name}
-                          hint={`${pluralUsers(users)} · ${override ? `${formatLimit(override.limitValue)} override` : orgDefault ? "organization default" : "no limit"}`}
+                          hint={`${pluralUsers(users)} · ${environmentDefault ? `${formatLimit(environmentDefault.limitValue)} default user limit` : orgDefault ? "All environments default user limit" : "no limit"}`}
                         />
                       ),
                       selectedContent: env.name,
@@ -659,7 +659,8 @@ function RosterRow({
 
 /**
  * Where this user's limit comes from, as plain text: "Custom", "Default",
- * "No limit", or the environment whose override applies. Hover explains it.
+ * "No limit", or the environment whose default user limit applies. Hover
+ * explains it.
  */
 function LimitSource({
   row,
@@ -675,10 +676,13 @@ function LimitSource({
       : row.source === "environment_default"
         ? {
             label: environment ?? "Environment",
-            hint: `The ${row.environmentName ?? "environment"} override applies`,
+            hint: `The default user limit for ${row.environmentName ?? "this environment"} applies`,
           }
         : row.source === "organization_default"
-          ? { label: "Default", hint: "The organization default applies" }
+          ? {
+              label: "Default",
+              hint: "The default user limit for all environments applies",
+            }
           : {
               label: "No limit",
               hint: "No default or custom limit covers this user",

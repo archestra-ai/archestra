@@ -218,7 +218,7 @@ test("shows the connection and model that are the person's to pick on the accoun
   });
   await expect(summary).toBeVisible();
   const connection = workSources.getByRole("button", {
-    name: "API key Choose an API key",
+    name: "Key Choose an API key",
   });
   const model = workSources.getByRole("button", {
     name: "Model Choose a model",

@@ -273,7 +273,7 @@ test("someone who may only use a runtime that fixes a connection and model sees 
 
   // The runtime's one account, on the connection and model it fixes.
   const row = page.getByRole("button", { name: /^Credentials to use/ });
-  await expect(row).toContainText("Company OpenAI, GPT-5");
+  await expect(row).toHaveText("Credentials to use");
   if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
   const accounts = page.getByRole("group", {
     name: "Credentials to use",

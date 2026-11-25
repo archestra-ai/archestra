@@ -43,14 +43,20 @@ test('encrypted trajectories enforce, replay, survive a new process, and contain
   assert.equal(approved.decision, 'ack');
   assert.deepEqual(await hook(session, result, key), approved, 'encrypted processed output replays exactly');
   assert.equal((await hook(session, { event: 'tool_call', operation_id: 'call:send', tool: 'send', arguments: { marker } }, key)).decision, 'deny_call');
-  assert.equal((await native.getOpenappaStatus(session.organization_id, session.session_id, 'attended', policy, key)).trust, 'suspicious');
-  await assert.rejects(native.getOpenappaStatus(session.organization_id, session.session_id, 'attended', policy), /requires its conversation key/);
-  await assert.rejects(native.getOpenappaStatus(session.organization_id, session.session_id, 'attended', policy, { ...key, key: randomBytes(32) }), /authentication failed/);
+  const status = (encryption) => native.getOpenappaStatus(session.organization_id, session.session_id, 'attended', policy, encryption);
+  const authentic = await status(key);
+  assert.equal(authentic.trust, 'suspicious');
+  // The read above left this key and scope's decrypted log in the process cache.
+  // Another key, another scope, or no key never gets that copy.
+  await assert.rejects(status(), /requires its conversation key/);
+  await assert.rejects(status({ ...key, key: randomBytes(32) }), /authentication failed/);
+  await assert.rejects(status({ ...key, scope: JSON.stringify([session.organization_id, randomUUID()]) }), /authentication failed/);
   await assert.rejects(hook(session, { ...call, operation_id: 'call:keyless', tool_call_id: 'keyless' }), /requires its conversation key/);
-  const child = spawnSync(process.execPath, ['-e', `
+  const coldStatus = () => spawnSync(process.execPath, ['-e', `
     const n=require('./index.cjs');
     (async()=>{const x=JSON.parse(require('fs').readFileSync(0,'utf8')); await n.initializeOpenappa(x.url,2); const status=await n.getOpenappaStatus(x.session.organization_id,x.session.session_id,'attended',x.policy,{key:Buffer.from(x.key,'base64'),scope:x.scope}); process.stdout.write(JSON.stringify(status));})().catch(e=>{console.error(e.message);process.exitCode=1});
   `], { cwd: __dirname, input: JSON.stringify({ url: databaseUrl, session, policy, key: key.key.toString('base64'), scope: key.scope }), encoding: 'utf8', timeout: 15000 });
+  const child = coldStatus();
   assert.equal(child.status, 0, child.stderr);
   assert.equal(JSON.parse(child.stdout).trust, 'suspicious');
 
@@ -70,15 +76,30 @@ test('encrypted trajectories enforce, replay, survive a new process, and contain
   const starts = await pg.query('SELECT root,start_decision FROM openappa_sessions WHERE organization_id=$1 AND session_id=$2', [session.organization_id, session.session_id]);
   assert.ok(starts.rows[0].start_decision.__appa_encrypted);
   assert.deepEqual(await native.openappaRootKinds([starts.rows[0].root, 'archestra:no-such-root']), ['encrypted', null], 'a keyless read tells an encrypted opening apart without decrypting it');
-  const events = await pg.query('SELECT payload FROM openappa_events WHERE root=$1 ORDER BY seq', [starts.rows[0].root]);
+  const events = await pg.query('SELECT seq, payload FROM openappa_events WHERE root=$1 ORDER BY seq', [starts.rows[0].root]);
   assert.ok(events.rows.length > 1);
   for (const row of events.rows) assert.ok(row.payload.subarray(0,17).includes(Buffer.from('appa-storage-v1')) && !row.payload.includes(Buffer.from(marker)));
-  // Tampering must fail even after a previously successful status read: a new
-  // encrypted view must never reuse an unkeyed/decrypted process cache.
-  const saved = events.rows[0].payload; const tampered = Buffer.from(saved); tampered[tampered.length-1] ^= 1;
-  await pg.query('UPDATE openappa_events SET payload=$2 WHERE root=$1 AND seq=0', [starts.rows[0].root, tampered]);
-  await assert.rejects(native.getOpenappaStatus(session.organization_id, session.session_id, 'attended', policy, key), /authentication failed/);
-  await pg.query('UPDATE openappa_events SET payload=$2 WHERE root=$1 AND seq=0', [starts.rows[0].root, saved]);
+  // A warm reader may serve its own cached, already authenticated copy of the
+  // log. It re-opens only the last batch, so tampering that batch fails at once,
+  // while tampering an earlier batch fails on the next cold read. A warm reader
+  // never returns tampered content.
+  const tamper = async ({ seq, payload }) => {
+    const bytes = Buffer.from(payload); bytes[bytes.length-1] ^= 1;
+    await pg.query('UPDATE openappa_events SET payload=$2 WHERE root=$1 AND seq=$3', [starts.rows[0].root, bytes, seq]);
+    return () => pg.query('UPDATE openappa_events SET payload=$2 WHERE root=$1 AND seq=$3', [starts.rows[0].root, payload, seq]);
+  };
+  let restore = await tamper(events.rows.at(-1));
+  await assert.rejects(status(key), /authentication failed/);
+  await restore();
+  assert.deepEqual(await status(key), authentic);
+  restore = await tamper(events.rows[0]);
+  const cold = coldStatus();
+  assert.notEqual(cold.status, 0, 'a cold process opens every batch');
+  assert.match(cold.stderr, /authentication failed/);
+  const warm = await status(key).catch((error) => error);
+  if (warm instanceof Error) assert.match(warm.message, /authentication failed/);
+  else assert.deepEqual(warm, authentic, 'a warm reader serves only its authenticated copy');
+  await restore();
 });
 
 test('concurrent encrypted annotations carry only their own transient context and encrypt consult audit content', { skip: !databaseUrl, timeout: 60000 }, async (t) => {

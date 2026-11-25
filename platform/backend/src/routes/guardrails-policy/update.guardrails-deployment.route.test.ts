@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { GuardrailsSettings } from "@archestra/openappa-rs";
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
@@ -19,6 +19,7 @@ import {
   getGuardrailsDeployment,
   guardrailsDispatchSettings,
   isGuardrailsV2Active,
+  LINE_CHECK_ELSEWHERE,
   LINE_CHECK_INCOMPLETE,
   lineWarnings,
   withGuardrailsRequest,
@@ -715,10 +716,14 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       enforcedMarks: [],
     };
     expect(
-      await lineWarnings(observe, 0),
+      await lineWarnings(observe, { deadlineMs: 0 }),
       "a scan past its deadline answers that it is incomplete",
     ).toEqual([LINE_CHECK_INCOMPLETE]);
     expect(await lineWarnings(observe)).toHaveLength(1);
+    expect(
+      await lineWarnings(observe, { viewer: randomUUID() }),
+      "another organization's reasons stay in the log",
+    ).toEqual([LINE_CHECK_ELSEWHERE]);
     const uncapped = capped.replace("planner_cap = 1", "planner_cap = 8");
     await GuardrailsPolicyModel.saveDeclarationMigration({
       organizationId,

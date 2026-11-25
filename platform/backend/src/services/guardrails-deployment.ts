@@ -170,7 +170,7 @@ export async function setGuardrailsDeployment(
   // switch-on the check did not cover.
   const checked = turnsOn(await GuardrailsDeploymentModel.get(), update);
   if (checked) await assertPoliciesOpen();
-  const stored = await GuardrailsDeploymentModel.save((row) => {
+  const saved = await GuardrailsDeploymentModel.save((row) => {
     if (turnsOn(row, update) && !checked)
       throw new ApiError(
         409,
@@ -190,8 +190,12 @@ export async function setGuardrailsDeployment(
       ...legacyTuple(settings),
     };
   });
-  const before = await getGuardrailsDeploymentFromSnapshot({ row: stored });
-  const after = await getGuardrailsDeployment();
+  const before = await getGuardrailsDeploymentFromSnapshot({
+    row: saved.before,
+  });
+  const after = await getGuardrailsDeploymentFromSnapshot({
+    row: saved.after,
+  });
   await announceSwitch(before, after, actor?.userId);
   const routing =
     update.mode !== undefined ||
@@ -203,7 +207,9 @@ export async function setGuardrailsDeployment(
     ...after,
     warnings:
       routing && after.active
-        ? await lineWarnings(dispatchSettingsOf(after))
+        ? await lineWarnings(dispatchSettingsOf(after), {
+            viewer: actor?.organizationId,
+          })
         : [],
   };
 }
@@ -216,6 +222,10 @@ const LINE_CHECK_UNAVAILABLE =
   "The settings are saved, but whether every organization's policy can carry them could not be checked. See the backend log.";
 
 /** @public — exported for testability */
+export const LINE_CHECK_ELSEWHERE =
+  "Another organization's policy can't carry these settings, so its new sessions follow Enforce. See the backend log.";
+
+/** @public — exported for testability */
 export const LINE_CHECK_INCOMPLETE =
   "The settings are saved, but not every organization's policy was checked before the response was due. The warnings above may not be all of them.";
 
@@ -223,13 +233,17 @@ export const LINE_CHECK_INCOMPLETE =
  * Why a line `settings` open sessions on can't carry its approvers over some
  * organization's served policy, so those sessions follow Enforce instead. The
  * settings are already saved, so a check that fails says so and fails nothing,
- * and one still running at the deadline answers with what it gathered.
+ * and one still running at the deadline answers with what it gathered. The
+ * reasons of an organization other than the `viewer`'s go to the log only.
  *
  * @public — exported for testability
  */
 export async function lineWarnings(
   settings: GuardrailsSettings,
-  deadlineMs = LINE_CHECK_DEADLINE_MS,
+  {
+    viewer,
+    deadlineMs = LINE_CHECK_DEADLINE_MS,
+  }: { viewer?: string; deadlineMs?: number } = {},
 ): Promise<string[]> {
   const lines = new Set<LineRefusal["variant"]>(
     settings.mode === "observe"
@@ -243,6 +257,7 @@ export async function lineWarnings(
   const gathered = new Set<string>();
   let failed = false;
   let skipped = false;
+  let elsewhere = false;
   const check = async (organizationId: string) => {
     if (Date.now() >= deadline) {
       skipped = true;
@@ -261,7 +276,15 @@ export async function lineWarnings(
           lines,
         },
       );
-      for (const warning of warnings) gathered.add(warning);
+      if (viewer === undefined || organizationId === viewer)
+        for (const warning of warnings) gathered.add(warning);
+      else if (warnings.length > 0) {
+        elsewhere = true;
+        logger.warn(
+          { organizationId, warnings },
+          "Guardrails settings fall back to Enforce for an organization",
+        );
+      }
     } catch (error) {
       failed = true;
       logger.error(
@@ -294,6 +317,7 @@ export async function lineWarnings(
     ]);
     return [
       ...gathered,
+      ...(elsewhere ? [LINE_CHECK_ELSEWHERE] : []),
       ...(failed ? [LINE_CHECK_UNAVAILABLE] : []),
       ...(finished && !skipped ? [] : [LINE_CHECK_INCOMPLETE]),
     ];

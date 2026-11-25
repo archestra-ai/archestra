@@ -59,20 +59,27 @@ class GuardrailsDeploymentModel {
 
   /**
    * Write what `next` derives from the row, holding the row's lock from the
-   * read to the write. Returns the row as it was.
+   * read to the write. Returns the row as this save found and left it.
    */
   static async save(
     next: (row: GuardrailsDeploymentRow) => GuardrailsDeploymentUpdate,
-  ): Promise<GuardrailsDeploymentRow> {
+  ): Promise<{
+    before: GuardrailsDeploymentRow;
+    after: GuardrailsDeploymentRow;
+  }> {
     return withDbTransaction(async (tx) => {
       await tx.insert(table).values({ id }).onConflictDoNothing();
-      const [row] = await tx
+      const [before] = await tx
         .select()
         .from(table)
         .where(eq(table.id, id))
         .for("update");
-      await tx.update(table).set(next(row)).where(eq(table.id, id));
-      return row;
+      const [after] = await tx
+        .update(table)
+        .set(next(before))
+        .where(eq(table.id, id))
+        .returning();
+      return { before, after };
     });
   }
 

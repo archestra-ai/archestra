@@ -8469,7 +8469,9 @@ describe("AgentForm save payload and failure handling", () => {
           screen.queryByText("Select at least one option."),
         ).not.toBeInTheDocument();
         expect(
-          screen.queryByRole("img", { name: "Choose who pays for its runs" }),
+          screen.queryByRole("img", {
+            name: "Choose credentials for its runs",
+          }),
         ).not.toBeInTheDocument();
 
         await user.type(screen.getByLabelText(/Name/), "Copilot agent");

@@ -1120,7 +1120,7 @@ describe("the composer prompt for a connection that is left to the person", () =
     );
 
     expect(
-      screen.getByText("Choose an API key to run this agent"),
+      screen.getByText("Choose a connection to run this agent"),
     ).toBeVisible();
     expect(screen.getByText(/Choose one on the agent's page\./)).toBeVisible();
     expect(screen.getByRole("link", { name: "Open agent" })).toHaveAttribute(

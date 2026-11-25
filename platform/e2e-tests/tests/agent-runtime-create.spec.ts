@@ -69,12 +69,12 @@ test("creates Claude Code from the catalog and explains the account connection a
     await expect(subscription).not.toBeChecked();
     await expect(companyKey).not.toBeChecked();
     const attention = authenticationRow.getByRole("img", {
-      name: "Choose who pays for its runs",
+      name: "Choose credentials for its runs",
     });
     await expect(attention).toBeVisible();
     await attention.hover();
     await expect(page.getByRole("tooltip")).toHaveText(
-      "Choose who pays for its runs",
+      "Choose credentials for its runs",
     );
     const iconBounds = await attention.boundingBox();
     await expect(async () => {

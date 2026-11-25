@@ -134,7 +134,7 @@ export function inboundPoolWire(
   const [provider, surface] = interactionType.split(":");
   if (
     surface === "chatCompletions" &&
-    wireOf(provider as SupportedProvider) === "openai-chat"
+    providerChatWire(provider as SupportedProvider) === "openai-chat"
   ) {
     return "openai-chat";
   }
@@ -152,7 +152,7 @@ export function canReachMember(
       provider === "azure" ||
       provider === "github-copilot"
     );
-  const target = wireOf(provider);
+  const target = providerChatWire(provider);
   if (!target) return false;
   return target === inbound || TRANSLATED.has(`${inbound}>${target}`);
 }
@@ -179,7 +179,7 @@ export function memberTransport(params: {
   const transport = memberTransportOnWire(params);
   const inboundOutside = params.inboundReasoningOutsideCompletion ?? false;
   const memberOutside =
-    wireOf(params.provider) === "openai-chat" &&
+    providerChatWire(params.provider) === "openai-chat" &&
     reportsReasoningOutsideCompletion(params.provider);
   if (params.inbound !== "openai-chat" || inboundOutside === memberOutside) {
     return transport;
@@ -228,7 +228,7 @@ function memberTransportOnWire(params: {
     ? "anthropic"
     : inbound === "openai-responses" && adapter
       ? "openai-responses"
-      : wireOf(provider);
+      : providerChatWire(provider);
   if (!adapter || !target) {
     throw new Error(`Provider ${provider} cannot serve a model pool`);
   }
@@ -695,7 +695,7 @@ function readOpenAiUsage(
   };
 }
 
-function wireOf(provider: SupportedProvider): PoolWire | null {
+export function providerChatWire(provider: SupportedProvider): PoolWire | null {
   if (!isModelPoolProvider(provider)) return null;
   if (provider === "anthropic") return "anthropic";
   if (provider === "bedrock") return "bedrock-converse";

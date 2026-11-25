@@ -46434,6 +46434,7 @@ export type GetNewChatBootstrapResponses = {
                 } | null;
             };
             isBest?: boolean;
+            apiKeyIds?: Array<string>;
             isFree: boolean;
             embeddingDimensions?: EmbeddingDimensions | null;
             requiresUserConnection?: boolean;
@@ -46684,6 +46685,7 @@ export type GetNewChatBootstrapResponses = {
                     } | null;
                 };
                 isBest?: boolean;
+                apiKeyIds?: Array<string>;
                 isFree: boolean;
                 embeddingDimensions?: EmbeddingDimensions | null;
                 requiresUserConnection?: boolean;
@@ -47049,6 +47051,7 @@ export type GetConversationBootstrapResponses = {
                     } | null;
                 };
                 isBest?: boolean;
+                apiKeyIds?: Array<string>;
                 isFree: boolean;
                 embeddingDimensions?: EmbeddingDimensions | null;
                 requiresUserConnection?: boolean;
@@ -47299,6 +47302,7 @@ export type GetConversationBootstrapResponses = {
                         } | null;
                     };
                     isBest?: boolean;
+                    apiKeyIds?: Array<string>;
                     isFree: boolean;
                     embeddingDimensions?: EmbeddingDimensions | null;
                     requiresUserConnection?: boolean;
@@ -48331,6 +48335,7 @@ export type CreateChatConversationData = {
         projectId?: string | null;
         encryptedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
+        strictModelSelection?: boolean;
     };
     path?: never;
     query?: never;
@@ -48953,6 +48958,7 @@ export type UpdateChatConversationData = {
         projectId?: string | null;
         pinnedAt?: string | null;
         thinkingEffort?: 'low' | 'medium' | 'high';
+        strictModelSelection?: boolean;
     };
     path: {
         id: string;
@@ -109236,6 +109242,7 @@ export type GetLlmModelsResponses = {
             } | null;
         };
         isBest?: boolean;
+        apiKeyIds?: Array<string>;
         isFree: boolean;
         embeddingDimensions?: EmbeddingDimensions | null;
         requiresUserConnection?: boolean;
@@ -132633,7 +132640,9 @@ export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganiza
 export type GetOrganizationDefaultModelData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        forChat?: 'true';
+    };
     url: '/api/organization/default-model';
 };
 
@@ -132719,6 +132728,8 @@ export type GetOrganizationDefaultModelResponses = {
         autoRouters: Array<{
             id: string;
             name: string;
+            unavailableReason?: string | null;
+            normalOnlyReason?: string | null;
             tiers: {
                 fast: {
                     id: string;

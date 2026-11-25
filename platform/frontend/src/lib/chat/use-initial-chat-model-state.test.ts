@@ -275,6 +275,111 @@ describe("useInitialChatModelState", () => {
     await waitFor(() => expect(result.current.agentId).toBe("agent-2"));
   });
 
+  it("keeps inheritance through a model repair, and records a deliberate pick even at the same model", () => {
+    const { result } = renderHook(() =>
+      useInitialChatModelState({
+        ...baseParams,
+        defaultAgentId: "agent-2",
+        organization: {
+          defaultModelId: "unavailable-model",
+          defaultLlmApiKeyId: "unavailable-key",
+        },
+      }),
+    );
+
+    expect(result.current.hasModelOverride).toBe(false);
+    expect(result.current.modelSource).toBeNull();
+    act(() => result.current.onModelChange("uuid-gpt-mini", true));
+    expect(result.current.hasModelOverride).toBe(false);
+    act(() => result.current.onModelChange("uuid-gpt-mini"));
+    expect(result.current.hasModelOverride).toBe(true);
+    act(() => result.current.onModelChange("uuid-claude", true));
+    expect(result.current.modelId).toBe("uuid-gpt-mini");
+    act(() => result.current.onResetModelOverride());
+    expect(result.current.hasModelOverride).toBe(false);
+  });
+
+  it("pairs a catalog fallback with a credential that serves it, not the first key for its provider", () => {
+    const { result } = renderHook(() =>
+      useInitialChatModelState({
+        ...baseParams,
+        defaultAgentId: "agent-2",
+        modelsByProvider: {
+          openai: [
+            { ...model("uuid-gpt", "openai", true), apiKeyIds: ["linked-key"] },
+          ],
+        },
+        chatApiKeys: [
+          { id: "other-key", provider: "openai" },
+          { id: "linked-key", provider: "openai" },
+        ],
+      }),
+    );
+    expect(result.current.modelId).toBe("uuid-gpt");
+    expect(result.current.apiKeyId).toBe("linked-key");
+  });
+
+  it("reports a new deep link as pending until its explicit model is applied", () => {
+    const snapshots: Array<{
+      pending: boolean;
+      modelId: string;
+      override: boolean;
+    }> = [];
+    const { result, rerender } = renderHook(
+      ({ urlModelId }: { urlModelId: string | null }) => {
+        const state = useInitialChatModelState({
+          ...baseParams,
+          defaultAgentId: "agent-2",
+          urlModelId,
+        });
+        snapshots.push({
+          pending: state.isUrlModelSelectionPending,
+          modelId: state.modelId,
+          override: state.hasModelOverride,
+        });
+        return state;
+      },
+      { initialProps: { urlModelId: null as string | null } },
+    );
+
+    snapshots.length = 0;
+    rerender({ urlModelId: "uuid-gpt-mini" });
+    expect(snapshots[0]?.pending).toBe(true);
+    expect(result.current).toMatchObject({
+      isUrlModelSelectionPending: false,
+      modelId: "uuid-gpt-mini",
+      hasModelOverride: true,
+    });
+  });
+
+  it("never turns a personal Copilot pick into an App-key pick for the same model", () => {
+    const shared = {
+      ...model("copilot-model", "github-copilot", true),
+      apiKeyIds: ["app-key"],
+    };
+    const { result } = renderHook(() =>
+      useInitialChatModelState({
+        ...baseParams,
+        defaultAgentId: "agent-2",
+        modelsByProvider: {
+          "github-copilot": [
+            shared,
+            { ...shared, apiKeyIds: [], requiresUserConnection: true },
+          ],
+        },
+        chatApiKeys: [
+          { id: "app-key", provider: "github-copilot", isGithubAppKey: true },
+        ],
+      }),
+    );
+    expect(result.current.apiKeyId).toBe("app-key");
+    act(() => result.current.onModelChange("copilot-model", undefined, true));
+    act(() => result.current.setApiKeyId("app-key"));
+    expect(result.current.modelId).toBe("copilot-model");
+    expect(result.current.apiKeyId).toBeNull();
+    expect(result.current.hasModelOverride).toBe(true);
+  });
+
   it("derives the provider on a model change", async () => {
     const { result } = renderHook(() => useInitialChatModelState(baseParams));
 

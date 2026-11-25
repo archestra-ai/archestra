@@ -1,7 +1,8 @@
 "use client";
 
 import type { FileUIPart } from "ai";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { inheritedChatModelChoice } from "@/app/chat/chat-initial-state";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
 import {
   AgentRuntimeCredentialPrompt,
@@ -12,8 +13,10 @@ import {
   runtimePreflightDisabledReason,
   useAgentRuntimePreflight,
 } from "@/lib/agent-runtime.query";
+import { autoRouterIdOfChoice } from "@/lib/chat/auto-model";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state";
 import { useFeature } from "@/lib/config/config.query";
+import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -49,6 +52,8 @@ export function NewChatComposer({
     apiKeyId: string | null;
     files: FileUIPart[];
     runtimeMode: boolean;
+    followDefaults?: boolean;
+    modelPoolId?: string | null;
   }) => void;
   /** The pinned agent of the project this composer starts chats in, if any. */
   projectDefaultAgentId?: string | null;
@@ -83,6 +88,7 @@ export function NewChatComposer({
     apiKeyId,
     provider,
     modelSource,
+    hasModelOverride,
     setApiKeyId,
     onAgentChange,
     onModelChange,
@@ -113,6 +119,17 @@ export function NewChatComposer({
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const currentAgent =
     internalAgents.find((agent) => agent.id === agentId) ?? selectedAgent;
+  const organizationDefault = useOrganizationDefaultModel({ forChat: true });
+  const [modelPoolChoice, setModelPoolChoice] = useState<string | null>();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a different agent starts with its defaults.
+  useEffect(() => setModelPoolChoice(undefined), [agentId]);
+  const followDefaults = modelPoolChoice === undefined && !hasModelOverride;
+  const modelPoolId = followDefaults
+    ? inheritedChatModelChoice(currentAgent, organizationDefault)
+    : (modelPoolChoice ?? null);
+  const autoUnavailableReason = organizationDefault.autoRouters.find(
+    (router) => router.id === autoRouterIdOfChoice(modelPoolId),
+  )?.unavailableReason;
   const runtimeAgent =
     runtimeEnabled && currentAgent?.runtime ? currentAgent : undefined;
   const isRuntimeMode = !!runtimeAgent;
@@ -127,7 +144,14 @@ export function NewChatComposer({
     !isRuntimeMode &&
     !isApiKeysLoading &&
     chatApiKeys.length === 0 &&
-    !agentLlmApiKeyId;
+    !agentLlmApiKeyId &&
+    !modelPoolId;
+
+  const modelUnavailableReason =
+    autoUnavailableReason ??
+    (!followDefaults && !modelPoolId && !modelId
+      ? "Choose a model for this connection."
+      : null);
 
   if (!agentId) return null;
 
@@ -196,16 +220,26 @@ export function NewChatComposer({
               apiKeyId,
               files,
               runtimeMode: isRuntimeMode,
+              ...(!isRuntimeMode && { followDefaults, modelPoolId }),
             });
           }}
           status={isSubmitting ? "submitted" : "ready"}
           selectedModel={modelId}
-          onModelChange={onModelChange}
+          onModelChange={(id, automatic, personal) => {
+            if (!automatic) setModelPoolChoice(null);
+            onModelChange(id, automatic, personal);
+          }}
           agentId={agentId}
           currentProvider={provider}
+          agentRequiresPerUserConnect={hasModelOverride}
           initialApiKeyId={apiKeyId}
           onApiKeyChange={setApiKeyId}
-          onProviderChange={onProviderChange}
+          onProviderChange={(provider, keyId) => {
+            setModelPoolChoice(null);
+            onProviderChange(provider, keyId);
+          }}
+          modelPoolId={modelPoolId}
+          onModelPoolChange={setModelPoolChoice}
           allowFileUploads={organization?.allowChatFileUploads ?? false}
           isModelsLoading={isModelsLoading}
           inputModalities={inputModalities}
@@ -213,9 +247,13 @@ export function NewChatComposer({
           selectorAgentId={agentId}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
-          onResetModelOverride={onResetModelOverride}
+          onResetModelOverride={() => {
+            setModelPoolChoice(undefined);
+            onResetModelOverride();
+          }}
           sendDisabled={
             hasNoUsableKey ||
+            (!isRuntimeMode && !!modelUnavailableReason) ||
             (isRuntimeMode &&
               (runtimePreflight.isPending ||
                 runtimePreflight.data?.ready !== true))
@@ -225,7 +263,7 @@ export function NewChatComposer({
               ? runtimePreflightDisabledReason(runtimePreflight)
               : hasNoUsableKey
                 ? "You have no API key you can use. Ask an admin to share one."
-                : undefined
+                : (modelUnavailableReason ?? undefined)
           }
           runtimeMode={isRuntimeMode}
           runtimeAgentName={runtimeAgent?.name}

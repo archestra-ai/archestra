@@ -809,24 +809,14 @@ class LlmProviderApiKeyModel {
     // one user ride on another's token. Returns null (→ "link your account"
     // prompt) when the user has no personal key of their own.
     if (providerRequiresPerUserCredential(provider)) {
-      // A GitHub App key is a separate, shared way to use Copilot. It is used
-      // only when named: the agent's configured key or the conversation's pick.
-      // It never stands in for a missing personal sign-in.
-      if (
-        provider === "github-copilot" &&
-        (await LlmProviderApiKeyModel.isGithubAppKey(agentLlmApiKeyId))
-      ) {
-        const agentKey = await LlmProviderApiKeyModel.findById(
-          agentLlmApiKeyId as string,
-        );
-        if (agentKey?.organizationId === organizationId) return agentKey;
-      }
-      if (provider === "github-copilot" && conversationId) {
-        const conversation = await ConversationModel.findById({
-          id: conversationId,
-          userId,
-          organizationId,
-        });
+      if (provider === "github-copilot") {
+        const conversation = conversationId
+          ? await ConversationModel.findById({
+              id: conversationId,
+              userId,
+              organizationId,
+            })
+          : null;
         const picked = conversation?.chatApiKeyId
           ? await LlmProviderApiKeyModel.findById(conversation.chatApiKeyId)
           : null;
@@ -841,6 +831,21 @@ class LlmProviderApiKeyModel {
             )))
         ) {
           return picked;
+        }
+        // A model without a stored key denotes the member's personal
+        // connection. Keep the chat's Copilot choice ahead of the agent's App.
+        const chatSelectedCopilot =
+          conversation?.modelId &&
+          (conversation.chatApiKeyId === null ||
+            picked?.provider === "github-copilot");
+        if (
+          !chatSelectedCopilot &&
+          agentLlmApiKeyId &&
+          (await LlmProviderApiKeyModel.isGithubAppKey(agentLlmApiKeyId))
+        ) {
+          const agentKey =
+            await LlmProviderApiKeyModel.findById(agentLlmApiKeyId);
+          if (agentKey?.organizationId === organizationId) return agentKey;
         }
       }
       return LlmProviderApiKeyModel.findPersonalKey({

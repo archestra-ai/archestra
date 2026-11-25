@@ -15,6 +15,7 @@ import {
   isThinkingEffortSelfHostedProvider,
   markTurnStopped,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
+  providerRequiresPerUserCredential,
   RouteId,
   RUN_ID_HEADER,
   requiresOpenAiResponsesApi,
@@ -60,6 +61,9 @@ import {
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import { userModelRouterAuth } from "@/auto-routing/eligibility";
+import { agentAutoRouterId } from "@/auto-routing/organization-default";
+import { chatAutoRouterAvailability } from "@/auto-routing/router";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   fetchToolUiResource,
@@ -128,6 +132,7 @@ import {
   ScheduleTriggerRunModel,
   TeamModel,
 } from "@/models";
+import AutoRouterModel from "@/models/auto-router";
 import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
@@ -3288,7 +3293,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             projectId: true,
             encryptedChat: true,
             thinkingEffort: true,
-          }),
+          })
+          .extend({ strictModelSelection: z.boolean().optional() }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
@@ -3304,6 +3310,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           projectId,
           encryptedChat,
           thinkingEffort,
+          strictModelSelection,
         },
         user,
         organizationId,
@@ -3358,6 +3365,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? agent.modelPoolId
           : null);
 
+      if (
+        strictModelSelection &&
+        !modelId &&
+        !effectiveModelPoolId &&
+        !autoRouterId
+      ) {
+        throw new ApiError(400, "Choose a model for this connection.");
+      }
+
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
       if (
@@ -3396,6 +3412,34 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             explicitAutoRouterId: autoRouterId,
             allowAutoModel: agent.runtime === null,
           });
+
+      if ("autoRouterId" in llmSelection && llmSelection.autoRouterId) {
+        await assertChatAutoRouterAccess(
+          organizationId,
+          user.id,
+          llmSelection.autoRouterId,
+        );
+      } else if (
+        autoRouterId ||
+        (!modelId &&
+          !effectiveModelPoolId &&
+          (await agentAutoRouterId(agent, organizationId)))
+      ) {
+        throw new ApiError(
+          400,
+          "This auto router is not set up. Choose another model.",
+        );
+      } else if (
+        strictModelSelection &&
+        !effectiveModelPoolId &&
+        (modelId !== llmSelection.modelId ||
+          (chatApiKeyId && chatApiKeyId !== llmSelection.chatApiKeyId))
+      ) {
+        throw new ApiError(
+          409,
+          "That model is no longer available on the selected connection. Choose a model again.",
+        );
+      }
 
       logger.info(
         {
@@ -3459,11 +3503,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Update conversation title, model, agent, API key, or project",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        body: UpdateConversationSchema,
+        body: UpdateConversationSchema.extend({
+          strictModelSelection: z.boolean().optional(),
+        }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
+    async (
+      {
+        params: { id },
+        body: { strictModelSelection, ...body },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
       const currentConversation = await ConversationModel.findById({
         id,
         userId: user.id,
@@ -3529,6 +3583,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Picking an auto router stores its normal tier the same way, and
       // leaves the pool; picking anything else leaves the router.
       if (body.autoRouterId) {
+        await assertChatAutoRouterAccess(
+          organizationId,
+          user.id,
+          body.autoRouterId,
+        );
         const auto = await resolveAutoModelSelection(
           organizationId,
           body.autoRouterId,
@@ -3613,6 +3672,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           allowAutoModel: nextAgent.runtime === null,
         });
 
+        if (llmSelection.autoRouterId) {
+          await assertChatAutoRouterAccess(
+            organizationId,
+            user.id,
+            llmSelection.autoRouterId,
+          );
+        } else if (await agentAutoRouterId(nextAgent, organizationId)) {
+          throw new ApiError(
+            400,
+            "This auto router is not set up. Choose another model.",
+          );
+        }
         body.modelId = llmSelection.modelId;
         body.chatApiKeyId = llmSelection.chatApiKeyId;
         body.autoRouterId = llmSelection.autoRouterId ?? null;
@@ -3643,10 +3714,39 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKeyId: mergedApiKeyId,
           })
         ) {
-          throw new ApiError(
-            400,
-            "A conversation's model and API key must be set together",
-          );
+          // Personal selections use the acting member's own credential at send
+          // time. Clearing the key here also leaves any previously chosen App.
+          const personalModel =
+            body.modelId && body.chatApiKeyId === null
+              ? await ModelModel.findById(body.modelId)
+              : null;
+          if (
+            !personalModel ||
+            !providerRequiresPerUserCredential(personalModel.provider)
+          ) {
+            throw new ApiError(
+              400,
+              "A conversation's model and API key must be set together",
+            );
+          }
+        }
+        if (
+          strictModelSelection &&
+          !body.modelPoolId &&
+          !body.autoRouterId &&
+          mergedModelId &&
+          mergedApiKeyId
+        ) {
+          const linked =
+            await LlmProviderApiKeyModelLinkModel.filterLinkedModelIds({
+              apiKeyIds: [mergedApiKeyId],
+              modelIds: [mergedModelId],
+            });
+          if (!linked.has(mergedModelId))
+            throw new ApiError(
+              409,
+              "That model is no longer available on the selected connection. Choose a model again.",
+            );
         }
       }
 
@@ -5540,6 +5640,30 @@ function stripFeedbackMetadata(message: ChatMessage): ChatMessage {
   }
   const { feedback: _feedback, ...rest } = metadata as Record<string, unknown>;
   return { ...message, metadata: rest } as ChatMessage;
+}
+
+async function assertChatAutoRouterAccess(
+  organizationId: string,
+  userId: string,
+  routerId: string,
+): Promise<void> {
+  const router = await AutoRouterModel.findInOrganization(
+    organizationId,
+    routerId,
+  );
+  if (!router)
+    throw new ApiError(
+      400,
+      "This auto router is not set up. Choose another model.",
+    );
+  const auth = await userModelRouterAuth({ organizationId, userId });
+  const availability = await chatAutoRouterAvailability({
+    router,
+    auth,
+    checkTiers: false,
+  });
+  if (availability.kind === "unavailable")
+    throw new ApiError(403, availability.reason);
 }
 
 /**

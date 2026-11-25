@@ -229,7 +229,7 @@ describe("DELETE /api/members/bulk", () => {
 
   test("gives the removed member's shared items to the chosen new owner", async ({
     makeAccount,
-    makeAgent,
+    makeInternalAgent,
     makeMember,
     makeTeam,
     makeUser,
@@ -240,7 +240,7 @@ describe("DELETE /api/members/bulk", () => {
     const newOwner = await makeUser();
     await makeMember(newOwner.id, organizationId);
     const team = await makeTeam(organizationId, user.id);
-    const teamAgent = await makeAgent({
+    const teamAgent = await makeInternalAgent({
       organizationId,
       authorId: departing.id,
       access: { teams: [team.id] },

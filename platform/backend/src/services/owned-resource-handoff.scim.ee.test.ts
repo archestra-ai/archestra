@@ -7,7 +7,7 @@ import { scimProvisioningService } from "./scim-provisioning.ee";
 
 describe("SCIM deactivation and a departing member's shared resources", () => {
   test("SCIM deactivation hands shared resources to the longest-standing active admin", async ({
-    makeAgent,
+    makeInternalAgent,
     makeMember,
     makeOrganization,
     makeTeam,
@@ -39,7 +39,7 @@ describe("SCIM deactivation and a departing member's shared resources", () => {
       softDeleted: new Date(),
     });
     const team = await makeTeam(organization.id, senior.id);
-    const teamAgent = await makeAgent({
+    const teamAgent = await makeInternalAgent({
       organizationId: organization.id,
       authorId: departing.id,
       access: { teams: [team.id] },

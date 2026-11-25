@@ -28,7 +28,7 @@ describe("GET /api/members/:userId/owned-resources", () => {
   });
 
   test("lists what moves to a new owner, with who uses it, and counts what is deleted", async ({
-    makeAgent,
+    makeInternalAgent,
     makeMember,
     makeSkill,
     makeTeam,
@@ -41,7 +41,7 @@ describe("GET /api/members/:userId/owned-resources", () => {
     const team = await makeTeam(organizationId, user.id, {
       name: "Support team",
     });
-    const teamAgent = await makeAgent({
+    const teamAgent = await makeInternalAgent({
       organizationId,
       authorId: member.id,
       name: "Support triage",
@@ -51,12 +51,12 @@ describe("GET /api/members/:userId/owned-resources", () => {
       authorId: member.id,
       access: { users: [colleague.id] },
     });
-    await makeAgent({
+    await makeInternalAgent({
       organizationId,
       authorId: member.id,
       access: "personal",
     });
-    await makeAgent({
+    await makeInternalAgent({
       organizationId,
       authorId: member.id,
       access: "personal",

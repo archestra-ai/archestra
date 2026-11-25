@@ -248,8 +248,9 @@ export const AppaSelfServiceSchema = z.object({
     .object({ checkName: z.string(), url: z.string().nullable() })
     .optional(),
   /**
-   * Whether the GitHub App merges each self-served rules pull request once
-   * its policy check passes, and the environment variable that sets it.
+   * Whether the GitHub App merges each pull request Archestra opens for a
+   * policy change once its checks pass, and the environment variable that
+   * sets it.
    */
   autoMerge: z.object({
     enabled: z.boolean(),

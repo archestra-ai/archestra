@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { CreatedBy } from "@archestra/shared";
 import {
   ALL_ARCHESTRA_TOKEN_PREFIXES,
+  ApiError,
   ARCHESTRA_TOKEN_PREFIX,
   MEMBER_ROLE_NAME,
   type Permissions,
@@ -29,6 +30,7 @@ import type {
   ServiceAccountResponse,
   ServiceAccountTokenResponse,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import { ServiceAccountLabelModel } from "./entity-labels";
 import OrganizationRoleModel from "./organization-role";
@@ -41,6 +43,13 @@ import ResourcePermissionSubjectModel from "./resource-permission-subject";
  * saves an UPDATE on every service-account request.
  */
 const TOKEN_LAST_USED_REFRESH_MS = 60_000;
+
+/** A create or rename onto a name another account in the organization holds. */
+class ServiceAccountNameTakenError extends ApiError {
+  constructor(name: string | undefined) {
+    super(409, `A service account named "${name}" already exists`);
+  }
+}
 
 class ServiceAccountModel {
   static readonly MAX_TOKENS_PER_SERVICE_ACCOUNT = 50;
@@ -296,7 +305,7 @@ class ServiceAccountModel {
       });
       // SPDX-SnippetEnd
       return created;
-    });
+    }).catch((error) => rethrowIfNameTaken(error, params.name));
 
     if (params.labels?.length) {
       await ServiceAccountLabelModel.syncLabels(
@@ -346,7 +355,8 @@ class ServiceAccountModel {
           eq(schema.serviceAccountsTable.organizationId, organizationId),
         ),
       )
-      .returning();
+      .returning()
+      .catch((error) => rethrowIfNameTaken(error, columns.name));
 
     if (!serviceAccount) return null;
 
@@ -754,4 +764,20 @@ function isTokenHashEqual(left: string, right: string): boolean {
     leftBuffer.length === rightBuffer.length &&
     timingSafeEqual(leftBuffer, rightBuffer)
   );
+}
+
+/**
+ * Names are unique per organization. Without this, a create or rename onto a
+ * taken name surfaces the raw unique violation as a 500.
+ */
+function rethrowIfNameTaken(error: unknown, name: string | undefined): never {
+  if (
+    isUniqueConstraintError(
+      error,
+      "service_accounts_organization_id_name_unique_idx",
+    )
+  ) {
+    throw new ServiceAccountNameTakenError(name);
+  }
+  throw error;
 }

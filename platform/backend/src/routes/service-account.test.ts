@@ -374,6 +374,46 @@ describe("service account routes", () => {
     });
   });
 
+  test("rejects a duplicate name on create and rename with a conflict", async () => {
+    const create = (name: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/service-accounts",
+        payload: { name, role: "member" },
+      });
+    expect((await create("Nightly sync")).statusCode).toBe(200);
+    const other = await create("Weekly sync");
+    expect(other.statusCode).toBe(200);
+
+    const duplicate = await create("Nightly sync");
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toEqual({
+      error: {
+        message: 'A service account named "Nightly sync" already exists',
+        type: "api_conflict_error",
+      },
+    });
+
+    const rename = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${other.json().id}`,
+      payload: { name: "Nightly sync" },
+    });
+    expect(rename.statusCode).toBe(409);
+    expect(rename.json().error.type).toBe("api_conflict_error");
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+    });
+    expect(
+      list
+        .json()
+        .map((item: { name: string }) => item.name)
+        .sort(),
+    ).toEqual(["Nightly sync", "Weekly sync"]);
+  });
+
   test("rejects token creation after the service account token limit", async () => {
     const serviceAccount = await ServiceAccountModel.create({
       organizationId,

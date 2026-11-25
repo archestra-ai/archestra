@@ -29,7 +29,7 @@ Give teammates a named starting point, such as Engineering workspace, with your 
 
 Requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
-1. Go to **Settings → Agents → Runtimes** and choose **Add runtime → Create custom runtime…**.
+1. Go to **Settings → Agents → Runtimes** and choose **Create custom runtime** (or **Add runtime → Create custom runtime…** if any runtimes are removed).
 2. Enter a **Name** and **Description**, and optionally choose a **Display icon**.
 3. Under **Container**, set the **Container image** and **Command**. Open **Inference API**, **Follow-up messages**, **Environment**, and **Limits** to change those settings; each row shows its current value while closed.
 4. Click **Add runtime**. The runtime is saved and appears among the choices when creating an agent.

@@ -418,7 +418,8 @@ mod tests {
 
     fn response(text: &str, finish_reason: FinishReason) -> CompletionResponse {
         CompletionResponse {
-            choice: rig_core::OneOrMany::one(rig_core::completion::AssistantContent::text(text)),
+            choice: vec![rig_core::completion::AssistantContent::text(text)],
+            origin: None,
             finish_reason,
             usage: nitpicker_agent::llm::TokenUsage::default(),
             selected_model: None,

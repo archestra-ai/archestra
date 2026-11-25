@@ -1,8 +1,8 @@
 # Curated Agent catalog images. The build context is platform/ so every native
 # CLI shares one hardened execution base.
-FROM ghcr.io/astral-sh/uv:0.9.30@sha256:538e0b39736e7feae937a65983e49d2ab75e1559d35041f9878b7b7e51de91e4 AS uv
+FROM dhi.io/uv:0.9.30@sha256:2ba66b2a3ecfd98962a18d4eeb399ca537e20a900f29df3bf6952c3190e84c00 AS uv
 # The uv release Hermes locks its environment with.
-FROM ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657da05ffaa45d82797b53fa3abc AS uv-hermes
+FROM dhi.io/uv:0.12.3@sha256:6eb8ea7c3ff90b389a4d1e3c41ee66d8daa204fc6609df65b0ef21e3ba29dd57 AS uv-hermes
 
 # One Rust toolchain both builds the review engine and ships in the runtime, so
 # projects with native code (Archestra's addons included) compile in place.

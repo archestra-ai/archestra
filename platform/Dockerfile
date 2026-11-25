@@ -193,7 +193,7 @@ RUN mkdir -p /var/tmp && skopeo copy --override-os linux --override-arch "${TARG
 # framework-neutral IL (net472 assemblies zipped into a .mfappx), so the
 # stage always runs on the build platform — never under target-arch
 # emulation — and the same bytes land in every target arch.
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0-alpine@sha256:4f4992f8f302150e4adb5e78c324731e968493a30c0638985ba29cb42a858cd6 AS vaf-add-on-builder
+FROM --platform=$BUILDPLATFORM dhi.io/dotnet:8.0-sdk-alpine3.23@sha256:65fbafc42fea930cc099c0a9536fff7cf31abc812b00818722aafe45af1eafb6 AS vaf-add-on-builder
 WORKDIR /src
 COPY backend/src/knowledge-base/connectors/mfiles/vaf-add-on/ ./
 # The csproj's packaging target writes exactly one versioned

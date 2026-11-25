@@ -46,7 +46,11 @@ RUN uv pip sync \
    python -c "import mcp; import pydantic_core"
 
 # Node.js stage
-FROM node:20.20.2-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS node-builder
+FROM dhi.io/node:20.20.2-alpine3.23-dev@sha256:e155683884a967bd60e6cb82f7a8cb0fa1b8c10f04b91c7973d5e44d4c884294 AS node-builder
+# The hardened image keeps npm under /usr/lib. Global installs go to /usr/local,
+# so the upgraded npm below lands in /usr/local/lib/node_modules/npm and runs
+# ahead of the image's own npm on PATH.
+ENV NPM_CONFIG_PREFIX=/usr/local
 
 # Upgrade npm to a version whose bundled dependencies already include the fixes for
 # picomatch CVE-2026-33671, sigstore CVE-2026-48815, and undici CVE-2026-12151
@@ -204,7 +208,7 @@ COPY --from=go-bin /usr/lib/go /usr/local/go
 COPY --from=node-runtime /usr/bin/node /usr/local/bin/node
 
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
-# node:20-alpine has npm in /usr/local/lib/node_modules/npm
+# node-builder installs its npm in /usr/local/lib/node_modules/npm
 COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx

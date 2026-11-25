@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-24
+lastUpdated: 2026-11-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1618,9 +1618,9 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: unset (the saved setting applies, off unless changed).
   - Values: `enabled`, `disabled`. Other values stop startup.
 
-- **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets the deployment's person approval, `personApproval` in the Guardrails deployment API. While it is set, the API refuses to change that setting. **Settings → Guardrails** has no control for it.
+- **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets the deployment's [person approval](/docs/agents/guardrails#off-observe-and-enforce), `personApproval` in the Guardrails deployment API. While it is set, the API refuses to change that setting. **Settings → Guardrails** has no control for it.
   - Default: unset (the saved setting applies, `block` unless changed)
-  - Values: `block`, `unattended`, `everywhere`. Other values stop startup.
+  - Values: `block` (`ask`), `unattended` (`auto_unattended`), `everywhere` (`auto_everywhere`). Other values stop startup.
   - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same setting.
 
 - **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Still read, so a deployment configured with it keeps starting, but it waives nothing: a refused call stays refused, and Guardrails stay on for the session. While it is set, the API refuses to change `unapprovableBlockMode`.

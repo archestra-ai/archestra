@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-20
+lastUpdated: 2026-11-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -164,7 +164,7 @@ What to know:
 [Guardrails](/docs/agents/guardrails) check each tool call and tool result inside the run.
 
 - **Delegated runs** get their parent's restrictions before work starts. Follow-up instructions keep them. An answer crosses the guardrail check before another agent gets it.
-- **Review:** a run has no person at hand. By default, a call that needs human approval waits. Set **Human approval** under **Break the glass** in **Settings → Guardrails** to **Waive in unattended sessions** to let it run anyway and approve a plan that needs one for the agent. Each waiver records a yell in the **Yells** tab, and with the default **Yell tool** setting that yell also turns Guardrails off for the run's session. With the default, the review shows in the run's live terminal as the agent's own question card or form, and only the run's owner approves or denies it there. Client permission settings cannot approve it.
+- **Review:** a run has no person at hand. By default, a call that needs human approval waits: the review shows in the run's live terminal as the agent's own question card or form, and only the run's owner approves or denies it there. Client permission settings cannot approve it. Set [`personApproval`](/docs/agents/guardrails#off-observe-and-enforce) to `auto_unattended` to have the platform approve for the agent in runs.
 - **File downloads:** a protected transfer checks the pinned file content before it returns a download command. It refuses a file that needs changes or that passes the protected export limit. The session owner can still download directly.
 - **Old sessions:** turning on Guardrails does not protect work that started before. Start a new session. Guardrails do not replace filesystem or network sandboxing.
 

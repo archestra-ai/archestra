@@ -3,7 +3,7 @@ title: Upgrade from v1.4 to v1.5
 description: What v1.5 changes for your deployment, and the steps to upgrade from v1.4 with Helm or Docker
 order: 11
 draft: true
-lastUpdated: 2026-11-20
+lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -24,3 +24,12 @@ If a script reads the member list from the Adoption API, switch it to the new en
 
 - [`GET /api/connected-clients/adoption`](/docs/reference/api/apps#tag/connection-setups/GET/api/connected-clients/adoption) now returns `memberCount` and only the members with an agent or traffic. Members who have connected nothing are counted but not listed.
 - To list every member, page through [`GET /api/connected-clients/adoption/members`](/docs/reference/api/apps#tag/connection-setups/GET/api/connected-clients/adoption/members). It filters by `state`, searches with `search`, and returns up to 1000 members per page.
+
+## Guardrails
+
+v1.5 removes the ways a refused call got through, so check these before you upgrade:
+
+- **Waivers:** if you set [`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE) to `allow`, or **Other blocked calls** to **Waive the block**, refused calls stay refused after the upgrade, and your deployment runs [Enforce](/docs/agents/guardrails#off-observe-and-enforce). To keep agents working while you tune the policy, set `mode` to `observe` once the rollout finishes.
+- **Sessions a yell turned off:** they are checked again.
+- **`X-Archestra-Unattended`:** clients that send it no longer get unattended approvals. Only Agent Runtime runs count as unattended.
+- **Rolling upgrade:** until every replica runs v1.5, a v1.4 replica still waives as v1.4 did, honors the header, and turns sessions off on a yell. Change `mode` or `personApproval` only after the rollout: a v1.4 replica reads a saved `observe` as waiving every approval and every refused call.

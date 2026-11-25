@@ -14897,6 +14897,77 @@ describe("the removed soft-block override", () => {
   });
 });
 
+describe("a call id the client reuses after loading its tool", () => {
+  test("is answered by the runtime's ruling, not the earlier not-loaded one", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const contextFor = (declared: boolean) => {
+      const context = requestContext({
+        sessionId: "reused-id",
+        organizationId,
+      });
+      trustedOf(context).request = {
+        tools: stubRequestTools(),
+        session: {},
+        customTools: new Set(),
+        declaredTools: declared ? [{ name: "read_file" }] : [],
+        defersTools: true,
+      };
+      return context;
+    };
+    const call = { id: "call_0", name: "read_file", arguments: {} };
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async (_session, calls) =>
+        calls.map(() => ({ kind: "allow" as const })),
+      );
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const plugin = new AppaPluginArchestra([]);
+    try {
+      const unloaded = contextFor(false);
+      await plugin.onSessionInit(unloaded);
+      const refused = await plugin.onToolCalls({
+        ...unloaded,
+        toolCalls: [call],
+      });
+      expect(refused).toMatchObject({ blocked: [{ id: "call_0" }] });
+      expect(evaluate).not.toHaveBeenCalled();
+      await plugin.onCleanup(unloaded);
+
+      const loaded = contextFor(true);
+      await plugin.onSessionInit(loaded);
+      // The runtime allows it: the call goes upstream unchanged.
+      expect(
+        await plugin.onToolCalls({ ...loaded, toolCalls: [call] }),
+      ).toBeUndefined();
+      expect(evaluate).toHaveBeenCalledTimes(1);
+      await plugin.onCleanup(loaded);
+
+      const answered = contextFor(true);
+      await plugin.onSessionInit(answered);
+      const results = await plugin.onToolResults({
+        ...answered,
+        toolResults: [
+          {
+            id: "call_0",
+            name: "read_file",
+            content: "file text",
+            isError: false,
+          },
+        ],
+      });
+      expect(results?.toolResultUpdates?.call_0).toBeUndefined();
+      await plugin.onCleanup(answered);
+    } finally {
+      evaluate.mockRestore();
+      processResults.mockRestore();
+    }
+  });
+});
+
 describe("a provider-hosted call refused before any ruling", () => {
   test("its notice, not the runtime's withheld answer, reaches the next upstream request", async ({
     makeOrganization,

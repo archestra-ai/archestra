@@ -1501,13 +1501,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     });
     // A notice an earlier refusal of an id left must not answer for the call now
     // decided under it.
-    await forgetUnansweredNotices(
+    await forgetSupersededRulings(
       this.governedSession(binding),
-      calls.flatMap((call, index) => {
+      calls.map((call, index) => {
         const decision: AppaHostedCallDecision = decisions[index];
-        return decision.kind === "hold" && decision.proxyNotice
-          ? []
-          : [call.id];
+        return {
+          callId: call.id,
+          keepsNotice:
+            decision.kind === "hold" && decision.proxyNotice === true,
+        };
       }),
     );
     if (held.length === 0) return { decision: "release" };
@@ -1877,11 +1879,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     // A notice an earlier refusal of an id left must not answer for the call now
     // decided under it.
-    await forgetUnansweredNotices(
+    await forgetSupersededRulings(
       session,
-      [...decisionById].flatMap(([id, decision]) =>
-        decision.kind === "deny" && decision.proxyNotice ? [] : [id],
-      ),
+      [...decisionById].map(([callId, decision]) => ({
+        callId,
+        keepsNotice: decision.kind === "deny" && decision.proxyNotice === true,
+      })),
     );
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
@@ -3079,17 +3082,26 @@ async function retainUnansweredNotice(params: {
   }
 }
 
-async function forgetUnansweredNotices(
+/**
+ * Drops what earlier rulings of these ids left for their results: the runtime
+ * decided each one now. A call that keeps a notice keeps the one just retained.
+ */
+async function forgetSupersededRulings(
   session: OpenAppaSession,
-  callIds: readonly string[],
+  decided: readonly { callId: string; keepsNotice: boolean }[],
 ): Promise<void> {
-  if (callIds.length === 0) return;
+  if (decided.length === 0) return;
   try {
     // A ruling carried on a stand-in call goes too: the id now names another call.
     await cacheManager.getAndDeleteMany(
-      callIds.flatMap((callId) => [
-        unansweredNoticeKey({ session, callId }),
-        carriedRulingKey({ session, callId }),
+      decided.flatMap(({ callId, keepsNotice }) => [
+        notLoadedRulingKey({ session, callId }),
+        ...(keepsNotice
+          ? []
+          : [
+              unansweredNoticeKey({ session, callId }),
+              carriedRulingKey({ session, callId }),
+            ]),
       ]),
     );
   } catch (err) {

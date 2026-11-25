@@ -167,6 +167,12 @@ export const CreateBaseToolArgsSchema = z
       .describe(
         "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false.",
       ),
+    progressiveSubagentLoading: z
+      .boolean()
+      .optional()
+      .describe(
+        "Progressive subagent loading for explicitly-configured delegation targets: when true they are not listed as agent__ tools and are found with search_tools and run with run_tool instead. Defaults to false. Has no effect while accessAllSubagents is true, which always loads subagents this way.",
+      ),
     subagentLoadBalancing: SubagentLoadBalancingConfigSchema.nullable()
       .optional()
       .describe(
@@ -279,6 +285,11 @@ const ResourceDetailOutputSchema = z.object({
     .describe(
       "Whether the agent may delegate to every internal agent the calling user can access.",
     ),
+  progressiveSubagentLoading: z
+    .boolean()
+    .describe(
+      "Whether explicitly-configured delegation targets are found with search_tools instead of listed as agent__ tools.",
+    ),
   subagentLoadBalancing: StoredSubagentLoadBalancingConfigSchema.nullable()
     .optional()
     .describe(
@@ -387,6 +398,7 @@ export async function handleCreateResource<
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
+    progressiveSubagentLoading?: boolean;
     subagentLoadBalancing?: SubagentLoadBalancingConfig | null;
     runtime?: AgentRuntimeToolInput;
     networkPolicy?: NetworkPolicyInput;
@@ -458,6 +470,9 @@ export async function handleCreateResource<
     }
     if (args.accessAllSubagents !== undefined) {
       createParams.accessAllSubagents = args.accessAllSubagents;
+    }
+    if (args.progressiveSubagentLoading !== undefined) {
+      createParams.progressiveSubagentLoading = args.progressiveSubagentLoading;
     }
     if (args.subagentLoadBalancing !== undefined) {
       createParams.subagentLoadBalancing = args.subagentLoadBalancing;
@@ -775,6 +790,7 @@ export async function handleEditResource<
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
+    progressiveSubagentLoading?: boolean;
     subagentLoadBalancing?: SubagentLoadBalancingConfig | null;
     runtime?: AgentRuntimeToolInput | null;
     networkPolicy?: NetworkPolicyInput | null;
@@ -860,6 +876,9 @@ export async function handleEditResource<
     }
     if (args.accessAllSubagents !== undefined) {
       updateData.accessAllSubagents = args.accessAllSubagents;
+    }
+    if (args.progressiveSubagentLoading !== undefined) {
+      updateData.progressiveSubagentLoading = args.progressiveSubagentLoading;
     }
     if (args.subagentLoadBalancing !== undefined) {
       updateData.subagentLoadBalancing = args.subagentLoadBalancing;

@@ -222,6 +222,7 @@ class AgentVersionModel {
       missingCredentialBehavior: agent.missingCredentialBehavior,
       accessAllTools: agent.accessAllTools,
       accessAllSubagents: agent.accessAllSubagents,
+      progressiveSubagentLoading: agent.progressiveSubagentLoading,
       activationSkillMode: agent.activationSkillMode,
       activationSkillRules: activationSkillRuleRows
         .map((row) => ({
@@ -525,6 +526,13 @@ function normalizeAgentVersion(row: AgentVersion): AgentVersion {
       networkPolicy: AgentConfigSnapshotSchema.shape.networkPolicy.parse(
         row.snapshot.networkPolicy,
       ),
+      // Before the setting existed a gateway kept its agents behind
+      // search_tools/run_tool whenever its tools were, and a chat agent
+      // always listed them.
+      progressiveSubagentLoading:
+        row.snapshot.progressiveSubagentLoading ??
+        (row.snapshot.agentType !== "agent" &&
+          row.snapshot.toolExposureMode === "search_and_run_only"),
     },
   };
 }

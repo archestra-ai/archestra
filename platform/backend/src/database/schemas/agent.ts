@@ -263,6 +263,17 @@ const agentsTable = softDeletablePgTable(
       .default(false),
 
     /**
+     * "Progressive subagent loading" for Manual subagents: when on, the
+     * assigned delegation targets are not listed as `agent__…` tools and are
+     * reached through search_tools/run_tool instead. Has no effect while
+     * `accessAllSubagents` is on: that set has no bound, so it is always
+     * loaded progressively.
+     */
+    progressiveSubagentLoading: boolean("progressive_subagent_loading")
+      .notNull()
+      .default(false),
+
+    /**
      * MCP gateways: how incoming requests are load-balanced across the
      * subagents assigned to the gateway, including algorithm, per-subagent
      * weights, and retry/fallback policy for failed subagent requests.

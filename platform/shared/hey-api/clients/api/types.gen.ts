@@ -17262,6 +17262,7 @@ export type GetAgentCatalogResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                progressiveSubagentLoading: boolean;
                 subagentLoadBalancing?: {
                     enabled: boolean;
                     algorithm: 'round_robin' | 'weighted' | 'random';
@@ -17668,6 +17669,7 @@ export type GetAgentsResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            progressiveSubagentLoading: boolean;
             subagentLoadBalancing?: {
                 enabled: boolean;
                 algorithm: 'round_robin' | 'weighted' | 'random';
@@ -17830,6 +17832,7 @@ export type CreateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        progressiveSubagentLoading?: boolean;
         subagentLoadBalancing?: {
             enabled?: boolean;
             algorithm?: 'round_robin' | 'weighted' | 'random';
@@ -18128,6 +18131,7 @@ export type CreateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -19427,6 +19431,7 @@ export type GetDefaultMcpGatewayResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -19752,6 +19757,7 @@ export type ImportAgentResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            progressiveSubagentLoading: boolean;
             subagentLoadBalancing?: {
                 enabled: boolean;
                 algorithm: 'round_robin' | 'weighted' | 'random';
@@ -20086,6 +20092,7 @@ export type GetAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -20237,6 +20244,7 @@ export type UpdateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        progressiveSubagentLoading?: boolean;
         subagentLoadBalancing?: {
             enabled?: boolean;
             algorithm?: 'round_robin' | 'weighted' | 'random';
@@ -20434,6 +20442,7 @@ export type UpdateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -20989,6 +20998,7 @@ export type GetAgentVersionResponses = {
             missingCredentialBehavior: string;
             accessAllTools: boolean;
             accessAllSubagents: boolean;
+            progressiveSubagentLoading: boolean;
             activationSkillMode: 'all' | 'manual';
             passthroughHeaders: Array<string>;
             incomingEmailEnabled: boolean;
@@ -21236,6 +21246,7 @@ export type RestoreAgentVersionResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -21502,6 +21513,7 @@ export type CloneAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -24004,6 +24016,7 @@ export type RestoreAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -46522,6 +46535,7 @@ export type GetNewChatBootstrapResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                progressiveSubagentLoading: boolean;
                 subagentLoadBalancing?: {
                     enabled: boolean;
                     algorithm: 'round_robin' | 'weighted' | 'random';
@@ -47137,6 +47151,7 @@ export type GetConversationBootstrapResponses = {
                     activationSkillMode: 'all' | 'manual';
                     activationSkillPolicyRevision: number;
                     accessAllSubagents: boolean;
+                    progressiveSubagentLoading: boolean;
                     subagentLoadBalancing?: {
                         enabled: boolean;
                         algorithm: 'round_robin' | 'weighted' | 'random';

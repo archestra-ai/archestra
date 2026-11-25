@@ -147,7 +147,11 @@ import { toolDiscoverySteer } from "./tool-recovery-messages";
 import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
-export { getAgentTools } from "./delegation";
+export {
+  getAgentTools,
+  getListedAgentTools,
+  loadsSubagentsProgressively,
+} from "./delegation";
 export { filterToolNamesByPermission } from "./rbac";
 export { getSkillDelegationTools } from "./skill-delegation";
 export type { ArchestraContext } from "./types";

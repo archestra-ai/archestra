@@ -70,6 +70,8 @@ const EditMcpGatewayToolArgsSchema = z
     ),
     accessAllTools: CreateBaseToolArgsSchema.shape.accessAllTools,
     accessAllSubagents: CreateBaseToolArgsSchema.shape.accessAllSubagents,
+    progressiveSubagentLoading:
+      CreateBaseToolArgsSchema.shape.progressiveSubagentLoading,
     subagentLoadBalancing: CreateBaseToolArgsSchema.shape.subagentLoadBalancing,
     knowledgeBaseIds: UpdateAgentSchemaBase.shape.knowledgeBaseIds
       .describe(

@@ -77,7 +77,7 @@ export function CompanyConnectionPickers({
   modelFixed = false,
   compact = false,
   plan = false,
-  emptyConnection = plan ? "Choose a plan" : "Choose a connection",
+  emptyConnection = plan ? "Choose a plan" : "Choose an API key",
   emptyModel,
 }: {
   keys: ConnectionKey[];
@@ -238,7 +238,7 @@ export function CompanyConnectionPickers({
             id={`${id}-connection`}
             className={compact ? "sr-only" : undefined}
           >
-            {plan ? "Which plan pays" : "Which connection pays"}
+            {plan ? "Enterprise plan" : "API key"}
           </Label>
           <PickerField
             labelId={`${id}-connection`}
@@ -265,7 +265,7 @@ export function CompanyConnectionPickers({
             onClear={
               companyKeyId && !lockedConnection ? onApiKeyClear : undefined
             }
-            clearLabel={plan ? "Clear plan" : "Clear connection"}
+            clearLabel={plan ? "Clear plan" : "Clear API key"}
           />
         </div>
       )}
@@ -293,7 +293,7 @@ export function CompanyConnectionPickers({
                 ? copy.model
                 : plan
                   ? "Choose a plan first"
-                  : "Choose a connection first")
+                  : "Choose an API key first")
             }
             disabled={disabled || !companyKeyId}
             locked={
@@ -451,7 +451,7 @@ export function SubscriptionModelPicker({
 }
 
 const CLAUDE_COPY = {
-  none: "No company connection can run Claude yet",
+  none: "No API key can run Claude yet",
   needs:
     "Claude Code needs an Anthropic API key, Amazon Bedrock, or Vertex AI with Anthropic models. Add one to use it here.",
   add: "Add an Anthropic key",
@@ -459,7 +459,7 @@ const CLAUDE_COPY = {
   model: "Select a Claude model",
 };
 const RUNTIME_COPY = {
-  none: "No company connection can run this agent yet",
+  none: "No API key can run this agent yet",
   needs:
     "Its runtime needs a key of a provider it can call. Add one to use it here.",
   add: "Add a key",

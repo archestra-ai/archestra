@@ -245,7 +245,7 @@ function alternativeLabels(
   ];
 }
 
-const COMPANY_API_KEY = "A company API key";
+const COMPANY_API_KEY = "An API key";
 const COMPANY_ENTERPRISE_PLAN = "The company's enterprise plan";
 
 /** The way the viewer's runs use: the lock's, their choice, or the default. */
@@ -456,7 +456,8 @@ function companyOptionDescription(
     : modelOpen
       ? `The agent's ${connection}, with a model you pick on its page.`
       : `The agent's ${connection} and model.`;
-  return `${runsOn} Billed to the company.`;
+  // A plan is the organization's; an API key can be the person's own.
+  return copilot ? `${runsOn} Billed to the company.` : runsOn;
 }
 
 /** What the form starts on: the stored choice, else the agent's default. */

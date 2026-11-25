@@ -4273,7 +4273,7 @@ export function AgentForm({
         ];
 
   const modelAttention = noAccountWay
-    ? "Choose who pays for its runs"
+    ? "Choose credentials for its runs"
     : usesClaudeSubscription
       ? undefined
       : !requiredSubscriptionSatisfied
@@ -4312,7 +4312,7 @@ export function AgentForm({
       {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
         <Label>
           {isClaudeCodeRuntime || (runtime && agentRuntimeEnabled)
-            ? "Accounts that can run it"
+            ? "Credentials to use"
             : "Model"}
         </Label>
       )}
@@ -4398,12 +4398,12 @@ export function AgentForm({
                     choosesAmongAccounts &&
                     canLockAccount && (
                       <FieldDescription>
-                        Choose which accounts this agent allows, from those its
-                        runtime allows.
+                        Choose which credentials this agent allows, from those
+                        its runtime allows.
                       </FieldDescription>
                     )}
                   <AgentAccountOptions
-                    label="Accounts that can run it"
+                    label="Credentials to use"
                     // Under the runtime's rule there is one kind, and nothing
                     // to say about a choice between two.
                     meaning={

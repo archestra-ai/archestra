@@ -687,6 +687,42 @@ describe("ChatSetupMenu behind one form field", () => {
     expect(props.close).toHaveBeenCalledOnce();
   });
 
+  it("lists no model pools and no auto routers where the caller cannot set one, though both exist", async () => {
+    pools.push({ id: "pool-1", name: "qwen3-32b", providers: ["vllm"] });
+    const tier = (id: string) => ({
+      id,
+      provider: "vllm" as const,
+      displayName: id,
+    });
+    vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
+      data: {
+        model: null,
+        defaultAutoRouterId: null,
+        autoRouters: [
+          {
+            id: "router-a",
+            name: "auto",
+            tiers: { fast: tier("f"), normal: tier("n"), smart: tier("s") },
+          },
+        ],
+      },
+    } as never);
+    renderMenu({
+      ...formProps,
+      only: "key",
+      keyFilter: (key) => key.scope === "team",
+    });
+
+    expect(screen.getByPlaceholderText("Search keys…")).toBeVisible();
+    expect(
+      screen.queryByRole("group", { name: "Model pools" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /^Auto/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Team vLLM/ })).toBeVisible();
+  });
+
   it("adds a key from the key list, even while it is empty", async () => {
     const user = userEvent.setup();
     const onAddKey = vi.fn();

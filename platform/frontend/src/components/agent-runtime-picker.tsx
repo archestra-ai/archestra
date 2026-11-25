@@ -258,8 +258,10 @@ export function AgentRuntimePicker({
         <ConfigurationRow
           id={`${id}-model`}
           value="model"
-          title="Accounts that can run it"
-          summary={modelSummary}
+          title={value ? "Credentials to use" : "Model"}
+          // A runtime's row lists its credentials below; a summary of them
+          // on the bar adds nothing.
+          summary={value ? undefined : modelSummary}
           attention={modelAttention}
         >
           {modelBlock}

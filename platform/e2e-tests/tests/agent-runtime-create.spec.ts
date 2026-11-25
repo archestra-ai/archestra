@@ -49,7 +49,7 @@ test("creates Claude Code from the catalog and explains the account connection a
       page.getByRole("radiogroup", { name: "Runtime", exact: true }),
     ).toHaveCount(0);
     const authenticationRow = page.getByRole("button", {
-      name: /^Accounts that can run it/,
+      name: /^Credentials to use/,
     });
     await expect(authenticationRow).toHaveAttribute("aria-expanded", "true");
     // The runtime's own setting is each person's Claude subscription, so a
@@ -59,7 +59,7 @@ test("creates Claude Code from the catalog and explains the account connection a
       name: /Each person's Claude subscription/,
     });
     const companyKey = page.getByRole("checkbox", {
-      name: /A company API key/,
+      name: /An API key/,
     });
     await expect(subscription).toBeChecked();
     await expect(companyKey).not.toBeChecked();

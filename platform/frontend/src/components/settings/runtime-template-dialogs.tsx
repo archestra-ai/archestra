@@ -741,8 +741,8 @@ function RuntimeAccountsSection(
 ) {
   return (
     <SettingsSection
-      title="Accounts that can run it"
-      description="Which accounts agents on this runtime may allow. Each agent's settings pick from these."
+      title="Credentials to use"
+      description="Which credentials agents on this runtime may allow. Each agent's settings pick from these."
     >
       <RuntimeAccountsField {...props} />
     </SettingsSection>

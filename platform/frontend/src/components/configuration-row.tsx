@@ -25,7 +25,7 @@ export function ConfigurationRow({
   id?: string;
   value: string;
   title: string;
-  summary: string;
+  summary?: string;
   description?: string;
   attention?: string;
   children: ReactNode;
@@ -66,9 +66,11 @@ export function ConfigurationRow({
               </span>
             )}
           </span>
-          <span className="min-w-0 truncate text-sm font-normal text-muted-foreground sm:ml-auto sm:max-w-[45%] sm:text-right">
-            {summary}
-          </span>
+          {summary && (
+            <span className="min-w-0 truncate text-sm font-normal text-muted-foreground sm:ml-auto sm:max-w-[45%] sm:text-right">
+              {summary}
+            </span>
+          )}
         </span>
       </AccordionTrigger>
       <AccordionContent className="pt-2">{children}</AccordionContent>

@@ -146,11 +146,11 @@ export function agentRuntimeCanNameAccountKind(runtime: {
 export type CompanyAccountWords = {
   /** The company account is an enterprise plan, not an API key. */
   plan: boolean;
-  /** As one of two accounts: "a company API key". */
+  /** As one of two accounts: "an API key". */
   a: string;
-  /** As the one the agent has: "the company API key". */
+  /** As the one the agent has: "the API key". */
   the: string;
-  /** After "Uses": "company's API key". */
+  /** After "Uses": "an API key". */
   companys: string;
   /** In a button: "API key". */
   short: string;
@@ -162,9 +162,9 @@ export type CompanyAccountWords = {
 
 const API_KEY_WORDS: CompanyAccountWords = {
   plan: false,
-  a: "a company API key",
-  the: "the company API key",
-  companys: "company's API key",
+  a: "an API key",
+  the: "the API key",
+  companys: "an API key",
   short: "API key",
   connection: "connection",
   aConnection: "a connection",

@@ -32,7 +32,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && tar -xzf /tmp/gh-source.tar.gz --strip-components=1 \
  && rm /tmp/gh-source.tar.gz \
- && go get golang.org/x/net@v0.62.0 \
+ && go get golang.org/x/net@v0.63.0 \
  && go mod verify \
  && CGO_ENABLED=0 go build -trimpath \
       -ldflags='-s -w -X github.com/cli/cli/v2/internal/build.Version=2.103.2 -X github.com/cli/cli/v2/internal/build.Date=2026-10-23' \

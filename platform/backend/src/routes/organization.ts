@@ -75,6 +75,7 @@ import {
   prepareMcpRuntimeTierChange,
 } from "@/services/mcp-runtime-tier-settings";
 import { removeMemberTarget } from "@/services/member-removal";
+import { assertEligibleNewOwner } from "@/services/owned-resource-handoff";
 import { reconcileManagedPlaywrightSetting } from "@/services/playwright-runtime";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { syncBuiltInSkillsForOrganization } from "@/services/seed";
@@ -894,6 +895,28 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "You are not authorized to change the default role for new members",
           );
         }
+      }
+
+      // Who inherits departing members' shared items is member administration
+      // too: gate it on the permission that removes members.
+      if ("departingMemberOwnerId" in body) {
+        const { success: canRemoveMembers } = await hasPermission(
+          { member: ["delete"] },
+          headers,
+          serviceAccount,
+          { userId: user.id, organizationId },
+        );
+        if (!canRemoveMembers) {
+          throw new ApiError(
+            403,
+            "You are not authorized to choose who receives a departing member's items",
+          );
+        }
+        if (body.departingMemberOwnerId)
+          await assertEligibleNewOwner({
+            candidateId: body.departingMemberOwnerId,
+            organizationId,
+          });
       }
 
       // A non-null default role must resolve to a real role in this org

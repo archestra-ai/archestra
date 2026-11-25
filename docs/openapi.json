@@ -171564,6 +171564,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "departingMemberOwnerId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "defaultAgentId": {
                           "nullable": true,
                           "type": "string",
@@ -172111,6 +172115,7 @@
                         "defaultUserLimitModel",
                         "defaultUserLimitCleanupInterval",
                         "defaultMemberRole",
+                        "departingMemberOwnerId",
                         "defaultAgentId",
                         "favicon",
                         "appName",
@@ -514264,6 +514269,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -514811,6 +514820,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -516060,6 +516070,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -516607,6 +516621,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -517601,6 +517616,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -518148,6 +518167,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -518750,6 +518770,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -519297,6 +519321,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -519896,6 +519921,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -520443,6 +520472,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -522526,6 +522556,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -523073,6 +523107,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -523807,6 +523842,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -524354,6 +524393,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -525148,6 +525188,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -525695,6 +525739,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -526364,6 +526409,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -526911,6 +526960,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -527238,6 +527288,11 @@
                     "type": "string",
                     "pattern": "^[a-z0-9_:-]+(?:,[a-z0-9_:-]+)*$",
                     "description": "One or more organization role identifiers, separated by commas"
+                  },
+                  "departingMemberOwnerId": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
                   }
                 }
               }
@@ -527521,6 +527576,10 @@
                       ]
                     },
                     "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "departingMemberOwnerId": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -528071,6 +528130,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -528715,6 +528775,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -529262,6 +529326,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -529843,6 +529908,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -530390,6 +530459,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -532175,6 +532245,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "departingMemberOwnerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -532722,6 +532796,7 @@
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
                     "defaultMemberRole",
+                    "departingMemberOwnerId",
                     "defaultAgentId",
                     "favicon",
                     "appName",

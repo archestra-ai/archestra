@@ -265,6 +265,16 @@ const organizationsTable = pgTable("organization", {
   defaultMemberRole: text("default_member_role"),
 
   /**
+   * Receives what a departing member shared with others when nobody picks a
+   * new owner: SCIM deactivation, leaving or deleting one's own account.
+   * NULL falls back to the longest-standing active admin. An admin removing
+   * someone in the UI picks the new owner themselves.
+   * FK to user(id) ON DELETE SET NULL — enforced by migration only, like
+   * `defaultAgentId`.
+   */
+  departingMemberOwnerId: text("departing_member_owner_id"),
+
+  /**
    * Organization-wide default agent ID (fallback when member has no personal default).
    * FK to agents(id) ON DELETE SET NULL — enforced by migration only
    * (Drizzle .references() causes TS circular inference: organization → agent → ... → organization).

@@ -3,6 +3,7 @@ import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
 import MemberModel from "@/models/member";
+import OrganizationModel from "@/models/organization";
 import OwnedResourceModel, {
   type OwnedResourceKind,
 } from "@/models/owned-resource";
@@ -20,9 +21,10 @@ import { handOffResourceOwnership } from "./resource-ownership";
  * departing member could reach are left alone; they are personal and are
  * deleted with the member.
  *
- * The new owner is `recipientId` (the admin removing the member) when that is
- * an active member other than the departing one, and otherwise the
- * organization's longest-standing active admin. The departing member keeps
+ * The new owner is `recipientId` (the admin removing the member, or whom they
+ * picked) when that is an active member other than the departing one; else
+ * the organization's configured `departingMemberOwnerId` under the same rule;
+ * else the organization's longest-standing active admin. The departing member keeps
  * their own grant on each resource, so restoring a deactivated user gives back
  * their access.
  *
@@ -52,8 +54,27 @@ export async function handOffSharedResources(params: {
       }))
         ? params.recipientId
         : null;
+    const configured = explicit
+      ? null
+      : (await OrganizationModel.getById(organizationId))
+          ?.departingMemberOwnerId;
+    const fallback =
+      configured &&
+      (await isEligibleRecipient({
+        candidateId: configured,
+        userId,
+        organizationId,
+      }))
+        ? configured
+        : null;
+    if (configured && !fallback)
+      logger.warn(
+        { userId, organizationId, configured },
+        "[owned-resource-handoff] the configured new owner cannot take over; using the longest-standing admin",
+      );
     const ownerId =
       explicit ??
+      fallback ??
       (await MemberModel.findLongestStandingAdmin({
         organizationId,
         excludeUserId: userId,

@@ -45928,6 +45928,7 @@ export type GetBootstrapResponses = {
             defaultUserLimitModel: Array<string> | null;
             defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             defaultMemberRole: string | null;
+            departingMemberOwnerId: string | null;
             defaultAgentId: string | null;
             favicon: string | null;
             appName: string | null;
@@ -132626,6 +132627,7 @@ export type GetOrganizationResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -133106,6 +133108,7 @@ export type UpdateAppearanceSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -133354,6 +133357,7 @@ export type UpdateSecuritySettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -133598,6 +133602,7 @@ export type UpdateMcpSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -133841,6 +133846,7 @@ export type UpdateSkillsSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -134508,6 +134514,7 @@ export type UpdateAgentSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -134775,6 +134782,7 @@ export type UpdateConnectionSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -135078,6 +135086,7 @@ export type UpdateIntegrationSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -135331,6 +135340,7 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -135455,6 +135465,7 @@ export type UpdateAuthSettingsData = {
          * One or more organization role identifiers, separated by commas
          */
         defaultMemberRole?: string | null;
+        departingMemberOwnerId?: string | null;
     };
     path?: never;
     query?: never;
@@ -135579,6 +135590,7 @@ export type UpdateAuthSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -135829,6 +135841,7 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -136069,6 +136082,7 @@ export type DropEmbeddingConfigResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -136671,6 +136685,7 @@ export type CompleteOnboardingResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;

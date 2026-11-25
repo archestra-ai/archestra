@@ -2088,6 +2088,49 @@ describe("APPA feature boundary", () => {
     });
   });
 
+  test.each([
+    "later",
+    "after_repair",
+  ] as const)("a remedy result whose gate could not judge the remedy says it did not run (%s)", async (retry) => {
+    const refused =
+      "[appa] this call was not checked: a fact its check needs could not be obtained.";
+    native.dispatchHook.mockImplementation(async (raw: string) =>
+      JSON.stringify(
+        JSON.parse(raw).event === "tool_result"
+          ? {
+              decision: "mcp_result",
+              result: {
+                isError: true,
+                content: [{ type: "text", text: refused }],
+              },
+              approved_output: refused,
+              output_source: "runtime",
+              outcomes: ["missing_fact"],
+              deciding: "missing_fact",
+              retry,
+            }
+          : { decision: "ack" },
+      ),
+    );
+
+    const result = await processProxyResults({
+      session,
+      canonicalize: (name) => name,
+      results: [
+        {
+          id: "remedy",
+          name: "archestra__execute_remedy_plan",
+          content: refused,
+          isError: true,
+        },
+      ],
+    });
+
+    expect(result.toolResultUpdates.remedy).toMatchObject({
+      content: refused + refusalGuidance({ kind: "refuse_unjudged", retry }),
+    });
+  });
+
   describe("a remedy call the gateway never ran", () => {
     const CONTROL = "mcp__gw__archestra__execute_remedy_plan";
     const WITHHELD =

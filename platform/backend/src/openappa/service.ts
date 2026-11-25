@@ -1130,8 +1130,14 @@ async function approveToolResult(params: {
     (decision.decision === "mcp_result" ||
       decision.decision === "replace_output");
   const unjudged = unjudgedAction(outcome);
+  // An `mcp_result` is the runtime's own answer to a remedy call, which its gate
+  // refused before it ran: that call may be made again, unlike a tool that ran.
+  const guidance =
+    decision.decision === "mcp_result"
+      ? refusalGuidance
+      : withheldOutputGuidance;
   return {
-    content: unjudged ? content + withheldOutputGuidance(unjudged) : content,
+    content: unjudged ? content + guidance(unjudged) : content,
     outputSource,
     ...((!unknownControl || outcome?.kind === "hard_block") &&
     (decision.decision === "block" ||

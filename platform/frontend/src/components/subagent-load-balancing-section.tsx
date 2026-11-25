@@ -48,7 +48,7 @@ function getModeOptions(params: {
     },
     {
       value: "weighted",
-      label: "Weighted",
+      label: "Weighted round robin",
       description: isAllSubagentsMode
         ? "Requires Manual mode."
         : "Split runs by custom weights.",

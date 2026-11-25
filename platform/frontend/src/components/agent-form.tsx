@@ -471,76 +471,73 @@ function SubagentWeightSection({
   };
 
   return (
-    <div className="shrink-0 space-y-3 border-b px-4 py-3">
-      <div className="flex items-center gap-3 text-xs">
-        <span className="shrink-0 font-medium text-muted-foreground">
-          Runs share
-        </span>
-        <div
-          className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
-          aria-hidden="true"
-        >
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-150"
-            style={{ width: `${sharePercent}%` }}
-          />
-        </div>
-        <span className="shrink-0 font-mono font-medium tabular-nums text-primary">
-          {sharePercent}%
-        </span>
-      </div>
+    <div className="shrink-0 space-y-3 border-b p-4">
+      <p className="text-sm font-medium text-foreground">Load balancing</p>
 
-      {readOnly ? (
+      <div className="space-y-2.5">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium text-foreground">
-            Load balancing weight
-          </span>
-          <span className="font-mono text-sm font-medium tabular-nums text-foreground">
-            {weight}
-          </span>
+          <span className="shrink-0 text-sm text-muted-foreground">Weight</span>
+          {readOnly ? (
+            <span className="text-sm font-medium tabular-nums text-foreground">
+              {weight}
+            </span>
+          ) : (
+            <div className="flex items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                className="rounded-r-none border-r-0"
+                disabled={weight <= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+                onClick={() => commitNumber(weight - 1)}
+                aria-label={`Decrease weight for ${agentName}`}
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </Button>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+                max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+                aria-label={`Weight for ${agentName}`}
+                value={draft}
+                onChange={(event) => handleDraftChange(event.target.value)}
+                onBlur={handleBlur}
+                className="h-8 w-16 rounded-none px-2 text-center text-sm font-medium tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                className="rounded-l-none border-l-0"
+                disabled={weight >= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+                onClick={() => commitNumber(weight + 1)}
+                aria-label={`Increase weight for ${agentName}`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium text-foreground">
-            Load balancing weight
+
+        <div className="flex items-center gap-3">
+          <span className="shrink-0 text-sm text-muted-foreground">
+            Runs share
           </span>
-          <div className="flex items-center">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              className="rounded-r-none border-r-0"
-              disabled={weight <= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
-              onClick={() => commitNumber(weight - 1)}
-              aria-label={`Decrease weight for ${agentName}`}
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </Button>
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
-              max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
-              aria-label={`Weight for ${agentName}`}
-              value={draft}
-              onChange={(event) => handleDraftChange(event.target.value)}
-              onBlur={handleBlur}
-              className="h-8 w-16 rounded-none px-2 text-center font-mono text-xs tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          <div
+            className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+            aria-hidden="true"
+          >
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-150"
+              style={{ width: `${sharePercent}%` }}
             />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              className="rounded-l-none border-l-0"
-              disabled={weight >= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
-              onClick={() => commitNumber(weight + 1)}
-              aria-label={`Increase weight for ${agentName}`}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
           </div>
+          <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">
+            {sharePercent}%
+          </span>
         </div>
-      )}
+      </div>
     </div>
   );
 }

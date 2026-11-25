@@ -68,14 +68,14 @@ describe("SubagentLoadBalancingSection", () => {
     await user.click(select);
     expect(screen.getByRole("option", { name: /Direct/ })).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: /Round robin/ }),
+      screen.getByRole("option", { name: /^Round robin/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: /Weighted/ }),
+      screen.getByRole("option", { name: /Weighted round robin/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /Random/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("option", { name: /Round robin/ }));
+    await user.click(screen.getByRole("option", { name: /^Round robin/ }));
     expect(select).toHaveTextContent("Round robin");
     expect(onChange).toHaveBeenLastCalledWith({
       enabled: true,
@@ -83,8 +83,10 @@ describe("SubagentLoadBalancingSection", () => {
     });
 
     await user.click(select);
-    await user.click(screen.getByRole("option", { name: /Weighted/ }));
-    expect(select).toHaveTextContent("Weighted");
+    await user.click(
+      screen.getByRole("option", { name: /Weighted round robin/ }),
+    );
+    expect(select).toHaveTextContent("Weighted round robin");
     const weightedCall = onChange.mock.calls.at(-1)?.[0];
     expect(weightedCall).toEqual({
       enabled: true,
@@ -174,7 +176,9 @@ describe("SubagentLoadBalancingSection", () => {
     expect(select).toHaveTextContent("Round robin");
 
     await user.click(select);
-    const weightedOption = screen.getByRole("option", { name: /Weighted/ });
+    const weightedOption = screen.getByRole("option", {
+      name: /Weighted round robin/,
+    });
     expect(weightedOption).toHaveAttribute("aria-disabled", "true");
     expect(weightedOption).toHaveTextContent("Requires Manual mode.");
   });

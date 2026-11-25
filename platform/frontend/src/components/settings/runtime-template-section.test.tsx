@@ -251,18 +251,18 @@ const subscriptionCard = (dialog: HTMLElement) =>
     name: /Each person's Claude subscription/,
   });
 const companyCard = (dialog: HTMLElement) =>
-  within(dialog).getByRole("checkbox", { name: /An API key/ });
+  within(dialog).getByRole("checkbox", { name: /Provider API key/ });
 const BOTH =
   "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, an API key, or both.";
 // Nothing fixed: the empty field says who picks, and no sentence follows.
-const NOTHING_FIXED = { name: "API key Each agent chooses its own key" };
+const NOTHING_FIXED = { name: "Key Each agent chooses its own key" };
 const CONNECTION_FIXED =
   "Every agent on this runtime uses this API key. Set the model in each agent's settings, or choose one here.";
 const BOTH_FIXED = "Every agent on this runtime uses this API key and model.";
 const accountsGroup = (dialog: HTMLElement) =>
   within(dialog).getByRole("group", { name: "Credentials to use" });
 const connectionField = (dialog: HTMLElement) =>
-  within(dialog).getByRole("button", { name: /^API key/ });
+  within(dialog).getByRole("button", { name: /^Key/ });
 const modelField = (dialog: HTMLElement) =>
   within(dialog).getByRole("button", { name: /^Model/ });
 /** Opens a field's list and picks one of its options. */
@@ -931,7 +931,9 @@ describe("the accounts a custom runtime gives its agents", () => {
     expect(
       within(dialog).getByRole("heading", { name: "Credentials to use" }),
     ).toBeVisible();
-    expect(within(accountsGroup(dialog)).getByText("An API key")).toBeVisible();
+    expect(
+      within(accountsGroup(dialog)).getByText("Provider API key"),
+    ).toBeVisible();
     expect(within(dialog).queryByRole("checkbox")).toBeNull();
     expect(within(dialog).queryByText(/Each person's/)).toBeNull();
 
@@ -1491,9 +1493,7 @@ describe("the company connection and model a runtime fixes for its agents", () =
     const user = userEvent.setup();
     let dialog = await open(user);
     await pick(user, connectionField(dialog), /Company OpenAI/);
-    expect(connectionField(dialog)).toHaveAccessibleName(
-      "API key Company OpenAI",
-    );
+    expect(connectionField(dialog)).toHaveAccessibleName("Key Company OpenAI");
     expect(within(dialog).getByText(CONNECTION_FIXED)).toBeVisible();
     expect(modelField(dialog)).toBeEnabled();
     await saveRuntime(user, dialog);
@@ -1523,9 +1523,7 @@ describe("the company connection and model a runtime fixes for its agents", () =
     await saveRuntime(user, dialog);
     expect(templateAccounts()).toEqual({ llmApiKeyId: "key-openai" });
 
-    await user.click(
-      within(dialog).getByRole("button", { name: "Clear API key" }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "Clear key" }));
     expect(within(dialog).getByRole("button", NOTHING_FIXED)).toBeVisible();
     expect(modelField(dialog)).toBeDisabled();
     await saveRuntime(user, dialog);
@@ -1548,9 +1546,7 @@ describe("the company connection and model a runtime fixes for its agents", () =
     expect(within(dialog).getByRole("alert")).toHaveTextContent(
       "This connection no longer exists. Choose another or clear it.",
     );
-    await user.click(
-      within(dialog).getByRole("button", { name: "Clear API key" }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "Clear key" }));
     expect(within(dialog).queryByRole("alert")).toBeNull();
     await saveRuntime(user, dialog);
     expect(settings.templates[0]).not.toHaveProperty("accounts");
@@ -1561,7 +1557,9 @@ describe("the company connection and model a runtime fixes for its agents", () =
     const user = userEvent.setup();
     const dialog = await openBuiltIn(user, "OpenCode");
     // One always-on card: nothing to tick, and no meaning line to follow.
-    expect(within(accountsGroup(dialog)).getByText("An API key")).toBeVisible();
+    expect(
+      within(accountsGroup(dialog)).getByText("Provider API key"),
+    ).toBeVisible();
     expect(within(dialog).queryByRole("checkbox")).toBeNull();
     await pick(user, connectionField(dialog), /Company Anthropic/);
     await pick(user, modelField(dialog), /Claude Sonnet/);
@@ -1591,12 +1589,10 @@ describe("the company connection and model a runtime fixes for its agents", () =
     await closeRuntime(user, dialog);
     dialog = await openBuiltIn(user, "Claude Code");
     expect(connectionField(dialog)).toHaveAccessibleName(
-      "API key Company Anthropic",
+      "Key Company Anthropic",
     );
     await user.click(companyCard(dialog));
-    expect(
-      within(dialog).queryByRole("button", { name: /^API key/ }),
-    ).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: /^Key/ })).toBeNull();
     await saveRuntime(user, dialog);
     expect(builtInAccounts("claude-code")).toEqual({ kind: "subscription" });
   });
@@ -1626,7 +1622,7 @@ describe("the company connection and model a runtime fixes for its agents", () =
     const user = userEvent.setup();
     const dialog = await open(user);
     expect(connectionField(dialog)).toHaveAccessibleName(
-      "API key Platform team OpenAI",
+      "Key Platform team OpenAI",
     );
     await user.click(connectionField(dialog));
     expect(
@@ -1773,9 +1769,7 @@ describe("the kind of account a runtime with a subscription of its own names", (
       ),
     ).toBeVisible();
     // The plan is the connection: only its model is picked.
-    expect(
-      within(dialog).queryByRole("button", { name: /^API key/ }),
-    ).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: /^Key/ })).toBeNull();
     expect(
       within(dialog).getByText(
         "Optional. Leave the model empty to set it in each agent's settings.",

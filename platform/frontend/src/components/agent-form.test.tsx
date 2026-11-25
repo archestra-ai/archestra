@@ -4695,7 +4695,9 @@ describe("AgentForm save payload and failure handling", () => {
     expect(
       screen.queryByRole("button", { name: "Pick API key" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: /An API key/ }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /Provider API key/ }),
+    );
     expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
     await user.click(screen.getByRole("button", { name: "Pick API key" }));
     useLlmModelsByProviderMock.mockReturnValue({
@@ -4765,7 +4767,7 @@ describe("AgentForm save payload and failure handling", () => {
         />,
       );
     const companyKeyWay = () =>
-      screen.getByRole("checkbox", { name: /An API key/ });
+      screen.getByRole("checkbox", { name: /Provider API key/ });
     const user = userEvent.setup();
 
     // Codex runs its company key on OpenAI, beside ChatGPT subscriptions. A
@@ -5257,11 +5259,13 @@ describe("AgentForm save payload and failure handling", () => {
     await user.click(screen.getByRole("radio", { name: /Codex/ }));
     await waitFor(() =>
       expect(
-        screen.getByRole("checkbox", { name: /An API key/ }),
+        screen.getByRole("checkbox", { name: /Provider API key/ }),
       ).toBeChecked(),
     );
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
-    await user.click(screen.getByRole("checkbox", { name: /An API key/ }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /Provider API key/ }),
+    );
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     expect(
       screen.getByRole("img", {
@@ -5326,10 +5330,12 @@ describe("AgentForm save payload and failure handling", () => {
     // Subscriptions alone, which wait for the creator's own ChatGPT.
     await waitFor(() =>
       expect(
-        screen.getByRole("checkbox", { name: /An API key/ }),
+        screen.getByRole("checkbox", { name: /Provider API key/ }),
       ).toBeChecked(),
     );
-    await user.click(screen.getByRole("checkbox", { name: /An API key/ }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /Provider API key/ }),
+    );
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     expect(
       screen.getByRole("img", {
@@ -5375,7 +5381,7 @@ describe("AgentForm save payload and failure handling", () => {
 
   describe("a new Claude agent starts on the account its runtime names", () => {
     const companyKeyWay = () =>
-      screen.getByRole("checkbox", { name: /An API key/ });
+      screen.getByRole("checkbox", { name: /Provider API key/ });
     const subscriptionWay = () =>
       screen.getByRole("checkbox", {
         name: /Each person's Claude subscription/,
@@ -5710,7 +5716,9 @@ describe("AgentForm save payload and failure handling", () => {
     // Saved before people could choose: it runs only the way it always ran.
     // A custom image ran every agent on its company API key, whatever Claude
     // account the agent stored.
-    expect(screen.getByRole("checkbox", { name: /An API key/ })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: /Provider API key/ }),
+    ).toBeChecked();
     expect(
       screen.getByRole("checkbox", {
         name: /Each person's Claude subscription/,
@@ -5855,7 +5863,9 @@ describe("AgentForm save payload and failure handling", () => {
     );
 
     // An image that does not declare Claude Code has only the company key.
-    expect(screen.getByRole("checkbox", { name: /An API key/ })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: /Provider API key/ }),
+    ).toBeChecked();
     expect(
       screen.getByRole("checkbox", {
         name: /Each person's Claude subscription/,
@@ -5937,7 +5947,7 @@ describe("AgentForm save payload and failure handling", () => {
     const accounts = screen.getByRole("group", {
       name: "Credentials to use",
     });
-    expect(within(accounts).getByText("An API key")).toBeVisible();
+    expect(within(accounts).getByText("Provider API key")).toBeVisible();
     expect(
       screen.queryByText(/Each person's Claude subscription/),
     ).not.toBeInTheDocument();
@@ -6475,7 +6485,7 @@ describe("AgentForm save payload and failure handling", () => {
         name: /Each person's SuperGrok subscription/,
       });
     const companyKeyWay = () =>
-      screen.getByRole("checkbox", { name: /An API key/ });
+      screen.getByRole("checkbox", { name: /Provider API key/ });
 
     beforeEach(() => {
       vi.mocked(useFeature).mockImplementation(
@@ -6753,7 +6763,7 @@ describe("AgentForm save payload and failure handling", () => {
       const accounts = screen.getByRole("group", {
         name: "Credentials to use",
       });
-      expect(within(accounts).getByText("An API key")).toBeVisible();
+      expect(within(accounts).getByText("Provider API key")).toBeVisible();
       // The runtime has no subscription of its own, and an OpenAI key does
       // not bring ChatGPT's along.
       expect(screen.queryByText(/Each person's/)).not.toBeInTheDocument();
@@ -7526,7 +7536,7 @@ describe("AgentForm save payload and failure handling", () => {
           codex: "Each person's ChatGPT subscription",
           grok: "Each person's SuperGrok subscription",
         };
-        const COMPANY = "An API key";
+        const COMPANY = "Provider API key";
         /**
          * One card, always on, as a runtime with one kind of account shows
          * it: no box to tick, no card for the other kind, and nothing said
@@ -7756,7 +7766,7 @@ describe("AgentForm save payload and failure handling", () => {
           renderNew("codex");
 
           expect(
-            await screen.findByRole("checkbox", { name: /An API key/ }),
+            await screen.findByRole("checkbox", { name: /Provider API key/ }),
           ).toBeInTheDocument();
           expect(subscriptionWay()).toBeInTheDocument();
           expect(within(accounts()).getAllByRole("checkbox")).toHaveLength(2);
@@ -8193,11 +8203,44 @@ describe("AgentForm save payload and failure handling", () => {
         expect(
           screen.queryByText("ChatGPT Subscription required"),
         ).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(
+            "Each person using this agent must connect their own subscription account. No credential is shared.",
+          ),
+        ).not.toBeInTheDocument();
         expect(await create(user)).toMatchObject({
           llmApiKeyId: null,
           modelId: null,
           runtime: { accountLock: "key" },
         });
+      });
+
+      it("hides the personal subscription notice and shows only the inline error when subscription is deselected", async () => {
+        const user = userEvent.setup();
+        renderNew("codex");
+        await waitFor(() => expect(subscriptionWay()).toBeChecked());
+        expect(
+          screen.getByText(
+            "Each person using this agent must connect their own subscription account. No credential is shared.",
+          ),
+        ).toBeVisible();
+
+        await user.click(subscriptionWay());
+        expect(subscriptionWay()).not.toBeChecked();
+        expect(companyKeyWay()).not.toBeChecked();
+        expect(
+          screen.queryByText(
+            "Each person using this agent must connect their own subscription account. No credential is shared.",
+          ),
+        ).not.toBeInTheDocument();
+        expect(screen.getByRole("alert")).toHaveTextContent(
+          "Select at least one option.",
+        );
+        expect(
+          screen.queryByRole("img", {
+            name: "Choose credentials for its runs",
+          }),
+        ).not.toBeInTheDocument();
       });
 
       it("takes the creator's ChatGPT subscription again once a new Codex agent is left on subscriptions alone", async () => {

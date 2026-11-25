@@ -116,7 +116,7 @@ describe("Claude Code authentication", () => {
         name: /Each person's Claude subscription/,
       });
     const companyKey = () =>
-      screen.getByRole("checkbox", { name: /An API key/ });
+      screen.getByRole("checkbox", { name: /Provider API key/ });
     // Both options start selected: each person chooses.
     await waitFor(() => expect(subscription()).toBeChecked());
     expect(companyKey()).toBeChecked();
@@ -254,7 +254,7 @@ describe("Claude Code authentication", () => {
     expect(subscription).not.toBeDisabled();
     expect(subscription).toBeChecked();
     expect(
-      screen.getByRole("checkbox", { name: /An API key/ }),
+      screen.getByRole("checkbox", { name: /Provider API key/ }),
     ).not.toBeChecked();
   });
 
@@ -273,7 +273,9 @@ describe("Claude Code authentication", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByRole("checkbox", { name: /An API key/ })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: /Provider API key/ }),
+    ).toBeChecked();
     // The image hint is about subscriptions, so it waits for that way.
     expect(
       screen.queryByText(

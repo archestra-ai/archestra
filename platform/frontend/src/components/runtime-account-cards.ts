@@ -32,7 +32,7 @@ export const CLAUDE_SUBSCRIPTION_CARD: CardText = {
 /** The company's own connection: every runtime but the Copilot CLI has it. */
 export function companyApiKeyCard(appName: string): CardText {
   return {
-    title: "An API key",
+    title: "Provider API key",
     description: `An LLM provider key set up in ${appName}. Cost limits apply. A run's container only gets a short-lived key.`,
   };
 }

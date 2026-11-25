@@ -88,7 +88,7 @@ export function AgentAccountOptions({
   const only = options.length === 1 ? options[0] : null;
   const noneSelected = !only && options.every((option) => !option.checked);
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {meaning && !only && (
         <FieldDescription id={`${id}-meaning`}>{meaning}</FieldDescription>
       )}

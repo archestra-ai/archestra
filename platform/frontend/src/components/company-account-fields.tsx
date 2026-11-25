@@ -2,7 +2,10 @@
 
 import type { ComponentProps, ReactNode } from "react";
 import { CompanyConnectionPickers } from "@/components/claude-connection-pickers";
-import { noCompanyConnection } from "@/components/claude-connection-pickers.utils";
+import {
+  companyConnectionIdOf,
+  noCompanyConnection,
+} from "@/components/claude-connection-pickers.utils";
 
 /**
  * Who decides the company option's connection and model here: a runtime's
@@ -59,6 +62,7 @@ export function CompanyAccountFields({
 }) {
   const { apiKeyId, modelId, connectionFixed } = pickers;
   const connection = apiKeyId ?? undefined;
+  const hasConnection = !!companyConnectionIdOf(pickers.keys, apiKeyId ?? null);
   const text = amongSeveral ? AMONG_SEVERAL[level] : SENTENCES[level];
   // The connection is not this level's to set: a plan's own card, or one a
   // level above fixes. Only the model is spoken of.
@@ -95,6 +99,10 @@ export function CompanyAccountFields({
         // Empty, the field says who picks: the level below.
         emptyConnection={
           pickers.emptyConnection ?? emptyConnectionText(level, pickers.plan)
+        }
+        emptyModel={
+          pickers.emptyModel ??
+          (hasConnection || connectionFixed ? emptyModelText(level) : undefined)
         }
         // A new connection has its own models: the old one's does not stay.
         onApiKeyChange={(keyId) => onChange({ llmApiKeyId: keyId })}
@@ -145,6 +153,12 @@ function emptyConnectionText(level: CompanyAccountLevel, plan = false): string {
   if (level === "runtime")
     return plan ? "Agent chooses plan" : "Each agent chooses its own key";
   return plan ? "User chooses plan themselves" : "User chooses key themselves";
+}
+
+function emptyModelText(level: CompanyAccountLevel): string {
+  return level === "runtime"
+    ? "Each agent chooses its own model"
+    : "User chooses model themselves";
 }
 
 const SENTENCES: Record<CompanyAccountLevel, Sentences> = {

@@ -42,7 +42,7 @@ Each change saves as you make it. The Create Agent cards and Configuration runti
 
 ### Set a Runtime's Settings
 
-Decide once how a runtime's agents start, such as whether Claude Code bills each person's Claude subscription or an API key. This uses [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+Decide once how a runtime's agents start, such as whether Claude Code bills each person's Claude subscription or a company API key. This uses [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
 1. Go to **Settings → Agents → Runtimes**, open a runtime's **⋯** menu, and click **Edit runtime**.
 2. Under **Runtime settings**, set its defaults. A built-in runtime has **Claude account** (Claude Code only), run limits, and tiers. A custom runtime also has its image, protocol, and follow-up delivery.

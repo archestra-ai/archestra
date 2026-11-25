@@ -78,7 +78,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
     }),
   ).toBeChecked();
   await expect(
-    accounts.getByRole("checkbox", { name: /An API key/ }),
+    accounts.getByRole("checkbox", { name: /Provider API key/ }),
   ).toBeChecked();
   await expect(
     dialog.getByText(
@@ -88,17 +88,17 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   // Its connection and model are optional: left empty, each agent sets its own.
   await expect(
     dialog.getByRole("button", {
-      name: "API key Each agent chooses its own key",
+      name: "Key Each agent chooses its own key",
     }),
   ).toBeVisible();
   await expect(accounts.getByRole("button", { name: /^Model/ })).toBeDisabled();
 
   // Fix the connection.
-  await accounts.getByRole("button", { name: /^API key/ }).click();
+  await accounts.getByRole("button", { name: /^Key/ }).click();
   await page.getByRole("option", { name: /Company OpenAI/ }).click();
   await expect(
     accounts.getByRole("button", {
-      name: "API key Company OpenAI",
+      name: "Key Company OpenAI",
     }),
   ).toBeVisible();
   await expect(
@@ -116,7 +116,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   await expectSavedAndOpen(page, dialog);
   await expect(
     dialog.getByRole("button", {
-      name: "API key Company OpenAI",
+      name: "Key Company OpenAI",
     }),
   ).toBeVisible();
   await footerClose(dialog).click();
@@ -131,13 +131,13 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   dialog = await openCodex();
   await expect(
     dialog.getByRole("button", {
-      name: "API key Company OpenAI",
+      name: "Key Company OpenAI",
     }),
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Clear API key" }).click();
+  await dialog.getByRole("button", { name: "Clear key" }).click();
   await expect(
     dialog.getByRole("button", {
-      name: "API key Each agent chooses its own key",
+      name: "Key Each agent chooses its own key",
     }),
   ).toBeVisible();
   // An unsaved change: the footer's way out reads Cancel until it is saved.
@@ -150,7 +150,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   await expectSavedAndOpen(page, dialog);
   await expect(
     dialog.getByRole("button", {
-      name: "API key Each agent chooses its own key",
+      name: "Key Each agent chooses its own key",
     }),
   ).toBeVisible();
 });
@@ -198,7 +198,7 @@ test("an administrator sees both account cards on the Claude Code runtime with n
   });
   await expect(subscription).toBeChecked();
   await expect(
-    accounts.getByRole("checkbox", { name: /An API key/ }),
+    accounts.getByRole("checkbox", { name: /Provider API key/ }),
   ).toBeChecked();
   // The rule reaches every agent on save; the update is for the rest.
   await expect(
@@ -280,7 +280,7 @@ test("someone who may only use a runtime that fixes a connection and model sees 
   });
   await expect(
     accounts.getByRole("button", {
-      name: "API key Company OpenAI",
+      name: "Key Company OpenAI",
     }),
   ).toBeDisabled();
   await expect(

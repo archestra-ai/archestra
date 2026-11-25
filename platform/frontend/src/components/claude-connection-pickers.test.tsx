@@ -153,7 +153,7 @@ describe("CompanyConnectionPickers", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "API key Company Anthropic",
+        name: "Key Company Anthropic",
       }),
     ).toBeEnabled();
     expect(
@@ -176,7 +176,7 @@ describe("CompanyConnectionPickers", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: "API key Choose an API key",
+        name: "Key Choose an API key",
       }),
     );
     expect(
@@ -250,7 +250,7 @@ describe("CompanyConnectionPickers", () => {
     const user = userEvent.setup();
     renderPickers({ apiKeyId: null, modelId: null, modelName: null });
 
-    await user.click(screen.getByRole("button", { name: /^API key/ }));
+    await user.click(screen.getByRole("button", { name: /^Key/ }));
 
     expect(
       screen.getByRole("option", { name: /Company Anthropic/ }),
@@ -265,7 +265,7 @@ describe("CompanyConnectionPickers", () => {
     const user = userEvent.setup();
     const props = renderPickers();
 
-    await user.click(screen.getByRole("button", { name: /^API key/ }));
+    await user.click(screen.getByRole("button", { name: /^Key/ }));
     await user.click(screen.getByRole("button", { name: "Add a key" }));
     expect(props.onAddApiKey).toHaveBeenCalledOnce();
   });
@@ -281,7 +281,7 @@ describe("CompanyConnectionPickers", () => {
 
     expect(screen.getByText("No API key can run Claude yet")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: /^API key/ }),
+      screen.queryByRole("button", { name: /^Key/ }),
     ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Add an Anthropic key" }),
@@ -312,10 +312,37 @@ describe("CompanyConnectionPickers", () => {
     rerender(fields((provider) => provider === "anthropic"));
     expect(
       screen.getByRole("button", {
-        name: "API key User chooses key themselves",
+        name: "Key User chooses key themselves",
       }),
     ).toBeVisible();
     expect(screen.queryByText(/^Optional\./)).toBeNull();
+  });
+
+  it("says who chooses the model when a key is selected and no model is fixed", () => {
+    const base = {
+      keys: keys as never,
+      apiKeyId: "key-openai",
+      runsOn: (provider: string) => provider === "openai",
+      modelId: null,
+      modelName: null,
+      modelProvider: null,
+      onChange: vi.fn(),
+    };
+    const { rerender } = render(
+      <CompanyAccountFields level="agent" {...base} />,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "Model User chooses model themselves",
+      }),
+    ).toBeEnabled();
+
+    rerender(<CompanyAccountFields level="runtime" {...base} />);
+    expect(
+      screen.getByRole("button", {
+        name: "Model Each agent chooses its own model",
+      }),
+    ).toBeEnabled();
   });
 
   it("speaks of the runtime, not of Claude, for an agent that does not run Claude Code", async () => {
@@ -334,7 +361,7 @@ describe("CompanyConnectionPickers", () => {
     ).toBeEnabled();
     await user.click(
       screen.getByRole("button", {
-        name: "API key Company OpenAI",
+        name: "Key Company OpenAI",
       }),
     );
     expect(
@@ -367,7 +394,7 @@ describe("CompanyConnectionPickers", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "API key Choose an API key",
+        name: "Key Choose an API key",
       }),
     ).toBeEnabled();
     expect(
@@ -396,7 +423,7 @@ describe("CompanyConnectionPickers", () => {
     expect(onModelClear).toHaveBeenCalledOnce();
     expect(screen.queryByRole("option")).toBeNull();
     // Reached and used from the keyboard as well.
-    screen.getByRole("button", { name: "Clear API key" }).focus();
+    screen.getByRole("button", { name: "Clear key" }).focus();
     await user.keyboard("{Enter}");
     expect(onApiKeyClear).toHaveBeenCalledOnce();
     first.unmount();
@@ -425,7 +452,7 @@ describe("CompanyConnectionPickers", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "API key Runtime connection",
+        name: "Key Runtime connection",
       }),
     ).toBeDisabled();
     expect(
@@ -443,7 +470,7 @@ describe("CompanyConnectionPickers", () => {
     });
     expect(
       screen.getByRole("button", {
-        name: "API key Runtime connection",
+        name: "Key Runtime connection",
       }),
     ).toBeDisabled();
     expect(
@@ -489,11 +516,11 @@ describe("CompanyConnectionPickers", () => {
     // It stays the reader's to change or clear.
     expect(
       screen.getByRole("button", {
-        name: "API key Platform team Anthropic",
+        name: "Key Platform team Anthropic",
       }),
     ).toBeEnabled();
     expect(
-      screen.getByRole("button", { name: "Clear API key" }),
+      screen.getByRole("button", { name: "Clear key" }),
     ).toBeInTheDocument();
   });
 
@@ -503,7 +530,7 @@ describe("CompanyConnectionPickers", () => {
     const picked = renderPickers(fixed);
 
     expect(
-      screen.queryByRole("button", { name: /^API key/ }),
+      screen.queryByRole("button", { name: /^Key/ }),
     ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Model Select a Claude model" }),

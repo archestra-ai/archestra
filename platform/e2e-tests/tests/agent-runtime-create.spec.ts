@@ -59,7 +59,7 @@ test("creates Claude Code from the catalog and explains the account connection a
       name: /Each person's Claude subscription/,
     });
     const companyKey = page.getByRole("checkbox", {
-      name: /An API key/,
+      name: /Provider API key/,
     });
     await expect(subscription).toBeChecked();
     await expect(companyKey).not.toBeChecked();

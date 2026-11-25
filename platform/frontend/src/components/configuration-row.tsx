@@ -32,9 +32,9 @@ export function ConfigurationRow({
 }) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
   return (
-    <AccordionItem id={id} value={value} className="px-4 last:border-b-0">
+    <AccordionItem id={id} value={value} className="last:border-b-0">
       <AccordionTrigger
-        className="min-w-0 items-center hover:no-underline"
+        className="min-w-0 items-center rounded-none px-4 hover:no-underline focus-visible:ring-2 focus-visible:ring-inset data-[state=open]:pb-2"
         onFocus={() => setTooltipOpen(true)}
         onBlur={() => setTooltipOpen(false)}
       >
@@ -73,7 +73,9 @@ export function ConfigurationRow({
           )}
         </span>
       </AccordionTrigger>
-      <AccordionContent className="pt-2">{children}</AccordionContent>
+      <AccordionContent className={description ? "px-4 pt-1" : "px-4 pt-0"}>
+        {children}
+      </AccordionContent>
     </AccordionItem>
   );
 }

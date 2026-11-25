@@ -245,7 +245,7 @@ function alternativeLabels(
   ];
 }
 
-const COMPANY_API_KEY = "An API key";
+const COMPANY_API_KEY = "Provider API key";
 const COMPANY_ENTERPRISE_PLAN = "The company's enterprise plan";
 
 /** The way the viewer's runs use: the lock's, their choice, or the default. */

@@ -425,6 +425,15 @@ describe("CreateVirtualKeyDialog", () => {
     await user.click(
       screen.getByRole("radio", { name: /Current and future providers/ }),
     );
+    // Every shared provider is already in, so the picker offers no keys.
+    await user.click(
+      screen.getByRole("combobox", { name: "Add a model pool or auto router" }),
+    );
+    expect(
+      await screen.findByText("Everything is already added."),
+    ).toBeVisible();
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Create key" }));
     expect(mutateAsync).toHaveBeenCalledWith({
       data: expect.objectContaining({

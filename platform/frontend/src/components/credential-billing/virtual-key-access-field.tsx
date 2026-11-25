@@ -138,7 +138,7 @@ export function VirtualKeyAccessField(props: AccessProps) {
             title="Providers"
             hint={
               model.includeFutureProviders
-                ? "Each shared provider’s primary key, unless you add another key above"
+                ? "Each shared provider’s primary key, including providers added later"
                 : "Apps call each provider’s models by name, on the key shown"
             }
           >
@@ -307,11 +307,6 @@ const MODEL_SAMPLE_SIZE = 3;
 function ProviderDetails({ row }: { row: ProviderRow }) {
   return (
     <div className="space-y-3">
-      {row.replaces && (
-        <p className="text-muted-foreground">
-          Used instead of {row.replaces}, the shared primary key.
-        </p>
-      )}
       {row.chosen.map((option) => (
         <div key={option.key.id} className="space-y-2">
           <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
@@ -528,15 +523,13 @@ type ProviderRow = {
   label: string;
   /** The keys in the list (one, unless a starting value had several). */
   chosen: KeyOption[];
-  /** In automatic mode, the shared primary key this row overrides. */
-  replaces?: string;
 };
 
 type PickerProvider = {
   provider: SupportedProvider;
   label: string;
-  /** Keys the picker offers. `replaces` names the key a pick overrides. */
-  keys: (KeyOption & { replaces?: string })[];
+  /** Keys the picker offers. */
+  keys: KeyOption[];
 };
 
 type AccessModel = ReturnType<typeof useAccess>;
@@ -544,7 +537,8 @@ type AccessModel = ReturnType<typeof useAccess>;
 /**
  * What's listed, what the picker can still add, and the actions. The picker
  * adds one key per provider; once a provider is listed its keys leave the
- * picker until its row is removed.
+ * picker until its row is removed. With current and future providers it adds
+ * no provider keys: every shared provider's primary key is already in.
  */
 function useAccess(props: AccessProps) {
   const {
@@ -608,39 +602,26 @@ function useAccess(props: AccessProps) {
         : [],
     );
   };
-  /** In automatic mode, the shared primary key automatic access already uses. */
-  const automaticKey = (provider: SupportedProvider) =>
-    includeFutureProviders
-      ? (grouped.get(provider) ?? []).find(isSharedPrimary)
-      : undefined;
-
   const providerRows: ProviderRow[] = providers
     .filter((provider) => chosenKeys(provider).length > 0)
-    .map((provider) => {
-      const automatic = automaticKey(provider);
-      return {
-        provider,
-        label: catalog.label(provider),
-        chosen: chosenKeys(provider).map(keyOption),
-        replaces: automatic ? keyName(automatic) : undefined,
-      };
-    });
+    .map((provider) => ({
+      provider,
+      label: catalog.label(provider),
+      chosen: chosenKeys(provider).map(keyOption),
+    }));
 
   // Every key the picker can still add, by provider. A listed provider is
   // left out: one key per provider, and switching means removing it and
-  // adding the other. With automatic access, a shared provider's primary key
-  // is already used, so only its other keys are offered, as overrides.
-  const pickerProviders: PickerProvider[] = providers.flatMap((provider) => {
-    if (chosenKeys(provider).length > 0) return [];
-    const automatic = automaticKey(provider);
-    const replaces = automatic ? keyName(automatic) : undefined;
-    const keys = (grouped.get(provider) ?? [])
-      .filter((key) => key.id !== automatic?.id)
-      .map((key) => ({ ...keyOption(key), replaces }));
-    return keys.length
-      ? [{ provider, label: catalog.label(provider), keys }]
-      : [];
-  });
+  // adding the other.
+  const pickerProviders: PickerProvider[] = includeFutureProviders
+    ? []
+    : providers.flatMap((provider) => {
+        if (chosenKeys(provider).length > 0) return [];
+        const keys = (grouped.get(provider) ?? []).map(keyOption);
+        return keys.length
+          ? [{ provider, label: catalog.label(provider), keys }]
+          : [];
+      });
 
   const listedRouters = routers.filter((router) =>
     autoRouterIds.includes(router.id),
@@ -674,11 +655,7 @@ function useAccess(props: AccessProps) {
   /** "8 providers · 1 pool · 1 router" */
   const summary = [
     includeFutureProviders
-      ? `all shared providers${
-          providerRows.length
-            ? ` + ${plural(providerRows.length, "override", "overrides")}`
-            : ""
-        }`
+      ? "all shared providers"
       : plural(providerRows.length, "provider", "providers"),
     ...(listedPools.length
       ? [plural(listedPools.length, "pool", "pools")]
@@ -789,13 +766,16 @@ function ModeCard({
 // ---------------------------------------------------------------------------
 
 /**
- * Adds an auto router, a model pool or one provider key. Grouped by kind;
+ * Adds an auto router, a model pool or (in selected-providers mode) one
+ * provider key. Grouped by kind;
  * under Providers, every key of each provider not listed yet, under that
  * provider's name. Closes after each pick; anything already added is left
  * out.
  */
 function AccessPicker({ model }: { model: AccessModel }) {
-  const label = "Add a provider, model pool or auto router";
+  const label = model.includeFutureProviders
+    ? "Add a model pool or auto router"
+    : "Add a provider, model pool or auto router";
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const changeOpen = (next: boolean) => {
@@ -845,7 +825,11 @@ function AccessPicker({ model }: { model: AccessModel }) {
           <CommandInput
             value={search}
             onValueChange={setSearch}
-            placeholder="Search providers, keys, pools and routers…"
+            placeholder={
+              model.includeFutureProviders
+                ? "Search pools and routers…"
+                : "Search providers, keys, pools and routers…"
+            }
           />
           <CommandList className="max-h-[360px]">
             <CommandEmpty>
@@ -924,9 +908,7 @@ function AccessPicker({ model }: { model: AccessModel }) {
                         {option.key.isPrimary && <PrimaryBadge />}
                       </span>
                       <span className="truncate text-xs text-muted-foreground">
-                        {option.replaces
-                          ? `${option.detail} · replaces ${option.replaces}`
-                          : option.detail}
+                        {option.detail}
                       </span>
                     </span>
                     {option.modelIds !== null && (

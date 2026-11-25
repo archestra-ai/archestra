@@ -68,7 +68,7 @@
     "searchText": "copy file between chat and open app, transfer attachment into app file store, export app output to chat files panel, open file in app, save app result, download, project files, rename destination, overwrite existing file"
   },
   "create_agent": {
-    "definitionHash": "8647b27a9e09fef8c77cdc0e441c6870c663857155db823b870f7c4aa65bc2bd",
+    "definitionHash": "8bcbe433c2e4bbf51ca1325f55953c55d2b837a514034b0bbc6b58c1957f891a",
     "searchText": "create new AI agent assistant, set name description system prompt, model API key, assign MCP tools, knowledge bases connectors, sub-agent delegation, progressive subagent loading, labels emoji icon, suggested prompts, container runtime Claude Code Codex custom image, network egress policy, sharing permissions grants users teams"
   },
   "create_guardrails_repository": {
@@ -92,7 +92,7 @@
     "searchText": "create usage limit, LLM spend budget cap, cost limit, rate limit requests per minute, token quota, MCP server tool call limit, per organization team user agent virtual key environment, model-specific, hourly daily weekly monthly reset, hard block or soft alert"
   },
   "create_mcp_gateway": {
-    "definitionHash": "7acc51341bf604171138c56a1fd4abea49258c57e054eefe4e89a3c8a2d501f4",
+    "definitionHash": "1d81a7c437bb4d30095de6be81a50ca578f30cd2bb5d83f94502ecd830679632",
     "searchText": "create new MCP gateway, set up Model Context Protocol server endpoint, assign knowledge bases and connectors, key-value labels, subagent delegation, progressive subagent loading, tool exposure mode, search and run tools, initial access grants permissions for users, teams, roles, service accounts, OAuth clients, organization"
   },
   "create_mcp_server": {
@@ -180,7 +180,7 @@
     "searchText": "save sandbox file to persistent conversation files, export container output, persist generated file, copy file from sandbox disk, make file downloadable for user, attachments, overwrite existing file, MIME type, binary or text output"
   },
   "edit_agent": {
-    "definitionHash": "a944b40d3146b43b314ef1ca7f9140a3756aa9066b2afed1d902da6e9c76fa7a",
+    "definitionHash": "2f2bf191ed415f6a25537a7da1b8b264dca6f65342a5037bfca8d21d2a890ed3",
     "searchText": "update modify configure existing AI agent settings, rename, change system prompt, description, icon, labels, assign tools, add subagent delegation, progressive subagent loading, knowledge bases, connectors, suggested prompts, LLM model and API key, container runtime Claude Code Codex image, outbound network egress policy allowed domains"
   },
   "edit_app": {
@@ -200,7 +200,7 @@
     "searchText": "edit update MCP server catalog entry metadata, rename display name, change description, emoji icon, documentation URL, source repository link, version, setup usage instructions, key-value labels tags categorize organize server"
   },
   "edit_mcp_gateway": {
-    "definitionHash": "a5fc7da704bf0cc2ddf5612f7be86ffd9d6a837c58db5bd15d9a35cbe01b97ff",
+    "definitionHash": "19d955e56469a53c30b3b1c090ac97e4baafe1aed318aed17dc363e9b63b213c",
     "searchText": "edit update MCP gateway settings rename description emoji icon labels, tool exposure mode full or search and run only, dynamic tool access, subagent delegation, progressive subagent loading, assign knowledge bases connectors, configure gateway"
   },
   "edit_plugin": {

@@ -8,6 +8,7 @@ import {
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  normalizeSubagentLoadBalancingConfig,
   type PaginationQuery,
   PERSONAL_MCP_GATEWAY_NAME,
   type PermissionSubject,
@@ -17,6 +18,7 @@ import {
   providerRequiresPerUserCredential,
   RESOURCE_ACCESS_RELATIONS,
   type ResourcePermissionGrant,
+  resolveEffectiveSubagentLoadBalancingConfig,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   SubagentLoadBalancingConfigSchema,
   type SupportedProvider,
@@ -894,7 +896,12 @@ class AgentModel {
           ? NetworkPolicyInputSchema.parse(agent.networkPolicy)
           : agent.networkPolicy,
         subagentLoadBalancing: agent.subagentLoadBalancing
-          ? SubagentLoadBalancingConfigSchema.parse(agent.subagentLoadBalancing)
+          ? resolveEffectiveSubagentLoadBalancingConfig(
+              SubagentLoadBalancingConfigSchema.parse(
+                agent.subagentLoadBalancing,
+              ),
+              agent.accessAllSubagents,
+            )
           : agent.subagentLoadBalancing,
         organizationId,
         ...(slug && { slug }),
@@ -4680,6 +4687,28 @@ class AgentModel {
       effectiveToolExposureMode !== "search_and_run_only"
     ) {
       agent.toolExposureMode = "search_and_run_only";
+    }
+
+    // Keep the all-subagents ⇒ non-weighted load-balancing invariant on every
+    // update path: custom weights require explicit Manual assignments, so
+    // enabled weighted routing falls back to round_robin in All-agents mode.
+    const effectiveAccessAllSubagents =
+      agent.accessAllSubagents ?? existingAgent.accessAllSubagents;
+    const effectiveSubagentLoadBalancing =
+      agent.subagentLoadBalancing !== undefined
+        ? agent.subagentLoadBalancing
+        : existingAgent.subagentLoadBalancing;
+    const normalizedSubagentLoadBalancing =
+      normalizeSubagentLoadBalancingConfig(effectiveSubagentLoadBalancing);
+    if (
+      effectiveAccessAllSubagents &&
+      normalizedSubagentLoadBalancing?.enabled &&
+      normalizedSubagentLoadBalancing.algorithm === "weighted"
+    ) {
+      agent.subagentLoadBalancing = resolveEffectiveSubagentLoadBalancingConfig(
+        normalizedSubagentLoadBalancing,
+        true,
+      );
     }
 
     // If setting isDefault to true, unset isDefault for other agents of the same type

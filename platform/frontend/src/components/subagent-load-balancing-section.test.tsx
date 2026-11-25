@@ -4,15 +4,27 @@ import {
   type SubagentLoadBalancingConfig,
   SubagentLoadBalancingConfigSchema,
 } from "@archestra/shared";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useAgentOptionsByIds } from "@/lib/agent-options.query";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { SubagentLoadBalancingSection } from "./subagent-load-balancing-section";
 
-vi.mock("@/lib/agent-options.query");
+beforeAll(() => {
+  // Radix Select calls pointer-capture and scrollIntoView APIs absent in jsdom.
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false;
+  }
+  if (!Element.prototype.setPointerCapture) {
+    Element.prototype.setPointerCapture = () => {};
+  }
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = () => {};
+  }
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+  }
+});
 
 const AGENT_A_ID = "00000000-0000-4000-8000-00000000000a";
 const AGENT_B_ID = "00000000-0000-4000-8000-00000000000b";
@@ -38,47 +50,55 @@ function renderSection(
       />
     );
   }
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <Host />
-    </QueryClientProvider>,
-  );
+  render(<Host />);
   return { onChange };
 }
 
-beforeEach(() => {
-  vi.mocked(useAgentOptionsByIds).mockReturnValue({
-    data: [
-      { id: AGENT_A_ID, name: "Lobster Claude", description: null },
-      { id: AGENT_B_ID, name: "Lobster Codex", description: null },
-    ],
-  } as unknown as ReturnType<typeof useAgentOptionsByIds>);
-});
-
 describe("SubagentLoadBalancingSection", () => {
-  it("enables load balancing with round-robin defaults and toggles off", async () => {
+  it("selects an algorithm from the Agent Runtime Delegation dropdown and switches back to Direct", async () => {
     const user = userEvent.setup();
     const { onChange } = renderSection(null);
 
-    const toggle = screen.getByRole("switch", {
-      name: "Enable load balancing",
+    const select = screen.getByRole("combobox", {
+      name: "Agent Runtime Delegation",
     });
-    expect(toggle).not.toBeChecked();
+    expect(select).toHaveTextContent("Direct");
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
 
-    await user.click(toggle);
+    await user.click(select);
+    expect(screen.getByRole("option", { name: /Direct/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /^Round robin/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Weighted round robin/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Random/ })).toBeInTheDocument();
 
-    expect(toggle).toBeChecked();
+    await user.click(screen.getByRole("option", { name: /^Round robin/ }));
+    expect(select).toHaveTextContent("Round robin");
     expect(onChange).toHaveBeenLastCalledWith({
       enabled: true,
       algorithm: "round_robin",
-      retries: 1,
-      fallbackEnabled: true,
     });
 
-    await user.click(toggle);
+    await user.click(select);
+    await user.click(
+      screen.getByRole("option", { name: /Weighted round robin/ }),
+    );
+    expect(select).toHaveTextContent("Weighted round robin");
+    const weightedCall = onChange.mock.calls.at(-1)?.[0];
+    expect(weightedCall).toEqual({
+      enabled: true,
+      algorithm: "weighted",
+    });
+    expect(
+      SubagentLoadBalancingConfigSchema.safeParse(weightedCall).success,
+    ).toBe(true);
+
+    await user.click(select);
+    await user.click(screen.getByRole("option", { name: /Direct/ }));
+    expect(select).toHaveTextContent("Direct");
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         enabled: false,
@@ -86,41 +106,22 @@ describe("SubagentLoadBalancingSection", () => {
     );
   });
 
-  it("allows configuring per-subagent weights and retry/fallback policy", async () => {
-    const user = userEvent.setup();
-    const { onChange } = renderSection({
-      enabled: true,
-      algorithm: "weighted",
-      retries: 1,
-      fallbackEnabled: true,
-    });
-
-    const claudeWeightInput = screen.getByLabelText(
-      "Weight for Lobster Claude",
-    );
-    expect(claudeWeightInput).toHaveValue(1);
-
-    fireEvent.change(claudeWeightInput, { target: { value: "3" } });
-
-    const latest = onChange.mock.calls.at(-1)?.[0];
-    expect(latest).toMatchObject({
-      enabled: true,
-      algorithm: "weighted",
-      weights: { [AGENT_A_ID]: 3 },
-    });
-    expect(SubagentLoadBalancingConfigSchema.safeParse(latest).success).toBe(
-      true,
+  it("does not render a duplicate agent list or retry/failover controls when Weighted is active with assigned agents", () => {
+    renderSection(
+      {
+        enabled: true,
+        algorithm: "weighted",
+      },
+      [AGENT_A_ID, AGENT_B_ID],
+      { isGateway: false },
     );
 
-    const fallbackSwitch = screen.getByRole("switch", {
-      name: "Fall back to other subagents",
-    });
-    await user.click(fallbackSwitch);
-    expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        fallbackEnabled: false,
-      }),
-    );
+    expect(screen.queryByText(/Subagent weights/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Retries on same/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: /Fail over/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   });
 
   it("orders subagents according to round-robin and weighted policies", () => {
@@ -132,8 +133,6 @@ describe("SubagentLoadBalancingSection", () => {
         {
           enabled: true,
           algorithm: "round_robin",
-          retries: 1,
-          fallbackEnabled: true,
         },
         { seed: 1 },
       ),
@@ -146,55 +145,74 @@ describe("SubagentLoadBalancingSection", () => {
           enabled: true,
           algorithm: "weighted",
           weights: { [AGENT_A_ID]: 1, [AGENT_B_ID]: 9 },
-          retries: 1,
-          fallbackEnabled: true,
         },
         { random: () => 0.5 },
       ),
     ).toEqual([AGENT_B_ID, AGENT_A_ID]);
   });
 
-  it("renders regular agent copy and All-agents weighted notice", () => {
+  it("disables Weighted and falls back to Round robin in All-agents mode without Beta badge", async () => {
+    const user = userEvent.setup();
     renderSection(
       {
         enabled: true,
         algorithm: "weighted",
-        retries: 1,
-        fallbackEnabled: true,
       },
       [],
       { isGateway: false, isAllSubagentsMode: true },
     );
 
+    expect(screen.getByText("Agent Runtime Delegation")).toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "Distributes delegated runs across the Agent Runtime subagents assigned to this agent only, with retries, out-of-memory tier upgrades, and failover.",
+        "Load balance Agent Runtime subagent runs or let the model pick one. Subagents without a dedicated runtime are always selected by the model.",
+      ),
+    ).toBeInTheDocument();
+
+    const select = screen.getByRole("combobox", {
+      name: "Agent Runtime Delegation",
+    });
+    expect(select).toHaveTextContent("Round robin");
+
+    await user.click(select);
+    const weightedOption = screen.getByRole("option", {
+      name: /Weighted round robin/,
+    });
+    expect(weightedOption).toHaveAttribute("aria-disabled", "true");
+    expect(weightedOption).toHaveTextContent("Requires Manual mode.");
+  });
+
+  it("renders gateway copy and empty-assignment weighted notice using agent terminology", () => {
+    renderSection(
+      {
+        enabled: true,
+        algorithm: "weighted",
+      },
+      [],
+      { isGateway: true, isAllSubagentsMode: false },
+    );
+
+    expect(
+      screen.getByText(
+        "Load balance Agent Runtime agent runs or let the model pick one. Agents without a dedicated runtime are always selected by the model.",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /In "All agents" mode, all accessible runtime subagents receive equal weight/i,
-      ),
+      screen.getByText("Assign agents above to set custom weights."),
     ).toBeInTheDocument();
   });
 
-  it("renders single-sentence gateway copy naming Agent Runtime agents", () => {
-    renderSection(null, [AGENT_A_ID], { isGateway: true });
-
-    expect(
-      screen.getByText(
-        "Distributes delegated runs across the Agent Runtime agents assigned to this gateway only, with retries, out-of-memory tier upgrades, and failover.",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("clamps stored retry counts above 3 on read so UI and supervisor agree", () => {
+  it("strips legacy retry and failover fields on read", () => {
     const parsed = StoredSubagentLoadBalancingConfigSchema.parse({
       enabled: true,
       algorithm: "round_robin",
       retries: 5,
-      fallbackEnabled: true,
+      fallbackEnabled: false,
     });
-    expect(parsed.retries).toBe(3);
+    expect(parsed).toEqual({
+      enabled: true,
+      algorithm: "round_robin",
+    });
   });
 });

@@ -606,10 +606,6 @@ function renderSubagentLoadBalancing(
   if (!policy) return null;
   if (!policy.enabled) return "Disabled";
   const parts: string[] = [policy.algorithm];
-  parts.push(`retries: ${policy.retries}`);
-  parts.push(
-    policy.fallbackEnabled ? "fallback: enabled" : "fallback: disabled",
-  );
   const weightEntries = Object.entries(policy.weights ?? {}).sort(([a], [b]) =>
     a.localeCompare(b),
   );
@@ -738,8 +734,6 @@ const CONFIGURATION_FIELDS: {
                 ([a], [b]) => a.localeCompare(b),
               ),
             ),
-            retries: s.subagentLoadBalancing.retries,
-            fallbackEnabled: s.subagentLoadBalancing.fallbackEnabled,
           })
         : null,
   },

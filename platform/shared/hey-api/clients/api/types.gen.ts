@@ -17269,8 +17269,6 @@ export type GetAgentCatalogResponses = {
                     weights?: {
                         [key: string]: number;
                     };
-                    retries: number;
-                    fallbackEnabled: boolean;
                 } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
@@ -17676,8 +17674,6 @@ export type GetAgentsResponses = {
                 weights?: {
                     [key: string]: number;
                 };
-                retries: number;
-                fallbackEnabled: boolean;
             } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
@@ -17839,8 +17835,6 @@ export type CreateAgentData = {
             weights?: {
                 [key: string]: number;
             };
-            retries?: number;
-            fallbackEnabled?: boolean;
         } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
@@ -18138,8 +18132,6 @@ export type CreateAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -19438,8 +19430,6 @@ export type GetDefaultMcpGatewayResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -19764,8 +19754,6 @@ export type ImportAgentResponses = {
                 weights?: {
                     [key: string]: number;
                 };
-                retries: number;
-                fallbackEnabled: boolean;
             } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
@@ -20099,8 +20087,6 @@ export type GetAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -20251,8 +20237,6 @@ export type UpdateAgentData = {
             weights?: {
                 [key: string]: number;
             };
-            retries?: number;
-            fallbackEnabled?: boolean;
         } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
@@ -20449,8 +20433,6 @@ export type UpdateAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -21028,8 +21010,6 @@ export type GetAgentVersionResponses = {
                 weights?: {
                     [key: string]: number;
                 };
-                retries: number;
-                fallbackEnabled: boolean;
             } | null;
             tools: Array<{
                 toolId: string;
@@ -21253,8 +21233,6 @@ export type RestoreAgentVersionResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -21520,8 +21498,6 @@ export type CloneAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -24023,8 +23999,6 @@ export type RestoreAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -46544,8 +46518,6 @@ export type GetNewChatBootstrapResponses = {
                     weights?: {
                         [key: string]: number;
                     };
-                    retries: number;
-                    fallbackEnabled: boolean;
                 } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
@@ -47162,8 +47134,6 @@ export type GetConversationBootstrapResponses = {
                         weights?: {
                             [key: string]: number;
                         };
-                        retries: number;
-                        fallbackEnabled: boolean;
                     } | null;
                     builtInAgentConfig: {
                         name: 'openappa-configuration-agent';

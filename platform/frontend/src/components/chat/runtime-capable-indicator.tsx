@@ -296,11 +296,14 @@ export function AgentRuntimeChip({
   /** The agent's saved runtime config, or null/undefined for a regular agent. */
   runtime: unknown;
   /**
-   * `chip` shows the runtime icon and name (for popovers and wider rows).
-   * `icon` shows just the runtime mark with a tooltip naming it, matching the
-   * agent details page header (for compact cards and pills).
+   * `chip` shows the runtime icon and name.
+   * `icon` shows just the non-interactive runtime mark with a tooltip (safe
+   * inside `<Button>` triggers like assigned subagent pills).
+   * `icon-link` matches the agent details page header: a hoverable/clickable
+   * runtime logo linking to runtime settings for admins (or a hoverable icon
+   * button for non-admins).
    */
-  appearance?: "chip" | "icon";
+  appearance?: "chip" | "icon" | "icon-link";
   className?: string;
 }) {
   const runtimeObj =
@@ -342,11 +345,14 @@ export function AgentRuntimeChip({
       : undefined;
   const resolvedBuiltInId =
     builtInId ?? (ref?.kind === "built-in" ? ref.id : null);
+  const resolvedRef = resolvedBuiltInId
+    ? ({ kind: "built-in", id: resolvedBuiltInId } as const)
+    : ref;
   const name = resolvedBuiltInId
     ? AGENT_CATALOG_TEMPLATE_NAMES[resolvedBuiltInId]
     : (custom?.name ?? (image ? "Custom image" : "Runtime"));
-  const iconSize = appearance === "icon" ? 14 : 12;
-  const fallbackIconClass = appearance === "icon" ? "size-3.5" : "size-3";
+  const iconSize = appearance === "chip" ? 12 : 14;
+  const fallbackIconClass = appearance === "chip" ? "size-3" : "size-3.5";
   const mark = resolvedBuiltInId ? (
     <CatalogAgentIcon id={resolvedBuiltInId} size={iconSize} />
   ) : custom?.icon ? (
@@ -356,6 +362,69 @@ export function AgentRuntimeChip({
   ) : (
     <TerminalSquare className={fallbackIconClass} aria-hidden="true" />
   );
+
+  if (appearance === "icon-link") {
+    const iconMark = (
+      <span
+        aria-hidden="true"
+        className="inline-flex opacity-70 grayscale transition group-hover:opacity-100 group-hover:grayscale-0 group-focus-visible:opacity-100 group-focus-visible:grayscale-0 [&>svg]:size-3.5"
+      >
+        {mark}
+      </span>
+    );
+    const triggerClassName = cn(
+      "group inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+      className,
+    );
+
+    if (administers) {
+      const label = resolvedRef
+        ? `Runtime: ${name}, open its settings`
+        : `Runtime: ${name}, open runtime settings`;
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IntentPrefetchLink
+              href={runtimeSettingsHref(resolvedRef?.id)}
+              aria-label={label}
+              className={triggerClassName}
+            >
+              {iconMark}
+            </IntentPrefetchLink>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="px-2.5 py-1">
+            <span className="flex flex-col leading-snug">
+              <span className="font-medium">{name}</span>
+              <span className="text-muted-foreground">
+                {resolvedRef
+                  ? "Open this runtime's settings"
+                  : "None of your runtimes"}
+              </span>
+            </span>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <UnstyledButton
+            aria-label={`Runtime: ${name}`}
+            className={triggerClassName}
+          >
+            {iconMark}
+          </UnstyledButton>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="px-2.5 py-1">
+          <span className="flex flex-col leading-snug">
+            <span className="font-medium">{name}</span>
+            <span className="text-muted-foreground">Agent Runtime</span>
+          </span>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   if (appearance === "icon") {
     return (

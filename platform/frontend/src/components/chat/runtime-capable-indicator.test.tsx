@@ -370,4 +370,33 @@ describe("AgentRuntimeChip", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
   });
+
+  it("renders icon-link appearance as a settings link for runtime admins and a hoverable button for others", () => {
+    vi.mocked(useRouter).mockReturnValue({
+      prefetch: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+
+    const adminRender = mount(
+      <AgentRuntimeChip runtime={claudeCodeRuntime} appearance="icon-link" />,
+    );
+    const link = screen.getByRole("link", {
+      name: "Runtime: Claude Code, open its settings",
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "/settings/agents/runtimes?edit=claude-code",
+    );
+    adminRender.unmount();
+
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    mount(
+      <AgentRuntimeChip runtime={claudeCodeRuntime} appearance="icon-link" />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Runtime: Claude Code" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
 });

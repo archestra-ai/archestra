@@ -394,11 +394,11 @@ function AgentToolsList({ agentId }: { agentId: string }) {
   }
 
   return (
-    <div className="space-y-1">
-      <p className="text-xs font-medium text-muted-foreground mb-2">
+    <div className="flex min-h-0 flex-col space-y-1">
+      <p className="mb-2 shrink-0 text-xs font-medium text-muted-foreground">
         Available tools ({tools.length}):
       </p>
-      <div className="flex flex-wrap gap-1 max-h-[200px] overflow-y-auto">
+      <div className="flex min-h-0 max-h-[200px] flex-wrap gap-1 overflow-y-auto">
         {tools.map((tool) => (
           <span
             key={tool.name}
@@ -415,12 +415,10 @@ function AgentToolsList({ agentId }: { agentId: string }) {
 const WEIGHT_PRESETS = [1, 2, 3, 5, 10] as const;
 
 /**
- * Compact weight segment attached to a runtime `SubagentPill` in Weighted mode.
- * At rest it shows only the live traffic share (`50%`) with a subtle bottom
- * progress indicator so the inline-block card layout stays compact; clicking
- * opens a dedicated popover with stepper, numeric input, and quick presets.
+ * Load balancing weight controls shown inside a runtime `SubagentPill` popover
+ * when Weighted delegation is active.
  */
-function SubagentWeightControl({
+function SubagentWeightSection({
   agentName,
   weight,
   sharePercent,
@@ -433,7 +431,6 @@ function SubagentWeightControl({
   readOnly: boolean;
   onWeightChange: (rawValue: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => String(weight));
 
   useEffect(() => {
@@ -475,141 +472,94 @@ function SubagentWeightControl({
     commitNumber(parsed);
   };
 
-  const triggerLabel = `Weight for ${agentName}: ${weight} (${sharePercent}%)`;
-
-  if (readOnly) {
-    return (
-      <output
-        aria-label={triggerLabel}
-        title={`Weight ${weight} (${sharePercent}% of runs)`}
-        className="relative inline-flex h-8 min-w-[3.1rem] items-center justify-center overflow-hidden rounded-r-md border bg-primary/10 px-2 text-xs font-medium tabular-nums text-primary dark:border-input"
-      >
-        <span>{sharePercent}%</span>
-        <span
+  return (
+    <div className="shrink-0 space-y-3 border-b px-4 py-3">
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="font-medium text-foreground">Load balancing</span>
+          <span className="shrink-0 font-mono font-medium tabular-nums text-primary">
+            {sharePercent}%
+          </span>
+        </div>
+        <div
+          className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-primary/15"
         >
-          <span
-            className="block h-full bg-primary transition-[width] duration-150"
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-150"
             style={{ width: `${sharePercent}%` }}
           />
-        </span>
-      </output>
-    );
-  }
+        </div>
+      </div>
 
-  return (
-    <Popover open={open} onOpenChange={setOpen} modal>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-label={triggerLabel}
-          title={`Weight ${weight} (${sharePercent}% of runs) — click to adjust`}
-          className="relative min-w-[3.1rem] overflow-hidden rounded-none border-r-0 bg-primary/10 px-2 text-xs font-medium tabular-nums text-primary hover:bg-primary/20 hover:text-primary dark:bg-primary/15 dark:hover:bg-primary/25"
-        >
-          <span>{sharePercent}%</span>
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-primary/15"
-          >
-            <span
-              className="block h-full bg-primary transition-[width] duration-150"
-              style={{ width: `${sharePercent}%` }}
-            />
+      {readOnly ? (
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Weight</span>
+          <span className="font-mono font-medium tabular-nums text-foreground">
+            {weight}
           </span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-64 space-y-3 p-3"
-        side="bottom"
-        align="center"
-        sideOffset={8}
-        avoidCollisions
-      >
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="truncate font-medium">{agentName}</span>
-            <span className="shrink-0 font-mono font-medium tabular-nums text-primary">
-              {sharePercent}%
-            </span>
-          </div>
-          <div
-            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
-            aria-hidden="true"
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-150"
-              style={{ width: `${sharePercent}%` }}
-            />
-          </div>
         </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-muted-foreground">Weight</span>
+            <div className="flex items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                className="rounded-r-none border-r-0"
+                disabled={weight <= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+                onClick={() => commitNumber(weight - 1)}
+                aria-label={`Decrease weight for ${agentName}`}
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </Button>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+                max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+                aria-label={`Weight for ${agentName}`}
+                value={draft}
+                onChange={(event) => handleDraftChange(event.target.value)}
+                onBlur={handleBlur}
+                className="h-8 w-16 rounded-none px-2 text-center font-mono text-xs tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                className="rounded-l-none border-l-0"
+                disabled={weight >= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+                onClick={() => commitNumber(weight + 1)}
+                aria-label={`Increase weight for ${agentName}`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
 
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">Weight</span>
-          <div className="flex items-center">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              className="rounded-r-none border-r-0"
-              disabled={weight <= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
-              onClick={() => commitNumber(weight - 1)}
-              aria-label={`Decrease weight for ${agentName}`}
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </Button>
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
-              max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
-              aria-label={`Weight for ${agentName}`}
-              value={draft}
-              onChange={(event) => handleDraftChange(event.target.value)}
-              onBlur={handleBlur}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  handleBlur();
-                  setOpen(false);
-                }
-              }}
-              className="h-8 w-16 rounded-none px-2 text-center font-mono text-xs tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              className="rounded-l-none border-l-0"
-              disabled={weight >= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
-              onClick={() => commitNumber(weight + 1)}
-              aria-label={`Increase weight for ${agentName}`}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
+          <div className="flex items-center gap-1">
+            {WEIGHT_PRESETS.map((preset) => (
+              <Button
+                key={preset}
+                type="button"
+                variant={weight === preset ? "secondary" : "ghost"}
+                size="xs"
+                className={cn(
+                  "flex-1 font-mono text-xs tabular-nums",
+                  weight === preset && "font-semibold text-foreground",
+                )}
+                onClick={() => commitNumber(preset)}
+              >
+                <span>{preset}</span>
+              </Button>
+            ))}
           </div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          {WEIGHT_PRESETS.map((preset) => (
-            <Button
-              key={preset}
-              type="button"
-              variant={weight === preset ? "secondary" : "ghost"}
-              size="xs"
-              className={cn(
-                "flex-1 font-mono text-xs tabular-nums",
-                weight === preset && "font-semibold text-foreground",
-              )}
-              onClick={() => commitNumber(preset)}
-            >
-              <span>{preset}</span>
-            </Button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -622,7 +572,7 @@ interface SubagentPillProps {
   // "delegate" pills read as an active delegation target (green); "exclude"
   // pills read as a target removed from the Auto surface (red).
   tone?: "delegate" | "exclude";
-  /** Inline weight trigger shown on runtime pills when Weighted mode is active. */
+  /** Weight & traffic share shown via top progress hairline and edited inside the popover. */
   weight?: number;
   sharePercent?: number;
   onWeightChange?: (rawValue: string) => void;
@@ -647,14 +597,34 @@ function SubagentPill({
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
-      <div className="flex items-center">
+      <div className="relative flex items-center">
+        {showWeight && (
+          <div
+            role="progressbar"
+            aria-label={`Traffic share for ${agent.name}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={sharePercent}
+            className="pointer-events-none absolute inset-x-[1px] top-0 z-10 h-[2px] overflow-hidden rounded-t-[5px] bg-primary/15"
+          >
+            <span
+              className="block h-full bg-primary transition-[width] duration-150"
+              style={{ width: `${sharePercent}%` }}
+            />
+          </div>
+        )}
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             size="sm"
+            title={
+              showWeight
+                ? `Weight ${weight} (${sharePercent}% of runs)`
+                : undefined
+            }
             className={cn(
               "group max-w-[280px] text-xs",
-              (!readOnly || showWeight) && "rounded-r-none border-r-0",
+              !readOnly && "rounded-r-none border-r-0",
               !isSelected && "border-dashed opacity-50",
             )}
           >
@@ -682,15 +652,6 @@ function SubagentPill({
             )}
           </Button>
         </PopoverTrigger>
-        {showWeight && onWeightChange && (
-          <SubagentWeightControl
-            agentName={agent.name}
-            weight={weight}
-            sharePercent={sharePercent}
-            readOnly={readOnly}
-            onWeightChange={onWeightChange}
-          />
-        )}
         {!readOnly && (
           <Button
             variant="outline"
@@ -708,15 +669,24 @@ function SubagentPill({
         )}
       </div>
       <PopoverContent
-        className="w-[350px] p-0"
+        className="flex max-h-(--radix-popover-content-available-height) w-[350px] flex-col overflow-hidden p-0"
         side="bottom"
         align="start"
         sideOffset={8}
+        collisionPadding={16}
         avoidCollisions
       >
-        <div className="p-4 border-b flex items-start justify-between gap-2">
+        <div className="flex shrink-0 items-start justify-between gap-2 border-b p-4">
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold truncate">{agent.name}</h4>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h4 className="font-semibold truncate">{agent.name}</h4>
+              {agent.runtime && (
+                <AgentRuntimeChip
+                  runtime={agent.runtime}
+                  appearance="icon-link"
+                />
+              )}
+            </div>
             {agent.description && (
               <ExpandableText
                 text={agent.description}
@@ -736,14 +706,17 @@ function SubagentPill({
           </Button>
         </div>
 
-        {agent.runtime && (
-          <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2 text-xs">
-            <span className="text-muted-foreground">Agent Runtime</span>
-            <AgentRuntimeChip runtime={agent.runtime} />
-          </div>
+        {showWeight && onWeightChange && (
+          <SubagentWeightSection
+            agentName={agent.name}
+            weight={weight}
+            sharePercent={sharePercent}
+            readOnly={readOnly}
+            onWeightChange={onWeightChange}
+          />
         )}
 
-        <div className="p-4">
+        <div className="flex min-h-0 flex-1 flex-col p-4">
           <AgentToolsList agentId={agent.id} />
         </div>
       </PopoverContent>

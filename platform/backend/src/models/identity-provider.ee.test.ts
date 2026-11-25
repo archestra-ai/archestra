@@ -40,9 +40,7 @@ describe("IdentityProviderModel", () => {
   describe("create", () => {
     describe("by a service account", () => {
       const serviceAccountUserId = "service-account:crossplane";
-      const unusedRegistrar = (
-        registerSSOProvider: ReturnType<typeof vi.fn>,
-      ) =>
+      const unusedRegistrar = (registerSSOProvider: ReturnType<typeof vi.fn>) =>
         ({ api: { registerSSOProvider } }) as unknown as Parameters<
           typeof IdentityProviderModel.create
         >[3];

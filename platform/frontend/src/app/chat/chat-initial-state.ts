@@ -2,7 +2,7 @@ import {
   BUILT_IN_AGENT_IDS,
   type ThinkingEffortSetting,
 } from "@archestra/shared";
-import { autoRouterIdOfChoice } from "@/lib/chat/auto-model";
+import { autoModelChoice, autoRouterIdOfChoice } from "@/lib/chat/auto-model";
 import {
   resolveInitialModel,
   resolveModelForAgent,
@@ -53,6 +53,7 @@ export type CreateConversationInput = {
   /** Project the chat is started in (carried from /chat?project=...). */
   projectId?: string;
   thinkingEffort?: ThinkingEffortSetting;
+  strictModelSelection?: boolean;
 };
 
 /**
@@ -173,7 +174,11 @@ export function resolveChatModelState(params: {
   const modelsByProvider = Object.fromEntries(
     Object.entries(params.modelsByProvider).map(([provider, models]) => [
       provider,
-      models.map((m) => ({ id: m.dbId, isBest: m.isBest })),
+      models.map((m) => ({
+        id: m.dbId,
+        isBest: m.isBest,
+        apiKeyIds: m.apiKeyIds,
+      })),
     ]),
   );
 
@@ -205,9 +210,16 @@ export function resolveChatModelState(params: {
 
 export function resolvePreferredModelForProvider(params: {
   provider: SupportedProvider;
+  apiKeyId?: string;
+  allowPersonalModels?: boolean;
   modelsByProvider: Record<string, LlmModel[]>;
 }): { modelId: string; provider: SupportedProvider } | null {
-  const providerModels = params.modelsByProvider[params.provider];
+  const providerModels = params.modelsByProvider[params.provider]?.filter(
+    (model) =>
+      !params.apiKeyId ||
+      (params.allowPersonalModels && model.requiresUserConnection) ||
+      (model.apiKeyIds?.includes(params.apiKeyId) ?? true),
+  );
   if (!providerModels || providerModels.length === 0) {
     return null;
   }
@@ -220,8 +232,36 @@ export function resolvePreferredModelForProvider(params: {
   };
 }
 
+export function inheritedChatModelChoice(
+  agent:
+    | (AgentInfo & {
+        autoRouterId?: string | null;
+        modelPoolId?: string | null;
+        runtime?: unknown;
+      })
+    | null
+    | undefined,
+  organizationDefault: {
+    defaultAutoRouterId: string | null;
+    autoRouters: { id: string }[];
+  },
+): string | null {
+  if (!agent || agent.runtime != null) return null;
+  if (agent.modelPoolId) return agent.modelPoolId;
+  const routerId =
+    agent.autoRouterId ??
+    (!agent.modelId && !agent.llmApiKeyId
+      ? organizationDefault.defaultAutoRouterId
+      : null);
+  return routerId &&
+    organizationDefault.autoRouters.some((router) => router.id === routerId)
+    ? autoModelChoice(routerId)
+    : null;
+}
+
 export function buildCreateConversationInput(params: {
   agentId: string | null;
+  followDefaults?: boolean;
   modelId: string;
   chatApiKeyId: string | null;
   modelPoolId?: string | null;
@@ -231,6 +271,15 @@ export function buildCreateConversationInput(params: {
 }): CreateConversationInput | null {
   if (!params.agentId) {
     return null;
+  }
+
+  if (params.followDefaults) {
+    return {
+      agentId: params.agentId,
+      title: params.title,
+      projectId: params.projectId ?? undefined,
+      thinkingEffort: params.thinkingEffort,
+    };
   }
 
   const autoRouterId = autoRouterIdOfChoice(params.modelPoolId);
@@ -247,6 +296,8 @@ export function buildCreateConversationInput(params: {
     agentId: params.agentId,
     modelId: params.modelId || undefined,
     chatApiKeyId: params.chatApiKeyId ?? undefined,
+    ...(params.followDefaults === false &&
+      !params.modelPoolId && { strictModelSelection: true }),
     modelPoolId: params.modelPoolId ?? undefined,
     title: params.title,
     projectId: params.projectId ?? undefined,

@@ -3,7 +3,7 @@ title: "Archestra MCP Server"
 description: "Every built-in tool an agent uses to manage Archestra, with its inputs and required permission"
 order: 4
 explore: false
-lastUpdated: 2026-11-21
+lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

@@ -33,9 +33,7 @@ describe("network policy banners", () => {
   it("warns and freezes the controls when a probe measured no enforcement", () => {
     renderFields({ enforcementStatus: "verified-not-enforced" });
 
-    expect(
-      screen.getByText("Network policy enforcement test failed"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Network policy not enforced")).toBeInTheDocument();
     expect(
       screen.queryByText("Network policy enforcement not verified"),
     ).not.toBeInTheDocument();
@@ -49,7 +47,7 @@ describe("network policy banners", () => {
       screen.getByText("Network policy enforcement not verified"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Network policy enforcement test failed"),
+      screen.queryByText("Network policy not enforced"),
     ).not.toBeInTheDocument();
     // Unmeasured is not a measured failure, so the editor stays usable: most
     // clusters that skip the probe do enforce.
@@ -69,7 +67,7 @@ describe("network policy banners", () => {
     renderFields({ enforcementStatus: "verified-enforced" });
 
     expect(
-      screen.queryByText("Network policy enforcement test failed"),
+      screen.queryByText("Network policy not enforced"),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Network policy enforcement not verified"),
@@ -87,9 +85,7 @@ describe("network policy banners", () => {
       supportsFqdn: false,
     });
 
-    expect(
-      screen.getByText("Network policy enforcement test failed"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Network policy not enforced")).toBeInTheDocument();
     expect(
       screen.queryByText("Organization default not loaded"),
     ).not.toBeInTheDocument();

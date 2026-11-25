@@ -429,6 +429,7 @@ async function planScalars(params: {
     systemPrompt: snapshot.systemPrompt,
     accessAllTools: snapshot.accessAllTools,
     accessAllSubagents: snapshot.accessAllSubagents,
+    progressiveSubagentLoading: snapshot.progressiveSubagentLoading,
     incomingEmailEnabled: snapshot.incomingEmailEnabled,
     incomingEmailAllowedDomain: snapshot.incomingEmailAllowedDomain,
   };

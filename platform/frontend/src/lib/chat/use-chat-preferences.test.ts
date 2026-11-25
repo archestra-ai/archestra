@@ -200,6 +200,7 @@ describe("resolveConversationKeyForModel", () => {
         currentModelProvider: "openai",
         agentApiKeyId: "key-agent",
         modelProvider: "openai",
+        modelApiKeyIds: ["key-openai-usable"],
         usableKeys,
       }),
     ).toBe("key-agent");

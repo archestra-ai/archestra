@@ -1,5 +1,5 @@
 {
-  "id": "b536949d-f756-485c-9487-4208c2c7c26b",
+  "id": "db064bb3-fade-4cc1-87dd-1ab82638950e",
   "prevId": "cc45e750-a7b8-42fa-a6ff-11d55e040150",
   "version": "7",
   "dialect": "postgresql",
@@ -5061,6 +5061,13 @@
         },
         "access_all_subagents": {
           "name": "access_all_subagents",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "progressive_subagent_loading": {
+          "name": "progressive_subagent_loading",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -12319,24 +12326,6 @@
           "type": "text",
           "primaryKey": true,
           "notNull": true
-        },
-        "mode": {
-          "name": "mode",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "person_approval": {
-          "name": "person_approval",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "enforced_marks": {
-          "name": "enforced_marks",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": false
         },
         "enabled": {
           "name": "enabled",

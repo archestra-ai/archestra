@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_ADMIN_EMAIL, DocsPage } from "@archestra/shared";
+import { DEFAULT_ADMIN_EMAIL } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { GuardrailsDisabledWarning } from "@/app/openappa/_parts/guardrails-deployment-toggle";
@@ -25,7 +25,6 @@ import {
   useSession,
 } from "@/lib/auth/auth.query";
 import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useK8sCapabilities } from "@/lib/environment.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useShellReady } from "@/lib/shell-deferral";
@@ -89,13 +88,6 @@ export function SidebarWarningsAccordion({
   const showNetworkPolicyWarning =
     capabilities?.networkPolicy?.enforcementStatus === "verified-not-enforced";
 
-  // Null under full white-labeling, where the environments screen carries the
-  // same explanation and stays reachable.
-  const networkPolicyDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformDeploymentNetworking,
-    "enforce-workload-egress",
-  );
-
   const warnings = [
     showDefaultCredsWarning && {
       label: "Change default credentials",
@@ -103,9 +95,10 @@ export function SidebarWarningsAccordion({
       external: false,
     },
     showNetworkPolicyWarning && {
+      // The Environments page explains what this means and links the docs.
       label: "Network policy not enforced",
-      href: networkPolicyDocsUrl ?? "/settings/environments",
-      external: networkPolicyDocsUrl !== null,
+      href: "/settings/environments",
+      external: false,
     },
   ].filter((w): w is Warning => Boolean(w));
 

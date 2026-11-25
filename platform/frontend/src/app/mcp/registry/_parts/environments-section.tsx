@@ -2,7 +2,7 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Layers, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Layers, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -37,6 +37,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
@@ -94,6 +95,14 @@ import { EnvironmentResourceDefaultsDialog } from "./environment-resource-defaul
 import { compileValidationRegex } from "./environment-validation-helpers";
 
 const ENVIRONMENTS_DOCS_URL = getDocsUrl(DocsPage.PlatformEnvironments);
+const BUILT_IN_POLICY_DOCS_URL = getDocsUrl(
+  DocsPage.PlatformEnvironments,
+  "built-in-default-policy",
+);
+const NETWORK_ENFORCEMENT_DOCS_URL = getDocsUrl(
+  DocsPage.PlatformDeploymentNetworking,
+  "enforce-workload-egress",
+);
 
 type NetworkPolicy = NonNullable<EnvironmentWithAssignedCount["networkPolicy"]>;
 type EgressMode = NetworkPolicy["egressMode"];
@@ -365,6 +374,10 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
 
   return (
     <BulkActionsScope className="space-y-4">
+      {capabilities?.networkPolicy?.enforcementStatus ===
+      "verified-not-enforced" ? (
+        <NetworkRulesIgnoredBanner />
+      ) : null}
       <CollectionFilters>
         <FilterBar
           leading
@@ -537,7 +550,15 @@ function NamespaceCell({ namespace }: { namespace: string | null }) {
 
 function NetworkPolicyCell({ policy }: { policy: NetworkPolicy | null }) {
   if (!policy) {
-    return <span className="text-muted-foreground">Built-in</span>;
+    return (
+      <ExternalDocsLink
+        href={BUILT_IN_POLICY_DOCS_URL}
+        className="text-muted-foreground underline decoration-dotted underline-offset-4"
+        showIcon={false}
+      >
+        Built-in
+      </ExternalDocsLink>
+    );
   }
 
   return (
@@ -1187,5 +1208,37 @@ function DeleteEnvironmentDialog({
         })
       }
     />
+  );
+}
+
+// The sidebar warning links here. The probe that runs after each Helm install
+// and upgrade saw a pod under a deny-all policy still reach the cluster, so
+// every NetworkPolicy, including the built-in egress rules that apply with
+// nothing configured, is created and then ignored.
+function NetworkRulesIgnoredBanner() {
+  return (
+    <Alert variant="warning">
+      <TriangleAlert className="h-4 w-4" />
+      <AlertTitle>Environments network policy not enforced</AlertTitle>
+      <AlertDescription className="block leading-6">
+        Your Kubernetes cluster doesn't enforce NetworkPolicy, so MCP servers,
+        agents and code sandboxes can reach any address. The{" "}
+        <ExternalDocsLink
+          href={BUILT_IN_POLICY_DOCS_URL}
+          className="underline"
+          showIcon={false}
+        >
+          built-in default policy
+        </ExternalDocsLink>{" "}
+        doesn't apply either.{" "}
+        <ExternalDocsLink
+          href={NETWORK_ENFORCEMENT_DOCS_URL}
+          className="underline"
+          showIcon={false}
+        >
+          How to turn it on
+        </ExternalDocsLink>
+      </AlertDescription>
+    </Alert>
   );
 }

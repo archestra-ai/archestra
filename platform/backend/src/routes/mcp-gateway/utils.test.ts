@@ -2281,6 +2281,8 @@ describe("createAgentServer tools/list", () => {
     const agent = await makeAgent({
       organizationId: org.id,
       toolExposureMode: "search_and_run_only",
+      // The assigned agent is reached through search_tools, not listed.
+      progressiveSubagentLoading: true,
     });
     const targetAgent = await makeAgent({ organizationId: org.id });
     const delegationTool = await ToolModel.findOrCreateDelegationTool(

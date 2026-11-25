@@ -100,7 +100,7 @@ export interface ChatSetupMenuProps {
   /** Model, key, and reasoning are hidden without chat:full-view. */
   canShowProviderSettings: boolean;
   selectedModel: string;
-  onModelChange: (dbId: string) => void;
+  onModelChange: (dbId: string, automatic?: true, personal?: true) => void;
   fallbackModelName?: string;
   modelSource?: ModelSource | null;
   onResetModelOverride?: () => void;
@@ -389,7 +389,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
   const currentValue =
     scope === "model"
       ? currentModel
-        ? modelValue(currentModel.dbId)
+        ? modelValue(currentModel)
         : ""
       : scope === "agent"
         ? currentAgent
@@ -463,7 +463,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     }
   };
   const pickModel = (m: LlmModel) => {
-    data.selectModel(m.dbId);
+    data.selectModel(m);
     ctx.close();
   };
   const pickAgent = (id: string) => {
@@ -682,10 +682,12 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                 className={GROUP}
               >
                 {s.models.map((m) => {
-                  const isCurrent = m.dbId === currentModel?.dbId;
+                  const isCurrent = currentModel
+                    ? modelValue(m) === modelValue(currentModel)
+                    : false;
                   return (
                     <ModelEntry
-                      key={m.dbId}
+                      key={modelValue(m)}
                       model={m}
                       keywords={modelKeywords(m, data.providerLabel)}
                       selected={isCurrent}
@@ -920,7 +922,7 @@ function ModelRow({
   const capabilities = modelCapabilities(model);
   return (
     <CommandItem
-      value={modelValue(model.dbId)}
+      value={modelValue(model)}
       data-testid={getChatModelOptionTestId(model.id)}
       keywords={keywords}
       onSelect={onSelect}
@@ -1088,6 +1090,7 @@ function AutoRow({
   return (
     <CommandItem
       value={autoRouterValue(router.id)}
+      disabled={!!router.unavailableReason}
       keywords={autoRouterKeywords(router)}
       onSelect={onSelect}
       className={cn(ITEM, "min-h-11")}
@@ -1098,7 +1101,9 @@ function AutoRow({
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-medium">{router.label}</span>
         <span className="truncate text-xs leading-4 text-muted-foreground">
-          {router.description}
+          {router.unavailableReason ??
+            router.normalOnlyReason ??
+            router.description}
         </span>
       </div>
       <Selected on={selected} />
@@ -1476,8 +1481,10 @@ function signInKeywords(title: string) {
   return [title, "sign in", "connect"];
 }
 
-function modelValue(dbId: string) {
-  return `model:${dbId}`;
+function modelValue(model: Pick<LlmModel, "dbId" | "requiresUserConnection">) {
+  return model.requiresUserConnection
+    ? `model:${model.dbId}:personal`
+    : `model:${model.dbId}`;
 }
 function agentValue(id: string) {
   return `agent:${id}`;

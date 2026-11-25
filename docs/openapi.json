@@ -63186,6 +63186,9 @@
                                   "accessAllSubagents": {
                                     "type": "boolean"
                                   },
+                                  "progressiveSubagentLoading": {
+                                    "type": "boolean"
+                                  },
                                   "subagentLoadBalancing": {
                                     "nullable": true,
                                     "type": "object",
@@ -63655,6 +63658,7 @@
                                   "activationSkillMode",
                                   "activationSkillPolicyRevision",
                                   "accessAllSubagents",
+                                  "progressiveSubagentLoading",
                                   "builtInAgentConfig",
                                   "builtIn",
                                   "latestVersion",
@@ -65047,6 +65051,9 @@
                           "accessAllSubagents": {
                             "type": "boolean"
                           },
+                          "progressiveSubagentLoading": {
+                            "type": "boolean"
+                          },
                           "subagentLoadBalancing": {
                             "nullable": true,
                             "type": "object",
@@ -65516,6 +65523,7 @@
                           "activationSkillMode",
                           "activationSkillPolicyRevision",
                           "accessAllSubagents",
+                          "progressiveSubagentLoading",
                           "builtInAgentConfig",
                           "builtIn",
                           "latestVersion",
@@ -66201,6 +66209,9 @@
                     "type": "boolean"
                   },
                   "accessAllSubagents": {
+                    "type": "boolean"
+                  },
+                  "progressiveSubagentLoading": {
                     "type": "boolean"
                   },
                   "subagentLoadBalancing": {
@@ -67204,6 +67215,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -67656,6 +67670,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -72717,6 +72732,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -73181,6 +73199,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -74267,6 +74286,9 @@
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
+                        "progressiveSubagentLoading": {
+                          "type": "boolean"
+                        },
                         "subagentLoadBalancing": {
                           "nullable": true,
                           "type": "object",
@@ -74719,6 +74741,7 @@
                         "activationSkillMode",
                         "activationSkillPolicyRevision",
                         "accessAllSubagents",
+                        "progressiveSubagentLoading",
                         "builtInAgentConfig",
                         "builtIn",
                         "latestVersion",
@@ -75490,6 +75513,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -75942,6 +75968,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -76624,6 +76651,9 @@
                   "accessAllSubagents": {
                     "type": "boolean"
                   },
+                  "progressiveSubagentLoading": {
+                    "type": "boolean"
+                  },
                   "subagentLoadBalancing": {
                     "nullable": true,
                     "type": "object",
@@ -77287,6 +77317,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -77739,6 +77772,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -79662,6 +79696,10 @@
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
+                        "progressiveSubagentLoading": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "activationSkillMode": {
                           "default": "all",
                           "type": "string",
@@ -80033,6 +80071,7 @@
                         "missingCredentialBehavior",
                         "accessAllTools",
                         "accessAllSubagents",
+                        "progressiveSubagentLoading",
                         "activationSkillMode",
                         "passthroughHeaders",
                         "incomingEmailEnabled",
@@ -80825,6 +80864,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -81277,6 +81319,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -82192,6 +82235,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -82644,6 +82690,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -90343,6 +90390,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -90795,6 +90845,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -174144,6 +174195,12 @@
                           "isBest": {
                             "type": "boolean"
                           },
+                          "apiKeyIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "isFree": {
                             "type": "boolean"
                           },
@@ -174633,6 +174690,9 @@
                             "accessAllSubagents": {
                               "type": "boolean"
                             },
+                            "progressiveSubagentLoading": {
+                              "type": "boolean"
+                            },
                             "subagentLoadBalancing": {
                               "nullable": true,
                               "type": "object",
@@ -175085,6 +175145,7 @@
                             "activationSkillMode",
                             "activationSkillPolicyRevision",
                             "accessAllSubagents",
+                            "progressiveSubagentLoading",
                             "builtInAgentConfig",
                             "builtIn",
                             "latestVersion",
@@ -175601,6 +175662,12 @@
                               },
                               "isBest": {
                                 "type": "boolean"
+                              },
+                              "apiKeyIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               },
                               "isFree": {
                                 "type": "boolean"
@@ -177606,6 +177673,12 @@
                               "isBest": {
                                 "type": "boolean"
                               },
+                              "apiKeyIds": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
                               "isFree": {
                                 "type": "boolean"
                               },
@@ -178095,6 +178168,9 @@
                                 "accessAllSubagents": {
                                   "type": "boolean"
                                 },
+                                "progressiveSubagentLoading": {
+                                  "type": "boolean"
+                                },
                                 "subagentLoadBalancing": {
                                   "nullable": true,
                                   "type": "object",
@@ -178547,6 +178623,7 @@
                                 "activationSkillMode",
                                 "activationSkillPolicyRevision",
                                 "accessAllSubagents",
+                                "progressiveSubagentLoading",
                                 "builtInAgentConfig",
                                 "builtIn",
                                 "latestVersion",
@@ -179063,6 +179140,12 @@
                                   },
                                   "isBest": {
                                     "type": "boolean"
+                                  },
+                                  "apiKeyIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
                                   },
                                   "isFree": {
                                     "type": "boolean"
@@ -182967,6 +183050,9 @@
                       "medium",
                       "high"
                     ]
+                  },
+                  "strictModelSelection": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -185509,6 +185595,9 @@
                       "medium",
                       "high"
                     ]
+                  },
+                  "strictModelSelection": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -428916,6 +429005,12 @@
                       "isBest": {
                         "type": "boolean"
                       },
+                      "apiKeyIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "isFree": {
                         "type": "boolean"
                       },
@@ -514825,6 +514920,19 @@
           "Organization"
         ],
         "description": "Get the model agents and chats on the organization default run on, and the tiers auto routing routes them across\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            },
+            "in": "query",
+            "name": "forChat",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -514900,6 +515008,14 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "name": {
+                            "type": "string"
+                          },
+                          "unavailableReason": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "normalOnlyReason": {
+                            "nullable": true,
                             "type": "string"
                           },
                           "tiers": {

@@ -2,7 +2,7 @@
 title: Networking
 description: Configure public endpoints, streaming, and workload network isolation
 order: 5
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -74,23 +74,25 @@ Allowed embedding origins follow [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployme
 
 If you restrict the backend's outbound traffic, allow each model provider's endpoint, listed under [LLM Provider Configuration](/docs/admin/deployment/configuration#llm-providers). A ChatGPT subscription needs [its own hosts](/docs/llm-proxy/providers#chatgpt-subscription-egress).
 
-## Enforce Workload Egress
+## Turn On Network Policy Enforcement
 
-[Environment policies](/docs/admin/environments#network-egress-policies) require a network dataplane that enforces them. Creating policy objects alone does not isolate workloads.
+<span id="enforce-workload-egress"></span>
 
-Domain rules need an FQDN policy provider; plain Kubernetes `NetworkPolicy` supports IP/CIDR rules only.
+[Network egress policies](/docs/admin/environments#network-egress-policies) work only when your Kubernetes cluster enforces them. Creating a policy alone does not prevent MCP servers, agents, and code sandboxes from reaching an address that the policy blocks. If your cluster does not enforce policies, the sidebar shows **Network policy not enforced**.
+
+Plain Kubernetes [`NetworkPolicy`](https://kubernetes.io/docs/concepts/services-networking/network-policies/) allows only IP/CIDR ranges. To enforce domain rules, for example to allow calling `api.github.com`, you need an FQDN policy provider. The table below shows which FQDN policy provider can be configured in different Kubernetes clusters.
 
 | Cluster | IP/CIDR enforcement | Domain enforcement |
 | --- | --- | --- |
-| EKS Auto Mode | Kubernetes NetworkPolicy, when enabled | AWS ApplicationNetworkPolicy with the Auto Mode Network Policy Controller. DNS rules apply to Auto Mode EC2 workloads. |
-| EKS with AWS VPC CNI | Kubernetes NetworkPolicy, when enabled | Not supported outside Auto Mode DNS policies. |
-| AKS | Kubernetes NetworkPolicy, when enabled | CiliumNetworkPolicy when its CRD is available. |
-| GKE | Kubernetes NetworkPolicy, when enabled | FQDNNetworkPolicy with Dataplane V2 and FQDN policy enabled. |
-| Cilium clusters | Kubernetes or Cilium policy | CiliumNetworkPolicy. |
+| [EKS Auto Mode](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html) | Kubernetes NetworkPolicy, when enabled | AWS ApplicationNetworkPolicy with the Auto Mode Network Policy Controller. DNS rules apply to Auto Mode EC2 workloads. |
+| [EKS with AWS VPC CNI](https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy.html) | Kubernetes NetworkPolicy, when enabled | Not supported outside Auto Mode DNS policies. |
+| [AKS](https://learn.microsoft.com/en-us/azure/aks/use-network-policies) | Kubernetes NetworkPolicy, when enabled | CiliumNetworkPolicy when its CRD is available. |
+| [GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies) | Kubernetes NetworkPolicy, when enabled | FQDNNetworkPolicy with Dataplane V2 and FQDN policy enabled. |
+| [Cilium clusters](https://docs.cilium.io/en/latest/security/dns/) | Kubernetes or Cilium policy | CiliumNetworkPolicy. |
 
-Check your provider's setup: [Kubernetes](https://kubernetes.io/docs/concepts/services-networking/network-policies/), [Cilium](https://docs.cilium.io/en/latest/security/dns/), [GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), or [EKS Auto Mode](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html). Archestra allows DNS bootstrap traffic only to the discovered cluster resolver. If discovery fails, Auto Mode policies omit that exception; domain lookups can fail until you restore discovery or configure the resolver. See [Helm DNS discovery](/docs/admin/deployment/helm#dns-discovery) for resolver overrides and the optional Service read grant.
+A network policy also blocks DNS lookups. Without DNS, an MCP server can't turn `api.github.com` into an address, so Archestra adds an exception to every policy: lookups to the cluster's DNS server are allowed.
 
-Public internet mode blocks private, metadata, loopback, and reserved destinations. Add only the private ranges a workload needs under **Additional allowed CIDRs**, or use an allowlist to restrict all outbound access. DNS to a known cluster resolver remains allowed.
+Normally, the exception points at the DNS server by its pod label. On EKS Auto Mode, the network policy doesn't support pod labels, so the exception must contain the IP address of the DNS server. Archestra normally finds this address by itself. If it can't, it adds no DNS lookup exception to the policy, and lookups fail. To fix it, set the address yourself in the Helm value `archestra.orchestrator.kubernetes.clusterDnsIps`: see [Helm DNS discovery](/docs/admin/deployment/helm#dns-discovery).
 
 ## Code Sandbox Requirements
 

@@ -21,12 +21,16 @@ RELEASES = {
     "golang.org/x/net": {"v0.62.0": 30, "v0.63.0": 8},
     "github.com/BurntSushi/toml": {"v1.5.0": 90},
     "github.com/containerd/containerd/v2": {"v2.2.7": 40},
+    "go.opentelemetry.io/otel": {"v1.41.0": 90, "v1.47.0": 10},
+    "go.opentelemetry.io/otel/metric": {"v1.41.0": 90, "v1.47.0": 10},
 }
 DOCKER_CLI = """RUN go mod edit -go=1.25.11 && \\
     # CVE-2026-34986: patched go-jose parsing.
     go get github.com/go-jose/go-jose/v4@v4.1.6 && \\
     go get golang.org/x/net@v0.62.0 && \\
     go get github.com/BurntSushi/toml@v1.5.0 && \\
+    go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 && \\
+    go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \\
     go mod vendor
 """
 AGENT = """RUN go get golang.org/x/net@v0.61.0 && go get github.com/containerd/containerd/v2@v2.2.7
@@ -68,6 +72,14 @@ class BumpGoPinsTest(unittest.TestCase):
         # Comments and other commands are left alone.
         self.assertIn("# CVE-2026-34986: patched go-jose parsing.", docker_cli)
         self.assertIn("go mod edit -go=1.25.11", docker_cli)
+
+    def test_every_module_of_a_multi_module_go_get_moves(self):
+        _, docker_cli, _ = self.run_bump()
+        # Modules released together stay in step: a go get that bumps only the
+        # first argument leaves otel@v1.47.0 needing a newer otel/metric.
+        self.assertIn("go get go.opentelemetry.io/otel@v1.47.0 go.opentelemetry.io/otel/metric@v1.47.0 && \\", docker_cli)
+        # module@version outside `go get` is not a pin.
+        self.assertIn("go mod edit -require=github.com/docker/docker@v29.3.1+incompatible", docker_cli)
 
     def test_a_release_line_keeps_v1_and_later_modules_on_their_minor(self):
         bumps, docker_cli, _ = self.run_bump("--patch-only")

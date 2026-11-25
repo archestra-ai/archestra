@@ -27,6 +27,7 @@ import {
   useConversationUpdatedCacheSync,
   useCreateConversation,
   useDeleteConversation,
+  useGenerateConversationTitle,
   useKeepViewedConversationRead,
   useMarkConversationRead,
   useRefreshConversationFilesAfterTurn,
@@ -46,6 +47,7 @@ vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
   clearChatConversationErrors: vi.fn(),
   updateChatConversation: vi.fn(),
   createChatConversation: vi.fn(),
+  generateChatConversationTitle: vi.fn(),
   stopChatStream: vi.fn(),
   resolveChatMcpElicitation: vi.fn(),
 }));
@@ -1253,6 +1255,42 @@ describe("conversation settings reach the wire", () => {
       expect.objectContaining({
         body: expect.objectContaining({ thinkingEffort: "high" }),
       }),
+    );
+  });
+});
+
+describe("useGenerateConversationTitle", () => {
+  it("refreshes Recents for the project returned by the title mutation", async () => {
+    const saved = {
+      ...makeConversation(),
+      projectId: "project-1",
+      title: "Launch checklist",
+    };
+    vi.mocked(archestraApiSdk.generateChatConversationTitle).mockResolvedValue({
+      data: saved,
+      error: undefined,
+    } as Awaited<
+      ReturnType<typeof archestraApiSdk.generateChatConversationTitle>
+    >);
+    const queryClient = new QueryClient();
+    const recents = ["projects", saved.projectId, "conversations"];
+    const unrelatedRecents = ["projects", "project-2", "conversations"];
+    queryClient.setQueryData(recents, [{ id: saved.id, title: null }]);
+    queryClient.setQueryData(unrelatedRecents, []);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useGenerateConversationTitle(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: saved.id });
+    });
+
+    expect(queryClient.getQueryState(recents)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(unrelatedRecents)?.isInvalidated).toBe(
+      false,
     );
   });
 });

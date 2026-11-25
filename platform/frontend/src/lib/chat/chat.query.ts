@@ -538,6 +538,17 @@ type WithThinkingEffortSetting<TBody> = Omit<TBody, "thinkingEffort"> & {
   thinkingEffort?: ThinkingEffortSetting;
 };
 
+function invalidateProjectRecents(
+  queryClient: QueryClient,
+  projectId: string | null,
+) {
+  if (projectId) {
+    void queryClient.invalidateQueries({
+      queryKey: ["projects", projectId, "conversations"],
+    });
+  }
+}
+
 export function useCreateConversation() {
   const queryClient = useQueryClient();
 
@@ -596,11 +607,7 @@ export function useCreateConversation() {
         storeEncryptedChatKey(newConversation.id, variables.encryptedChatKey);
       }
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      if (newConversation.projectId) {
-        queryClient.invalidateQueries({
-          queryKey: ["projects", newConversation.projectId, "conversations"],
-        });
-      }
+      invalidateProjectRecents(queryClient, newConversation.projectId);
       // Immediately populate the individual conversation cache to avoid loading state
       queryClient.setQueryData(
         ["conversation", newConversation.id],
@@ -1030,6 +1037,7 @@ export function useGenerateConversationTitle() {
             : c,
         ),
       );
+      invalidateProjectRecents(queryClient, data.projectId);
     },
   });
 }

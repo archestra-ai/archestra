@@ -2,7 +2,7 @@
 title: Environments
 description: Separate staging and production resources and workload networks
 order: 3
-lastUpdated: 2026-11-23
+lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -75,24 +75,27 @@ These rules apply to both manual assignments and execution. An app created from 
 
 ## Network Egress Policies
 
-Choose what workloads can reach from the environment's namespace. Archestra uses the agent's own policy, then the environment policy, then the organization default, then Public internet.
+Limit what self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [coding agent workspaces](/docs/agents/runtime#environments-and-network-egress) can connect to. For example, let staging reach the public internet, and let production reach only your own APIs.
 
-| Need | Mode |
+To set a policy, go to **Settings → Environments**, edit an environment, and open the **Network Egress Policy** tab. Under **Egress**, pick one:
+
+| Egress | What they can reach |
 | --- | --- |
-| No outbound access | Block all (`off`). |
-| Only selected endpoints | Allowlist (`restricted`), with their domains or CIDRs. |
-| Public destinations | Public internet (`unrestricted`), which blocks private and reserved ranges. |
-| Public destinations plus a private service | Public internet, with that service's range under **Additional allowed CIDRs**. |
+| **Block all** | Nothing. |
+| **Allowlist** | Only the domains and CIDRs that you list. |
+| **Public internet** | The public internet, but not your internal network. To add one internal service, enter its range under **Additional allowed CIDRs**. |
 
-Self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [coding agent workspaces](/docs/agents/runtime#environments-and-network-egress) inherit the policy. The cluster must enforce the relevant policy type; creating a policy object alone does not isolate workloads.
+An environment without a policy uses the policy of the default environment. If that has none, the built-in default policy applies.
+
+Your cluster must [enforce network policies](/docs/admin/deployment/networking#enforce-workload-egress). Creating a policy alone does not prevent MCP servers, agents, and code sandboxes from reaching an address that the policy blocks.
 
 ### Built-in Default Policy
 
 <span id="the-public-internet-floor"></span>
 
-With no policy set, MCP servers, agents, and code sandboxes can reach websites and public APIs, but nothing inside your own network. A compromised MCP server cannot connect to your database, call other services in the cluster, or take your cloud credentials. The **Network Egress** column shows this policy as **Built-in**.
+By default, Archestra applies a built-in network policy. MCP servers, agents, and code sandboxes can reach the public internet, but not your internal network. For example, an MCP server can call `api.github.com`, but it can't connect to your database or get the cloud credentials of the machine it runs on.
 
-It blocks these ranges. **Public internet** mode blocks the same ones.
+It blocks the addresses below:
 
 | Blocked | Examples | Ranges |
 | --- | --- | --- |
@@ -100,9 +103,7 @@ It blocks these ranges. **Public internet** mode blocks the same ones.
 | Cloud metadata service | The address on every AWS, Google Cloud, or Azure machine that hands out the machine's cloud credentials | `169.254.0.0/16`, `168.63.129.16/32`, `fe80::/10` |
 | Loopback and reserved ranges | `localhost` | `127.0.0.0/8`, `0.0.0.0/8`, `::1/128`, `64:ff9b::/96` |
 
-- DNS to the cluster resolver stays allowed.
-- To let workloads reach one private service, choose **Public internet** and add its range under **Additional allowed CIDRs**.
-- The cluster must [enforce NetworkPolicy](/docs/admin/deployment/networking#enforce-workload-egress). If it does not, the sidebar shows **Network policy not enforced** and nothing is blocked.
+To add an allowed address, change the environment's policy to **Public internet** and add the service's range under **Additional allowed CIDRs**.
 
 ### Give One Agent Its Own Policy
 

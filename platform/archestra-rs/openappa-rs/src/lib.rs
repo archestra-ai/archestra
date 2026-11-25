@@ -306,6 +306,15 @@ enum Recovery {
 
 /// Whether the runtime decided `decision`: a denial for a fact it could not obtain decided
 /// nothing, so its receipt is not kept and the same request is judged afresh.
+/// `response`, once this dispatch's receipt is dropped unrecorded, so the next identical
+/// request is judged afresh.
+fn answered_unrecorded(receipts: &lease::Receipts, response: Value) -> napi::Result<Value> {
+    match receipts.discard().map_err(sql_failure)? {
+        lease::Guarded::Finished(()) => Ok(response),
+        lease::Guarded::Lost => Err(lease_lost()),
+    }
+}
+
 fn judged(decision: &HookDecision) -> bool {
     !matches!(
         decision,
@@ -1058,10 +1067,7 @@ impl State {
                 // An untracked remedy is keyed by its arguments, so a completed receipt would
                 // answer an identical retry with this notice instead of running it. The attempt
                 // committed nothing the receipt guards: the retry vouches afresh.
-                return match receipts.discard().map_err(sql_failure)? {
-                    lease::Guarded::Finished(()) => Ok(response),
-                    lease::Guarded::Lost => Err(lease_lost()),
-                };
+                return answered_unrecorded(receipts, response);
             }
             return finish_remedy(
                 &self.store,
@@ -1228,10 +1234,7 @@ impl State {
             )
         };
         if !judged {
-            return match receipts.discard().map_err(sql_failure)? {
-                lease::Guarded::Finished(()) => Ok(decision),
-                lease::Guarded::Lost => Err(lease_lost()),
-            };
+            return answered_unrecorded(receipts, decision);
         }
         finish_operation(
             &self.store,
@@ -1381,10 +1384,7 @@ impl State {
                         // Neither the call nor its result is decided: both are asked again.
                         Recovery::Unjudged(decision) => {
                             let response = authoritative_unexecuted_response(decision)?;
-                            return match receipts.discard().map_err(sql_failure)? {
-                                lease::Guarded::Finished(()) => Ok(response),
-                                lease::Guarded::Lost => Err(lease_lost()),
-                            };
+                            return answered_unrecorded(receipts, response);
                         }
                     }
                 }
@@ -1395,10 +1395,7 @@ impl State {
                 let Some(response) = inherited_result(pg, input, &call_id)? else {
                     // No call holds this id yet, and one judged under it later must not find
                     // this answer, as a call the runtime could not judge would.
-                    return match receipts.discard().map_err(sql_failure)? {
-                        lease::Guarded::Finished(()) => Ok(unknown_result_response()),
-                        lease::Guarded::Lost => Err(lease_lost()),
-                    };
+                    return answered_unrecorded(receipts, unknown_result_response());
                 };
                 let approved = decision_text(&response)?;
                 self.store

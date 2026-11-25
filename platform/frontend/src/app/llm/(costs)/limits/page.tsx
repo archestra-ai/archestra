@@ -2521,9 +2521,8 @@ function DefaultLimitAppliedTo({
       </span>
       <div className="min-w-0">
         <div className="truncate">{scopeName}</div>
-        <div className="truncate text-xs text-muted-foreground">
-          {whoIsLimited}
-        </div>
+        {/* Wraps instead of truncating: the sentence is the row's meaning. */}
+        <div className="text-xs text-muted-foreground">{whoIsLimited}</div>
       </div>
     </div>
   );

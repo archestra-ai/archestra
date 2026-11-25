@@ -189,10 +189,10 @@ describe("default limit scope", () => {
 describe("defaultLimitWhoIsLimited", () => {
   it("says who a default is for, under its row's name", () => {
     expect(defaultLimitWhoIsLimited({ environmentId: null })).toBe(
-      "Limit for every user",
+      "Default user limit",
     );
     expect(defaultLimitWhoIsLimited({ environmentId: "env-prod" })).toBe(
-      "Limit for every user in this environment",
+      "Default user limit in this environment",
     );
   });
 });

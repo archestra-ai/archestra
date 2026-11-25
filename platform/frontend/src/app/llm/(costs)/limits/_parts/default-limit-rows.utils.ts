@@ -126,13 +126,13 @@ export function defaultLimitScopeName(
   );
 }
 
-/** The second line of a default's table row: who the limit is for. */
+/** The second line of a default's table row: the kind of limit, as on other rows. */
 export function defaultLimitWhoIsLimited(
   limit: Pick<DefaultUserLimit, "environmentId">,
 ) {
   return limit.environmentId === null
-    ? "Limit for every user"
-    : "Limit for every user in this environment";
+    ? "Default user limit"
+    : "Default user limit in this environment";
 }
 
 /** Who gets the limit being created or edited, for the form's notice. */

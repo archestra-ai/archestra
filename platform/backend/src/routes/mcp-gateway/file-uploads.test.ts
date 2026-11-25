@@ -32,6 +32,7 @@ import {
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
 import { afterEach, describe, expect, type TestFixtures, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { agentOwner } from "@/types/tool-owner";
 import mcpGatewayRoutes from "./index";
 
 setupTestCacheManager();
@@ -237,7 +238,7 @@ describe("MCP gateway - File Uploads extension", () => {
     );
   });
 
-  test("form target: the caller POSTs raw bytes and the relay builds the multipart body", async ({
+  test("form target: the caller PUTs raw bytes and the relay builds the multipart POST", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -264,10 +265,10 @@ describe("MCP gateway - File Uploads extension", () => {
       fileInput({ name: 'reports/Q3 "final".pdf' }),
     );
     const [target] = first.body.result.uploads;
-    expect(target.method).toBe("POST");
+    expect(target.method).toBe("PUT");
     expect(target).not.toHaveProperty("form");
 
-    const upload = await gateway.upload(target.path, FILE_BYTES, "POST");
+    const upload = await gateway.upload(target.path, FILE_BYTES);
     expect(upload.status).toBe(200);
     const form = upstream.forms.at(-1);
     expect(form?.fields).toEqual([
@@ -614,6 +615,164 @@ describe("MCP gateway - File Uploads extension", () => {
     expect(retry.body.result.isError).toBe(true);
     expect(retry.body.result.content[0].text).toContain("a second time");
   });
+
+  test("repeating an upload that already arrived succeeds without sending it again", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeSecret,
+  }) => {
+    const fixtures: Fixtures = {
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeSecret,
+    };
+    const { gateway, install, upstream } = await setUp(fixtures, {
+      mode: "url",
+    });
+    const first = await gateway.callSave(install.saveToolName, fileInput());
+    const [target] = first.body.result.uploads;
+    expect((await gateway.upload(target.path, FILE_BYTES)).status).toBe(200);
+    const sent = upstream.uploads.length;
+    expect((await gateway.upload(target.path, FILE_BYTES)).status).toBe(200);
+    expect(upstream.uploads).toHaveLength(sent);
+    expect((await gateway.upload(target.path, FILE_BYTES, "POST")).status).toBe(
+      404,
+    );
+    const longer = Buffer.concat([FILE_BYTES, Buffer.from("x")]);
+    expect((await gateway.upload(target.path, longer)).status).toBe(400);
+  });
+
+  test("a caller that did not declare the extension cannot call a file tool", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeSecret,
+  }) => {
+    const fixtures: Fixtures = {
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeSecret,
+    };
+    const { gateway, install, upstream } = await setUp(fixtures, {
+      mode: "url",
+      maxInlineBytes: 64 * 1024,
+    });
+    const response = await gateway.callSave(
+      install.saveToolName,
+      fileInput({ data: FILE_BYTES.toString("base64") }),
+      { declareFiles: false },
+    );
+    expect(response.body.error.code).toBe(-32021);
+    expect(response.body.error.data).toEqual({
+      requiredCapabilities: { extensions: { [MCP_FILES_EXTENSION_ID]: {} } },
+    });
+    expect(upstream.toolCalls).toBe(0);
+  });
+
+  test("a file argument that is not a file input is refused, and its bytes are not recorded", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeSecret,
+  }) => {
+    const fixtures: Fixtures = {
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeSecret,
+    };
+    const { gateway, install, upstream } = await setUp(fixtures, {
+      mode: "url",
+      maxInlineBytes: 64 * 1024,
+    });
+    const notAnObject = await gateway.callSave(
+      install.saveToolName,
+      "report.pdf",
+    );
+    expect(notAnObject.body.result.isError).toBe(true);
+    expect(notAnObject.body.result.content[0].text).toContain(
+      "not a file input object",
+    );
+
+    const data = FILE_BYTES.toString("base64");
+    const invalid = await gateway.callSave(
+      install.saveToolName,
+      fileInput({ id: "", data }),
+    );
+    expect(invalid.body.result.isError).toBe(true);
+    const rows = await toolCallRows(install.agentId, install.saveToolName);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(JSON.stringify(rows.map((row) => row.toolCall))).not.toContain(data);
+    expect(upstream.toolCalls).toBe(0);
+  });
+
+  test("a file tool called outside the gateway's files path is refused", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeSecret,
+  }) => {
+    const fixtures: Fixtures = {
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeSecret,
+    };
+    const { install, upstream } = await setUp(fixtures, {
+      mode: "url",
+      maxInlineBytes: 64 * 1024,
+    });
+    const data = FILE_BYTES.toString("base64");
+    // How run_tool, chat and apps call a tool: no files plan.
+    const result = await mcpClient.executeToolCallForOwner(
+      {
+        id: randomUUID(),
+        name: install.saveToolName,
+        arguments: { folder: "x", file: fileInput({ data }) },
+      },
+      agentOwner(install.agentId),
+      {
+        tokenId: install.tokenId,
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+        userId: install.userId,
+        organizationId: install.organizationId,
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("This tool takes files");
+    const rows = await toolCallRows(install.agentId, install.saveToolName);
+    expect(JSON.stringify(rows.map((row) => row.toolCall))).not.toContain(data);
+    expect(upstream.toolCalls).toBe(0);
+  });
 });
 
 // =============================================================================
@@ -676,10 +835,15 @@ async function installAndSync(fixtures: Fixtures, url: string) {
     await AgentToolModel.create(agent.id, row.id, { mcpServerId: serverId });
   }
 
-  const { value: token } = await UserTokenModel.create(user.id, org.id);
+  const { value: token, token: tokenRecord } = await UserTokenModel.create(
+    user.id,
+    org.id,
+  );
   return {
     agentId: agent.id,
     organizationId: org.id,
+    userId: user.id,
+    tokenId: tokenRecord.id,
     token,
     saveToolName: ToolModel.slugifyName(catalog.name, "save_file"),
     echoToolName: ToolModel.slugifyName(catalog.name, "echo"),
@@ -754,8 +918,12 @@ function gatewayClient(app: FastifyInstance, agentId: string, token: string) {
     rpc,
     callSave: (
       toolName: string,
-      file: Record<string, unknown>,
-      options: { requestState?: string; declareUpload?: boolean } = {},
+      file: unknown,
+      options: {
+        requestState?: string;
+        declareUpload?: boolean;
+        declareFiles?: boolean;
+      } = {},
     ) =>
       rpc(
         "tools/call",
@@ -764,7 +932,11 @@ function gatewayClient(app: FastifyInstance, agentId: string, token: string) {
           arguments: { folder: "reports", file },
           ...(options.requestState && { requestState: options.requestState }),
         },
-        { name: toolName, declareUpload: options.declareUpload },
+        {
+          name: toolName,
+          declareUpload: options.declareUpload,
+          declareFiles: options.declareFiles,
+        },
       ),
     upload: (
       path: string,

@@ -15,6 +15,7 @@ import {
   STATELESS_MCP_PROTOCOL_REVISION,
 } from "@/routes/mcp-gateway/protocol";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
+import { isObject } from "./is-object";
 
 /**
  * Requests to an upstream MCP server in protocol revision 2026-07-28.
@@ -71,18 +72,28 @@ export type JsonRpcOutcome =
     };
 
 export class StatelessUpstreamError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** The HTTP status, when the server answered without JSON-RPC. */
+    readonly status?: number,
+  ) {
     super(message);
     this.name = "StatelessUpstreamError";
   }
+}
+
+/** Whether an abort reason is a deadline passing rather than a cancel. */
+export function isTimeout(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === "TimeoutError";
 }
 
 /**
  * Send one 2026-07-28 request and return its JSON-RPC outcome.
  *
  * Throws {@link StatelessUpstreamError} when no JSON-RPC response arrives (a
- * transport failure, a non-JSON body, a stream that ends without the answer):
- * for a `tools/call` that means the outcome is unknown.
+ * transport failure, a deadline passing, a non-JSON body, a stream that ends
+ * without the answer): for a `tools/call` that means the outcome is unknown.
+ * A cancelled `signal` propagates as the abort it is.
  */
 export async function sendStatelessRequest(params: {
   target: UpstreamHttpTarget;
@@ -128,10 +139,7 @@ export async function sendStatelessRequest(params: {
       redirect: "manual",
     });
   } catch (error) {
-    if (signal.aborted) throw error;
-    throw new StatelessUpstreamError(
-      `The MCP server could not be reached: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw transportFailure(error, signal, "could not be reached");
   }
 
   const mediaType = (response.headers.get("content-type") ?? "")
@@ -140,7 +148,12 @@ export async function sendStatelessRequest(params: {
     .toLowerCase();
 
   if (mediaType === "text/event-stream" && response.ok && response.body) {
-    return readEventStreamAnswer(response.body, id);
+    try {
+      return await readEventStreamAnswer(response.body, id);
+    } catch (error) {
+      if (error instanceof StatelessUpstreamError) throw error;
+      throw transportFailure(error, signal, "stopped answering");
+    }
   }
 
   // 2026-07-28 answers errors with a 4xx carrying the JSON-RPC error, so a
@@ -152,6 +165,7 @@ export async function sendStatelessRequest(params: {
     } catch {
       throw new StatelessUpstreamError(
         `The MCP server answered HTTP ${response.status} with invalid JSON.`,
+        response.status,
       );
     }
     const outcome = toOutcome(body);
@@ -161,6 +175,7 @@ export async function sendStatelessRequest(params: {
   }
   throw new StatelessUpstreamError(
     `The MCP server answered HTTP ${response.status} without a JSON-RPC response.`,
+    response.status,
   );
 }
 
@@ -271,9 +286,11 @@ async function readEventStreamAnswer(
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
-      buffer += decoder
-        .decode(value, { stream: true })
-        .replaceAll("\r\n", "\n");
+      // Normalized over the whole buffer: a CRLF can straddle two reads.
+      buffer = (buffer + decoder.decode(value, { stream: true })).replaceAll(
+        "\r\n",
+        "\n",
+      );
       for (
         let end = buffer.indexOf("\n\n");
         end !== -1;
@@ -330,10 +347,6 @@ function toOutcome(message: unknown): JsonRpcOutcome | undefined {
   return undefined;
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** Most pages of tools one listing follows before giving up. */
 const MAX_TOOL_LIST_PAGES = 50;
 
@@ -378,5 +391,24 @@ export async function listStatelessTools(params: {
   }
   throw new StatelessUpstreamError(
     `The MCP server's tool list ran past ${MAX_TOOL_LIST_PAGES} pages.`,
+  );
+}
+
+/**
+ * A request that got no answer: a deadline passing is the server's failure to
+ * answer in time; a cancel is the caller's, and stays an abort.
+ */
+function transportFailure(
+  error: unknown,
+  signal: AbortSignal,
+  what: string,
+): unknown {
+  if (signal.aborted) {
+    return isTimeout(signal.reason)
+      ? new StatelessUpstreamError("The MCP server did not answer in time.")
+      : error;
+  }
+  return new StatelessUpstreamError(
+    `The MCP server ${what}: ${error instanceof Error ? error.message : String(error)}`,
   );
 }

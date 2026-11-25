@@ -89,6 +89,7 @@ import mcpClient, {
   type TokenAuthContext,
 } from "@/clients/mcp-client";
 import {
+  holdsFileShapedUpload,
   redactFileShapedData,
   schemaDeclaresFileInput,
 } from "@/clients/mcp-files/file-input";
@@ -1058,9 +1059,13 @@ export async function createAgentServer(params: {
     // sync threshold and detaches into a durable background task when it
     // outlives it. Everything below (dispatch, policies, envelope, metrics,
     // persistence) runs identically either way; only who is waiting for the
-    // outcome changes.
+    // outcome changes. The first leg of a call that needs files uploaded
+    // stays synchronous: its upload request must reach a caller who is still
+    // waiting (File Uploads), and a detached task has none.
     const taskEligible =
-      mrtrEnabled && clientDeclaredTasks({ params: request.params });
+      mrtrEnabled &&
+      clientDeclaredTasks({ params: request.params }) &&
+      !(mrtr?.uploadSessionId === undefined && holdsFileShapedUpload(args));
 
     // A connection that needs signing in again is offered to the person as a
     // link their client opens, then the call re-runs (see reauth-elicitation).

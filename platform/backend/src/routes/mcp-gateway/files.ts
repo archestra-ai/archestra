@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import {
   MCP_FILES_EXTENSION_ID,
   MCP_GATEWAY_MAX_INLINE_FILE_BYTES,
+  MCP_UPLOAD_REQUIRED_RESULT_TYPE,
 } from "@archestra/shared";
 import type { ContentBlock } from "@modelcontextprotocol/sdk/types.js";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -17,10 +18,13 @@ import {
   type FileArgument,
   FileInputError,
   needsOutOfBandUpload,
-  redactInlineFileData,
+  redactFileArguments,
+  schemaDeclaresFileInput,
 } from "@/clients/mcp-files/file-input";
+import { isObject } from "@/clients/mcp-files/is-object";
 import {
   discoverUpstreamFilesSupport,
+  isTimeout,
   StatelessUpstreamError,
   sendStatelessRequest,
   type UpstreamHttpTarget,
@@ -33,7 +37,6 @@ import {
 import {
   parseUploadRequiredResult,
   resolveUploadTargetUrl,
-  UPLOAD_REQUIRED_RESULT_TYPE,
   type UploadTarget,
   UploadTargetError,
 } from "@/clients/mcp-files/upload-target";
@@ -143,16 +146,21 @@ export class GatewayFileCall {
     } catch (error) {
       if (!(error instanceof FileInputError)) throw error;
       return {
-        run: async () => toolError(error.message),
-        recordedArguments: args,
+        run: async () => toolError(`${error.message} The tool didn't run.`),
+        // Whatever the arguments hold, no inline bytes go into the record.
+        recordedArguments: redactFileArguments(inputSchema, args),
       };
     }
+    // A tool that takes files is only ever called the 2026-07-28 way, even
+    // without a file this time: its server may list it only to file clients.
     // A retry of an upload is a file call even if, impossibly, the tool no
     // longer marks the argument: the upload session decides how it ends.
-    if (files.length === 0 && !uploadSessionId) return undefined;
+    if (!schemaDeclaresFileInput(inputSchema) && !uploadSessionId) {
+      return undefined;
+    }
     return {
       run: (params) => this.run(params, files),
-      recordedArguments: redactInlineFileData(args, files),
+      recordedArguments: redactFileArguments(inputSchema, args),
     };
   };
 
@@ -160,6 +168,16 @@ export class GatewayFileCall {
     params: Parameters<UpstreamHttpCall>[0],
     files: FileArgument[],
   ): Promise<UpstreamHttpCallOutcome> {
+    // The gateway declares upstream only what its caller declared, so a
+    // caller without the extension cannot call a tool that takes files.
+    if (this.context.declaration === null) {
+      return this.answerWith(
+        missingCapabilityError(
+          "This tool takes files, but the request did not declare the files extension, so the tool didn't run.",
+          {},
+        ),
+      );
+    }
     let inlineBytes = 0;
     for (const file of files) {
       try {
@@ -183,19 +201,12 @@ export class GatewayFileCall {
     const outOfBand = files.filter((file) => needsOutOfBandUpload(file.input));
     const callerUploads = this.context.declaration?.upload === true;
     if (outOfBand.length > 0 && !callerUploads) {
-      return this.answerWith({
-        kind: "error",
-        error: {
-          code: MISSING_REQUIRED_CLIENT_CAPABILITY_ERROR_CODE,
-          message:
-            "This tool needs files uploaded, but the request did not declare file uploads, so the tool didn't run.",
-          data: {
-            requiredCapabilities: {
-              extensions: { [MCP_FILES_EXTENSION_ID]: { upload: {} } },
-            },
-          },
-        },
-      });
+      return this.answerWith(
+        missingCapabilityError(
+          "This tool needs files uploaded, but the request did not declare file uploads, so the tool didn't run.",
+          { upload: {} },
+        ),
+      );
     }
 
     const support = await discoverUpstreamFilesSupport({
@@ -229,7 +240,7 @@ export class GatewayFileCall {
     if (answer.kind !== "result") return answer.outcome;
 
     const { result } = answer;
-    if (result.resultType !== UPLOAD_REQUIRED_RESULT_TYPE) {
+    if (result.resultType !== MCP_UPLOAD_REQUIRED_RESULT_TYPE) {
       return completeOutcome(result);
     }
     if (outOfBand.length === 0) {
@@ -296,9 +307,13 @@ export class GatewayFileCall {
       const upstreamExpiry = target.expiresAt
         ? Date.parse(target.expiresAt)
         : Number.POSITIVE_INFINITY;
+      if (upstreamExpiry <= now) {
+        return toolError(
+          "The MCP server's upload target had already expired, so the tool didn't run.",
+        );
+      }
       relays.push({
         relayId: newOpaqueId(),
-        sessionId,
         agentId,
         toolName,
         principal,
@@ -334,13 +349,11 @@ export class GatewayFileCall {
     return this.answerWith({
       kind: "upload_required",
       result: {
-        resultType: UPLOAD_REQUIRED_RESULT_TYPE,
+        resultType: MCP_UPLOAD_REQUIRED_RESULT_TYPE,
         uploads: relays.map((relay) => ({
           fileId: relay.fileId,
           path: `/${FILE_UPLOAD_PATH_SEGMENT}/${relay.relayId}`,
-          // The caller sends raw bytes even when the upstream takes a form:
-          // the relay builds the multipart body itself.
-          method: relay.target.method ?? "PUT",
+          method: callerMethod(relay.target),
           credentials: "include",
           expiresAt: new Date(relay.expiresAt).toISOString(),
         })),
@@ -394,7 +407,7 @@ export class GatewayFileCall {
     }
 
     for (const relayId of session.relayIds) {
-      const done = await cacheManager.get<true>(relayDoneKey(relayId), {
+      const done = await cacheManager.get<RelayDone>(relayDoneKey(relayId), {
         throwOnError: true,
       });
       if (!done) {
@@ -416,7 +429,7 @@ export class GatewayFileCall {
       afterTransfer: true,
     });
     if (answer.kind !== "result") return answer.outcome;
-    if (answer.result.resultType === UPLOAD_REQUIRED_RESULT_TYPE) {
+    if (answer.result.resultType === MCP_UPLOAD_REQUIRED_RESULT_TYPE) {
       return toolError(
         "The MCP server asked for the files a second time, so the tool didn't run.",
       );
@@ -481,6 +494,15 @@ export class GatewayFileCall {
         },
         "MCP file call got no answer from the upstream server",
       );
+      if (error.status === 401 || error.status === 403) {
+        // Refused before running: the request never got past authorization.
+        return {
+          kind: "done",
+          outcome: toolError(
+            `The MCP server refused the gateway's credential (HTTP ${error.status}), so the tool didn't run. Reconnect the server, then call it again.`,
+          ),
+        };
+      }
       return {
         kind: "done",
         outcome: toolError(
@@ -542,27 +564,37 @@ export async function relayFileUpload(params: {
   signal: AbortSignal;
 }): Promise<{ status: number; message?: string }> {
   const { relayId, profileId, tokenAuth, principal } = params;
+  const notFound = {
+    status: 404,
+    message: "This upload target does not exist or has expired.",
+  };
   const relay = await cacheManager.get<RelayRecord>(relayKey(relayId), {
     throwOnError: true,
   });
-  if (!relay || relay.expiresAt <= Date.now()) {
-    return {
-      status: 404,
-      message: "This upload target does not exist or has expired.",
-    };
+  if (!relay) {
+    // Repeating an upload that already arrived succeeds again without
+    // sending anything: the caller may have lost the first answer.
+    const done = await cacheManager.get<RelayDone>(relayDoneKey(relayId), {
+      throwOnError: true,
+    });
+    if (
+      done &&
+      done.agentId === profileId &&
+      done.principal === principal &&
+      params.method === done.method
+    ) {
+      return acknowledgeRepeat(params, done.size);
+    }
+    return notFound;
   }
+  // Indistinguishable from a missing target to anyone it was not issued to.
+  if (relay.expiresAt <= Date.now()) return notFound;
   if (relay.agentId !== profileId || relay.principal !== principal) {
-    // Indistinguishable from a missing target to anyone it was not issued to.
-    return {
-      status: 404,
-      message: "This upload target does not exist or has expired.",
-    };
+    return notFound;
   }
-  if (params.method !== (relay.target.method ?? "PUT")) {
-    return {
-      status: 405,
-      message: `Upload this file with ${relay.target.method ?? "PUT"}.`,
-    };
+  const method = callerMethod(relay.target);
+  if (params.method !== method) {
+    return { status: 405, message: `Upload this file with ${method}.` };
   }
   if (
     params.contentLength !== undefined &&
@@ -576,61 +608,65 @@ export async function relayFileUpload(params: {
   // Claim the target: one transfer at a time, and none after it succeeded.
   const claimed = await cacheManager.getAndDelete<RelayRecord>(
     relayKey(relayId),
-    {
-      throwOnError: true,
-    },
+    { throwOnError: true },
   );
   if (!claimed) {
     return {
       status: 409,
-      message: "This file is already being uploaded or was uploaded.",
+      message: "This file is already being uploaded.",
     };
   }
 
   let failure: { status: number; message: string } | undefined;
-  const result = await mcpClient.executeToolCallForOwner(
-    { id: `file-upload-${relayId}`, name: claimed.toolName, arguments: {} },
-    agentOwner(profileId),
-    tokenAuth,
-    {
-      abortSignal: params.signal,
-      // The transfer bounds itself by the file's size; the tool-call timeout
-      // is far too short for a large file.
-      upstreamTimeoutMs: FILE_UPLOAD_STATE_TTL_MS,
-      upstreamHttpFor: () => ({
-        recordedArguments: {},
-        run: async (upstream) => {
-          failure = await transferToUpstream({
-            relay: claimed,
-            upstream,
-            body: params.body,
-            signal: params.signal,
-          });
-          return { kind: "unrecorded" };
-        },
-      }),
-    },
-  );
+  let sending = false;
+  let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
+  try {
+    result = await mcpClient.executeToolCallForOwner(
+      { id: `file-upload-${relayId}`, name: claimed.toolName, arguments: {} },
+      agentOwner(profileId),
+      tokenAuth,
+      {
+        abortSignal: params.signal,
+        // The transfer bounds itself by the file's size; the tool-call
+        // timeout is far too short for a large file.
+        upstreamTimeoutMs: FILE_UPLOAD_STATE_TTL_MS,
+        upstreamHttpFor: () => ({
+          recordedArguments: {},
+          run: async (upstream) => {
+            failure = await transferToUpstream({
+              relay: claimed,
+              upstream,
+              body: params.body,
+              signal: params.signal,
+              onSending: () => {
+                sending = true;
+              },
+            });
+            return { kind: "unrecorded" };
+          },
+        }),
+      },
+    );
+  } catch (error) {
+    // The caller went away mid-body, say: the target stays usable if it can.
+    await offerAgain(claimed, sending);
+    throw error;
+  }
   if (!failure && result.isError) {
     failure = { status: 502, message: describeToolResult(result.content) };
   }
 
   if (failure) {
-    // A PUT can be repeated: put the target back for the caller's retry. A
-    // POST may have been applied, so it is never offered twice.
-    if (
-      (claimed.target.method ?? "PUT") === "PUT" &&
-      claimed.expiresAt > Date.now()
-    ) {
-      await cacheManager.set(
-        relayKey(relayId),
-        claimed,
-        claimed.expiresAt - Date.now(),
-      );
-    }
+    await offerAgain(claimed, sending);
     return failure;
   }
-  await cacheManager.set(relayDoneKey(relayId), true, FILE_UPLOAD_STATE_TTL_MS);
+  const done: RelayDone = {
+    agentId: claimed.agentId,
+    principal: claimed.principal,
+    method,
+    size: claimed.file.size,
+  };
+  await cacheManager.set(relayDoneKey(relayId), done, FILE_UPLOAD_STATE_TTL_MS);
   return { status: 200 };
 }
 
@@ -647,7 +683,6 @@ type UploadSession = {
 
 type RelayRecord = {
   relayId: string;
-  sessionId: string;
   agentId: string;
   toolName: string;
   principal: string;
@@ -659,11 +694,67 @@ type RelayRecord = {
   expiresAt: number;
 };
 
+/** A relayed file that reached its upstream target. */
+type RelayDone = {
+  agentId: string;
+  principal: string;
+  method: "PUT" | "POST";
+  size: number;
+};
+
+/**
+ * Answer a repeated upload of a file that already arrived. Nothing is sent
+ * on, but the body is held to the file's size like the first one was.
+ */
+async function acknowledgeRepeat(
+  params: {
+    contentLength: number | undefined;
+    body: AsyncIterable<Uint8Array>;
+  },
+  size: number,
+): Promise<{ status: number; message?: string }> {
+  const wrongSize = (received: number) => ({
+    status: 400,
+    message: `The upload is ${received} bytes; the file was declared as ${size}.`,
+  });
+  if (params.contentLength !== undefined && params.contentLength !== size) {
+    return wrongSize(params.contentLength);
+  }
+  let received = 0;
+  for await (const chunk of params.body) {
+    received += chunk.length;
+    if (received > size) return wrongSize(received);
+  }
+  return received === size ? { status: 200 } : wrongSize(received);
+}
+
+/**
+ * The method the caller uploads with. A form target is presented without its
+ * form, as raw bytes the caller PUTs: the relay builds the multipart body.
+ */
+function callerMethod(target: UploadTarget): "PUT" | "POST" {
+  return target.form ? "PUT" : (target.method ?? "PUT");
+}
+
+/**
+ * Put a claimed target back after a failed transfer, when trying again is
+ * safe: a PUT can be repeated, and a POST that never started sending was not
+ * applied. A POST that may have been is never offered twice.
+ */
+async function offerAgain(relay: RelayRecord, sending: boolean) {
+  const remaining = relay.expiresAt - Date.now();
+  if (remaining <= 0) return;
+  if (sending && (relay.target.method ?? "PUT") !== "PUT") return;
+  await cacheManager.set(relayKey(relay.relayId), relay, remaining);
+}
+
 async function transferToUpstream(params: {
   relay: RelayRecord;
   upstream: Parameters<UpstreamHttpCall>[0];
   body: AsyncIterable<Uint8Array>;
   signal: AbortSignal;
+  /** Called once the request to the upstream target is about to go out. */
+  onSending: () => void;
 }): Promise<{ status: number; message: string } | undefined> {
   const { relay, upstream } = params;
   if (upstream.installKey !== relay.installKey) {
@@ -691,6 +782,7 @@ async function transferToUpstream(params: {
           : undefined,
       guardDestination: relay.target.url !== undefined,
       signal: params.signal,
+      onSending: params.onSending,
     });
     return undefined;
   } catch (error) {
@@ -704,6 +796,8 @@ async function transferToUpstream(params: {
           toolName: relay.toolName,
           fileId: relay.fileId,
           error: error.message,
+          ...(error instanceof FileTransferError &&
+            error.detail !== undefined && { detail: error.detail }),
         },
         "MCP file upload relay failed",
       );
@@ -736,9 +830,12 @@ async function egressRefusal(
     environmentId: scope.environmentId,
     organizationId: scope.organizationId,
   });
-  return verdict.allowed
-    ? undefined
-    : `The upload target's address is not allowed by the network egress policy: ${verdict.message}`;
+  if (verdict.allowed) return undefined;
+  logger.info(
+    { organizationId: scope.organizationId, reason: verdict.message },
+    "Network egress policy refused an MCP file upload target",
+  );
+  return "The upload target's address is not allowed by the network egress policy.";
 }
 
 function transferredFile(file: FileArgument): TransferredFile {
@@ -761,12 +858,19 @@ function completeOutcome(
       `The MCP server answered with an unsupported result type, so the call's outcome is unknown.`,
     );
   }
+  // The upstream's own files `_meta` (download targets, say) is for the
+  // gateway, which declared no downloads; it never reaches the caller.
+  const meta = isObject(_meta)
+    ? Object.fromEntries(
+        Object.entries(_meta).filter(([key]) => key !== MCP_FILES_EXTENSION_ID),
+      )
+    : undefined;
   return {
     kind: "result",
     result: {
       content: Array.isArray(content) ? (content as ContentBlock[]) : [],
       isError: isError === true,
-      ...(isObject(_meta) && { _meta }),
+      ...(meta && Object.keys(meta).length > 0 && { _meta: meta }),
       ...(isObject(structuredContent) && { structuredContent }),
     },
   };
@@ -776,6 +880,24 @@ function toolError(text: string): UpstreamHttpCallOutcome {
   return {
     kind: "result",
     result: { content: [{ type: "text", text }], isError: true },
+  };
+}
+
+function missingCapabilityError(
+  message: string,
+  settings: Record<string, unknown>,
+): NonNullable<GatewayFileCall["interim"]> {
+  return {
+    kind: "error",
+    error: {
+      code: MISSING_REQUIRED_CLIENT_CAPABILITY_ERROR_CODE,
+      message,
+      data: {
+        requiredCapabilities: {
+          extensions: { [MCP_FILES_EXTENSION_ID]: settings },
+        },
+      },
+    },
   };
 }
 
@@ -802,10 +924,6 @@ function describeToolResult(content: unknown): string {
   return "The upload could not be relayed to the MCP server.";
 }
 
-function isTimeout(reason: unknown): boolean {
-  return reason instanceof DOMException && reason.name === "TimeoutError";
-}
-
 /** Loopback http upload targets are fine where loopback servers are. */
 function allowsLocalTargets(): boolean {
   return !config.production || config.test.enableE2eTestEndpoints;
@@ -825,8 +943,4 @@ function relayKey(id: string) {
 
 function relayDoneKey(id: string) {
   return `${CacheKey.McpFileUploadRelayDone}-${id}` as const;
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

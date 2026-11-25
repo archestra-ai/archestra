@@ -55,6 +55,8 @@ export const MCP_FILES_EXTENSION_ID = "io.modelcontextprotocol/files";
 
 /** JSON Schema keyword that marks an argument as a file. */
 export const MCP_FILE_SCHEMA_KEYWORD = "x-mcp-file";
+/** The `resultType` of a server's request for out-of-band file uploads. */
+export const MCP_UPLOAD_REQUIRED_RESULT_TYPE = "upload_required";
 
 /** Largest total inline file `data` the MCP gateway accepts in one call. */
 export const MCP_GATEWAY_MAX_INLINE_FILE_BYTES = 8 * 1024 * 1024;

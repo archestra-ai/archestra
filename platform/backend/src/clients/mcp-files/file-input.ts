@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { MCP_FILE_SCHEMA_KEYWORD } from "@archestra/shared";
+import { isObject } from "./is-object";
 
 /**
  * Tool arguments that carry files under the MCP File Uploads extension.
@@ -12,8 +13,8 @@ import { MCP_FILE_SCHEMA_KEYWORD } from "@archestra/shared";
  * @see https://github.com/modelcontextprotocol/experimental-ext-file-uploads
  */
 
+/** What the gateway enforces of an argument's `x-mcp-file` settings. */
 export type FileInputDescriptor = {
-  accept?: string[];
   maxSize?: number;
 };
 
@@ -35,8 +36,6 @@ export type FileArgument = {
   path: FileArgumentPath;
   descriptor: FileInputDescriptor;
   input: FileInput;
-  /** Decoded inline bytes; absent for an out-of-band or empty file. */
-  bytes?: Buffer;
 };
 
 const MAX_FILE_INPUT_ID_LENGTH = 128;
@@ -68,16 +67,45 @@ export function schemaDeclaresFileInput(schema: unknown): boolean {
  * holding `null` or nothing is an omitted optional file, not a file.
  *
  * Throws {@link FileInputError} when a marked location holds a value that is
- * not a valid `FileInput`, or when two files share an id.
+ * not a valid `FileInput`, or when two files share an id. A value that is not
+ * an object at all is refused too, unless the marker sits in one branch of an
+ * `anyOf`/`oneOf` whose other branches may describe it.
  */
 export function collectFileArguments(
   schema: unknown,
   args: Record<string, unknown>,
 ): FileArgument[] {
-  const found = new Map<string, FileArgument>();
-  walk(schema, args, [], found);
+  const files: FileArgument[] = [];
+  for (const location of markedLocations(schema, args)) {
+    if (!isObject(location.value)) {
+      if (location.inAlternative) continue;
+      throw new FileInputError(
+        `The file argument ${describePath(location.path)} is not a file input object.`,
+      );
+    }
+    // The arguments object itself cannot be a file: there would be nowhere to
+    // put the other arguments, and nothing to replace it with.
+    if (location.path.length === 0) {
+      throw new FileInputError(
+        `The tool marks its whole input schema with ${MCP_FILE_SCHEMA_KEYWORD}, which is not supported.`,
+      );
+    }
+    let input: FileInput;
+    try {
+      input = parseFileInput(location.value, location.path);
+    } catch (error) {
+      // Under an alternative, an object that is no file input may well be
+      // the other branch's value.
+      if (error instanceof FileInputError && location.inAlternative) continue;
+      throw error;
+    }
+    files.push({
+      path: location.path,
+      descriptor: parseDescriptor(location.marker, location.path),
+      input,
+    });
+  }
 
-  const files = [...found.values()];
   const ids = new Set<string>();
   for (const file of files) {
     if (ids.has(file.input.id)) {
@@ -136,37 +164,27 @@ export function needsOutOfBandUpload(input: FileInput): boolean {
 }
 
 /**
- * Copy `args` with each listed file argument replaced.
+ * The arguments as they may be written to the tool-call record: the bytes of
+ * every file argument are replaced by their size, whether or not the file is
+ * valid, and so is any inline data shaped like a file elsewhere.
  *
- * The arguments object is never mutated: it is also what the caller's
- * `requestState` is bound to.
+ * `args` itself is never changed: it is also what the caller's `requestState`
+ * is bound to.
  */
-function replaceFileArguments(
+export function redactFileArguments(
+  schema: unknown,
   args: Record<string, unknown>,
-  files: FileArgument[],
-  replace: (file: FileArgument) => unknown,
 ): Record<string, unknown> {
   const copy = structuredClone(args);
-  for (const file of files) {
-    setAtPath(copy, file.path, replace(file));
+  for (const { value } of markedLocations(schema, copy)) {
+    if (isObject(value) && value.data !== undefined) {
+      value.data =
+        typeof value.size === "number"
+          ? `[${value.size} bytes omitted]`
+          : "[omitted]";
+    }
   }
-  return copy;
-}
-
-/**
- * The arguments as they may be written to logs, spans, and the tool-call
- * record: inline bytes are replaced by their size.
- */
-export function redactInlineFileData(
-  args: Record<string, unknown>,
-  files: FileArgument[],
-): Record<string, unknown> {
-  if (!files.some((file) => file.input.data !== undefined)) return args;
-  return replaceFileArguments(args, files, (file) =>
-    file.input.data === undefined
-      ? file.input
-      : { ...file.input, data: `[${file.input.size} bytes omitted]` },
-  );
+  return redactFileShapedData(copy) as Record<string, unknown>;
 }
 
 export class FileInputError extends Error {
@@ -178,57 +196,71 @@ export class FileInputError extends Error {
 
 // === Internal helpers ===
 
-function walk(
-  schema: unknown,
-  value: unknown,
-  path: FileArgumentPath,
-  found: Map<string, FileArgument>,
-): void {
-  if (!isObject(schema) || value === undefined || value === null) return;
+type MarkedLocation = {
+  path: FileArgumentPath;
+  marker: unknown;
+  value: unknown;
+  /** Under an anyOf/oneOf branch: other branches may describe the value. */
+  inAlternative: boolean;
+};
 
-  const marker = schema[MCP_FILE_SCHEMA_KEYWORD];
-  if (marker !== undefined && isObject(value)) {
-    // The arguments object itself cannot be a file: there would be nowhere to
-    // put the other arguments, and nothing to replace it with.
-    if (path.length === 0) {
-      throw new FileInputError(
-        `The tool marks its whole input schema with ${MCP_FILE_SCHEMA_KEYWORD}, which is not supported.`,
-      );
-    }
-    const key = JSON.stringify(path);
-    if (!found.has(key)) {
-      found.set(key, {
-        path,
-        descriptor: parseDescriptor(marker, path),
-        input: parseFileInput(value, path),
-      });
-    }
-    return;
-  }
+/**
+ * Every present, non-null value in `value` that sits at an `x-mcp-file`
+ * schema, once per location. Follows object `properties`, array `items`, and
+ * `anyOf`/`oneOf`/`allOf` branches.
+ */
+function markedLocations(schema: unknown, value: unknown): MarkedLocation[] {
+  const found = new Map<string, MarkedLocation>();
+  const visit = (
+    node: unknown,
+    current: unknown,
+    path: FileArgumentPath,
+    inAlternative: boolean,
+  ): void => {
+    if (!isObject(node) || current === undefined || current === null) return;
 
-  for (const keyword of ["anyOf", "oneOf", "allOf"] as const) {
-    const branches = schema[keyword];
-    if (Array.isArray(branches)) {
-      for (const branch of branches) walk(branch, value, path, found);
+    const marker = node[MCP_FILE_SCHEMA_KEYWORD];
+    if (marker !== undefined) {
+      const key = JSON.stringify(path);
+      const seen = found.get(key);
+      // A location any branch marks outside an alternative is a file for sure.
+      if (!seen || (seen.inAlternative && !inAlternative)) {
+        found.set(key, { path, marker, value: current, inAlternative });
+      }
+      if (isObject(current)) return;
     }
-  }
 
-  const properties = schema.properties;
-  if (isObject(properties) && isObject(value)) {
-    for (const [key, propertySchema] of Object.entries(properties)) {
-      if (Object.hasOwn(value, key)) {
-        walk(propertySchema, value[key], [...path, key], found);
+    for (const keyword of ["anyOf", "oneOf", "allOf"] as const) {
+      const branches = node[keyword];
+      if (Array.isArray(branches)) {
+        // Every allOf branch applies to the value; an anyOf/oneOf branch is
+        // only one of the shapes it may take, and so is all that lies below.
+        const alternative = keyword !== "allOf" || inAlternative;
+        for (const branch of branches) {
+          visit(branch, current, path, alternative);
+        }
       }
     }
-  }
 
-  const items = schema.items;
-  if (Array.isArray(value) && items !== undefined) {
-    value.forEach((element, index) => {
-      const itemSchema = Array.isArray(items) ? items[index] : items;
-      walk(itemSchema, element, [...path, index], found);
-    });
-  }
+    const properties = node.properties;
+    if (isObject(properties) && isObject(current)) {
+      for (const [key, propertySchema] of Object.entries(properties)) {
+        if (Object.hasOwn(current, key)) {
+          visit(propertySchema, current[key], [...path, key], inAlternative);
+        }
+      }
+    }
+
+    const items = node.items;
+    if (Array.isArray(current) && items !== undefined) {
+      current.forEach((element, index) => {
+        const itemSchema = Array.isArray(items) ? items[index] : items;
+        visit(itemSchema, element, [...path, index], inAlternative);
+      });
+    }
+  };
+  visit(schema, value, [], false);
+  return [...found.values()];
 }
 
 function parseDescriptor(
@@ -240,12 +272,9 @@ function parseDescriptor(
       `The tool's ${MCP_FILE_SCHEMA_KEYWORD} at ${describePath(path)} is not an object.`,
     );
   }
+  // `accept` is a hint for the client choosing a file; the server behind the
+  // tool is the one that holds files to it.
   const descriptor: FileInputDescriptor = {};
-  if (Array.isArray(marker.accept)) {
-    descriptor.accept = marker.accept.filter(
-      (entry): entry is string => typeof entry === "string",
-    );
-  }
   if (
     typeof marker.maxSize === "number" &&
     Number.isSafeInteger(marker.maxSize) &&
@@ -317,24 +346,8 @@ function sha256Base64Url(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("base64url");
 }
 
-function setAtPath(
-  target: Record<string, unknown>,
-  path: FileArgumentPath,
-  value: unknown,
-): void {
-  let node: unknown = target;
-  for (const segment of path.slice(0, -1)) {
-    node = (node as Record<string | number, unknown>)[segment];
-  }
-  (node as Record<string | number, unknown>)[path[path.length - 1]] = value;
-}
-
 function describePath(path: FileArgumentPath): string {
   return path.length === 0 ? "the arguments root" : `"${path.join(".")}"`;
-}
-
-function isObject(value: unknown): value is JsonSchemaNode {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -346,12 +359,7 @@ function isObject(value: unknown): value is JsonSchemaNode {
 export function redactFileShapedData(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactFileShapedData);
   if (!isObject(value)) return value;
-  if (
-    typeof value.data === "string" &&
-    typeof value.id === "string" &&
-    typeof value.mimeType === "string" &&
-    typeof value.size === "number"
-  ) {
+  if (isFileShaped(value) && typeof value.data === "string") {
     return { ...value, data: `[${value.size} bytes omitted]` };
   }
   return Object.fromEntries(
@@ -359,5 +367,29 @@ export function redactFileShapedData(value: unknown): unknown {
       key,
       redactFileShapedData(member),
     ]),
+  );
+}
+
+/**
+ * Whether any object shaped like a FileInput, anywhere in `value`, asks for an
+ * out-of-band upload: a non-empty file without inline data. For decisions made
+ * before the tool's schema is known; a look-alike value counts too.
+ */
+export function holdsFileShapedUpload(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(holdsFileShapedUpload);
+  if (!isObject(value)) return false;
+  if (isFileShaped(value) && value.data === undefined && value.size > 0) {
+    return true;
+  }
+  return Object.values(value).some(holdsFileShapedUpload);
+}
+
+function isFileShaped(
+  value: Record<string, unknown>,
+): value is Record<string, unknown> & { size: number } {
+  return (
+    typeof value.id === "string" &&
+    typeof value.mimeType === "string" &&
+    typeof value.size === "number"
   );
 }

@@ -38,6 +38,11 @@ export async function transferFile(params: {
    */
   guardDestination: boolean;
   signal?: AbortSignal;
+  /**
+   * Called once every check has passed and the request is about to go out:
+   * from then on the target may have received something.
+   */
+  onSending?: () => void;
 }): Promise<void> {
   const { target, url, file, body, credentialHeaders, guardDestination } =
     params;
@@ -50,7 +55,8 @@ export async function transferFile(params: {
     const validation = validateOutboundUrl(url.href);
     if (!validation.ok) {
       throw new FileTransferError(
-        `The upload target's address is not allowed (${validation.reason}).`,
+        "The upload target's address is not allowed.",
+        validation.reason,
       );
     }
     const pinned = await createPinnedOutboundDispatcher({
@@ -58,7 +64,8 @@ export async function transferFile(params: {
     });
     if (!pinned.ok) {
       throw new FileTransferError(
-        `The upload target's address is not allowed (${pinned.reason}).`,
+        "The upload target's address is not allowed.",
+        pinned.reason,
       );
     }
     dispatcher = pinned.dispatcher;
@@ -78,6 +85,7 @@ export async function transferFile(params: {
   };
 
   try {
+    params.onSending?.();
     const response = await request(url, {
       method: target.method ?? "PUT",
       headers,
@@ -99,7 +107,8 @@ export async function transferFile(params: {
     }
     if (params.signal?.aborted) throw error;
     throw new FileTransferError(
-      `The upload failed: ${error instanceof Error ? error.message : String(error)}`,
+      "The upload to the MCP server's upload target failed.",
+      error instanceof Error ? error.message : String(error),
     );
   } finally {
     await dispatcher?.close();
@@ -113,8 +122,15 @@ export type TransferredFile = {
   digest?: FileInputDigest;
 };
 
+/**
+ * A failed transfer. `message` is fit for the caller; `detail`, which may name
+ * the upstream target's host or address, is for logs only.
+ */
 export class FileTransferError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly detail?: string,
+  ) {
     super(message);
     this.name = "FileTransferError";
   }

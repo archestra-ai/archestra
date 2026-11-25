@@ -1,3 +1,4 @@
+import { MCP_UPLOAD_REQUIRED_RESULT_TYPE } from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
@@ -183,7 +184,7 @@ export async function runToolCallMaybeTask(params: {
             }
           : // An upload request has to precede the task (File Uploads): one
             // that arrives after detaching has no caller left to upload.
-            result?.resultType === "upload_required"
+            result?.resultType === MCP_UPLOAD_REQUIRED_RESULT_TYPE
             ? {
                 kind: "failed",
                 error: {

@@ -52,6 +52,10 @@ import {
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import {
+  redactFileArguments,
+  schemaDeclaresFileInput,
+} from "@/clients/mcp-files/file-input";
+import {
   discoverUpstreamFilesSupport,
   GATEWAY_UPSTREAM_FILES_CAPABILITIES,
   listStatelessTools,
@@ -871,6 +875,25 @@ class McpClient {
     const upstreamHttp = options?.upstreamHttpFor?.(
       (tool.parameters as Record<string, unknown> | null) ?? null,
     );
+    // A tool that takes files is called only by a caller that handles the
+    // files extension (the gateway, through upstreamHttpFor). Any other path
+    // — run_tool, chat, apps — would send it over a connection that declares
+    // no files, and record any inline bytes it carried.
+    if (!upstreamHttp && schemaDeclaresFileInput(tool.parameters)) {
+      return this.createErrorResult({
+        toolCall: {
+          ...toolCall,
+          arguments: redactFileArguments(tool.parameters, toolCall.arguments),
+        },
+        owner,
+        error:
+          "This tool takes files, which only an MCP client calling it directly through the gateway with the files extension can send. The tool didn't run.",
+        mcpServerName: tool.catalogName || catalogItem.name,
+        authInfo,
+        encryptedChatContent,
+        startedAt,
+      });
+    }
 
     const mcpParamHeaders = mcpParamHeadersForCall({
       inputSchema: tool.parameters,

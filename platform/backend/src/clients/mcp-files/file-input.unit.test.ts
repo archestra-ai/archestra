@@ -4,8 +4,9 @@ import {
   collectFileArguments,
   decodeInlineFile,
   FileInputError,
+  holdsFileShapedUpload,
+  redactFileArguments,
   redactFileShapedData,
-  redactInlineFileData,
   schemaDeclaresFileInput,
 } from "./file-input";
 
@@ -64,10 +65,7 @@ describe("collectFileArguments", () => {
       [["attachments", 0], "a"],
       [["attachments", 1], "b"],
     ]);
-    expect(files[0].descriptor).toEqual({
-      accept: ["application/pdf"],
-      maxSize: 100,
-    });
+    expect(files[0].descriptor).toEqual({ maxSize: 100 });
   });
 
   test("an omitted optional file is not a file", () => {
@@ -77,6 +75,36 @@ describe("collectFileArguments", () => {
     };
     expect(collectFileArguments(schema, { cover: null })).toEqual([]);
     expect(collectFileArguments(schema, {})).toEqual([]);
+    const fileOrUrl = {
+      type: "object",
+      properties: { cover: { anyOf: [FILE_SCHEMA, { type: "string" }] } },
+    };
+    expect(
+      collectFileArguments(fileOrUrl, { cover: "https://example.com/a.pdf" }),
+    ).toEqual([]);
+    const objectAlternatives = {
+      anyOf: [
+        { type: "object", properties: { cover: FILE_SCHEMA } },
+        { type: "object", properties: { cover: { type: "string" } } },
+      ],
+    };
+    expect(
+      collectFileArguments(objectAlternatives, { cover: "a.pdf" }),
+    ).toEqual([]);
+    const fileOrLink = {
+      type: "object",
+      properties: {
+        cover: {
+          oneOf: [
+            FILE_SCHEMA,
+            { type: "object", properties: { href: { type: "string" } } },
+          ],
+        },
+      },
+    };
+    expect(
+      collectFileArguments(fileOrLink, { cover: { href: "https://x/a.pdf" } }),
+    ).toEqual([]);
   });
 
   test("refuses duplicate ids, invalid file inputs and a marked root", () => {
@@ -96,6 +124,12 @@ describe("collectFileArguments", () => {
     expect(() =>
       collectFileArguments(schema, { a: file({ data: null }) }),
     ).toThrow(/data that is not a string/);
+    expect(() => collectFileArguments(schema, { a: "report.pdf" })).toThrow(
+      /not a file input object/,
+    );
+    expect(() => collectFileArguments(schema, { a: [file()] })).toThrow(
+      /not a file input object/,
+    );
     expect(() =>
       collectFileArguments(
         { ...FILE_SCHEMA, properties: { ...FILE_SCHEMA.properties } },
@@ -159,10 +193,18 @@ describe("redaction", () => {
   test("replaces inline data with its size and leaves the original intact", () => {
     const doc: Record<string, unknown> = file({ data: "aGVsbG8=" });
     const args = { doc, other: 1 };
-    const files = collectFileArguments(schema, args);
-    expect(redactInlineFileData(args, files)).toEqual({
+    expect(redactFileArguments(schema, args)).toEqual({
       doc: { ...file(), data: "[5 bytes omitted]" },
       other: 1,
+    });
+    expect(args.doc.data).toBe("aGVsbG8=");
+  });
+
+  test("redacts data at a marked location even when it is no valid file", () => {
+    const args = { doc: { id: 42, size: 5, data: "aGVsbG8=" }, data: "keep" };
+    expect(redactFileArguments(schema, args)).toEqual({
+      doc: { id: 42, size: 5, data: "[5 bytes omitted]" },
+      data: "keep",
     });
     expect(args.doc.data).toBe("aGVsbG8=");
   });
@@ -171,5 +213,16 @@ describe("redaction", () => {
     expect(
       redactFileShapedData({ list: [file({ data: "aGVsbG8=" })], text: "x" }),
     ).toEqual({ list: [{ ...file(), data: "[5 bytes omitted]" }], text: "x" });
+  });
+});
+
+describe("holdsFileShapedUpload", () => {
+  test("finds a non-empty file without data anywhere", () => {
+    expect(holdsFileShapedUpload({ a: [{ b: file() }] })).toBe(true);
+    expect(holdsFileShapedUpload({ a: file({ data: "aGVsbG8=" }) })).toBe(
+      false,
+    );
+    expect(holdsFileShapedUpload({ a: file({ size: 0 }) })).toBe(false);
+    expect(holdsFileShapedUpload({ a: "x" })).toBe(false);
   });
 });

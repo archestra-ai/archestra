@@ -1,3 +1,5 @@
+import { MCP_UPLOAD_REQUIRED_RESULT_TYPE } from "@archestra/shared";
+import { isObject } from "./is-object";
 /**
  * Upload targets an upstream server hands the gateway in an `upload_required`
  * result, and the checks the extension requires of any client before it sends
@@ -5,8 +7,6 @@
  *
  * @see https://github.com/modelcontextprotocol/experimental-ext-file-uploads
  */
-
-export const UPLOAD_REQUIRED_RESULT_TYPE = "upload_required";
 
 export type UploadForm = {
   fields: { name: string; value: string }[];
@@ -26,7 +26,7 @@ export type UploadTarget = {
 };
 
 export type UploadRequiredResult = {
-  resultType: typeof UPLOAD_REQUIRED_RESULT_TYPE;
+  resultType: typeof MCP_UPLOAD_REQUIRED_RESULT_TYPE;
   uploads: UploadTarget[];
   requestState: string;
 };
@@ -168,7 +168,7 @@ export function parseUploadRequiredResult(
   }
 
   return {
-    resultType: UPLOAD_REQUIRED_RESULT_TYPE,
+    resultType: MCP_UPLOAD_REQUIRED_RESULT_TYPE,
     uploads: targets,
     requestState,
   };
@@ -445,8 +445,4 @@ function isLoopbackHostname(hostname: string): boolean {
     hostname === "[::1]" ||
     /^127(?:\.\d{1,3}){3}$/.test(hostname)
   );
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

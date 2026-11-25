@@ -417,12 +417,20 @@ describe("CreateVirtualKeyDialog", () => {
     await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
   });
 
-  it("creates automatic coverage without freezing the currently selected primary keys", async () => {
+  it("copies and allows editing a future-provider key without showing unavailable endpoints", async () => {
     vi.mocked(useScopedCapabilities).mockReturnValue({
       data: [{ resource: "llmProviderApiKey", action: "use", scope: "*" }],
     } as unknown as ReturnType<typeof useScopedCapabilities>);
+    mutateAsync.mockResolvedValueOnce({
+      ...createdKey("standard", []),
+      id: "vk-future-only",
+      includeFutureProviders: true,
+    });
     const user = userEvent.setup();
-    renderDialog("standard");
+    renderDialog("standard", {
+      parentableKeys: [],
+      initialProviderApiKeys: [],
+    });
     await user.click(
       screen.getByRole("radio", { name: /Current and future providers/ }),
     );
@@ -433,6 +441,16 @@ describe("CreateVirtualKeyDialog", () => {
         providerApiKeys: [],
       }),
     });
+    expect(screen.getByRole("button", { name: "Copy key" })).toBeVisible();
+    expect(screen.getByText(/No providers are available/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Edit key" })).toHaveAttribute(
+      "href",
+      "/llm/proxy/virtual-keys?edit=vk-future-only",
+    );
+    expect(
+      screen.queryByRole("radiogroup", { name: "Endpoint" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
   });
 
   it("starts with every provider's primary key", async () => {

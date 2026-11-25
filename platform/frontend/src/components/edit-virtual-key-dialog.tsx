@@ -76,7 +76,11 @@ export function EditVirtualKeyDialog({
   // through once they load.
   const [modelPoolIds, setModelPoolIds] = useState<string[]>();
   const canSetModelPools = useCanSetModelPools();
-  const { data: pools } = useModelPools({ enabled: canSetModelPools });
+  const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
+  const { data: pools, isLoading: poolsLoading } = useModelPools({
+    enabled: canSetModelPools || canReadPools === true,
+    toastOnError: false,
+  });
   const grantedPoolIds = useMemo(
     () =>
       (pools ?? [])
@@ -95,9 +99,13 @@ export function EditVirtualKeyDialog({
   // Undefined until edited, like the pools.
   const [autoRouterIds, setAutoRouterIds] = useState<string[]>();
   const canSetAutoRouters = useCanSetAutoRouters();
-  const { data: autoRouters } = useAvailableAutoRouters({
-    enabled: canSetAutoRouters,
+  const { data: canReadRouters } = useHasPermissions({
+    llmProviderApiKey: ["read"],
   });
+  const { data: autoRouters, isLoading: routersLoading } =
+    useAvailableAutoRouters({
+      enabled: canSetAutoRouters || canReadRouters === true,
+    });
   const grantedRouterIds = useMemo(
     () =>
       (autoRouters ?? [])
@@ -426,6 +434,16 @@ export function EditVirtualKeyDialog({
           keyType={virtualKey.keyType}
           mappedProviderKeys={virtualKey.providerApiKeys}
           includeFutureProviders={virtualKey.includeFutureProviders}
+          hasGrantedRoutes={
+            grantedPoolIds.length > 0 ||
+            grantedRouterIds.length > 0 ||
+            // Without provider access the API requires at least one pool
+            // or router on a standard key, even if this viewer cannot list it.
+            (virtualKey.keyType === "standard" &&
+              !virtualKey.includeFutureProviders &&
+              virtualKey.providerApiKeys.length === 0)
+          }
+          routesPending={poolsLoading || routersLoading}
           connectionBaseUrl={connectionBaseUrl}
           name={virtualKey.name}
           expiration={formatExpiration(virtualKey.expiresAt)}

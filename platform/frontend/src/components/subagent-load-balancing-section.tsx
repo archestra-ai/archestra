@@ -39,7 +39,7 @@ function getModeOptions(params: {
     {
       value: "disabled",
       label: "Direct",
-      description: `Call each ${noun} directly.`,
+      description: `Model picks ${noun} to call.`,
     },
     {
       value: "round_robin",

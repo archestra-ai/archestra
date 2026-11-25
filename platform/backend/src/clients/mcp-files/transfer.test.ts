@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { checkedBytes, FileTransferError, multipartFilename } from "./transfer";
 
 async function* chunks(...parts: string[]) {

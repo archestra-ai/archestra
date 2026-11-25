@@ -1,7 +1,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { MCP_FILES_EXTENSION_ID } from "@archestra/shared";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { parseFilesSupport, sendStatelessRequest } from "./stateless-upstream";
 
 const discover = (settings: unknown, versions = ["2026-07-28"]) => ({

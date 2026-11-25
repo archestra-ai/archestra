@@ -89,7 +89,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `agent_id` | `string` | No | The agent to do the work (UUID or agent__<slug> tool name). Omit when calling from a load-balanced agent or MCP gateway to select an assigned runtime subagent using its load-balancing policy, or pass a load-balanced router agent to select from its assigned runtime subagents. |
+| `agent_id` | `string` | No | The agent to do the work (UUID or agent__&lt;slug&gt; tool name). Omit when calling from a load-balanced agent or MCP gateway to select an assigned runtime subagent using its load-balancing policy, or pass a load-balanced router agent to select from its assigned runtime subagents. |
 | `exclude_agent_ids` | `string[]` | No | Runtime subagents that already failed on a previous attempt for this request, to skip when selecting a fallback on an MCP gateway. |
 | `credential_grant_ids` | `string[]` | No | One-time credential_grant_id handles minted by transfer_credential({ ephemeral: true }). Consumed at launch and bound only to the winning runtime pod. |
 | `message` | `string` | Yes | What the agent should do, including handoff context and acceptance criteria. |
@@ -281,7 +281,7 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `agent_id` | `string` | No | The Agent to give the credential to (UUID or agent__<slug> tool name). Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway, or pass a load-balanced router agent to target its assigned runtime subagents. |
+| `agent_id` | `string` | No | The Agent to give the credential to (UUID or agent__&lt;slug&gt; tool name). Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway, or pass a load-balanced router agent to target its assigned runtime subagents. |
 | `environment` | `object[]` | Yes | Exactly one credential to transfer. Never include more than the task needs. |
 | `environment[].key` | `string` | Yes | Environment variable name, e.g. AWS_SECRET_ACCESS_KEY. |
 | `environment[].type` | `"secret"` | Yes | Always 'secret'. Marks the value for redaction in logs. |
@@ -500,7 +500,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `limit` | `integer` | No | Maximum number of agents to return. |
 | `name` | `string` | No | Optional agent name filter. Use this when the user names an agent but you still need to look up the ID. |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my agents". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import {
+  escapeTableCell,
   generateDocsFiles,
   renderSchemaRows,
 } from "./codegen-archestra-mcp-server-docs";
@@ -14,6 +15,15 @@ describe("codegen-archestra-mcp-server-docs", () => {
     for (const content of Object.values(files)) {
       expect(content).not.toContain("lastUpdated");
     }
+  });
+
+  test("escapes table cells so placeholders are not read as HTML tags", () => {
+    expect(escapeTableCell("UUID or agent__<slug> | role:<roleId>")).toBe(
+      "UUID or agent__&lt;slug&gt; \\| role:&lt;roleId&gt;",
+    );
+    expect(escapeTableCell("Call `agent__<slug>` (>= 1)")).toBe(
+      "Call `agent__<slug>` (&gt;= 1)",
+    );
   });
 
   test("puts the docs writer skill pointer under the frontmatter of every page", () => {

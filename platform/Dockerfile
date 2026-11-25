@@ -152,7 +152,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-35469: spdystream resource exhaustion fixed in >= 0.5.1.
     go get github.com/moby/spdystream@v0.5.1 && \
     # cve-2026-29181: OTel resource exhaustion fixed in >= 1.41.0.
-    go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 go.opentelemetry.io/otel/trace@v1.41.0 go.opentelemetry.io/otel/sdk@v1.43.0 && \
+    go get go.opentelemetry.io/otel@v1.43.0 go.opentelemetry.io/otel/metric@v1.43.0 go.opentelemetry.io/otel/trace@v1.43.0 go.opentelemetry.io/otel/sdk@v1.43.0 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
     # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.

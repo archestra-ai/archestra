@@ -79,7 +79,7 @@ Required permissions:
 Guardrails run in one of three states:
 
 - **Off:** nothing is checked. A deployment starts here, and the switch in **Settings → Guardrails** turns Guardrails off again.
-- **Observe:** every call is checked and every label change is recorded, but the platform applies the remedy plan for the agent: it gives the approvals and accepts the restrictions, so the agent keeps working. Use it to see what your policy would block before you enforce it. Approvals for `enforcedMarks` and for tools tagged `enforced` still wait for a person, and a call that no plan can lift, such as one marked `blocked`, is still refused.
+- **Observe:** every call is checked and every label change is recorded, but the platform applies the remedy plan for the agent: it gives the approvals and accepts the restrictions, so the agent keeps working. Use it to see what your policy would block before you enforce it. Approvals for `enforcedMarks` and for tools tagged `enforced` still wait as in Enforce, and a call that no plan can lift, such as one marked `blocked`, is still refused.
 - **Enforce:** a blocked call waits until the agent or a person applies a remedy plan. Saving the first policy starts Enforce, unless you already chose a state.
 
 The switch turns Guardrails off, and back on in Enforce. A session keeps Observe or Enforce from the moment it starts, and its subagents follow it, so a change between the two applies to sessions that start after it.
@@ -88,7 +88,7 @@ Set the state with [`PUT /api/guardrails-deployment`](/docs/reference/api/llm-pr
 
 - **`mode`:** `off`, `observe`, or `enforce`.
 - **`personApproval`:** who answers in Enforce when a plan needs a person. `ask` asks the person running the session. `auto_unattended` approves for the agent in [Agent Runtime](/docs/agents/runtime) runs and asks a person everywhere else. `auto_everywhere` approves for the agent in every session. [`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE), while set, fixes it.
-- **`enforcedMarks`:** attention marks that only a person may approve, in Observe and under `auto_unattended` or `auto_everywhere`. A tool tagged `enforced` in the policy keeps all its checks the same way.
+- **`enforcedMarks`:** attention marks the approvals of Observe, `auto_unattended`, and `auto_everywhere` never cover. A call that needs one waits as in Enforce, for a person or for an approver your policy declares for that mark. A tool tagged `enforced` in the policy keeps all its checks the same way.
 
 If your policy can't take the approvals Observe or `personApproval` adds, the save warns you, and new sessions run under plain Enforce.
 

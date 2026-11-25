@@ -2063,7 +2063,7 @@ describe("AgentForm delegation state", () => {
         (_, element) =>
           element?.tagName === "P" &&
           element.textContent ===
-            "75% of runs will be delegated to this agent.",
+            "75% of runs will be delegated to this subagent.",
       ),
     ).toBeInTheDocument();
   });

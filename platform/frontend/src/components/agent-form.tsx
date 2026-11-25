@@ -217,6 +217,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
 import {
@@ -384,34 +385,60 @@ function useRememberedSkills(
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {
   const { data: tools = [], isLoading } = useChatProfileMcpTools(agentId);
+  const [expanded, setExpanded] = useState(false);
 
   if (isLoading) {
-    return <p className="text-xs text-muted-foreground">Loading tools...</p>;
+    return (
+      <p className="text-xs text-muted-foreground">
+        <span>Loading tools...</span>
+      </p>
+    );
   }
 
   if (tools.length === 0) {
-    return <p className="text-xs text-muted-foreground">No tools available</p>;
+    return (
+      <p className="text-xs text-muted-foreground">
+        <span>No tools available</span>
+      </p>
+    );
   }
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="mb-2.5 flex shrink-0 items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-foreground">Available tools</p>
-        <span className="text-xs tabular-nums text-muted-foreground">
-          {tools.length}
-        </span>
-      </div>
-      <div className="flex min-h-0 max-h-[200px] flex-wrap gap-1 overflow-y-auto">
-        {tools.map((tool) => (
-          <span
-            key={tool.name}
-            className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs"
-          >
-            {tool.name}
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="flex min-h-0 flex-col"
+    >
+      <CollapsibleTrigger asChild>
+        <UnstyledButton className="group flex w-full shrink-0 items-center justify-between gap-2 rounded-md py-0.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+            <ChevronRight
+              className={cn(
+                "size-3.5 text-muted-foreground transition-transform duration-150 group-hover:text-foreground",
+                expanded && "rotate-90",
+              )}
+              aria-hidden="true"
+            />
+            <span>Available tools</span>
           </span>
-        ))}
-      </div>
-    </div>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {tools.length}
+          </span>
+        </UnstyledButton>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="min-h-0">
+        <div className="mt-2.5 flex max-h-[200px] flex-wrap gap-1 overflow-y-auto">
+          {tools.map((tool) => (
+            <span
+              key={tool.name}
+              className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs"
+            >
+              {tool.name}
+            </span>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -421,12 +448,14 @@ function AgentToolsList({ agentId }: { agentId: string }) {
  */
 function SubagentWeightSection({
   agentName,
+  noun = "subagent",
   weight,
   sharePercent,
   readOnly,
   onWeightChange,
 }: {
   agentName: string;
+  noun?: "subagent" | "agent";
   weight: number;
   sharePercent: number;
   readOnly: boolean;
@@ -475,14 +504,12 @@ function SubagentWeightSection({
   };
 
   return (
-    <div className="shrink-0 border-b p-4">
-      <p className="text-sm font-semibold text-foreground">Load balancing</p>
-
-      <div className="mt-2.5 flex items-center justify-between gap-3">
+    <div className="shrink-0 space-y-3 border-b p-4">
+      <div className="flex items-center justify-between gap-3">
         {readOnly ? (
           <>
-            <span className="shrink-0 text-sm text-muted-foreground">
-              Weight
+            <span className="shrink-0 text-sm font-medium text-foreground">
+              Load balancing weight
             </span>
             <span className="text-sm font-medium tabular-nums text-foreground">
               {weight}
@@ -492,9 +519,9 @@ function SubagentWeightSection({
           <>
             <Label
               htmlFor={inputId}
-              className="shrink-0 text-sm font-normal text-muted-foreground"
+              className="shrink-0 text-sm font-medium text-foreground"
             >
-              Weight
+              Load balancing weight
             </Label>
             <div className="inline-flex items-center divide-x divide-border/70 overflow-hidden rounded-md border border-border bg-background transition-[border-color,box-shadow] has-[:focus-visible]:border-ring has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50 dark:bg-muted/30">
               <Button
@@ -536,7 +563,7 @@ function SubagentWeightSection({
         )}
       </div>
 
-      <div className="relative mt-3 overflow-hidden rounded-md border border-border/60 bg-muted/25 px-3 py-2">
+      <div className="relative overflow-hidden rounded-md border border-border/60 bg-muted/25 px-3 py-2">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 left-0 bg-primary/[0.08] transition-[width] duration-200 ease-out"
@@ -555,7 +582,7 @@ function SubagentWeightSection({
           <span className="font-semibold tabular-nums text-foreground">
             {sharePercent}%
           </span>{" "}
-          of runs will be delegated to this agent.
+          {`of runs will be delegated to this ${noun}.`}
         </p>
       </div>
     </div>
@@ -571,6 +598,7 @@ interface SubagentPillProps {
   // "delegate" pills read as an active delegation target (green); "exclude"
   // pills read as a target removed from the Auto surface (red).
   tone?: "delegate" | "exclude";
+  noun?: "subagent" | "agent";
   /** Weight & traffic share shown via top progress hairline and edited inside the popover. */
   weight?: number;
   sharePercent?: number;
@@ -583,6 +611,7 @@ function SubagentPill({
   onToggle,
   readOnly = false,
   tone = "delegate",
+  noun = "subagent",
   weight,
   sharePercent,
   onWeightChange,
@@ -708,6 +737,7 @@ function SubagentPill({
         {showWeight && onWeightChange && (
           <SubagentWeightSection
             agentName={agent.name}
+            noun={noun}
             weight={weight}
             sharePercent={sharePercent}
             readOnly={readOnly}
@@ -827,6 +857,7 @@ function SubagentsEditor({
           )
         }
         tone={localMode === "all" ? "exclude" : "delegate"}
+        noun={noun}
         weight={weight}
         sharePercent={sharePercent}
         onWeightChange={

@@ -1970,6 +1970,64 @@ describe("AgentForm delegation state", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows inline weights only on assigned runtime pills in Weighted mode without duplicating the list", async () => {
+    const weightedAgent = {
+      ...baseAgent,
+      accessAllSubagents: false,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "weighted" as const,
+      },
+    };
+    const runtimeA = {
+      ...targetAgent,
+      id: "00000000-0000-4000-8000-00000000001a",
+      name: "Lobster Claude Code",
+      runtime: {
+        image: "ghcr.io/archestra-ai/agent-claude-code:latest",
+        command: ["archestra-claude-code"],
+      },
+    };
+    const runtimeB = {
+      ...targetAgent,
+      id: "00000000-0000-4000-8000-00000000001b",
+      name: "Lobster Codex",
+      runtime: {
+        image: "ghcr.io/archestra-ai/agent-codex:latest",
+        command: ["archestra-codex"],
+      },
+    };
+    useProfileMock.mockReturnValue({ data: weightedAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [runtimeA, runtimeB, targetAgent],
+    });
+    useAgentDelegationsMock.mockReturnValue({
+      data: [runtimeA, runtimeB, targetAgent],
+      isSuccess: true,
+    });
+
+    render(<AgentForm agentType="agent" agent={weightedAgent} />);
+
+    // Runtime pills get inline weight inputs; local non-runtime pill does not.
+    const claudeWeight = await screen.findByLabelText(
+      "Weight for Lobster Claude Code",
+    );
+    const codexWeight = screen.getByLabelText("Weight for Lobster Codex");
+    expect(claudeWeight).toHaveValue(1);
+    expect(codexWeight).toHaveValue(1);
+    expect(
+      screen.queryByLabelText(`Weight for ${targetAgent.name}`),
+    ).not.toBeInTheDocument();
+
+    // Only the two runtime pills split 100% (50% / 50%); no duplicate list below.
+    expect(screen.getAllByText("50%")).toHaveLength(2);
+    expect(screen.queryByText(/Subagent weights/i)).not.toBeInTheDocument();
+
+    fireEvent.change(claudeWeight, { target: { value: "3" } });
+    expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(screen.getByText("25%")).toBeInTheDocument();
+  });
+
   it("does not replace external assignments after their read fails", async () => {
     const user = userEvent.setup();
     const syncExternal = vi.fn();

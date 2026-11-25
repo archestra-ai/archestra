@@ -28,6 +28,8 @@ import {
   resolveAgentCatalogId,
   runtimeRequestsClaudeSubscription,
   runtimeSupportsClaudeSubscription,
+  SUBAGENT_LOAD_BALANCING_MAX_WEIGHT,
+  SUBAGENT_LOAD_BALANCING_MIN_WEIGHT,
   SUBSCRIPTION_CREDENTIALS,
   type SubagentLoadBalancingConfig,
   type SupportedProvider,
@@ -418,6 +420,10 @@ interface SubagentPillProps {
   // "delegate" pills read as an active delegation target (green); "exclude"
   // pills read as a target removed from the Auto surface (red).
   tone?: "delegate" | "exclude";
+  /** Inline weight controls shown on runtime pills when Weighted mode is active. */
+  weight?: number;
+  sharePercent?: number;
+  onWeightChange?: (rawValue: string) => void;
 }
 
 function SubagentPill({
@@ -426,8 +432,13 @@ function SubagentPill({
   onToggle,
   readOnly = false,
   tone = "delegate",
+  weight,
+  sharePercent,
+  onWeightChange,
 }: SubagentPillProps) {
   const [open, setOpen] = useState(false);
+  const showWeight =
+    weight !== undefined && Boolean(agent.runtime) && tone === "delegate";
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
@@ -437,7 +448,8 @@ function SubagentPill({
             variant="outline"
             size="sm"
             className={cn(
-              "group max-w-[280px] rounded-r-none border-r-0 text-xs",
+              "group max-w-[280px] text-xs",
+              (!readOnly || showWeight) && "rounded-r-none border-r-0",
               !isSelected && "border-dashed opacity-50",
             )}
           >
@@ -465,6 +477,30 @@ function SubagentPill({
             )}
           </Button>
         </PopoverTrigger>
+        {showWeight && (
+          <div
+            className={cn(
+              "flex h-8 items-center gap-1.5 border bg-muted/30 px-2 text-xs dark:border-input",
+              readOnly ? "rounded-r-md" : "border-r-0",
+            )}
+            title={`Weight (${SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}–${SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}) · ${sharePercent ?? 0}% of runs`}
+          >
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+              max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+              aria-label={`Weight for ${agent.name}`}
+              value={weight}
+              disabled={readOnly}
+              onChange={(event) => onWeightChange?.(event.target.value)}
+              className="h-5 w-11 rounded border-input bg-background px-1.5 py-0 text-right text-xs font-medium tabular-nums dark:bg-background [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <span className="min-w-[2.1rem] text-right text-[11px] tabular-nums text-muted-foreground">
+              {sharePercent ?? 0}%
+            </span>
+          </div>
+        )}
         {!readOnly && (
           <Button
             variant="outline"
@@ -554,6 +590,10 @@ interface SubagentsEditorProps {
    * agents on a gateway, whose clients call them.
    */
   noun?: "subagent" | "agent";
+  /** Show inline weight inputs on assigned runtime cards when Weighted delegation is active. */
+  weightedMode?: boolean;
+  weights?: Record<string, number>;
+  onWeightChange?: (agentId: string, rawValue: string) => void;
 }
 
 function SubagentsEditor({
@@ -567,6 +607,9 @@ function SubagentsEditor({
   onDisabledSelectionChange,
   emptyDescription = "Every task is handled here, with nothing handed on.",
   noun = "subagent",
+  weightedMode = false,
+  weights,
+  onWeightChange,
 }: SubagentsEditorProps) {
   const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
   const visibleIds = selectedIds.slice(0, 20);
@@ -584,6 +627,17 @@ function SubagentsEditor({
       localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
     setIds(ids);
   };
+  const showInlineWeights = weightedMode && localMode === "selected";
+  const runtimeAssignedAgents = showInlineWeights
+    ? visibleIds
+        .filter((id) => id !== agentId)
+        .map((id) => agentsById.get(id))
+        .filter((agent): agent is AgentOption => Boolean(agent?.runtime))
+    : [];
+  const totalRuntimeWeight = runtimeAssignedAgents.reduce(
+    (sum, agent) => sum + (weights?.[agent.id] ?? 1),
+    0,
+  );
   // In pick order, so a new pick holds its place as a loading pill until the
   // lookup names it, and the pills around it do not move.
   const pills = visibleIds
@@ -591,6 +645,14 @@ function SubagentsEditor({
     .map((id) => {
       const agent = agentsById.get(id);
       if (!agent) return <PendingSubagentPill key={id} />;
+      const hasInlineWeight = showInlineWeights && Boolean(agent.runtime);
+      const weight = hasInlineWeight ? (weights?.[id] ?? 1) : undefined;
+      const sharePercent =
+        weight !== undefined
+          ? totalRuntimeWeight > 0
+            ? Math.round((weight / totalRuntimeWeight) * 100)
+            : 0
+          : undefined;
       return (
         <SubagentPill
           key={id}
@@ -603,6 +665,13 @@ function SubagentsEditor({
             )
           }
           tone={localMode === "all" ? "exclude" : "delegate"}
+          weight={weight}
+          sharePercent={sharePercent}
+          onWeightChange={
+            hasInlineWeight
+              ? (rawValue) => onWeightChange?.(id, rawValue)
+              : undefined
+          }
         />
       );
     });
@@ -610,7 +679,16 @@ function SubagentsEditor({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium">Assigned</p>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-sm font-medium">Assigned</p>
+        {runtimeAssignedAgents.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            <span>
+              {`Weight (${SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}–${SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}) · higher gets more runs`}
+            </span>
+          </p>
+        )}
+      </div>
       {localMode === "all" ? (
         <div className="rounded-md border bg-muted/20 px-3 py-2.5">
           <div className="flex items-center gap-2">
@@ -1467,6 +1545,32 @@ export function AgentForm({
     useState<GitHubActionsAccess | null>(null);
   const [subagentLoadBalancing, setSubagentLoadBalancing] =
     useState<SubagentLoadBalancingConfig | null>(null);
+  const handleSubagentWeightChange = useCallback(
+    (targetAgentId: string, rawValue: string) => {
+      const parsed = Number.parseInt(rawValue, 10);
+      setSubagentLoadBalancing((prev) => {
+        const base: SubagentLoadBalancingConfig = prev ?? {
+          enabled: true,
+          algorithm: "weighted",
+        };
+        const nextWeights = { ...(base.weights ?? {}) };
+        if (Number.isNaN(parsed)) {
+          delete nextWeights[targetAgentId];
+        } else {
+          nextWeights[targetAgentId] = Math.max(
+            SUBAGENT_LOAD_BALANCING_MIN_WEIGHT,
+            Math.min(SUBAGENT_LOAD_BALANCING_MAX_WEIGHT, parsed),
+          );
+        }
+        return {
+          ...base,
+          weights:
+            Object.keys(nextWeights).length > 0 ? nextWeights : undefined,
+        };
+      });
+    },
+    [],
+  );
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const originalRuntimeId =
     initialRuntimeId ??
@@ -5107,13 +5211,19 @@ export function AgentForm({
                             : "No delegation tools appear in this gateway's tool list."
                         }
                         noun={isInternalAgent ? "subagent" : "agent"}
+                        weightedMode={
+                          supportsSubagents &&
+                          subagentLoadBalancing?.enabled === true &&
+                          subagentLoadBalancing.algorithm === "weighted"
+                        }
+                        weights={subagentLoadBalancing?.weights}
+                        onWeightChange={handleSubagentWeightChange}
                       />
                       {supportsSubagents && (
                         <SubagentLoadBalancingSection
                           value={subagentLoadBalancing}
                           onChange={setSubagentLoadBalancing}
                           selectedAgentIds={selectedDelegationTargetIds}
-                          canReadAgents={canReadAgents === true}
                           readOnly={readOnly}
                           isGateway={agentType === "mcp_gateway"}
                           isAllSubagentsMode={accessAllSubagents}

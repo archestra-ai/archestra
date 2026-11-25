@@ -4,17 +4,11 @@ import {
   type SubagentLoadBalancingConfig,
   SubagentLoadBalancingConfigSchema,
 } from "@archestra/shared";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { useAgentOptionsByIds } from "@/lib/agent-options.query";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { SubagentLoadBalancingSection } from "./subagent-load-balancing-section";
-
-vi.mock("@/lib/agent-options.query");
-vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/config/config.query");
 
 beforeAll(() => {
   // Radix Select calls pointer-capture and scrollIntoView APIs absent in jsdom.
@@ -34,7 +28,6 @@ beforeAll(() => {
 
 const AGENT_A_ID = "00000000-0000-4000-8000-00000000000a";
 const AGENT_B_ID = "00000000-0000-4000-8000-00000000000b";
-const AGENT_C_ID = "00000000-0000-4000-8000-00000000000c";
 
 function renderSection(
   initial: SubagentLoadBalancingConfig | null = null,
@@ -57,47 +50,9 @@ function renderSection(
       />
     );
   }
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <Host />
-    </QueryClientProvider>,
-  );
+  render(<Host />);
   return { onChange };
 }
-
-beforeEach(() => {
-  vi.mocked(useAgentOptionsByIds).mockReturnValue({
-    data: [
-      {
-        id: AGENT_A_ID,
-        name: "Lobster Claude",
-        description: null,
-        runtime: {
-          image: "ghcr.io/archestra-ai/agent-claude-code:latest",
-          command: ["archestra-claude-code"],
-        },
-      },
-      {
-        id: AGENT_B_ID,
-        name: "Lobster Codex",
-        description: null,
-        runtime: {
-          image: "ghcr.io/archestra-ai/agent-codex:latest",
-          command: ["archestra-codex"],
-        },
-      },
-      {
-        id: AGENT_C_ID,
-        name: "Regular Chat Agent",
-        description: null,
-        runtime: null,
-      },
-    ],
-  } as unknown as ReturnType<typeof useAgentOptionsByIds>);
-});
 
 describe("SubagentLoadBalancingSection", () => {
   it("selects an algorithm from the Agent Runtime Delegation dropdown and switches back to Direct", async () => {
@@ -128,12 +83,16 @@ describe("SubagentLoadBalancingSection", () => {
     });
 
     await user.click(select);
-    await user.click(screen.getByRole("option", { name: /Random/ }));
-    expect(select).toHaveTextContent("Random");
-    expect(onChange).toHaveBeenLastCalledWith({
+    await user.click(screen.getByRole("option", { name: /Weighted/ }));
+    expect(select).toHaveTextContent("Weighted");
+    const weightedCall = onChange.mock.calls.at(-1)?.[0];
+    expect(weightedCall).toEqual({
       enabled: true,
-      algorithm: "random",
+      algorithm: "weighted",
     });
+    expect(
+      SubagentLoadBalancingConfigSchema.safeParse(weightedCall).success,
+    ).toBe(true);
 
     await user.click(select);
     await user.click(screen.getByRole("option", { name: /Direct/ }));
@@ -145,32 +104,22 @@ describe("SubagentLoadBalancingSection", () => {
     );
   });
 
-  it("allows configuring per-agent weights without rendering retry or failover controls", async () => {
-    const { onChange } = renderSection({
-      enabled: true,
-      algorithm: "weighted",
-    });
-
-    const claudeWeightInput = screen.getByLabelText(
-      "Weight for Lobster Claude",
+  it("does not render a duplicate agent list or retry/failover controls when Weighted is active with assigned agents", () => {
+    renderSection(
+      {
+        enabled: true,
+        algorithm: "weighted",
+      },
+      [AGENT_A_ID, AGENT_B_ID],
+      { isGateway: false },
     );
-    expect(claudeWeightInput).toHaveValue(1);
 
-    fireEvent.change(claudeWeightInput, { target: { value: "3" } });
-
-    const latest = onChange.mock.calls.at(-1)?.[0];
-    expect(latest).toMatchObject({
-      enabled: true,
-      algorithm: "weighted",
-      weights: { [AGENT_A_ID]: 3 },
-    });
-    expect(SubagentLoadBalancingConfigSchema.safeParse(latest).success).toBe(
-      true,
-    );
+    expect(screen.queryByText(/Subagent weights/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Retries on same/i)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("switch", { name: /Fail over/i }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   });
 
   it("orders subagents according to round-robin and weighted policies", () => {
@@ -200,7 +149,7 @@ describe("SubagentLoadBalancingSection", () => {
     ).toEqual([AGENT_B_ID, AGENT_A_ID]);
   });
 
-  it("renders regular agent copy and All-agents weighted notice", () => {
+  it("renders regular agent copy and All-agents weighted notice without Beta badge", () => {
     renderSection(
       {
         enabled: true,
@@ -215,21 +164,14 @@ describe("SubagentLoadBalancingSection", () => {
     expect(
       screen.getByText("Split runs between subagents with dedicated runtimes."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Subagent weights")).toBeInTheDocument();
     expect(
       screen.getByText(
-        'In "All agents" mode, every Agent Runtime subagent gets weight 1. Switch to Manual mode above to set custom weights.',
+        'In "All agents" mode, every runtime subagent gets weight 1. Switch to Manual mode above to set custom weights.',
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Retries on same subagent"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("switch", { name: "Fail over to other subagents" }),
-    ).not.toBeInTheDocument();
   });
 
-  it("renders gateway copy using agent terminology consistently", () => {
+  it("renders gateway copy and empty-assignment weighted notice using agent terminology", () => {
     renderSection(
       {
         enabled: true,
@@ -242,29 +184,9 @@ describe("SubagentLoadBalancingSection", () => {
     expect(
       screen.getByText("Split runs between agents with dedicated runtimes."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Agent weights")).toBeInTheDocument();
     expect(
       screen.getByText("Assign agents above to set custom weights."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Retries on same agent")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("switch", { name: "Fail over to other agents" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows each subagent's runtime chip or No runtime in weighted rows", () => {
-    renderSection(
-      {
-        enabled: true,
-        algorithm: "weighted",
-      },
-      [AGENT_A_ID, AGENT_B_ID, AGENT_C_ID],
-      { isGateway: false },
-    );
-
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
-    expect(screen.getByText("Codex")).toBeInTheDocument();
-    expect(screen.getByText("No runtime")).toBeInTheDocument();
   });
 
   it("strips legacy retry and failover fields on read", () => {

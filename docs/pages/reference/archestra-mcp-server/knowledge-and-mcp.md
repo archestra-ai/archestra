@@ -2,7 +2,7 @@
 title: "Knowledge and MCP"
 description: "Archestra MCP Server tools for knowledge and mcp"
 order: 5
-lastUpdated: 2026-11-21
+lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -643,8 +643,6 @@ Required RBAC permission: [`mcpGateway:create`](/docs/reference/permissions#mcpG
 | `subagentLoadBalancing.enabled` | `boolean` | No |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | No |  |
 | `subagentLoadBalancing.weights` | `object` | No |  |
-| `subagentLoadBalancing.retries` | `integer` | No |  |
-| `subagentLoadBalancing.fallbackEnabled` | `boolean` | No |  |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
 | `connectorIds` | `string[]` | No | Knowledge connector IDs to assign directly to the agent. Use get_knowledge_connectors first when you need to look up IDs by name. |
 | `subAgentIds` | `string[]` | No | Optional list of agent IDs that this MCP gateway can delegate to as subagents. |
@@ -677,8 +675,6 @@ Required RBAC permission: [`mcpGateway:read`](/docs/reference/permissions#mcpGat
 | `subagentLoadBalancing.enabled` | `boolean` | Yes |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | Yes |  |
 | `subagentLoadBalancing.weights` | `object` | No |  |
-| `subagentLoadBalancing.retries` | `integer` | Yes |  |
-| `subagentLoadBalancing.fallbackEnabled` | `boolean` | Yes |  |
 | `agentType` | `"agent" \| "llm_proxy" \| "mcp_gateway" \| "profile"` | Yes | The resource type. |
 | `systemPrompt` | `string \| null` | No |  |
 | `teams` | `object[]` | Yes | The teams attached to it. |
@@ -720,8 +716,6 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `subagentLoadBalancing.enabled` | `boolean` | No |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | No |  |
 | `subagentLoadBalancing.weights` | `object` | No |  |
-| `subagentLoadBalancing.retries` | `integer` | No |  |
-| `subagentLoadBalancing.fallbackEnabled` | `boolean` | No |  |
 | `knowledgeBaseIds` | `string[]` | No | Replace the MCP gateway's assigned knowledge bases with this set. |
 | `connectorIds` | `string[]` | No | Replace the MCP gateway's directly assigned knowledge connectors with this set. |
 | `subAgentIds` | `string[]` | No | Optional list of agent IDs that this MCP gateway can delegate to as subagents. |

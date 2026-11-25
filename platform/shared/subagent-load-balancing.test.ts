@@ -220,14 +220,25 @@ describe("orderSubagentsByLoadBalancing", () => {
       enabled: true,
       algorithm: "ordered",
       retries: 2,
-      fallbackEnabled: true,
+      fallbackEnabled: false,
       maxFallbacks: 1,
     });
     expect(parsedLegacy).toEqual({
       enabled: true,
       algorithm: "round_robin",
-      retries: 2,
-      fallbackEnabled: true,
+    });
+
+    const parsedInputWithLegacyFields = SubagentLoadBalancingConfigSchema.parse(
+      {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 2,
+        fallbackEnabled: false,
+      },
+    );
+    expect(parsedInputWithLegacyFields).toEqual({
+      enabled: true,
+      algorithm: "round_robin",
     });
   });
 });

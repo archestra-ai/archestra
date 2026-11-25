@@ -2,7 +2,7 @@
 title: "Agents and Runtime"
 description: "Archestra MCP Server tools for agents and runtime"
 order: 4
-lastUpdated: 2026-11-21
+lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -349,8 +349,6 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `subagentLoadBalancing.enabled` | `boolean` | No |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | No |  |
 | `subagentLoadBalancing.weights` | `object` | No |  |
-| `subagentLoadBalancing.retries` | `integer` | No |  |
-| `subagentLoadBalancing.fallbackEnabled` | `boolean` | No |  |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
 | `icon` | `string \| null` | No | Optional emoji icon for the agent. |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
@@ -420,8 +418,6 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `subagentLoadBalancing.enabled` | `boolean` | Yes |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | Yes |  |
 | `subagentLoadBalancing.weights` | `object` | No |  |
-| `subagentLoadBalancing.retries` | `integer` | Yes |  |
-| `subagentLoadBalancing.fallbackEnabled` | `boolean` | Yes |  |
 | `agentType` | `"agent" \| "llm_proxy" \| "mcp_gateway" \| "profile"` | Yes | The resource type. |
 | `systemPrompt` | `string \| null` | No |  |
 | `teams` | `object[]` | Yes | The teams attached to it. |
@@ -560,8 +556,6 @@ Required RBAC permission: `update` on the agent (granted per item)
 | `subagentLoadBalancing.enabled` | `boolean` | No |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | No |  |
 | `subagentLoadBalancing.weights` | `object` | No |  |
-| `subagentLoadBalancing.retries` | `integer` | No |  |
-| `subagentLoadBalancing.fallbackEnabled` | `boolean` | No |  |
 | `suggestedPrompts` | `object[]` | No | Replace the agent's suggested prompts. |
 | `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown to users for this suggested prompt. |
 | `suggestedPrompts[].prompt` | `string` | Yes | Suggested prompt text users can click to start a conversation. |

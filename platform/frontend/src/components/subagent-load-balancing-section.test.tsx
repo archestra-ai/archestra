@@ -99,8 +99,6 @@ describe("SubagentLoadBalancingSection", () => {
     expect(onChange).toHaveBeenLastCalledWith({
       enabled: true,
       algorithm: "round_robin",
-      retries: 1,
-      fallbackEnabled: true,
     });
 
     await user.click(toggle);
@@ -111,13 +109,10 @@ describe("SubagentLoadBalancingSection", () => {
     );
   });
 
-  it("allows configuring per-agent weights and retry/failover policy", async () => {
-    const user = userEvent.setup();
+  it("allows configuring per-agent weights without rendering retry or failover controls", async () => {
     const { onChange } = renderSection({
       enabled: true,
       algorithm: "weighted",
-      retries: 1,
-      fallbackEnabled: true,
     });
 
     const claudeWeightInput = screen.getByLabelText(
@@ -136,16 +131,10 @@ describe("SubagentLoadBalancingSection", () => {
     expect(SubagentLoadBalancingConfigSchema.safeParse(latest).success).toBe(
       true,
     );
-
-    const failoverSwitch = screen.getByRole("switch", {
-      name: "Fail over to other agents",
-    });
-    await user.click(failoverSwitch);
-    expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        fallbackEnabled: false,
-      }),
-    );
+    expect(screen.queryByText(/Retries on same/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: /Fail over/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("orders subagents according to round-robin and weighted policies", () => {
@@ -157,8 +146,6 @@ describe("SubagentLoadBalancingSection", () => {
         {
           enabled: true,
           algorithm: "round_robin",
-          retries: 1,
-          fallbackEnabled: true,
         },
         { seed: 1 },
       ),
@@ -171,8 +158,6 @@ describe("SubagentLoadBalancingSection", () => {
           enabled: true,
           algorithm: "weighted",
           weights: { [AGENT_A_ID]: 1, [AGENT_B_ID]: 9 },
-          retries: 1,
-          fallbackEnabled: true,
         },
         { random: () => 0.5 },
       ),
@@ -184,8 +169,6 @@ describe("SubagentLoadBalancingSection", () => {
       {
         enabled: true,
         algorithm: "weighted",
-        retries: 1,
-        fallbackEnabled: true,
       },
       [],
       { isGateway: false, isAllSubagentsMode: true },
@@ -194,7 +177,7 @@ describe("SubagentLoadBalancingSection", () => {
     expect(screen.getByText("Load Balancing")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "When this agent delegates to Agent Runtime subagents, choose how to split runs and handle failures. Other subagents run directly.",
+        "When this agent delegates to Agent Runtime subagents, split runs across them with automatic retries and failover. Other subagents run directly.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Subagent weights")).toBeInTheDocument();
@@ -203,10 +186,12 @@ describe("SubagentLoadBalancingSection", () => {
         'In "All agents" mode, every Agent Runtime subagent gets weight 1. Switch to Manual mode above to set custom weights.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Retries on same subagent")).toBeInTheDocument();
     expect(
-      screen.getByRole("switch", { name: "Fail over to other subagents" }),
-    ).toBeInTheDocument();
+      screen.queryByText("Retries on same subagent"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: "Fail over to other subagents" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders gateway copy using agent terminology consistently", () => {
@@ -214,8 +199,6 @@ describe("SubagentLoadBalancingSection", () => {
       {
         enabled: true,
         algorithm: "weighted",
-        retries: 1,
-        fallbackEnabled: true,
       },
       [],
       { isGateway: true, isAllSubagentsMode: false },
@@ -223,17 +206,17 @@ describe("SubagentLoadBalancingSection", () => {
 
     expect(
       screen.getByText(
-        "When clients run Agent Runtime agents through this gateway, choose how to split runs and handle failures. Other agents run directly.",
+        "When clients run Agent Runtime agents through this gateway, split runs across them with automatic retries and failover. Other agents run directly.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Agent weights")).toBeInTheDocument();
     expect(
       screen.getByText("Assign agents above to set custom weights."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Retries on same agent")).toBeInTheDocument();
+    expect(screen.queryByText("Retries on same agent")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("switch", { name: "Fail over to other agents" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("switch", { name: "Fail over to other agents" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows each subagent's runtime chip or No runtime in weighted rows", () => {
@@ -241,8 +224,6 @@ describe("SubagentLoadBalancingSection", () => {
       {
         enabled: true,
         algorithm: "weighted",
-        retries: 1,
-        fallbackEnabled: true,
       },
       [AGENT_A_ID, AGENT_B_ID, AGENT_C_ID],
       { isGateway: false },
@@ -253,13 +234,16 @@ describe("SubagentLoadBalancingSection", () => {
     expect(screen.getByText("No runtime")).toBeInTheDocument();
   });
 
-  it("clamps stored retry counts above 3 on read so UI and supervisor agree", () => {
+  it("strips legacy retry and failover fields on read", () => {
     const parsed = StoredSubagentLoadBalancingConfigSchema.parse({
       enabled: true,
       algorithm: "round_robin",
       retries: 5,
-      fallbackEnabled: true,
+      fallbackEnabled: false,
     });
-    expect(parsed.retries).toBe(3);
+    expect(parsed).toEqual({
+      enabled: true,
+      algorithm: "round_robin",
+    });
   });
 });

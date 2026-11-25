@@ -692,8 +692,6 @@ describe("snapshot coverage", () => {
     subagentLoadBalancing: {
       enabled: true,
       algorithm: "round_robin",
-      retries: 1,
-      fallbackEnabled: true,
     },
     excludedTools: [{ toolId: "t9", name: "danger__wipe" }],
     excludedSubagents: [{ agentId: "a9", name: "Old bot" }],

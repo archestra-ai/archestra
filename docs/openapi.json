@@ -63210,23 +63210,11 @@
                                           "minimum": 1,
                                           "maximum": 1000
                                         }
-                                      },
-                                      "retries": {
-                                        "default": 3,
-                                        "type": "integer",
-                                        "minimum": 0,
-                                        "maximum": 3
-                                      },
-                                      "fallbackEnabled": {
-                                        "default": true,
-                                        "type": "boolean"
                                       }
                                     },
                                     "required": [
                                       "enabled",
-                                      "algorithm",
-                                      "retries",
-                                      "fallbackEnabled"
+                                      "algorithm"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -65071,23 +65059,11 @@
                                   "minimum": 1,
                                   "maximum": 1000
                                 }
-                              },
-                              "retries": {
-                                "default": 3,
-                                "type": "integer",
-                                "minimum": 0,
-                                "maximum": 3
-                              },
-                              "fallbackEnabled": {
-                                "default": true,
-                                "type": "boolean"
                               }
                             },
                             "required": [
                               "enabled",
-                              "algorithm",
-                              "retries",
-                              "fallbackEnabled"
+                              "algorithm"
                             ],
                             "additionalProperties": false
                           },
@@ -66227,16 +66203,6 @@
                           "minimum": 1,
                           "maximum": 1000
                         }
-                      },
-                      "retries": {
-                        "default": 1,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 3
-                      },
-                      "fallbackEnabled": {
-                        "default": true,
-                        "type": "boolean"
                       }
                     }
                   },
@@ -67228,23 +67194,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -72741,23 +72695,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -74291,23 +74233,11 @@
                                 "minimum": 1,
                                 "maximum": 1000
                               }
-                            },
-                            "retries": {
-                              "default": 3,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 3
-                            },
-                            "fallbackEnabled": {
-                              "default": true,
-                              "type": "boolean"
                             }
                           },
                           "required": [
                             "enabled",
-                            "algorithm",
-                            "retries",
-                            "fallbackEnabled"
+                            "algorithm"
                           ],
                           "additionalProperties": false
                         },
@@ -75514,23 +75444,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -76648,16 +76566,6 @@
                           "minimum": 1,
                           "maximum": 1000
                         }
-                      },
-                      "retries": {
-                        "default": 1,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 3
-                      },
-                      "fallbackEnabled": {
-                        "default": true,
-                        "type": "boolean"
                       }
                     }
                   },
@@ -77311,23 +77219,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -79800,23 +79696,11 @@
                                 "minimum": 1,
                                 "maximum": 1000
                               }
-                            },
-                            "retries": {
-                              "default": 3,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 3
-                            },
-                            "fallbackEnabled": {
-                              "default": true,
-                              "type": "boolean"
                             }
                           },
                           "required": [
                             "enabled",
-                            "algorithm",
-                            "retries",
-                            "fallbackEnabled"
+                            "algorithm"
                           ],
                           "additionalProperties": false
                         },
@@ -80849,23 +80733,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -82216,23 +82088,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -90367,23 +90227,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -174657,23 +174505,11 @@
                                     "minimum": 1,
                                     "maximum": 1000
                                   }
-                                },
-                                "retries": {
-                                  "default": 3,
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 3
-                                },
-                                "fallbackEnabled": {
-                                  "default": true,
-                                  "type": "boolean"
                                 }
                               },
                               "required": [
                                 "enabled",
-                                "algorithm",
-                                "retries",
-                                "fallbackEnabled"
+                                "algorithm"
                               ],
                               "additionalProperties": false
                             },
@@ -178119,23 +177955,11 @@
                                         "minimum": 1,
                                         "maximum": 1000
                                       }
-                                    },
-                                    "retries": {
-                                      "default": 3,
-                                      "type": "integer",
-                                      "minimum": 0,
-                                      "maximum": 3
-                                    },
-                                    "fallbackEnabled": {
-                                      "default": true,
-                                      "type": "boolean"
                                     }
                                   },
                                   "required": [
                                     "enabled",
-                                    "algorithm",
-                                    "retries",
-                                    "fallbackEnabled"
+                                    "algorithm"
                                   ],
                                   "additionalProperties": false
                                 },

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  SUBAGENT_LOAD_BALANCING_MAX_RETRIES,
   SUBAGENT_LOAD_BALANCING_MAX_WEIGHT,
   SUBAGENT_LOAD_BALANCING_MIN_WEIGHT,
   type SubagentLoadBalancingAlgorithm,
@@ -28,8 +27,6 @@ import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 const DEFAULT_LOAD_BALANCING_CONFIG: SubagentLoadBalancingConfig = {
   enabled: true,
   algorithm: "round_robin",
-  retries: 1,
-  fallbackEnabled: true,
 };
 
 function getAlgorithmOptions(params: {
@@ -60,19 +57,6 @@ function getAlgorithmOptions(params: {
   ];
 }
 
-const RETRY_OPTIONS = Array.from(
-  { length: SUBAGENT_LOAD_BALANCING_MAX_RETRIES + 1 },
-  (_, count) => ({
-    value: String(count),
-    label:
-      count === 0
-        ? "No retries (0)"
-        : count === 1
-          ? "1 retry"
-          : `${count} retries`,
-  }),
-);
-
 export interface SubagentLoadBalancingSectionProps {
   value: SubagentLoadBalancingConfig | null;
   onChange: (value: SubagentLoadBalancingConfig | null) => void;
@@ -94,12 +78,9 @@ export function SubagentLoadBalancingSection({
 }: SubagentLoadBalancingSectionProps) {
   const enableSwitchId = useId();
   const algorithmSelectId = useId();
-  const retriesSelectId = useId();
-  const fallbackSwitchId = useId();
 
   // Only runs of Agent Runtime agents are balanced, retried, and failed over:
   // a delegation to any other agent always goes to that agent directly.
-  const noun = isGateway ? "agent" : "subagent";
   const nouns = isGateway ? "agents" : "subagents";
   const runtimeNoun = isGateway
     ? "Agent Runtime agent"
@@ -108,9 +89,8 @@ export function SubagentLoadBalancingSection({
     ? "Agent Runtime agents"
     : "Agent Runtime subagents";
   const sectionDescription = isGateway
-    ? "When clients run Agent Runtime agents through this gateway, choose how to split runs and handle failures. Other agents run directly."
-    : "When this agent delegates to Agent Runtime subagents, choose how to split runs and handle failures. Other subagents run directly.";
-  const failoverLabel = `Fail over to other ${nouns}`;
+    ? "When clients run Agent Runtime agents through this gateway, split runs across them with automatic retries and failover. Other agents run directly."
+    : "When this agent delegates to Agent Runtime subagents, split runs across them with automatic retries and failover. Other subagents run directly.";
   const algorithmOptions = getAlgorithmOptions({ runtimeNoun, runtimeNouns });
 
   const isEnabled = value?.enabled === true;
@@ -309,59 +289,6 @@ export function SubagentLoadBalancingSection({
                 )}
               </div>
             )}
-
-            <div className="space-y-3 border-t pt-3">
-              <div className="space-y-1.5">
-                <Label htmlFor={retriesSelectId}>
-                  <span>{`Retries on same ${noun}`}</span>
-                </Label>
-                <Select
-                  value={String(currentConfig.retries)}
-                  disabled={readOnly}
-                  onValueChange={(retries) =>
-                    updateConfig({ retries: Number.parseInt(retries, 10) })
-                  }
-                >
-                  <SelectTrigger id={retriesSelectId} className="max-w-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RETRY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        <span>{option.label}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FieldDescription>
-                  <span>
-                    {`Retry a failed run on the same ${runtimeNoun} this many times after a temporary failure.`}
-                  </span>
-                </FieldDescription>
-              </div>
-
-              <div className="flex items-start justify-between gap-4 pt-1">
-                <div className="space-y-1">
-                  <Label htmlFor={fallbackSwitchId}>
-                    <span>{failoverLabel}</span>
-                  </Label>
-                  <FieldDescription>
-                    <span>
-                      {`When a run fails after retries, try the other ${runtimeNouns} one by one until one succeeds.`}
-                    </span>
-                  </FieldDescription>
-                </div>
-                <Switch
-                  id={fallbackSwitchId}
-                  aria-label={failoverLabel}
-                  checked={currentConfig.fallbackEnabled}
-                  disabled={readOnly}
-                  onCheckedChange={(fallbackEnabled) =>
-                    updateConfig({ fallbackEnabled })
-                  }
-                />
-              </div>
-            </div>
           </div>
         )}
       </div>

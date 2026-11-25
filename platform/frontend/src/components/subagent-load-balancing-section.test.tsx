@@ -100,20 +100,18 @@ beforeEach(() => {
 });
 
 describe("SubagentLoadBalancingSection", () => {
-  it("selects an algorithm from the Load Balancing dropdown and switches back to Disabled", async () => {
+  it("selects an algorithm from the Agent Runtime Delegation dropdown and switches back to Direct", async () => {
     const user = userEvent.setup();
     const { onChange } = renderSection(null);
 
     const select = screen.getByRole("combobox", {
       name: "Agent Runtime Delegation",
     });
-    expect(select).toHaveTextContent("Disabled");
+    expect(select).toHaveTextContent("Direct");
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
 
     await user.click(select);
-    expect(
-      screen.getByRole("option", { name: /Disabled/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Direct/ })).toBeInTheDocument();
     expect(
       screen.getByRole("option", { name: /Round robin/ }),
     ).toBeInTheDocument();
@@ -138,8 +136,8 @@ describe("SubagentLoadBalancingSection", () => {
     });
 
     await user.click(select);
-    await user.click(screen.getByRole("option", { name: /Disabled/ }));
-    expect(select).toHaveTextContent("Disabled");
+    await user.click(screen.getByRole("option", { name: /Direct/ }));
+    expect(select).toHaveTextContent("Direct");
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         enabled: false,

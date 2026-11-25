@@ -42,7 +42,7 @@ function getModeOptions(params: {
   return [
     {
       value: "disabled",
-      label: "Disabled",
+      label: "Direct",
       description: `Call each ${noun} directly.`,
     },
     {

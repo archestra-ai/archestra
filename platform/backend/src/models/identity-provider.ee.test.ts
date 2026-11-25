@@ -38,6 +38,95 @@ function createParams(
 
 describe("IdentityProviderModel", () => {
   describe("create", () => {
+    describe("by a service account", () => {
+      const serviceAccountUserId = "service-account:crossplane";
+      const unusedRegistrar = (
+        registerSSOProvider: ReturnType<typeof vi.fn>,
+      ) =>
+        ({ api: { registerSSOProvider } }) as unknown as Parameters<
+          typeof IdentityProviderModel.create
+        >[3];
+      const oktaProvider = (providerId: string) => ({
+        providerId,
+        issuer: "https://example.okta.com",
+        domain: "example.com",
+        userId: serviceAccountUserId,
+        oidcConfig: {
+          issuer: "https://example.okta.com",
+          pkce: true,
+          clientId: "archestra",
+          clientSecret: "secret",
+          skipDiscovery: true,
+          authorizationEndpoint: "https://example.okta.com/oauth2/v1/authorize",
+          tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+          jwksEndpoint: "https://example.okta.com/oauth2/v1/keys",
+          discoveryEndpoint: "",
+        },
+      });
+
+      test("creates the provider without a Better Auth session", async ({
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const registerSSOProvider = vi.fn();
+
+        const created = await IdentityProviderModel.create(
+          oktaProvider("okta-sa"),
+          org.id,
+          new Headers({ authorization: "Bearer federated-token" }),
+          unusedRegistrar(registerSSOProvider),
+        );
+
+        expect(registerSSOProvider).not.toHaveBeenCalled();
+        expect(created).toMatchObject({
+          providerId: "okta-sa",
+          issuer: "https://example.okta.com",
+          domain: "example.com",
+          organizationId: org.id,
+          userId: null,
+          domainVerified: true,
+        });
+        expect(created.oidcConfig?.clientId).toBe("archestra");
+      });
+
+      test("rejects a providerId that is already registered", async ({
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const registerSSOProvider = vi.fn();
+        await IdentityProviderModel.create(
+          oktaProvider("okta-dup"),
+          org.id,
+          new Headers(),
+          unusedRegistrar(registerSSOProvider),
+        );
+
+        await expect(
+          IdentityProviderModel.create(
+            oktaProvider("okta-dup"),
+            org.id,
+            new Headers(),
+            unusedRegistrar(registerSSOProvider),
+          ),
+        ).rejects.toMatchObject({ statusCode: 422 });
+      });
+
+      test("rejects a providerId Better Auth reserves", async ({
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+
+        await expect(
+          IdentityProviderModel.create(
+            oktaProvider("credential"),
+            org.id,
+            new Headers(),
+            unusedRegistrar(vi.fn()),
+          ),
+        ).rejects.toMatchObject({ statusCode: 422 });
+      });
+    });
+
     test("hydrates OIDC discovery before registering with Better Auth", async ({
       makeOrganization,
       makeUser,

@@ -17,8 +17,14 @@ import {
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { beforeEach, describe, expect, test } from "@/test";
+import { recordQueries } from "@/test/query-counter";
 import type { Agent } from "@/types";
-import { type ArchestraContext, executeArchestraTool, getAgentTools } from ".";
+import {
+  type ArchestraContext,
+  executeArchestraTool,
+  getAgentTools,
+  getListedAgentTools,
+} from ".";
 
 /** The delegation targets a surface offers, without the caller's own fork. */
 function delegationTargets(tools: Array<{ name: string }>) {
@@ -956,6 +962,135 @@ describe("Auto-mode subagent delegation", () => {
       "No delegation is configured",
     );
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("progressive subagent loading", () => {
+  /** A parent agent, a caller, and one other agent the caller can reach. */
+  async function setup(fixtures: {
+    makeOrganization: any;
+    makeUser: any;
+    makeMember: any;
+    makeAgent: any;
+  }) {
+    const { makeOrganization, makeUser, makeMember, makeAgent } = fixtures;
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "member" });
+    const parent = await makeAgent({
+      name: "Parent Agent",
+      agentType: "agent",
+      organizationId: organization.id,
+    });
+    const target = await makeAgent({
+      name: "Research Bot",
+      agentType: "agent",
+      organizationId: organization.id,
+    });
+    const context = {
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    };
+    return { parent, target, context };
+  }
+
+  /** The read of every agent the caller can delegate to. */
+  function delegationTargetReads(statements: string[]) {
+    return statements.filter(
+      (query) =>
+        query.includes('from "agents"') &&
+        query.includes('"runtime" IS NOT NULL'),
+    );
+  }
+
+  test("All agents lists only the fork and reads no delegation targets, while every target stays searchable", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { parent, target, context } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    await AgentModel.update(parent.id, { accessAllSubagents: true });
+    const targetName = `${AGENT_TOOL_PREFIX}${slugify(target.name)}`;
+
+    const listed = await recordQueries(() => getListedAgentTools(context));
+
+    expect(listed.result.map((tool) => tool.name)).toEqual([
+      SELF_FORK_TOOL_NAME,
+    ]);
+    expect(delegationTargetReads(listed.statements)).toHaveLength(0);
+    // search_tools and run_tool resolve the full set, which still has it.
+    const searchable = await recordQueries(() => getAgentTools(context));
+    expect(searchable.result.map((tool) => tool.name)).toContain(targetName);
+    // Proves the matcher sees the read the listed set must not make.
+    expect(delegationTargetReads(searchable.statements).length).toBeGreaterThan(
+      0,
+    );
+  });
+
+  test("Manual lists each assigned subagent until Progressive subagent loading is switched on", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const { parent, target, context } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      target.id,
+    );
+    await makeAgentTool(parent.id, delegationTool.id);
+
+    expect(
+      (await getListedAgentTools(context)).map((tool) => tool.name),
+    ).toEqual([SELF_FORK_TOOL_NAME, delegationTool.name]);
+
+    await AgentModel.update(parent.id, { progressiveSubagentLoading: true });
+
+    expect(
+      (await getListedAgentTools(context)).map((tool) => tool.name),
+    ).toEqual([SELF_FORK_TOOL_NAME]);
+    expect((await getAgentTools(context)).map((tool) => tool.name)).toContain(
+      delegationTool.name,
+    );
+  });
+
+  test("a progressively loaded subagent runs when dispatched by its name", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { parent, target, context } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    await AgentModel.update(parent.id, { accessAllSubagents: true });
+    mockExecuteA2AMessage.mockResolvedValueOnce({ text: "done" });
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+      { message: "Do the research." },
+      { agent: { id: parent.id, name: parent.name }, ...context },
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: target.id }),
+    );
   });
 });
 

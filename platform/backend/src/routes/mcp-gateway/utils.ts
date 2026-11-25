@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import {
+  AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_GROUPS,
   extractMcpExecutedAs,
@@ -19,6 +20,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   platformExecutedAs,
+  SELF_FORK_TOOL_NAME,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
@@ -59,7 +61,9 @@ import {
   filterToolNamesByPermission,
   getAgentTools,
   getArchestraMcpTools,
+  getListedAgentTools,
   getSkillDelegationTools,
+  loadsSubagentsProgressively,
 } from "@/archestra-mcp-server";
 import {
   getUnassignedDiscoverableTools,
@@ -446,8 +450,11 @@ export async function buildAgentMcpToolList(params: {
       ? { advertiseUiTools: false, keepChatOnlyTools: true }
       : { advertiseUiTools: true, keepChatOnlyTools: false };
 
+  // Progressively loaded subagents are reached through search_tools/run_tool
+  // like progressively loaded tools, so those two are listed for either.
+  const subagentsProgressive = loadsSubagentsProgressively(agent);
   const implicitMetaTools =
-    agent.toolExposureMode === "search_and_run_only"
+    agent.toolExposureMode === "search_and_run_only" || subagentsProgressive
       ? getImplicitArchestraMetaTools()
       : [];
 
@@ -456,35 +463,36 @@ export async function buildAgentMcpToolList(params: {
   // no agent_tools rows at all, and exclusions/user access apply in both
   // modes. Drop the raw delegation rows and splice in the resolved surface so
   // the gateway advertises the same delegation set the dispatch path accepts.
-  // Compact external gateways expose delegation through search/run only.
-  // Do not expand a potentially large caller-scoped surface only to discard
-  // it below. Internal chat still uses it to decide which run controls to offer.
+  // With progressive subagent loading that surface is the caller's fork at
+  // most: the rest is found with search_tools, and is not read here at all.
   const disallowOAuthApp = Boolean(
     tokenAuth?.oauthExecution ||
       (tokenAuth?.oauthClientId && !tokenAuth.isUserToken),
   );
-  const resolveDelegations =
+  // Compact external gateways expose skill delegation through search/run only.
+  const resolveSkillDelegations =
     agent.toolExposureMode !== "search_and_run_only" ||
     agent.agentType === "agent";
-  const [delegationTools, skillDelegationTools] = resolveDelegations
-    ? await Promise.all([
-        getAgentTools({
-          agentId,
-          organizationId: agent.organizationId,
-          userId: callerUserId,
-          lookups: params.lookups,
-          disallowOAuthApp,
-        }),
-        // Agent-designated skills surface as skill__<slug> delegation tools,
-        // resolved per calling user with the same env/access symmetry.
-        getSkillDelegationTools({
+  const [delegationTools, skillDelegationTools] = await Promise.all([
+    getListedAgentTools({
+      agentId,
+      organizationId: agent.organizationId,
+      userId: callerUserId,
+      lookups: params.lookups,
+      disallowOAuthApp,
+      caller: agent,
+    }),
+    // Agent-designated skills surface as skill__<slug> delegation tools,
+    // resolved per calling user with the same env/access symmetry.
+    resolveSkillDelegations
+      ? getSkillDelegationTools({
           agentId,
           organizationId: agent.organizationId,
           userId: tokenAuth?.userId,
           lookups: params.lookups,
-        }),
-      ])
-    : [[], []];
+        })
+      : [],
+  ]);
   const includeImplicitStartAgentRun =
     await callerUsesImplicitLoadBalancedRunStarter({
       agent,
@@ -496,9 +504,12 @@ export async function buildAgentMcpToolList(params: {
   const implicitTaskStarterTools = includeImplicitStartAgentRun
     ? getImplicitStartAgentRunTools()
     : [];
+  // An internal chat whose subagents are loaded progressively can still
+  // delegate to them, so it keeps its run controls without listing any.
   const hasTaskStarter =
     includeImplicitStartAgentRun ||
     delegationTools.length > 0 ||
+    (subagentsProgressive && agent.agentType === "agent") ||
     mcpTools.some(
       (tool) =>
         archestraMcpBranding.getToolShortName(tool.name) ===
@@ -556,6 +567,7 @@ export async function buildAgentMcpToolList(params: {
           annotations: (tool.annotations ?? {}) as Record<string, unknown>,
           _meta: tool._meta,
         },
+        delegation: true,
       })),
     ].map(toMcpListTool),
   );
@@ -572,6 +584,7 @@ export async function buildAgentMcpToolList(params: {
     internalChat: agent.agentType === "agent",
     advertiseUiResourceTools: surface.advertiseUiTools,
     autoToolMode: agent.accessAllTools,
+    subagentsProgressive,
     tools: candidateTools.filter((t) => permittedNames.has(t.name)),
   });
   const permittedTools = surface.keepChatOnlyTools
@@ -644,6 +657,20 @@ export async function buildAgentMcpToolList(params: {
   const listSkillsName = archestraMcpBranding.getToolName(
     TOOL_LIST_SKILLS_SHORT_NAME,
   );
+  const subagentSearchHint =
+    advertisesSearchTools && subagentsProgressive
+      ? await buildSubagentSearchHint({
+          agent,
+          // The assigned rows are already in hand, so an agent with no Manual
+          // subagent pays nothing to learn there is none to name.
+          hasAssignedSubagents: mcpTools.some(
+            (tool) => tool.delegateToAgentId || tool.delegateToA2aConnectionId,
+          ),
+          userId: callerUserId,
+          lookups: params.lookups,
+          disallowOAuthApp,
+        })
+      : null;
   const [kbToolDescription, searchToolsDescription, skillPreview] =
     await Promise.all([
       buildKnowledgeSourcesDescription(
@@ -670,6 +697,7 @@ export async function buildAgentMcpToolList(params: {
             organizationId: tokenAuth?.organizationId,
             prefetchedCatalogs: catalogsById,
             lookups: params.lookups,
+            subagentSearchHint,
           })
         : null,
       permittedTools.some((tool) => tool.name === listSkillsName) &&
@@ -2740,6 +2768,7 @@ function filterExposedTools(params: {
   internalChat: boolean;
   advertiseUiResourceTools: boolean;
   autoToolMode: boolean;
+  subagentsProgressive: boolean;
   tools: McpListToolCandidate[];
 }) {
   const {
@@ -2747,6 +2776,7 @@ function filterExposedTools(params: {
     internalChat,
     advertiseUiResourceTools,
     autoToolMode,
+    subagentsProgressive,
     tools,
   } = params;
   return tools.filter((tool) => {
@@ -2772,8 +2802,12 @@ function filterExposedTools(params: {
     // model discovers those tools with search_tools instead. A Custom-mode
     // agent advertises the UI tools it explicitly assigns, a bounded set the
     // operator chose. `full` mode hides only the meta tools.
+    // Subagents follow their own setting, not this one: a listed `agent__…`
+    // tool stays whatever the tools do, and while subagents are loaded
+    // progressively the meta tools stay so they can be reached.
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
+          (tool.delegation && isAgentTool(tool.name)) ||
           (openappaEnabled() &&
             isOpenappaTool(shortName) &&
             (internalChat || ALWAYS_LOADED_SHORT_NAMES.has(shortName ?? ""))) ||
@@ -2785,7 +2819,7 @@ function filterExposedTools(params: {
           (advertiseUiResourceTools &&
             !autoToolMode &&
             providesUiResource(tool))
-      : !isArchestraMetaTool(tool.name);
+      : subagentsProgressive || !isArchestraMetaTool(tool.name);
   });
 }
 
@@ -2809,6 +2843,8 @@ type McpListToolCandidate = {
   };
   /** A platform built-in by catalog provenance, never by name. */
   builtIn: boolean;
+  /** A delegation tool the agent lists, never an upstream tool named like one. */
+  delegation: boolean;
 };
 
 function toMcpListTool(tool: {
@@ -2823,6 +2859,7 @@ function toMcpListTool(tool: {
     outputSchema?: unknown;
   } | null;
   builtIn?: boolean;
+  delegation?: boolean;
   annotations?: Record<string, unknown>;
 }): McpListToolCandidate {
   const builtIn =
@@ -2841,6 +2878,7 @@ function toMcpListTool(tool: {
       ? { ...tool.meta, annotations }
       : (tool.meta ?? undefined),
     builtIn,
+    delegation: tool.delegation === true,
   };
 }
 
@@ -3061,6 +3099,8 @@ async function buildSearchToolsDescription(params: {
     ReturnType<typeof InternalMcpCatalogModel.getByIds>
   >;
   lookups?: RequestLookups;
+  /** How to find progressively loaded subagents, when the agent has them. */
+  subagentSearchHint?: string | null;
 }) {
   const {
     agentId,
@@ -3133,6 +3173,7 @@ async function buildSearchToolsDescription(params: {
   const baseDescription = [
     searchTool.description,
     builtInSummary,
+    params.subagentSearchHint,
     knowledgeInstruction,
     runtimeInstruction,
   ]
@@ -3255,6 +3296,48 @@ function summarizeDeferredBuiltIns(params: {
     deferredShortNames.has(shortName) ? [`'${query}'`] : [],
   );
   return `Available built-in capabilities to discover: ${labels.join(", ")}.${examples.length > 0 ? ` Search by action, for example ${examples.join(", ")}.` : ""} Use run_tool with the returned tool name and arguments.`;
+}
+
+/** How many assigned subagents the search_tools description names. */
+const MAX_NAMED_SUBAGENTS_IN_SEARCH_HINT = 20;
+
+/**
+ * Tells the model its subagents are found with search_tools, since with
+ * progressive subagent loading none is listed. Manual subagents are a set
+ * someone chose, so they are named; "All agents" is every agent the caller can
+ * access, so it only says how to list them.
+ */
+async function buildSubagentSearchHint(params: {
+  agent: GatewayAgent;
+  hasAssignedSubagents: boolean;
+  userId?: string;
+  lookups?: RequestLookups;
+  disallowOAuthApp: boolean;
+}): Promise<string | null> {
+  const { agent } = params;
+  const howToList = `list them with mode: "regex" and query: "^${AGENT_TOOL_PREFIX}"`;
+  if (agent.accessAllSubagents) {
+    return `Agents to delegate work to are found here too, as tools named ${AGENT_TOOL_PREFIX}<name>: search by what the agent does, or ${howToList}.`;
+  }
+  if (!params.hasAssignedSubagents) return null;
+  const names = (
+    await getAgentTools({
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      userId: params.userId,
+      lookups: params.lookups,
+      disallowOAuthApp: params.disallowOAuthApp,
+    })
+  )
+    .map((tool) => tool.name)
+    .filter((name) => name !== SELF_FORK_TOOL_NAME);
+  if (names.length === 0) return null;
+  const named = names.slice(0, MAX_NAMED_SUBAGENTS_IN_SEARCH_HINT);
+  const rest =
+    names.length > named.length
+      ? ` and ${names.length - named.length} more (${howToList})`
+      : "";
+  return `Agents to delegate work to are found here too: ${named.join(", ")}${rest}.`;
 }
 
 // One-line, length-capped rendering of a catalog's own description for

@@ -84,6 +84,19 @@ function recordToolCallLifecycle(
   }
 }
 
+/**
+ * Whether an abort names its own cause. A stop (the user's, or a run whose
+ * row is gone) aborts with no reason, which the platform fills with its
+ * standard AbortError. An abort that carries another error says why the run
+ * ended, and that is a failure, not a stop.
+ */
+export function isAbortWithCause(signal: AbortSignal): boolean {
+  const { reason } = signal;
+  return (
+    signal.aborted && reason instanceof Error && reason.name !== "AbortError"
+  );
+}
+
 /** True when a tool call never finished streaming its input — the tracker's unresolved case. */
 export function hasUnfinishedToolInput(message: UIMessage): boolean {
   return message.parts.some(

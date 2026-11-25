@@ -184,7 +184,45 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
     await expectNoSseRetriesAfterDisconnect(upstream);
   });
 
-  test("a stale tool-call retry keeps the elicitation limit of one and its own handler", async ({
+  test("calls that ask the user take turns on a connection every caller shares", async ({
+    makeUser,
+  }) => {
+    upstream = await startSessionServer({ elicit: true });
+    upstream.setValidToken("token-0");
+    const { agent, user } = await installOAuthServer({
+      makeUser,
+      url: upstream.url,
+      expiresAt: Date.now() + 8 * 3_600_000,
+    });
+    const questions: { handler: number; tool: number }[] = [];
+
+    // No conversation owns this connection: every caller of the install is
+    // on it, as on the MCP gateway. One caller's question must never reach
+    // another, so these calls do not overlap.
+    expect(
+      await fanOut({
+        agentId: agent.id,
+        userId: user.id,
+        count: 3,
+        elicitationHandler: (index) => async (request) => {
+          questions.push({
+            handler: index,
+            tool: Number(request.params.message),
+          });
+          return { action: "accept", content: { index } };
+        },
+      }),
+    ).toEqual([]);
+
+    expect(upstream.activity.maxToolCalls).toBe(1);
+    expect(questions).toEqual([
+      { handler: 0, tool: 0 },
+      { handler: 1, tool: 1 },
+      { handler: 2, tool: 2 },
+    ]);
+  });
+
+  test("a conversation's calls that ask the user run in parallel, and each question reaches its own call", async ({
     makeUser,
   }) => {
     const questionStarted = gate();
@@ -199,16 +237,6 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
       url: upstream.url,
       expiresAt: Date.now() + 8 * 3_600_000,
     });
-    const limiter = vi.spyOn(
-      (
-        mcpClient as unknown as {
-          connectionLimiter: {
-            runWithLimit: (...args: unknown[]) => Promise<unknown>;
-          };
-        }
-      ).connectionLimiter,
-      "runWithLimit",
-    );
     const questions: { handler: number; tool: number }[] = [];
     const elicitationHandler =
       (index: number): McpElicitationHandler =>
@@ -229,9 +257,12 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
         userId: user.id,
         count: 1,
         elicitationHandler,
+        conversationId: "conversation-1",
       }),
     ];
     try {
+      // The first call lost its session, retried, and now waits on its
+      // question. The others must not wait for it.
       await questionStarted.promise;
       calls.push(
         fanOut({
@@ -240,30 +271,72 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
           startIndex: 1,
           count: FAN_OUT - 1,
           elicitationHandler,
+          conversationId: "conversation-1",
         }),
       );
-      await vi.waitFor(() => expect(limiter).toHaveBeenCalledTimes(FAN_OUT));
-      expect(upstream.activity.toolAttempts).toEqual([0, 0]);
-      expect(upstream.activity.initializations).toBe(2);
-      expect(questions).toEqual([{ handler: 0, tool: 0 }]);
+      await vi.waitFor(() =>
+        expect(upstream?.elicitationAnswers).toHaveLength(FAN_OUT - 1),
+      );
+      expect(questions).toHaveLength(FAN_OUT);
     } finally {
       releaseQuestion.resolve();
       await Promise.all(calls);
     }
     expect(await Promise.all(calls)).toEqual([[], []]);
-    expect(upstream.activity.maxToolCalls).toBe(1);
+    expect(upstream.activity.maxToolCalls).toBeGreaterThan(1);
+    expect(upstream.activity.maxToolCalls).toBeLessThanOrEqual(4);
     expect(upstream.activity.expiredToolCalls).toBe(1);
-    expect(upstream.activity.toolAttempts).toEqual([0, 0, 1, 2, 3, 4, 5]);
-    expect(questions).toEqual(
+    // Every question went to the handler of the call that caused it, and
+    // every answer went back to that call.
+    const byIndex = <T extends { tool?: number; index?: number }>(items: T[]) =>
+      items.toSorted(
+        (a, b) => (a.tool ?? a.index ?? 0) - (b.tool ?? b.index ?? 0),
+      );
+    expect(byIndex(questions)).toEqual(
       Array.from({ length: FAN_OUT }, (_, index) => ({
         handler: index,
         tool: index,
       })),
     );
-    expect(upstream.elicitationAnswers).toEqual(
+    expect(byIndex(upstream.elicitationAnswers)).toEqual(
       Array.from({ length: FAN_OUT }, (_, index) => ({ index, answer: index })),
     );
     await expectNoSseRetriesAfterDisconnect(upstream);
+  });
+
+  test("calls past the connection's limit are told they wait, and again when they start", async ({
+    makeUser,
+  }) => {
+    upstream = await startSessionServer();
+    upstream.setValidToken("token-0");
+    const { agent, user } = await installOAuthServer({
+      makeUser,
+      url: upstream.url,
+      expiresAt: Date.now() + 8 * 3_600_000,
+    });
+    const events: string[] = [];
+
+    expect(
+      await fanOut({
+        agentId: agent.id,
+        userId: user.id,
+        onQueueChange: (index, queued) =>
+          events.push(`${index} ${queued ? "queued" : "started"}`),
+      }),
+    ).toEqual([]);
+
+    // Four run at once; the fifth and sixth wait, and say so. The four that
+    // started at once hear nothing.
+    expect(upstream.activity.maxToolCalls).toBe(4);
+    expect(events.toSorted()).toEqual([
+      "4 queued",
+      "4 started",
+      "5 queued",
+      "5 started",
+    ]);
+    expect(events.indexOf("4 queued")).toBeLessThan(
+      events.indexOf("4 started"),
+    );
   });
 
   test("a delayed old-session 404 after recovery preserves the replacement session and client", async ({
@@ -517,6 +590,9 @@ async function fanOut(params: {
   startIndex?: number;
   contexts?: string[];
   elicitationHandler?: (index: number) => McpElicitationHandler;
+  onQueueChange?: (index: number, queued: boolean) => void;
+  /** The conversation that owns the connection, as a chat call has. */
+  conversationId?: string;
 }) {
   const results = await Promise.all(
     Array.from({ length: params.count ?? FAN_OUT }, async (_, offset) => {
@@ -538,9 +614,20 @@ async function fanOut(params: {
             ? { "X-Mcp-Context": params.contexts[index] }
             : undefined,
         },
-        params.elicitationHandler
-          ? { elicitationHandler: params.elicitationHandler(index) }
-          : undefined,
+        {
+          ...(params.conversationId
+            ? { conversationId: params.conversationId }
+            : {}),
+          ...(params.elicitationHandler
+            ? { elicitationHandler: params.elicitationHandler(index) }
+            : {}),
+          ...(params.onQueueChange
+            ? {
+                onQueueChange: (queued: boolean) =>
+                  params.onQueueChange?.(index, queued),
+              }
+            : {}),
+        },
       );
     }),
   );

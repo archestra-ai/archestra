@@ -621,6 +621,46 @@ test("reapStaleRuns fails runs past the stale cutoff", async ({
   );
 });
 
+test("wasStopRequested is true only for a run someone asked to stop", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const runId = run?.id ?? "";
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    20,
+  );
+
+  expect(await service.wasStopRequested(runId)).toBe(false);
+
+  await service.requestStop({
+    conversationId: conversation.id,
+    organizationId: organization.id,
+  });
+  expect(await service.wasStopRequested(runId)).toBe(true);
+
+  // A run whose row is gone aborts its stream too, and nobody stopped it.
+  await db
+    .delete(schema.chatActiveRunsTable)
+    .where(eq(schema.chatActiveRunsTable.id, runId));
+  expect(await service.wasStopRequested(runId)).toBe(false);
+});
+
 test("startStopPolling aborts when the run row no longer exists", async ({
   makeAgent,
   makeConversation,

@@ -99,6 +99,12 @@ export interface ChatSession {
    */
   mcpTasks: Record<string, McpTaskPartData>;
   /**
+   * Tool calls that wait for a free place on their server before they start.
+   * State for the same reason as `mcpTasks`: the backend streams the signal
+   * transiently, and it describes the moment, so history never has it.
+   */
+  queuedToolCallIds: ReadonlySet<string>;
+  /**
    * True while the session is auto-recovering from a transient stream failure
    * (auto-retry scheduled or reattaching to the still-running response).
    * The UI should not surface the error while this is set — the recovery

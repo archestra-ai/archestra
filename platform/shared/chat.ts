@@ -338,12 +338,32 @@ export interface McpTaskPartData {
   errorText?: string;
 }
 
+/**
+ * Type of the part that says a tool call is waiting for its turn. A server
+ * runs a few calls at a time (one for a stdio server), so a call past that
+ * number waits for a free place before it reaches the server. Sent
+ * transiently: it describes the moment, so it is never persisted and never
+ * reaches the model.
+ */
+export const TOOL_QUEUE_PART_TYPE = "data-tool-queue";
+
+/** The `data` payload of a {@link TOOL_QUEUE_PART_TYPE} part. */
+export interface ToolQueuePartData {
+  /** The tool call that waits, or that stopped waiting. */
+  toolCallId: string;
+  /** True while the call waits; false once it has started. */
+  queued: boolean;
+}
+
 // Control/telemetry parts the chat UI skips and providers never see. An
 // assistant turn left with only these (e.g. a `step-start` after a dangling
 // tool call is stripped) renders nothing, so it must not count as content.
 // `data-tool-ui-start` is deliberately absent — the UI renders it as an MCP app.
 const NON_RENDERABLE_ASSISTANT_PART_TYPES: ReadonlySet<string> = new Set([
   "step-start",
+  // The mark a stopped turn carries (TURN_STOPPED_PART_TYPE): it renders
+  // nothing by itself.
+  "data-turn-stopped",
   "data-token-usage",
   "data-heartbeat",
   "data-context-window-estimate",

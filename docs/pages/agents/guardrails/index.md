@@ -82,7 +82,7 @@ Guardrails run in one of three states:
 - **Observe:** every call is checked and every label change is recorded, but the platform applies the remedy plan for the agent: it gives the approvals and accepts the restrictions, so the agent keeps working. Use it to see what your policy would block before you enforce it. Approvals for `enforcedMarks` and for tools tagged `enforced` still wait as in Enforce, and a call that no plan can lift, such as one marked `blocked`, is still refused.
 - **Enforce:** a blocked call waits until the agent or a person applies a remedy plan. Saving the first policy starts Enforce, unless you already chose a state.
 
-The switch turns Guardrails off, and back on in Enforce. A session keeps Observe or Enforce from the moment it starts, and its subagents follow it, so a change between the two applies to sessions that start after it.
+The switch turns Guardrails off, and back on in Enforce. A session keeps Observe or Enforce from the moment it starts, and its subagents and forks follow it, so a change between the two applies to sessions that start after it.
 
 Set the state with [`PUT /api/guardrails-deployment`](/docs/reference/api/llm-proxy#tag/guardrails/PUT/api/guardrails-deployment):
 

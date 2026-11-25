@@ -202,10 +202,10 @@ test("an administrator sees both account cards on the Claude Code runtime with n
   await expect(
     accounts.getByRole("checkbox", { name: /A company API key/ }),
   ).toBeChecked();
-  // The rule reaches every agent on save; the update is for the rest.
+  // The rule reaches every agent on save; the update is for the limits.
   await expect(
     dialog.getByText(
-      "Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here. The container image updates with each release, for every agent.",
+      "Allowed accounts apply to every agent on this runtime as soon as you save. Limit changes apply to new agents, and to existing agents once you update them here.",
     ),
   ).toBeVisible();
 

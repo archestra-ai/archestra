@@ -368,10 +368,16 @@ describe("RuntimeTemplateSection", () => {
     expect(
       within(dialog).getByText("Locked to a company API key"),
     ).toBeVisible();
-    // Accounts reach every agent on save; the update is for the rest.
+    // The image follows each release by itself; only limits are editable.
     expect(
       within(dialog).getByText(
-        "Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here. The container image updates with each release, for every agent.",
+        "Updates automatically for every agent with each Test Platform release. It can't be changed.",
+      ),
+    ).toBeInTheDocument();
+    // Accounts reach every agent on save; the update is for the limits.
+    expect(
+      within(dialog).getByText(
+        "Allowed accounts apply to every agent on this runtime as soon as you save. Limit changes apply to new agents, and to existing agents once you update them here.",
       ),
     ).toBeInTheDocument();
     await user.type(
@@ -412,10 +418,10 @@ describe("RuntimeTemplateSection", () => {
       screen.getByRole("dialog", { name: "Edit Claude Code runtime" }),
     ).toBe(dialog);
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-    // The update names the limits it brings, and leaves the image alone.
+    // The update names the limits it brings.
     expect(
       within(dialog).getByText(
-        "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier. It does not change the container image.",
+        "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier.",
       ),
     ).toBeInTheDocument();
     await user.click(

@@ -438,6 +438,7 @@ export function BuiltInRuntimeDialog({
   onSave: (value: BuiltInRuntime, onSaved: () => void) => void;
 }) {
   const name = AGENT_CATALOG_NAMES[id];
+  const appName = useAppName();
   const [section, setSection] = useState<Section>("general");
   const [initial, setInitial] = useState<AgentRuntimeConfig>(() =>
     withAgentRuntimeDefaults({
@@ -579,7 +580,8 @@ export function BuiltInRuntimeDialog({
                 {image}
               </code>
               <p className="text-sm text-muted-foreground">
-                Kept up to date with each release. It can't be changed.
+                Updates automatically for every agent with each {appName}{" "}
+                release. It can't be changed.
               </p>
             </div>
           </SettingsSection>
@@ -649,7 +651,9 @@ function AccessSection({ scope }: { scope: string | null }) {
  * A runtime's account rule holds for every agent on it as soon as it is
  * saved. Its other settings only change agents created afterwards: this
  * brings the agents created before up to date with those, on request. The
- * section says which settings that is, and what happens to the image.
+ * section says which settings that is. For a built-in runtime only the
+ * limits change this way; the Container section already explains that its
+ * image follows each release.
  */
 function ExistingAgentsSection({
   runtimeId,
@@ -664,8 +668,9 @@ function ExistingAgentsSection({
   name: string;
   /**
    * A built-in runtime's image follows each release by itself: an update
-   * gives agents its limits only. A custom runtime's update also gives them
-   * its image, launch command, inference API and follow-up delivery.
+   * gives agents its limits only, and the copy names those limits. A custom
+   * runtime's update also gives them its image, launch command, inference
+   * API and follow-up delivery.
    */
   builtIn: boolean;
   blockedReason: string | null;
@@ -677,7 +682,11 @@ function ExistingAgentsSection({
   return (
     <SettingsSection
       title="Existing agents"
-      description={`Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here.${builtIn ? " The container image updates with each release, for every agent." : ""}`}
+      description={
+        builtIn
+          ? "Allowed accounts apply to every agent on this runtime as soon as you save. Limit changes apply to new agents, and to existing agents once you update them here."
+          : "Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here."
+      }
     >
       <div ref={anchor}>
         {blockedReason ? (
@@ -701,7 +710,7 @@ function ExistingAgentsSection({
               </p>
               <p className="text-sm text-muted-foreground">
                 {builtIn
-                  ? "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier. It does not change the container image."
+                  ? "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier."
                   : "Updating gives them the saved container image, launch command, inference API, follow-up delivery and limits (idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier). Their own environment variables, credentials and ports stay as they are."}
               </p>
             </div>

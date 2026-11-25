@@ -166,14 +166,9 @@ export function SubagentLoadBalancingSection({
           <Scale className="h-4 w-4" />
         </SettingIcon>
         <div className="min-w-0 flex-1 space-y-0.5">
-          <div className="flex items-center gap-2">
-            <Label htmlFor={modeSelectId}>
-              <span>Load Balancing</span>
-            </Label>
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-              Beta
-            </Badge>
-          </div>
+          <Label htmlFor={modeSelectId}>
+            <span>Load Balancing</span>
+          </Label>
           <FieldDescription>
             <span>{sectionDescription}</span>
           </FieldDescription>

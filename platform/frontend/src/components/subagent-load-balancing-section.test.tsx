@@ -215,6 +215,7 @@ describe("SubagentLoadBalancingSection", () => {
     );
 
     expect(screen.getByText("Load Balancing")).toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
     expect(
       screen.getByText(
         "When this agent delegates to Agent Runtime subagents, split runs across them with automatic retries and failover. Other subagents run directly.",

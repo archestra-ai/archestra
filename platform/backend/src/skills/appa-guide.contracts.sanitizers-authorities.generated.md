@@ -185,7 +185,7 @@ Authorities can use built-in handlers, HTTP endpoints, or local executables. Con
 | `builtin = "hitl"` | Routes requests to an interactive human reviewer displaying call details and requested exceptions. |
 | `builtin = "approve"` | Automatically approves matching requests within `permits`. If a blocked call requires only automatic approvals, OpenAPPA applies them transparently without interrupting the agent. (Plans requiring narrowing acceptance are still returned to the agent.) |
 | `builtin = "claude-code"` or `builtin = "llm"` | Uses an LLM to evaluate approval requests against the declaration and unmet preconditions. |
-| `builtin = "<module>"` | Executes a shared library module loaded from `--modules-dir`. |
+| `builtin = "<module>"` | Executes a shared library module loaded from `--modules-dir`. The module runs in the OpenAPPA process with no time limit. |
 | `url` or `command` | Dispatches approval requests to an external service or executable. |
 
 All authority implementations, including automatic approvers, remain strictly constrained by declared `permits`.

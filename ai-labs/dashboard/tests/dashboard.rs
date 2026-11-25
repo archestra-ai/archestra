@@ -1,6 +1,7 @@
 //! Loader and route tests over the real fixture experiments dir (no mocks: real files on disk).
 
-use std::path::PathBuf;
+use std::fs::{File, FileTimes};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use bench_dashboard::load::{ReduceSource, RubricKey, RubricStatus, list_runs, load_run};
@@ -9,13 +10,20 @@ fn fixtures() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/experiments");
     // Checkouts flatten mtimes, so pin the ordering the loader is supposed to observe: run_a's
     // newer rubric file really is newer, and run_a's dir is more recent than run_b's.
-    let now = filetime::FileTime::from_system_time(SystemTime::now());
-    let older = filetime::FileTime::from_system_time(SystemTime::now() - Duration::from_secs(3600));
-    filetime::set_file_mtime(dir.join("run_a/trajectory_rubrics_20260101-000000.jsonl"), older).unwrap();
-    filetime::set_file_mtime(dir.join("run_a/trajectory_rubrics_20260701-120000.jsonl"), now).unwrap();
-    filetime::set_file_mtime(dir.join("run_b"), older).unwrap();
-    filetime::set_file_mtime(dir.join("run_a"), now).unwrap();
+    let now = SystemTime::now();
+    let older = now - Duration::from_secs(3600);
+    set_mtime(&dir.join("run_a/trajectory_rubrics_20260101-000000.jsonl"), older);
+    set_mtime(&dir.join("run_a/trajectory_rubrics_20260701-120000.jsonl"), now);
+    set_mtime(&dir.join("run_b"), older);
+    set_mtime(&dir.join("run_a"), now);
     dir
+}
+
+fn set_mtime(path: &Path, mtime: SystemTime) {
+    File::open(path)
+        .unwrap()
+        .set_times(FileTimes::new().set_modified(mtime))
+        .unwrap();
 }
 
 // ---------------------------------------------------------------------------

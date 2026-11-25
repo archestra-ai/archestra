@@ -4,6 +4,7 @@ import { MODEL_POOL_RETRY_DEFAULTS } from "@archestra/shared/model-pool-retries"
 import { Info, Layers, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { AdvancedSection } from "@/components/advanced-section";
 import { FormDialog } from "@/components/form-dialog";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,18 @@ export function PoolDialog({
       ) : null}
     </>
   );
+  const failoverFields = (
+    <>
+      <TimeoutFields form={form} disabled={disabled} />
+      <RetryFields form={form} disabled={disabled} />
+      <MemberRetryOverrides
+        form={form}
+        options={options}
+        disabled={disabled}
+        savedMembers={live?.members ?? []}
+      />
+    </>
+  );
   const saveButton = (
     <Button
       type="submit"
@@ -180,14 +193,7 @@ export function PoolDialog({
           {fields}
         </div>
         <div hidden={activeSection !== "failover"} className="space-y-6">
-          <TimeoutFields form={form} disabled={disabled} />
-          <RetryFields form={form} disabled={disabled} />
-          <MemberRetryOverrides
-            form={form}
-            options={options}
-            disabled={disabled}
-            savedMembers={live?.members ?? []}
-          />
+          {failoverFields}
         </div>
         {activeSection === "connect" && (
           <PoolConnectSection pool={live ?? pool} />
@@ -207,7 +213,12 @@ export function PoolDialog({
       isDirty={isDirty}
     >
       <form onSubmit={onSubmit} className="flex min-h-0 flex-col">
-        <DialogBody className="space-y-6">{fields}</DialogBody>
+        <DialogBody className="space-y-6">
+          {fields}
+          <AdvancedSection keepMounted>
+            <div className="space-y-6">{failoverFields}</div>
+          </AdvancedSection>
+        </DialogBody>
         <DialogStickyFooter className="mt-0">
           {options.availableKeys.length === 0 ? (
             <p className="mr-auto text-xs text-muted-foreground">

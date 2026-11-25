@@ -700,8 +700,15 @@ async function reportResult(
       return {
         updated_mcp_tool_output: `[${unchecked} Its result is withheld. ${ran}]`,
       };
+    // One of Cursor's own tools has reached the model unchecked, so nothing
+    // the chat does next can be vouched for.
+    await cacheManager.set<UnvouchedReason>(
+      unvouchedChatKey(session),
+      "failed",
+      UNVOUCHED_CHAT_LIFETIME_MS,
+    );
     return {
-      additional_context: `${unchecked} Treat that result as unchecked. ${ran}`,
+      additional_context: `${unchecked} Treat that result as unchecked. ${ran} ${UNVOUCHED_CHAT_REFUSAL("failed")}`,
     };
   }
   const update = toolResultUpdates[id];
@@ -783,9 +790,10 @@ const OUTPUT_SANITIZER_REFUSAL = () =>
 
 /**
  * Why nothing a chat does next can be vouched for: it read a result the
- * runtime withheld, or one the hook could only hand over in part.
+ * runtime withheld, one the hook could only hand over in part, or one whose
+ * check failed.
  */
-type UnvouchedReason = "withheld" | "unchecked";
+type UnvouchedReason = "withheld" | "unchecked" | "failed";
 
 // `true` is what a chat was marked with before the reasons were told apart.
 const UNVOUCHED_CHAT_REFUSAL = (reason: UnvouchedReason | true = "withheld") =>
@@ -793,7 +801,9 @@ const UNVOUCHED_CHAT_REFUSAL = (reason: UnvouchedReason | true = "withheld") =>
   " refuses the tool calls of this chat: it read a tool result " +
   (reason === "unchecked"
     ? "that was too large to check, and Cursor gives its own tools' results to you before they are checked. "
-    : "that your organization's policy required to be withheld, which Cursor does not allow for its own tools. ") +
+    : reason === "failed"
+      ? "that Guardrails could not check, and Cursor gives its own tools' results to you before they are checked. "
+      : "that your organization's policy required to be withheld, which Cursor does not allow for its own tools. ") +
   "Tell the user to continue in a new chat.";
 
 const OWN_TOOL_OFFER_LIFETIME_MS = TimeInMs.Day;

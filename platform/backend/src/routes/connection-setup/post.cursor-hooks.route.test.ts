@@ -1163,6 +1163,7 @@ describe("Cursor hooks report chats to Guardrails", () => {
     const contexts = [];
     for (const output of ["UNRULED", "UNRULED_TRANSIENT"]) {
       const unchecked = await report("postToolUse", {
+        conversation_id: "chat-unchecked",
         tool_use_id: "call-7",
         tool_name: "Read",
         tool_input: { path: "notes.md" },
@@ -1172,9 +1173,19 @@ describe("Cursor hooks report chats to Guardrails", () => {
       contexts.push(unchecked.json().additional_context);
     }
     expect(contexts[0]).toMatch(
-      /could not check the result of tool call call-7:Read:[0-9a-f]{12}\. Treat that result as unchecked\. The call already ran: do not make it again\.$/,
+      /could not check the result of tool call call-7:Read:[0-9a-f]{12}\. Treat that result as unchecked\. The call already ran: do not make it again\./,
     );
     expect(contexts[1]).toBe(contexts[0]);
+    const next = await report("preToolUse", {
+      conversation_id: "chat-unchecked",
+      tool_use_id: "call-9",
+      tool_name: "Read",
+      tool_input: { path: "other.md" },
+    });
+    expect(
+      next.json().permission,
+      "the chat read an unchecked result, so its next call is refused",
+    ).toBe("deny");
     const mcp = await report("postToolUse", {
       tool_use_id: "call-8",
       tool_name: "MCP:docs__search",

@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.4.39](https://github.com/archestra-ai/archestra/compare/platform-v1.4.38...platform-v1.4.39) (2026-11-25)
+
+
+### Features
+
+* **agents:** each person chooses an Agent Runtime agent's account (backport release/1.4) ([#11126](https://github.com/archestra-ai/archestra/issues/11126)) ([bbd95ac](https://github.com/archestra-ai/archestra/commit/bbd95ac495be646bddc43a6a04841678d06639a0))
+* **openappa:** install, change, remove and inspect batteries from their dialog under Git sync (backport release/1.4) ([#11208](https://github.com/archestra-ai/archestra/issues/11208)) ([d04d1e1](https://github.com/archestra-ai/archestra/commit/d04d1e1658cf6e4f53156de8dd3d7d1922664d27))
+
+
+### Bug Fixes
+
+* **agent-runtimes:** polish account setup, copy, and Claude Code subscription card [1.4] ([#11206](https://github.com/archestra-ai/archestra/issues/11206)) ([37f79c0](https://github.com/archestra-ai/archestra/commit/37f79c0b47725c0354ffba4ab6c7a1be4d16ffd2))
+* **auth:** match IdP token emails to users case-insensitively (backport release/1.4) ([#11262](https://github.com/archestra-ai/archestra/issues/11262)) ([05c34f0](https://github.com/archestra-ai/archestra/commit/05c34f062d357af9fb3bf5b49b3498d831f64228))
+* **chat:** keep quiet active-run replays alive (backport release/1.4) ([#10594](https://github.com/archestra-ai/archestra/issues/10594)) ([0f55f77](https://github.com/archestra-ai/archestra/commit/0f55f778f026d027d25191f7569bd4651bd622c6))
+* **chat:** recognize Safari network failures (backport release/1.4) ([#10596](https://github.com/archestra-ai/archestra/issues/10596)) ([e0caf8a](https://github.com/archestra-ai/archestra/commit/e0caf8a8905215d8600032d448d37a7f90bf26cb))
+* **chat:** show each tool call's real state and run parallel calls in parallel (backport release/1.4) ([#11216](https://github.com/archestra-ai/archestra/issues/11216)) ([64c19a1](https://github.com/archestra-ai/archestra/commit/64c19a1e6d059cacff39d56f34d5067128057cd5))
+* **deps:** bump the Go modules pinned in Dockerfiles (release/1.4) ([#11133](https://github.com/archestra-ai/archestra/issues/11133)) ([b9e8006](https://github.com/archestra-ai/archestra/commit/b9e80063f5a667d76f5c041f374f1aa2deaa52d7))
+* **deps:** bump the Go modules pinned in Dockerfiles (release/1.4) ([#11221](https://github.com/archestra-ai/archestra/issues/11221)) ([07430cb](https://github.com/archestra-ai/archestra/commit/07430cb9e7b04fb7846153a27ec08b5f6ef9fb20))
+* **mcp:** deduplicate resolved egress domains (backport release/1.4) ([#10600](https://github.com/archestra-ai/archestra/issues/10600)) ([fe3ec45](https://github.com/archestra-ai/archestra/commit/fe3ec45a0b27a8ee5cb64a1ac3e436a3139d92af))
+* **openappa:** keep proxy turn guidance after the Claude Code cache breakpoint [1.4] ([#11176](https://github.com/archestra-ai/archestra/issues/11176)) ([04beb32](https://github.com/archestra-ai/archestra/commit/04beb320eb6c2b0a5c05d8eae4848f83bb5e4c86))
+* **pricing:** prefer exact Bedrock profile rates (backport release/1.4) ([#10598](https://github.com/archestra-ai/archestra/issues/10598)) ([501c929](https://github.com/archestra-ai/archestra/commit/501c929d17492defa29b264a445bc54a8062df34))
+* restore sibling install status after shared restart (backport release/1.4) ([#10602](https://github.com/archestra-ai/archestra/issues/10602)) ([6a8692e](https://github.com/archestra-ai/archestra/commit/6a8692e9c59d8a3286dd44c4850d8730fde6ca0f))
+* **runtimes:** direct Create custom runtime button when none removed (backport release/1.4) ([#11265](https://github.com/archestra-ai/archestra/issues/11265)) ([0feba07](https://github.com/archestra-ai/archestra/commit/0feba07eb2bbdd7759c1b3f4cbf87fb0866a68a4))
+* **service-accounts:** return 409 for a duplicate service account name (backport release/1.4) ([#11227](https://github.com/archestra-ai/archestra/issues/11227)) ([c884220](https://github.com/archestra-ai/archestra/commit/c884220cac07a01f39ba4bebf6e83a8c86acdb45))
+* **sso:** let service accounts create identity providers (backport release/1.4) ([#11240](https://github.com/archestra-ai/archestra/issues/11240)) ([133b10f](https://github.com/archestra-ai/archestra/commit/133b10f36e524d13e53c8b6171cc7aef299c28fc))
+
+
+### Dependencies
+
+* bump regex from 1.13.1 to 1.13.2 in /platform/archestra-rs in the rust-dependencies group ([#11245](https://github.com/archestra-ai/archestra/issues/11245)) ([106859e](https://github.com/archestra-ai/archestra/commit/106859e248bae1d6f62b88635b97990ab7450114))
+* bump the base-images group across 2 directories with 1 update ([#11158](https://github.com/archestra-ai/archestra/issues/11158)) ([776d8aa](https://github.com/archestra-ai/archestra/commit/776d8aa252ec140930f2138616a3efa6a1ef653b))
+* bump the rust-dependencies group across 1 directory with 10 updates ([#11060](https://github.com/archestra-ai/archestra/issues/11060)) ([711320c](https://github.com/archestra-ai/archestra/commit/711320ceda074ad132f8e5a6d0d7f286f75ce379))
+
+
+### Miscellaneous Chores
+
+* update client versions (release/1.4) ([#11174](https://github.com/archestra-ai/archestra/issues/11174)) ([ab433f8](https://github.com/archestra-ai/archestra/commit/ab433f83ec02d3e61de39074d3924b325e1ae6ee))
+
 ## [1.4.38](https://github.com/archestra-ai/archestra/compare/platform-v1.4.37...platform-v1.4.38) (2026-11-21)
 
 

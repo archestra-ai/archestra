@@ -80,14 +80,14 @@ crate-type = ["cdylib"]
 # outcome, prior-effect waivers, session settings (`auto_apply`,
 # `line_variant`) pinned when a family opens, retry hints on refusals, and a
 # child's return floor observed, not held, where a family accepts narrowings.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9951b565970d1ad9d63db75a43d97d3b613d63f3", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9951b565970d1ad9d63db75a43d97d3b613d63f3" }
 # The composed policy as the engine reads it, from which the host's approvers are
 # computed (`src/fragments.rs`).
-appa-engine = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7" }
-appa-policy = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7d35c2b468b2fb3463f5800f11ddd64d67a48af7" }
+appa-engine = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9951b565970d1ad9d63db75a43d97d3b613d63f3" }
+appa-policy = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9951b565970d1ad9d63db75a43d97d3b613d63f3" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9951b565970d1ad9d63db75a43d97d3b613d63f3", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9951b565970d1ad9d63db75a43d97d3b613d63f3" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

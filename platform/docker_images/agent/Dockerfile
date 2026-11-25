@@ -70,9 +70,10 @@ RUN apt-get update -qq \
 # predates HNSW indexes. No cluster ships; the agent runs initdb under HOME,
 # and the shared socket directory lets local clients connect without flags.
 # The DHI mirror has served postgresql-common archives that do not match its
-# signed index. Resolve these helpers from signed Debian and PGDG repositories.
+# signed index, and its PostgreSQL builds collide with Debian's helpers. Resolve
+# every PostgreSQL package from the signed Debian and PGDG repositories.
 RUN printf '%s\n' \
-      'Package: postgresql-common postgresql-client-common postgresql-common-dev' \
+      'Package: postgresql* libpq*' \
       'Pin: origin "dhi.io"' \
       'Pin-Priority: -1' > /etc/apt/preferences.d/postgresql-common \
  && apt-get update -qq \
@@ -220,12 +221,12 @@ RUN --network=none \
 
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.323 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.326 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.323","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.326","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -248,7 +249,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.169.0 \
+RUN pnpm add --global @openai/codex@0.170.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -263,7 +264,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-opencode
 USER root
-RUN pnpm add --global opencode-ai@1.19.5 \
+RUN pnpm add --global opencode-ai@1.19.6 \
  && OPENCODE_PACKAGE_DIR="$(pnpm list --global --json opencode-ai | jq -r '.[0].dependencies["opencode-ai"].path')" \
  && node "${OPENCODE_PACKAGE_DIR}/postinstall.mjs" \
  && opencode --version \
@@ -289,8 +290,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.23.1 \
- && hermes_commit=3b421578588243f920886e6fe79a6faa87ea026e \
+    hermes_version=0.23.2 \
+ && hermes_commit=ae2a81ccc00e9b7c06301523e5bb09608397149c \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -408,14 +409,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=23295740bc3a5120f3aee7f6fc872dea23dd21e34d02d61b7a2a9169c098b74e ;; \
-      arm64) grok_arch=arm64; checksum=bfea7596bc36024e1d190a747be6a7b8fe73f70e1c6b6baabc14ca84684df5f0 ;; \
+      amd64) grok_arch=x64; checksum=cf08714037f2e2eb76f766a1c7cd39e3a690a82f6116abe356d28e3b3344b6ea ;; \
+      arm64) grok_arch=arm64; checksum=864757973551ae5ad38188594cf57afef896342c83387494caba104288ea64a1 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.87" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.87.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.89" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.89.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -469,13 +470,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=baf941fb7845c2b720d8897e8bf6a60fd8e5ac3a8dd671b430a440b1791309769536e5b7f104b52cb6f33768cd8fa0957ee53f746b6e96a53ddea2736dc25705 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=732e8bec74bc03419c1e4acba437734bacb96f0fe4d60424099c9fee6c6bde349c7d75b7d83ec2af568a168999c0d38384813c096ba405fb50020ef9501e9687 ;; \
+      amd64) copilot_arch=x64; copilot_checksum=8079c8366f5f7c5ab3f86d7d71052a45ede5b130103b74db763eebec1c7592d66f0b95fa89777f9dfa350d14e3f666a06f9d9a1918aec01df2bc3d65916ebcc5 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=e30ab66a503e3d7fe101c64c41ea6e2e496b9f6c26388bcd80fbd7db1d10b4e5a89d7adf8b1c4aff1e4088d8a1c81104abe62a523a36f60d1f1f04dd369b47c1 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.112)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.114)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

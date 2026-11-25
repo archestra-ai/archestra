@@ -101,6 +101,8 @@ export function McpElicitationCard({
   const userSelectedTabRef = useRef(false);
   // Index of the tab displayed in the previous render.
   const shownIndexRef = useRef(0);
+  // The questions whose options were shown as buttons.
+  const buttonOptionIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (!groupId) {
@@ -244,6 +246,15 @@ export function McpElicitationCard({
   // pressing it again.
   const answersOnClick = (question: CardQuestion) =>
     !isMultiple && question.isPending && isSingleChoiceForm(question.fields);
+  // A question that answers on click shows its options as buttons, and keeps
+  // them once it is answered: its request leaves before its result arrives,
+  // and the options must not turn into a radio list for that moment.
+  if (activeQuestion && answersOnClick(activeQuestion)) {
+    buttonOptionIdsRef.current.add(activeQuestion.request.id);
+  }
+  const optionsAreButtons = (question: CardQuestion) =>
+    answersOnClick(question) ||
+    (!isMultiple && buttonOptionIdsRef.current.has(question.request.id));
   const answersOnClickOnly =
     activeQuestion !== undefined &&
     answersOnClick(activeQuestion) &&
@@ -571,11 +582,11 @@ export function McpElicitationCard({
         onPick={(value) =>
           pickOption({ question, fieldName: field.name, value })
         }
-        submitsOnPick={answersOnClick(question)}
+        submitsOnPick={optionsAreButtons(question)}
         other={
           !otherField || !singlePick
             ? undefined
-            : answersOnClick(question)
+            : optionsAreButtons(question)
               ? // The chat composer takes a lone question's typed answer.
                 onTypeAnswer
                 ? {

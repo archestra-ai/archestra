@@ -22,6 +22,7 @@ import {
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import {
+  type ComponentProps,
   Fragment,
   memo,
   useCallback,
@@ -873,7 +874,7 @@ export function ChatMessages({
                         const compactTools = compactEntriesByStartIndex.get(i);
                         if (!group || !compactTools) return null;
                         return (
-                          <CompactToolGroup
+                          <ChatToolGroup
                             key={getCompactGroupKey(
                               message.id,
                               group.startIndex,
@@ -1690,7 +1691,7 @@ export function ChatMessages({
               />
             )}
             {compactPendingToolCalls.length > 0 && (
-              <CompactToolGroup
+              <ChatToolGroup
                 key="optimistic-compact-tools"
                 tools={compactPendingToolCalls.map((toolCall) => ({
                   kind: "tool" as const,
@@ -1851,6 +1852,17 @@ function OpenAtEnd() {
     }
   }, [scrollRef]);
   return null;
+}
+
+/**
+ * The chat's circle row. A click on a circle is the person reading that call,
+ * so the chat stops following its own bottom: the row they clicked stays
+ * where it is while the card opens or closes under it. The chat follows the
+ * bottom again once they scroll back down to it.
+ */
+function ChatToolGroup(props: ComponentProps<typeof CompactToolGroup>) {
+  const { stopScroll } = useStickToBottomContext();
+  return <CompactToolGroup {...props} onBeforeToggle={stopScroll} />;
 }
 
 // Re-engage stick-to-bottom when the user sends a new message.

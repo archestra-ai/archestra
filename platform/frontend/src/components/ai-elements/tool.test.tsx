@@ -10,7 +10,7 @@ vi.mock("next-themes", () => ({
   useTheme: () => mockUseTheme(),
 }));
 
-import { ToolInput, ToolOutput } from "./tool";
+import { Tool, ToolHeader, ToolInput, ToolOutput } from "./tool";
 
 function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
   Object.defineProperty(navigator, "clipboard", {
@@ -18,6 +18,25 @@ function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
     value: { writeText },
   });
 }
+
+describe("ToolHeader", () => {
+  it("shows a long tool name in full, with the name as its hover text", () => {
+    render(
+      <Tool open>
+        <ToolHeader
+          type="tool-github__list_pull_request_review_comments"
+          state="output-available"
+        />
+      </Tool>,
+    );
+
+    const name = screen.getByText("github__list_pull_request_review_comments");
+    expect(name).toHaveAttribute(
+      "title",
+      "github__list_pull_request_review_comments",
+    );
+  });
+});
 
 describe("Tool copy actions", () => {
   it("copies serialized tool parameters", async () => {

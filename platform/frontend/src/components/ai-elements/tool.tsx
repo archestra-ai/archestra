@@ -127,40 +127,49 @@ export const ToolHeader = ({
   identityBadge,
   statusLabel,
   ...props
-}: ToolHeaderProps) => (
-  <CollapsibleTrigger
-    className={cn(
-      "group flex w-full items-center justify-between gap-3 border-b border-border/60 bg-muted/40 px-3 py-2 cursor-pointer",
-      isCollapsible ? "cursor-pointer" : "!cursor-default",
-      className,
-    )}
-    {...props}
-  >
-    <div className="flex min-w-0 flex-1 items-center gap-2">
-      {icon}
-      <span className="truncate font-mono text-xs font-medium text-foreground">
-        {title ?? type.split("-").slice(1).join("-")}
-      </span>
-    </div>
-    <div className="flex items-center gap-3">
-      {identityBadge}
-      {getStatusBadge(state, statusLabel)}
-      {actionButton && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: Wrapper needs to stop event propagation
-        <div
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
+}: ToolHeaderProps) => {
+  const name = title ?? type.split("-").slice(1).join("-");
+  return (
+    <CollapsibleTrigger
+      className={cn(
+        "group flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border/60 bg-muted/40 px-3 py-2 cursor-pointer",
+        isCollapsible ? "cursor-pointer" : "!cursor-default",
+        className,
+      )}
+      {...props}
+    >
+      {/* The name is never cut: in a narrow card the status moves to its own
+        line, and a name wider than the card breaks across lines, inside a
+        word when the name has no break point. */}
+      <div className="flex min-w-[min(100%,14rem)] max-w-full flex-1 items-center gap-2">
+        {icon}
+        <span
+          className="min-w-0 text-left font-mono text-xs font-medium text-foreground [overflow-wrap:anywhere]"
+          title={name}
         >
-          {actionButton}
-        </div>
-      )}
-      {isCollapsible && (
-        <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-      )}
-    </div>
-  </CollapsibleTrigger>
-);
+          {name}
+        </span>
+      </div>
+      <div className="ml-auto flex items-center gap-3">
+        {identityBadge}
+        {getStatusBadge(state, statusLabel)}
+        {actionButton && (
+          // biome-ignore lint/a11y/noStaticElementInteractions: Wrapper needs to stop event propagation
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {actionButton}
+          </div>
+        )}
+        {isCollapsible && (
+          <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+        )}
+      </div>
+    </CollapsibleTrigger>
+  );
+};
 
 export type ToolContentProps = Omit<
   ComponentProps<typeof CollapsibleContent>,

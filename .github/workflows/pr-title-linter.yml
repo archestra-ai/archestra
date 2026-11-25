@@ -26,4 +26,4 @@ jobs:
     permissions: {}
     steps:
       - name: Lint PR title
-        uses: archestra-ai/.github/actions/lint-pr-title@v1.25.2
+        uses: archestra-ai/.github/actions/lint-pr-title@v1.31.1

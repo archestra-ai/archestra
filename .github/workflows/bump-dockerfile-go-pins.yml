@@ -97,7 +97,7 @@ jobs:
       - name: Generate releaser token
         if: steps.bump.outputs.changed == 'true'
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
+        uses: archestra-ai/.github/actions/github-app-token@v1.31.1
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

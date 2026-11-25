@@ -268,6 +268,7 @@ describe("POST /api/auto-routing/routers/:id/simulate", () => {
       status: "cold_start",
       sessions: 10,
       required: 30,
+      pastSessions: 0,
     });
   });
 

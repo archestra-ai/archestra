@@ -123,6 +123,8 @@ export const AutoRouterResponseSchema = z.object({
       scorerVersionId: z.string().uuid(),
       sessions: z.number().int().nonnegative(),
       required: z.number().int().positive(),
+      /** The organization's past sessions among `sessions`; 0 while the router waits on its own. */
+      pastSessions: z.number().int().nonnegative(),
     }),
     /** Error of the newest fit outcome, when it failed. */
     lastFitError: z.string().nullable(),
@@ -404,6 +406,7 @@ export const AutoRoutingSimulateResponseSchema = z.discriminatedUnion(
       status: z.literal("cold_start"),
       sessions: z.number().int().nonnegative(),
       required: z.number().int().positive(),
+      pastSessions: z.number().int().nonnegative(),
     }),
   ],
 );
@@ -587,6 +590,8 @@ export const AutoRoutingBackfillResponseSchema = z.object({
       rescore: z.boolean(),
     })
     .nullable(),
+  /** Scored past sessions a router needs before they start it sooner than its own sessions would. */
+  pastSessionsNeeded: z.number().int().nonnegative(),
   /**
    * Whether scoring can start: the organization-wide Jev key a run pays with
    * resolves. Null while a job runs, since none can start until it ends.

@@ -70,6 +70,7 @@ function makeRouter(overrides: Partial<AutoRouter>): AutoRouter {
         scorerVersionId: "00000000-0000-4000-8000-000000000009",
         sessions: 12,
         required: 100,
+        pastSessions: 0,
       },
       lastFitError: null,
       scorer: "ready",

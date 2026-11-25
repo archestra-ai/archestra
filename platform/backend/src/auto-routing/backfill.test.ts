@@ -85,9 +85,11 @@ const ANSWERS = {
 
 type MakeInteraction = TestFixtures["makeInteraction"];
 
+/** Own sessions that start a router without past ones. */
+const LIVE_MIN_SESSIONS = 200;
+
 describe("auto routing backfill", () => {
   const server = useMswServer();
-  const configuredMinSessions = config.autoRouting.minSessions;
   let organizationId: string;
   let routerId: string;
   let userId: string;
@@ -104,7 +106,8 @@ describe("auto routing backfill", () => {
       makeLlmProviderApiKey,
       makeInteraction: fixture,
     }) => {
-      config.autoRouting.minSessions = configuredMinSessions;
+      // The live minimum, so past sessions count from the first one scored.
+      config.autoRouting.minSessions = LIVE_MIN_SESSIONS;
       organizationId = (await makeOrganization()).id;
       userId = (await makeUser()).id;
       await configureAutoRouting(organizationId);
@@ -1301,6 +1304,21 @@ describe("auto routing backfill", () => {
     expect(prompts).toEqual([]);
   });
 
+  test("an admin can count again right after a fresh scan whose sample is fully scored", async () => {
+    await sessions(2);
+    await scanAndScore({});
+    const scored = await RoutingBackfillModel.findLatest(organizationId);
+    expect((await describeBackfill(organizationId)).scoreOffer).toBeNull();
+
+    await sessions(1, "new");
+    await scan();
+
+    const { backfill, scoreOffer } = await describeBackfill(organizationId);
+    expect(backfill).toMatchObject({ phase: "scan", status: "scanned" });
+    expect(backfill?.id).not.toBe(scored?.id);
+    expect(scoreOffer).toMatchObject({ remaining: 1 });
+  });
+
   test("a stop names the phase it saw, so it never cancels the scoring that took over the scan", async () => {
     await sessions(2);
     await scan();
@@ -1589,25 +1607,77 @@ describe("auto routing backfill", () => {
     expect(history.sample).toHaveLength(5);
   });
 
-  test("the session minimum is the live one unless past sessions make up the sample", async () => {
-    config.autoRouting.minSessions = 1000;
-    await sessions(3);
-    await scanAndScore({});
-    const scorerVersionId = (await activeSourceVersion()).id;
-    const cold = await ensureAutoRouter(organizationId, "auto:cold");
-    const minSessions = async (
-      router: Awaited<ReturnType<typeof liveRouter>>,
-    ) =>
-      (
-        await readFitWindow({
-          router,
-          scorerVersionId,
-          inputWatermark: new Date(),
-        })
-      ).minSessions;
+  describe("past sessions count toward the minimum only once they start a router sooner than its own would", () => {
+    // Ten past sessions short of the minimum is what the live minimum leaves.
+    beforeEach(() => {
+      config.autoRouting.minSessions = LIVE_MIN_SESSIONS + 10;
+    });
 
-    expect(await minSessions(await liveRouter())).toBe(1000);
-    expect(await minSessions(cold)).toBe(200);
+    const window = async (router?: Awaited<ReturnType<typeof liveRouter>>) => {
+      const { sessions, minSessions, pastSessions } = await readFitWindow({
+        router: router ?? (await liveRouter()),
+        scorerVersionId: (await activeSourceVersion()).id,
+        inputWatermark: new Date(),
+      });
+      return { sessions, minSessions, pastSessions };
+    };
+
+    test("too few leave the router on its own minimum", async () => {
+      await sessions(8);
+      await scanAndScore({});
+
+      expect(await window()).toEqual({
+        sessions: 0,
+        minSessions: LIVE_MIN_SESSIONS,
+        pastSessions: 0,
+      });
+      expect((await describeBackfill(organizationId)).pastSessionsNeeded).toBe(
+        10,
+      );
+    });
+
+    test("one short of enough still counts none", async () => {
+      await sessions(9);
+      await scanAndScore({});
+
+      expect(await window()).toMatchObject({
+        minSessions: LIVE_MIN_SESSIONS,
+        pastSessions: 0,
+      });
+    });
+
+    test("enough count toward the configured minimum, but not for a router that does not read them", async () => {
+      await sessions(10);
+      await scanAndScore({});
+      const cold = await ensureAutoRouter(organizationId, "auto:cold");
+
+      expect(await window()).toEqual({
+        sessions: 10,
+        minSessions: LIVE_MIN_SESSIONS + 10,
+        pastSessions: 10,
+      });
+      expect(await window(cold)).toMatchObject({
+        minSessions: LIVE_MIN_SESSIONS,
+        pastSessions: 0,
+      });
+      const progress = {
+        sessions: 10,
+        required: LIVE_MIN_SESSIONS + 10,
+        pastSessions: 10,
+      };
+      expect(
+        (await getAutoRouter(organizationId, routerId)).status.coldStart,
+      ).toMatchObject(progress);
+      expect(
+        await simulateFit(routerId, {
+          budgetUsdPerDay: 10,
+          volumeMultiplier: 1,
+        }),
+      ).toEqual({
+        status: "cold_start",
+        ...progress,
+      });
+    });
   });
 
   test("a call costing more than its reservation raises the next ones; the overshoot stays within the calls in flight", async () => {

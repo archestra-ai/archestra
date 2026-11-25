@@ -30,7 +30,7 @@ import type {
   AutoRoutingScoreBackfillBody,
 } from "@/types/auto-routing-api";
 import { firstUserText } from "./first-user-text";
-import { fitReadiness, readsPastSessions } from "./fit";
+import { fitReadiness, pastSessionsNeeded, readsPastSessions } from "./fit";
 import { scoringContext } from "./scoring-context";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
 import {
@@ -212,6 +212,7 @@ export async function describeBackfill(
             latest,
           })
         : null,
+    pastSessionsNeeded: pastSessionsNeeded(),
     payer:
       latest?.status === "running"
         ? null

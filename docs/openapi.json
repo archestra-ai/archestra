@@ -132324,12 +132324,18 @@
                                 "minimum": 0,
                                 "exclusiveMinimum": true,
                                 "maximum": 9007199254740991
+                              },
+                              "pastSessions": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
                               }
                             },
                             "required": [
                               "scorerVersionId",
                               "sessions",
-                              "required"
+                              "required",
+                              "pastSessions"
                             ],
                             "additionalProperties": false
                           },
@@ -133182,12 +133188,18 @@
                               "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
+                            },
+                            "pastSessions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
                             "scorerVersionId",
                             "sessions",
-                            "required"
+                            "required",
+                            "pastSessions"
                           ],
                           "additionalProperties": false
                         },
@@ -134300,12 +134312,18 @@
                               "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
+                            },
+                            "pastSessions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
                             "scorerVersionId",
                             "sessions",
-                            "required"
+                            "required",
+                            "pastSessions"
                           ],
                           "additionalProperties": false
                         },
@@ -135176,12 +135194,18 @@
                               "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
+                            },
+                            "pastSessions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
                             "scorerVersionId",
                             "sessions",
-                            "required"
+                            "required",
+                            "pastSessions"
                           ],
                           "additionalProperties": false
                         },
@@ -137445,12 +137469,18 @@
                               "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
+                            },
+                            "pastSessions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
                             "scorerVersionId",
                             "sessions",
-                            "required"
+                            "required",
+                            "pastSessions"
                           ],
                           "additionalProperties": false
                         },
@@ -138532,12 +138562,18 @@
                           "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
+                        },
+                        "pastSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
                         "status",
                         "sessions",
-                        "required"
+                        "required",
+                        "pastSessions"
                       ],
                       "additionalProperties": false
                     }
@@ -139648,6 +139684,11 @@
                       ],
                       "additionalProperties": false
                     },
+                    "pastSessionsNeeded": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "payer": {
                       "anyOf": [
                         {
@@ -139750,6 +139791,7 @@
                   "required": [
                     "backfill",
                     "scoreOffer",
+                    "pastSessionsNeeded",
                     "payer",
                     "history"
                   ],
@@ -140233,6 +140275,11 @@
                       ],
                       "additionalProperties": false
                     },
+                    "pastSessionsNeeded": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "payer": {
                       "anyOf": [
                         {
@@ -140335,6 +140382,7 @@
                   "required": [
                     "backfill",
                     "scoreOffer",
+                    "pastSessionsNeeded",
                     "payer",
                     "history"
                   ],
@@ -140859,6 +140907,11 @@
                       ],
                       "additionalProperties": false
                     },
+                    "pastSessionsNeeded": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "payer": {
                       "anyOf": [
                         {
@@ -140961,6 +141014,7 @@
                   "required": [
                     "backfill",
                     "scoreOffer",
+                    "pastSessionsNeeded",
                     "payer",
                     "history"
                   ],
@@ -141468,6 +141522,11 @@
                       ],
                       "additionalProperties": false
                     },
+                    "pastSessionsNeeded": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "payer": {
                       "anyOf": [
                         {
@@ -141570,6 +141629,7 @@
                   "required": [
                     "backfill",
                     "scoreOffer",
+                    "pastSessionsNeeded",
                     "payer",
                     "history"
                   ],

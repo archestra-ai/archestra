@@ -609,6 +609,7 @@ async function describe(
         scorerVersionId: scorerVersion.id,
         sessions: progress.sessions,
         required: progress.minSessions,
+        pastSessions: progress.pastSessions,
       },
       lastFitError: latest?.status === "failed" ? latest.error : null,
       scorer,

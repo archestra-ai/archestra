@@ -35897,6 +35897,7 @@ export type GetAutoRoutersResponses = {
                 scorerVersionId: string;
                 sessions: number;
                 required: number;
+                pastSessions: number;
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
@@ -36078,6 +36079,7 @@ export type CreateAutoRouterResponses = {
                 scorerVersionId: string;
                 sessions: number;
                 required: number;
+                pastSessions: number;
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
@@ -36427,6 +36429,7 @@ export type GetAutoRouterResponses = {
                 scorerVersionId: string;
                 sessions: number;
                 required: number;
+                pastSessions: number;
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
@@ -36610,6 +36613,7 @@ export type UpdateAutoRouterResponses = {
                 scorerVersionId: string;
                 sessions: number;
                 required: number;
+                pastSessions: number;
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
@@ -37112,6 +37116,7 @@ export type ReplanAutoRoutingResponses = {
                 scorerVersionId: string;
                 sessions: number;
                 required: number;
+                pastSessions: number;
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
@@ -37394,6 +37399,7 @@ export type SimulateAutoRoutingResponses = {
         status: 'cold_start';
         sessions: number;
         required: number;
+        pastSessions: number;
     };
 };
 
@@ -37666,6 +37672,7 @@ export type GetAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        pastSessionsNeeded: number;
         payer: 'ready' | 'no_jev_key' | null;
         history: Array<{
             id: string;
@@ -37804,6 +37811,7 @@ export type ScanAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        pastSessionsNeeded: number;
         payer: 'ready' | 'no_jev_key' | null;
         history: Array<{
             id: string;
@@ -37950,6 +37958,7 @@ export type ScoreAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        pastSessionsNeeded: number;
         payer: 'ready' | 'no_jev_key' | null;
         history: Array<{
             id: string;
@@ -38092,6 +38101,7 @@ export type CancelAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        pastSessionsNeeded: number;
         payer: 'ready' | 'no_jev_key' | null;
         history: Array<{
             id: string;

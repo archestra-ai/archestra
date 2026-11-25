@@ -59,9 +59,11 @@ type HistoryRow = AutoRoutingBackfillState["history"][number];
 export function PastSessions({
   routingEnabled,
   canUpdate,
+  routerName,
 }: {
   routingEnabled: boolean;
   canUpdate: boolean;
+  routerName: string;
 }) {
   const { data } = useAutoRoutingBackfill();
   const [scoring, setScoring] = useState(false);
@@ -116,7 +118,12 @@ export function PastSessions({
         <PastSessionsHistory history={history} />
       </CardContent>
       <Dialog open={scoring} onOpenChange={setScoring}>
-        {scoring && <PastSessionsDialog onClose={() => setScoring(false)} />}
+        {scoring && (
+          <PastSessionsDialog
+            routerName={routerName}
+            onClose={() => setScoring(false)}
+          />
+        )}
       </Dialog>
     </Card>
   );
@@ -138,6 +145,7 @@ function PastSessionsAction({
   onScore: () => void;
 }) {
   const cancel = useCancelAutoRoutingBackfill();
+  const scan = useScanAutoRoutingBackfill();
   if (backfill?.status === "running") {
     return (
       <Button
@@ -154,8 +162,13 @@ function PastSessionsAction({
   if (payer === "no_jev_key") return <AddJevKeyLink />;
   if (!scoreOffer && backfill !== null && !isScanStale(backfill)) {
     return (
-      <Button size="sm" variant="outline" disabled>
-        Up to date
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={scan.isPending}
+        onClick={() => scan.mutate()}
+      >
+        Scan again (free)
       </Button>
     );
   }
@@ -170,13 +183,20 @@ function PastSessionsAction({
 export function ScorePastSessionsDialog({
   open,
   onOpenChange,
+  routerName,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  routerName: string;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {open && <PastSessionsDialog onClose={() => onOpenChange(false)} />}
+      {open && (
+        <PastSessionsDialog
+          routerName={routerName}
+          onClose={() => onOpenChange(false)}
+        />
+      )}
     </Dialog>
   );
 }
@@ -269,8 +289,7 @@ function describeHistoryRow(row: HistoryRow): {
     return {
       what,
       detail:
-        row.error ??
-        (row.startedByName ? startedBy : "Counted when routing was turned on"),
+        row.error ?? (row.startedByName ? startedBy : "Counted automatically"),
       sessions: running ? "—" : count(row.foundSessions),
       cost: "Free",
       running,
@@ -320,7 +339,13 @@ function isScanStale(backfill: Backfill): boolean {
  * log when the last count is stale (it is free), then offers to score what it
  * found at an estimated cost under a spending limit.
  */
-function PastSessionsDialog({ onClose }: { onClose: () => void }) {
+function PastSessionsDialog({
+  routerName,
+  onClose,
+}: {
+  routerName: string;
+  onClose: () => void;
+}) {
   const { data } = useAutoRoutingBackfill();
   const payer = data?.payer;
   const scan = useScanAutoRoutingBackfill();
@@ -351,6 +376,8 @@ function PastSessionsDialog({ onClose }: { onClose: () => void }) {
       return (
         <ScoreDialog
           offer={scoreOffer}
+          routerName={routerName}
+          pastSessionsNeeded={data?.pastSessionsNeeded ?? 0}
           onDone={onClose}
           details={
             backfill?.id === scoreOffer.backfillId && (
@@ -445,7 +472,7 @@ function ClientBreakdown({ breakdown }: { breakdown: Backfill["breakdown"] }) {
   if (rows.length === 0) return null;
   const largest = Math.max(...rows.map(([, sessions]) => sessions));
   return (
-    <table className="w-full max-w-md text-foreground">
+    <table className="text-foreground">
       <tbody>
         {rows.map(([label, sessions]) => (
           <tr key={label}>
@@ -453,7 +480,7 @@ function ClientBreakdown({ breakdown }: { breakdown: Backfill["breakdown"] }) {
             <td className="py-0.5 pr-3 text-right tabular-nums">
               {count(sessions)}
             </td>
-            <td className="w-full py-0.5" aria-hidden>
+            <td className="w-40 min-w-40 py-0.5" aria-hidden>
               <div
                 className="h-2 rounded-sm bg-primary/60"
                 style={{ width: `${(sessions / largest) * 100}%` }}
@@ -468,10 +495,15 @@ function ClientBreakdown({ breakdown }: { breakdown: Backfill["breakdown"] }) {
 
 function ScoreDialog({
   offer,
+  routerName,
+  pastSessionsNeeded,
   onDone,
   details = null,
 }: {
   offer: ScoreOffer;
+  routerName: string;
+  /** Past sessions it takes before they start a router sooner than its own would. */
+  pastSessionsNeeded: number;
   onDone: () => void;
   /** Shown above the figures: what the scan found, when the dialog also scanned. */
   details?: ReactNode;
@@ -492,14 +524,28 @@ function ScoreDialog({
       <DialogHeader>
         <DialogTitle>{verb} past sessions?</DialogTitle>
         <DialogDescription>
-          Auto splits sessions across the fast, normal and smart models by how
-          hard they are. Scoring sends the opening prompt of each past session
-          to Jev, which rates it, so the routing plan can learn from your
-          organization&apos;s real traffic.
+          <code>{routerName}</code> splits sessions across the fast, normal and
+          smart models by how hard they are. Scoring sends the opening prompt of
+          each past session to Jev, which rates it, so the routing plan can
+          learn from your organization&apos;s real traffic.
         </DialogDescription>
       </DialogHeader>
       <DialogBody className="space-y-4">
         {details}
+        {offer.sessions < pastSessionsNeeded && (
+          <InlineNotice data-testid="auto-routing-score-too-few">
+            <AlertTriangle />
+            <span className="font-medium">
+              This will not start routers sooner
+            </span>
+            <InlineNoticeText>
+              Past sessions count toward a router&apos;s first plan from{" "}
+              {count(pastSessionsNeeded)} scored ones, and this sample has{" "}
+              {count(offer.sessions)}. With fewer, a router starts on its own
+              sessions alone.
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
         {offer.rescore && (
           <p className="text-sm text-muted-foreground">
             The session scorer changed since these sessions were scored, so
@@ -532,7 +578,7 @@ function ScoreDialog({
                   : "auto-routing-backfill-ceiling-hint"
               }
               onChange={(event) => setCeiling(event.target.value)}
-              className="w-24"
+              className="w-32"
             />
           </dd>
         </dl>

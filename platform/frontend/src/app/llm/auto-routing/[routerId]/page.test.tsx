@@ -38,6 +38,7 @@ import {
 } from "@/lib/organization.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { ConfigureAutoRoutingButton } from "../_parts/configure-button";
+import { routerStatus } from "../_parts/router-status";
 import AutoRoutingOverviewPage from "./page";
 
 vi.mock("@/lib/auth/auth.query");
@@ -108,6 +109,7 @@ function makeSettings(overrides: Partial<AutoRouter> = {}): AutoRouter {
         scorerVersionId: "00000000-0000-4000-8000-000000000009",
         sessions: 12,
         required: 100,
+        pastSessions: 0,
       },
       lastFitError: null,
       scorer: "ready",
@@ -226,6 +228,7 @@ const server = setupServer(
       backfill: null,
       scoreOffer: null,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [],
     } satisfies AutoRoutingBackfillState),
   ),
@@ -539,7 +542,7 @@ describe("AutoRoutingOverviewPage", () => {
       await screen.findByRole("radio", { name: /Cost-efficient/ }),
     ).toBeChecked();
     expect(screen.getByTestId("auto-routing-budget-note")).toHaveTextContent(
-      "Set after 100 sessions (12 so far)",
+      "12 / 100 sessions",
     );
     await user.click(screen.getByRole("radio", { name: /Custom/ }));
     const budget = screen.getByLabelText("USD per day");
@@ -634,16 +637,78 @@ describe("AutoRoutingOverviewPage", () => {
       screen.queryByRole("button", { name: "Configure" }),
     ).not.toBeInTheDocument();
   });
-  it("says it is evaluating and keeps the figures, empty, while no plan is active", async () => {
+  it("says it is learning and keeps the figures, empty, while no plan is active", async () => {
     renderPage();
 
     expect(
       await screen.findByTestId("auto-routing-evaluating"),
-    ).toHaveTextContent("Evaluating sessions");
+    ).toHaveAttribute("data-state", "learning");
     const placeholder = screen.getByTestId("auto-routing-plan-placeholder");
     expect(placeholder).toHaveTextContent("Expected spend");
     expect(placeholder).toHaveTextContent("of $20.00 budget");
     expect(placeholder).toHaveTextContent("100.0% sessions");
+  });
+
+  it.each([
+    [0, "waiting"],
+    [12, "learning"],
+    [100, "building"],
+  ] as const)("with %i of 100 sessions and no plan, the notice says the router is %s", async (sessions, state) => {
+    const base = makeSettings();
+    settings = makeSettings({
+      status: {
+        ...base.status,
+        coldStart: { ...base.status.coldStart, sessions },
+      },
+    });
+    renderPage();
+
+    const notice = await screen.findByTestId("auto-routing-evaluating");
+    expect(notice).toHaveAttribute("data-state", state);
+    expect(within(notice).queryByRole("progressbar") !== null).toBe(
+      state === "learning",
+    );
+  });
+
+  it("counts toward the first plan the past sessions among a learning router's sessions", async () => {
+    const base = makeSettings();
+    settings = makeSettings({
+      status: {
+        ...base.status,
+        coldStart: {
+          ...base.status.coldStart,
+          sessions: 812,
+          required: 1000,
+          pastSessions: 800,
+        },
+      },
+    });
+    renderPage();
+
+    expect(
+      await screen.findByTestId("auto-routing-cold-start-progress"),
+    ).toHaveTextContent("812 / 1,000 sessions, including 800 past sessions");
+  });
+
+  it("badges a router without a plan whose fit failed apart from one still evaluating", () => {
+    const base = makeSettings();
+    expect(routerStatus(base)).toBe("Evaluating");
+    expect(
+      routerStatus(
+        makeSettings({ status: { ...base.status, lastFitError: "boom" } }),
+      ),
+    ).toBe("Fit failed");
+    expect(
+      routerStatus(
+        makeSettings({
+          status: {
+            ...base.status,
+            lastFitError: "boom",
+            activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
+          },
+        }),
+      ),
+    ).toBe("Active");
   });
 
   it("shows the failed fit instead of the evaluating notice", async () => {
@@ -653,7 +718,9 @@ describe("AutoRoutingOverviewPage", () => {
     });
     renderPage();
 
-    expect(await screen.findByText("Last fit failed")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("auto-routing-fit-failed"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId("auto-routing-evaluating"),
     ).not.toBeInTheDocument();
@@ -1013,6 +1080,7 @@ describe("past sessions", () => {
             backfill: scanned({ status: "running", phase: "score" }),
             scoreOffer: null,
             payer: "ready",
+            pastSessionsNeeded: 0,
             history: [],
           } satisfies AutoRoutingBackfillState);
         },
@@ -1031,6 +1099,7 @@ describe("past sessions", () => {
           backfill: scanned({ status: "running" }),
           scoreOffer: null,
           payer: "ready",
+          pastSessionsNeeded: 0,
           history: [],
         } satisfies AutoRoutingBackfillState);
       }),
@@ -1076,6 +1145,7 @@ describe("past sessions", () => {
       backfill: scanned({ status: "done" }),
       scoreOffer: null,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [],
     });
     renderPage();
@@ -1123,6 +1193,7 @@ describe("past sessions", () => {
       backfill: scanned(),
       scoreOffer: offer,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [],
     });
     const user = userEvent.setup();
@@ -1140,11 +1211,18 @@ describe("past sessions", () => {
   it("keeps the dialog the evaluating notice opened while the count it starts hides the notice's action", async () => {
     const stale = scanned({ cutoff: "2026-09-01T00:00:00.000Z" });
     serveBackfill(
-      { backfill: stale, scoreOffer: offer, payer: "ready", history: [] },
+      {
+        backfill: stale,
+        scoreOffer: offer,
+        payer: "ready",
+        pastSessionsNeeded: 0,
+        history: [],
+      },
       {
         backfill: scanned({ status: "running" }),
         scoreOffer: null,
         payer: "ready",
+        pastSessionsNeeded: 0,
         history: [],
       },
     );
@@ -1175,6 +1253,7 @@ describe("past sessions", () => {
       backfill: scanned(),
       scoreOffer: offer,
       payer: "no_jev_key",
+      pastSessionsNeeded: 0,
       history: [],
     });
     renderPage();
@@ -1208,6 +1287,7 @@ describe("past sessions", () => {
               : scanned({ cutoff: "2026-09-01T00:00:00.000Z" }),
             scoreOffer: offer,
             payer: "ready",
+            pastSessionsNeeded: 0,
             history: [],
           } satisfies AutoRoutingBackfillState);
         }),
@@ -1219,6 +1299,7 @@ describe("past sessions", () => {
             backfill: scanned({ status: "running" }),
             scoreOffer: null,
             payer: "ready",
+            pastSessionsNeeded: 0,
             history: [],
           } satisfies AutoRoutingBackfillState);
         }),
@@ -1249,6 +1330,7 @@ describe("past sessions", () => {
       backfill: scanned({ status: "done", phase: "score" }),
       scoreOffer: { ...offer, remaining: 0 },
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [],
     });
     renderPage();
@@ -1270,12 +1352,14 @@ describe("past sessions", () => {
         }),
         scoreOffer: null,
         payer: "ready",
+        pastSessionsNeeded: 0,
         history: [],
       },
       {
         backfill: scanned({ status: "done" }),
         scoreOffer: null,
         payer: "ready",
+        pastSessionsNeeded: 0,
         history: [],
       },
     );
@@ -1310,6 +1394,7 @@ describe("past sessions", () => {
       backfill: scanned({ status: "running", phase: "score" }),
       scoreOffer: null,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [
         job({
           status: "running",
@@ -1353,11 +1438,7 @@ describe("past sessions", () => {
       ],
       ["Counting failedThe interaction log is unreachable.", "240", "Free"],
       ["Found 240 past sessionsStarted by Ada", "240", "Free"],
-      [
-        "Found 240 past sessionsCounted when routing was turned on",
-        "240",
-        "Free",
-      ],
+      ["Found 240 past sessionsCounted automatically", "240", "Free"],
     ]);
   });
 
@@ -1367,6 +1448,7 @@ describe("past sessions", () => {
       backfill: scanned({ status: "running", phase: "score" }),
       scoreOffer: null,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [job({ status: "running", phase: "score", scoredSessions: 30 })],
     };
     const cancels: { id: string; phase: string | null }[] = [];
@@ -1385,6 +1467,7 @@ describe("past sessions", () => {
             backfill: scanned({ status: "cancelled", phase: "score" }),
             scoreOffer: offer,
             payer: "ready",
+            pastSessionsNeeded: 0,
             history: [
               job({ status: "cancelled", phase: "score", scoredSessions: 30 }),
             ],
@@ -1439,19 +1522,49 @@ describe("past sessions", () => {
     expect(cancels).toEqual([{ id: scanned().id, phase: "score" }]);
   });
 
-  it("says Up to date, and offers nothing, once every past session is scored", async () => {
+  it("offers to count again, for free, once every past session of a fresh count is scored", async () => {
     serveBackfill({
       backfill: scanned({ status: "done", phase: "score" }),
       scoreOffer: null,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [job({ status: "done", phase: "score", scoredSessions: 240 })],
     });
+    const scans = serveScan();
+    const user = userEvent.setup();
     renderPage();
 
     const section = await screen.findByTestId("auto-routing-past-sessions");
+    await user.click(
+      await within(section).findByRole("button", { name: "Scan again (free)" }),
+    );
+
+    await waitFor(() => expect(scans.count).toBe(1));
+  });
+
+  it.each([
+    [240, false],
+    [241, true],
+  ])("with %i past sessions needed, warns that scoring a 240-session sample will not start routers sooner: %s", async (needed, warned) => {
+    serveBackfill({
+      backfill: scanned(),
+      scoreOffer: offer,
+      payer: "ready",
+      pastSessionsNeeded: needed,
+      history: [],
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await openScore(user);
+
     expect(
-      await within(section).findByRole("button", { name: "Up to date" }),
-    ).toBeDisabled();
+      within(dialog).queryByTestId("auto-routing-score-too-few") !== null,
+    ).toBe(warned);
+    // Named after the router the page shows.
+    expect(
+      within(dialog).getByText(settings.name, { selector: "code" }),
+    ).toBeInTheDocument();
   });
 
   it.each([
@@ -1462,6 +1575,7 @@ describe("past sessions", () => {
       backfill: scanned({ status }),
       scoreOffer: null,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [job({ status })],
     });
     const scans = serveScan();
@@ -1505,6 +1619,7 @@ describe("past sessions", () => {
       }),
       scoreOffer: offer,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [job({})],
     });
     const user = userEvent.setup();
@@ -1536,6 +1651,7 @@ describe("past sessions", () => {
       backfill: scanned(),
       scoreOffer: offer,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [],
     });
     const user = userEvent.setup();
@@ -1558,11 +1674,18 @@ describe("past sessions", () => {
     const replaced = "00000000-0000-4000-8000-000000000302";
     let refused = 0;
     serveBackfill(
-      { backfill: scanned(), scoreOffer: offer, payer: "ready", history: [] },
+      {
+        backfill: scanned(),
+        scoreOffer: offer,
+        payer: "ready",
+        pastSessionsNeeded: 0,
+        history: [],
+      },
       {
         backfill: scanned({ id: replaced }),
         scoreOffer: { ...offer, backfillId: replaced, remaining: 90 },
         payer: "ready",
+        pastSessionsNeeded: 0,
         history: [],
       },
     );
@@ -1607,6 +1730,7 @@ describe("past sessions", () => {
             },
             scoreOffer: null,
             payer: "ready",
+            pastSessionsNeeded: 0,
             history: [],
           } satisfies AutoRoutingBackfillState);
         }),
@@ -1638,6 +1762,7 @@ describe("past sessions", () => {
         }),
         scoreOffer: null,
         payer: "ready",
+        pastSessionsNeeded: 0,
         history: [],
       };
       server.use(
@@ -1672,6 +1797,7 @@ describe("past sessions", () => {
         cutoff: "2026-09-01T00:00:00.000Z",
       },
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [],
     });
     const user = userEvent.setup();
@@ -1694,6 +1820,7 @@ describe("past sessions", () => {
       backfill: scanned(),
       scoreOffer: offer,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [],
     });
     const user = userEvent.setup();
@@ -1729,6 +1856,7 @@ describe("past sessions", () => {
       }),
       scoreOffer: { ...offer, rescore: true },
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [],
     });
     const user = userEvent.setup();
@@ -1767,6 +1895,7 @@ describe("past sessions", () => {
       backfill: scanned(),
       scoreOffer: offer,
       payer: "no_jev_key",
+      pastSessionsNeeded: 0,
       history: [],
     });
     renderPage();
@@ -1794,6 +1923,7 @@ describe("past sessions", () => {
       backfill: scanned(),
       scoreOffer: offer,
       payer: "no_jev_key",
+      pastSessionsNeeded: 0,
       history: [],
     });
     renderPage();
@@ -1813,6 +1943,7 @@ describe("past sessions", () => {
       backfill: scanned(),
       scoreOffer: offer,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [job({})],
     });
     const user = userEvent.setup();
@@ -1847,6 +1978,7 @@ describe("past sessions", () => {
       backfill: scanned({ status: "done", cutoff: "2026-10-26T00:00:00.000Z" }),
       scoreOffer: null,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [job({ status: "done" })],
     });
     const scans = serveScan();
@@ -1869,6 +2001,7 @@ describe("past sessions", () => {
       backfill: scanned(),
       scoreOffer: offer,
       payer: "ready",
+      pastSessionsNeeded: 0,
       history: [job({ status: "done" })],
     });
     renderPage();

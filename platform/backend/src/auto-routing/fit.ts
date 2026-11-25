@@ -336,10 +336,12 @@ function publish(
 type FitRun = { inputs: FitInputs; published: RoutingPublishResult };
 
 /**
- * What the fit learns from and sizes the plan for. It learns from the
- * router's own sessions alone once it has `liveMinSessions()` of them, so the
- * plan describes the traffic it routes; until then scored past sessions join
- * them. `sessions` is what the cold-start minimum `minSessions` counts.
+ * What the fit learns from and sizes the plan for. A router starts on
+ * `liveMinSessions()` sessions of its own, or on the configured minimum
+ * counting the organization's scored past sessions once there are at least
+ * `pastSessionsNeeded()` of them; past sessions join the fit only then, and
+ * only until the router has the former, so the plan describes the traffic it
+ * routes. `sessions` is what the cold-start minimum `minSessions` counts.
  * Volume is the live window's once it spans a week; before that, the
  * backfill population's, which estimates it from all eligible traffic, scaled
  * by `volumeFactor`. `frameId` is the scan whose past sessions it read, with
@@ -359,7 +361,12 @@ type FitWindowSummary = {
 /** What a fit read for a scorer version: the cold-start progress and the volume it plans for. */
 export type FitSessions = Pick<
   FitWindowSummary,
-  "sessions" | "minSessions" | "volumeSource" | "frameId" | "pastVolume"
+  | "sessions"
+  | "minSessions"
+  | "pastSessions"
+  | "volumeSource"
+  | "frameId"
+  | "pastVolume"
 > & { scorerVersionId: string };
 
 /**
@@ -503,6 +510,7 @@ async function simulate(
         status: "cold_start",
         sessions: inputs.history.sessions,
         required: inputs.history.minSessions,
+        pastSessions: inputs.history.pastSessions,
       };
     case "failed": {
       const cheapest = cheapestBudget(outcome.error);
@@ -837,7 +845,10 @@ function summarizeWindow(
       : "live");
   const factor = recorded?.volumeFactor ?? router.expectedTrafficFactor;
   const liveMin = liveMinSessions();
-  const pastSessions = live.sessions >= liveMin ? 0 : past.scored;
+  const pastSessions =
+    live.sessions < liveMin && past.scored >= pastSessionsNeeded()
+      ? past.scored
+      : 0;
   return {
     sessions: live.sessions + pastSessions,
     minSessions: pastSessions === 0 ? liveMin : config.autoRouting.minSessions,
@@ -898,6 +909,7 @@ function fitSessions(inputs: FitInputs): FitSessions | null {
         scorerVersionId: inputs.scorerVersionId,
         sessions: history.sessions,
         minSessions: history.minSessions,
+        pastSessions: history.pastSessions,
         volumeSource: history.volumeSource,
         frameId: history.frameId,
         pastVolume: history.pastVolume,
@@ -976,6 +988,11 @@ const LIVE_FIT_MIN_SESSIONS = 200;
 /** Never above the configured minimum, which a deployment may lower. */
 function liveMinSessions(): number {
   return Math.min(LIVE_FIT_MIN_SESSIONS, config.autoRouting.minSessions);
+}
+
+/** Scored past sessions that start a router sooner than its own would: fewer never reach the minimum before it has those. */
+export function pastSessionsNeeded(): number {
+  return config.autoRouting.minSessions - liveMinSessions();
 }
 
 /** Bounds refits when settings keep changing under an inline fit. */

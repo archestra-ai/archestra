@@ -54,6 +54,7 @@ import { AddJevKeyLink } from "./add-jev-key";
 import { BUDGET_PRESET_LABELS, type BudgetPreset } from "./budget-presets";
 import { MAX_BUDGET, MIN_BUDGET } from "./budget-scale";
 import { parsePlanSummary } from "./plan-document";
+import { coldStartProgress } from "./router-status";
 import { TIER_COLOR, TIER_LABELS, TIER_NAMES, type TierName } from "./tiers";
 
 type TierValue = { providerApiKeyId: string; modelId: string };
@@ -709,7 +710,12 @@ function useBudgetEstimate(
   const tiersSaved =
     settings !== null &&
     TIER_NAMES.every((tier) => settings.tiers[tier] !== null);
-  const coldStart = settings?.status.coldStart ?? { sessions: 0, required: 1 };
+  const coldStart = settings?.status.coldStart ?? {
+    scorerVersionId: "",
+    sessions: 0,
+    required: 1,
+    pastSessions: 0,
+  };
   const ready =
     tiersSaved &&
     !tiersEdited &&
@@ -774,7 +780,7 @@ function useBudgetEstimate(
     return {
       split: null,
       stale: false,
-      note: `Set after ${coldStart.required.toLocaleString("en-US")} sessions (${coldStart.sessions.toLocaleString("en-US")} so far). Until then, the router uses the normal model.`,
+      note: `Set once enough sessions are scored: ${coldStartProgress(coldStart)}. Until then, the router uses the normal model.`,
     };
   }
   if (mode === "custom" && !customValid) {

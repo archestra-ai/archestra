@@ -321,6 +321,9 @@ fn judged(decision: &HookDecision) -> bool {
         HookDecision::DenyCall {
             outcomes: Some(Outcomes::MissingFact(_)),
             ..
+        } | HookDecision::Block {
+            outcomes: Some(Outcomes::MissingFact(_)),
+            ..
         }
     )
 }
@@ -1005,6 +1008,11 @@ impl State {
                     _ => return Err(invariant("unexpected remedy control decision")),
                 };
                 let response = with_refusal_outcomes(runtime_refusal(text)?, &gate)?;
+                if !judged(&gate) && result_key.is_none() {
+                    // Keyed by its arguments, like an unanswered remedy below: the retry
+                    // passes the gate afresh.
+                    return answered_unrecorded(receipts, response);
+                }
                 return finish_remedy(
                     &self.store,
                     receipts,

@@ -14968,6 +14968,90 @@ describe("a call id the client reuses after loading its tool", () => {
   });
 });
 
+describe("a teammate send whose call id the client reuses", () => {
+  test("is not answered by the notice of its earlier unjudged attempt once admitted", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const contextFor = () => {
+      const context = requestContext({
+        sessionId: "reused-send",
+        organizationId,
+      });
+      context.headers = { "user-agent": "claude-cli/2.1.300 (external, cli)" };
+      trustedOf(context).request = {
+        tools: stubRequestTools(),
+        session: {},
+        customTools: new Set(),
+        declaredTools: [{ name: "SendMessage" }],
+      };
+      return context;
+    };
+    const send = {
+      id: "send_0",
+      name: "SendMessage",
+      arguments: { to: "*", message: "status?" },
+    };
+    const unjudgedNotice = "[appa] this call was not checked.";
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValueOnce([
+        {
+          kind: "deny",
+          feedback: unjudgedNotice,
+          outcome: { kind: "missing_fact", retry: "later" },
+          proxyNotice: true,
+        },
+      ])
+      .mockResolvedValue([{ kind: "allow" }]);
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const childReturns = vi
+      .spyOn(appaService, "loadChildReturns")
+      .mockResolvedValue([]);
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    try {
+      const unjudged = contextFor();
+      await plugin.onSessionInit(unjudged);
+      await plugin.onToolCalls({ ...unjudged, toolCalls: [send] });
+      await plugin.onCleanup(unjudged);
+
+      const admitted = contextFor();
+      await plugin.onSessionInit(admitted);
+      const second = await plugin.onToolCalls({
+        ...admitted,
+        toolCalls: [send],
+      });
+      expect(second).toMatchObject({ blocked: [{ id: "send_0" }] });
+      expect(evaluate).toHaveBeenCalledTimes(2);
+      await plugin.onCleanup(admitted);
+
+      const answered = contextFor();
+      await plugin.onSessionInit(answered);
+      const results = await plugin.onToolResults({
+        ...answered,
+        toolResults: [
+          {
+            id: "send_0",
+            name: "SendMessage",
+            content: "sent",
+            isError: false,
+          },
+        ],
+      });
+      // The send's own report is judged; the earlier attempt's notice is gone.
+      expect(results?.toolResultUpdates?.send_0).toEqual(expect.any(String));
+      expect(results?.toolResultUpdates?.send_0).not.toBe(unjudgedNotice);
+      await plugin.onCleanup(answered);
+    } finally {
+      evaluate.mockRestore();
+      processResults.mockRestore();
+      childReturns.mockRestore();
+    }
+  });
+});
+
 describe("a provider-hosted call refused before any ruling", () => {
   test("its notice, not the runtime's withheld answer, reaches the next upstream request", async ({
     makeOrganization,

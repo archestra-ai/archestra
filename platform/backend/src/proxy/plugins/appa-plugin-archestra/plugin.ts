@@ -1879,13 +1879,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     // A notice an earlier refusal of an id left must not answer for the call now
     // decided under it.
-    await forgetSupersededRulings(
-      session,
-      [...decisionById].map(([callId, decision]) => ({
+    await forgetSupersededRulings(session, [
+      ...[...decisionById].map(([callId, decision]) => ({
         callId,
         keepsNotice: decision.kind === "deny" && decision.proxyNotice === true,
       })),
-    );
+      ...[...admittedRelayIds].map((callId) => ({
+        callId,
+        keepsNotice: false,
+      })),
+    ]);
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
     }

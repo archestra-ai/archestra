@@ -38,6 +38,7 @@ import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
 import { openaiAdapterFactory } from "./adapters";
 import { virtualKeyRateLimiter } from "./llm-proxy-auth";
+import anthropicProxyRoutes from "./routes/anthropic";
 import openAiProxyRoutes from "./routes/openai";
 
 setupTestCacheManager();
@@ -99,6 +100,7 @@ describe("Model pools - LLM Proxy", () => {
       makeSecret,
       makeUser,
     }) => {
+      await app.register(anthropicProxyRoutes);
       const organizationId = proxy.organizationId;
       const user = await makeUser();
       await makeMember(user.id, organizationId);
@@ -193,6 +195,25 @@ describe("Model pools - LLM Proxy", () => {
           payload: { model, messages: [{ role: "user", content: "Hello" }] },
         });
       const createClient = vi.mocked(openaiAdapterFactory.createClient);
+      // The inbound wire need not have any credential of its own: the
+      // caller can use the OpenAI member through the pool's translation.
+      const anthropic = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agentId}/v1/messages`,
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "allowed-pool",
+          max_tokens: 128,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+      expect(anthropic.statusCode, anthropic.body).toBe(200);
+      expect(createClient.mock.lastCall?.[0]).toBe("sk-pool");
+
+      createClient.mockClear();
       const allowed = await send("allowed-pool");
       expect(allowed.statusCode, allowed.body).toBe(200);
       expect(createClient.mock.lastCall?.[0]).toBe("sk-pool");

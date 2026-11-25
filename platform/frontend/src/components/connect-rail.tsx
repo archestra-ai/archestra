@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Plus } from "lucide-react";
-import { useId } from "react";
+import { type ReactNode, useId } from "react";
 import { TerminalBlock } from "@/app/connection/terminal-block";
 import { SettingsLink } from "@/components/settings-link";
 import { Button } from "@/components/ui/button";
@@ -300,10 +300,12 @@ export function OauthTokenRequest({
   clientId,
   grantType,
   scope,
+  renderCode = (code) => <TerminalBlock code={code} />,
 }: {
   clientId: string;
   grantType: "client_credentials" | "authorization_code";
   scope: string;
+  renderCode?: (code: string) => ReactNode;
 }) {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   if (grantType === "authorization_code") {
@@ -327,15 +329,15 @@ export function OauthTokenRequest({
       <p className="text-sm text-muted-foreground">
         Get an access token with the client's secret.
       </p>
-      <TerminalBlock
-        code={[
+      {renderCode(
+        [
           `curl -X POST "${origin}/api/auth/oauth2/token" \\`,
           `  -d "grant_type=client_credentials" \\`,
           `  -d "client_id=${clientId}" \\`,
           `  -d "client_secret=$CLIENT_SECRET" \\`,
           `  -d "scope=${scope}"`,
-        ].join("\n")}
-      />
+        ].join("\n"),
+      )}
     </div>
   );
 }

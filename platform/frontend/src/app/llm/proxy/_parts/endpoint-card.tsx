@@ -29,7 +29,10 @@ import {
   type LlmConnection,
   useLlmConnection,
 } from "@/components/use-llm-connection";
-import { RequestExample } from "@/components/virtual-key-connection-guide";
+import {
+  FloatingCodeExample,
+  RequestExample,
+} from "@/components/virtual-key-connection-guide";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -256,6 +259,7 @@ function EndpointRequest({
           <OauthTokenRequest
             {...connection.picked.oauth}
             scope={LLM_PROXY_OAUTH_SCOPE}
+            renderCode={(code) => <FloatingCodeExample code={code} />}
           />
         </div>
       )}

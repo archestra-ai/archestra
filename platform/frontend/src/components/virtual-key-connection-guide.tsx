@@ -1137,14 +1137,14 @@ export function MaskedCodeExample({
  * real key in the command when the reader may read it (their own key, or one
  * just created), and the env var otherwise; the block itself stays masked.
  */
-function FloatingCodeExample({
+export function FloatingCodeExample({
   code,
   secret,
-  placeholder,
+  placeholder = MASKED_KEY,
 }: {
   code: string;
-  secret: RevealableSecret | undefined;
-  placeholder: string;
+  secret?: RevealableSecret;
+  placeholder?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);

@@ -30,12 +30,12 @@ for (const width of [1440, 390]) {
       },
     ]);
     await page.goto("/llm/limits");
-    // Default user limits are managed on this page, above the limits table.
-    const defaultLimit = page.getByRole("heading", {
-      name: "Default user limit",
-      exact: true,
+    // The line above the limits table reads "Affected by Limits", or "No one
+    // affected by limits" when nobody is at or near their own limit.
+    const affectedByLimits = page.getByRole("heading", {
+      name: /affected by limits/i,
     });
-    await expect(defaultLimit).toBeVisible();
+    await expect(affectedByLimits).toBeVisible();
 
     for (let attempt = 0; attempt < 2; attempt++) {
       await page
@@ -76,7 +76,7 @@ for (const width of [1440, 390]) {
       await expect(amount).not.toHaveAttribute("aria-describedby");
       await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
       await expect(dialog).not.toBeVisible();
-      await expect(defaultLimit).toBeVisible();
+      await expect(affectedByLimits).toBeVisible();
     }
 
     await page.goto("/llm/limits?edit=preview-limit");
@@ -110,7 +110,7 @@ for (const width of [1440, 390]) {
     await edit.getByLabel("Limit value", { exact: true }).fill("500");
     await edit.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(edit).not.toBeVisible();
-    await expect(defaultLimit).toBeVisible();
+    await expect(affectedByLimits).toBeVisible();
     await page.goto("/llm/limits?edit=preview-limit");
     await expect(
       page.getByRole("dialog").getByLabel("Limit value", { exact: true }),

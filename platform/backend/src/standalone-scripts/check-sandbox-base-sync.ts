@@ -76,8 +76,7 @@ if (baseImage && !dockerfile.includes(`FROM ${baseImage}@sha256:`)) {
   );
 }
 if (
-  // DHI republishes a patch release as `3.14.N-R`; Dependabot bumps to those.
-  !/^FROM dhi\.io\/python:3\.14\.\d+(?:-\d+)?-debian13-dev@sha256:[0-9a-f]{64}$/m.test(
+  !/^FROM dhi\.io\/python:3\.14\.\d+-debian13-dev@sha256:[0-9a-f]{64}$/m.test(
     dockerfile,
   )
 ) {

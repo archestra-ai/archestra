@@ -297,7 +297,8 @@ function AffectedByLimits({
     meta = [];
   } else if (noOneAffected) {
     main = null;
-    meta = [unlimitedItem, resetsItem];
+    // No reset time here: nobody is waiting for one.
+    meta = [unlimitedItem];
   } else if (allUnlimited) {
     main = (
       <>

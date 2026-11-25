@@ -2,7 +2,6 @@
 title: External Agents
 description: Connect external Agent2Agent systems and use them as subagents
 order: 2
-lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

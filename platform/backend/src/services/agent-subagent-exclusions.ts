@@ -61,12 +61,13 @@ export async function resolveCandidateRuntimeSubagentIds(params: {
         excludeAgentId: callerAgent.id,
         includeDetails: false,
         environmentId: callerAgent.environmentId,
+        only: "runtime",
       }),
       AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgent.id),
     ]);
     const excluded = new Set(excludedIds);
     return targets
-      .filter((target) => target.hasRuntime && !excluded.has(target.id))
+      .filter((target) => !excluded.has(target.id))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
       .map((target) => target.id);
   }
@@ -93,11 +94,10 @@ export async function resolveCandidateRuntimeSubagentIds(params: {
     organizationId: callerAgent.organizationId,
     includeDetails: false,
     environmentId: callerAgent.environmentId,
+    only: "runtime",
   });
   const accessibleRuntimeIds = new Set(
-    accessibleTargets
-      .filter((target) => target.hasRuntime)
-      .map((target) => target.id),
+    accessibleTargets.map((target) => target.id),
   );
   return assignedIds.filter((id) => accessibleRuntimeIds.has(id));
 }

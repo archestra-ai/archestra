@@ -2,7 +2,6 @@
 title: Guardrails and OpenAPPA Metrics
 description: Monitor OpenAPPA hooks and engine operations through Archestra's standard Prometheus endpoint.
 order: 9
-lastUpdated: 2026-11-19
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

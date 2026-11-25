@@ -2,7 +2,6 @@
 title: Plugins
 description: Client-native extensions for Claude Code, Claude Desktop, Codex, Copilot CLI, and Cursor
 order: 4
-lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

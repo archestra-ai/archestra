@@ -2,7 +2,6 @@
 title: GitHub Copilot
 description: Connect models from a personal GitHub Copilot seat or share an organization enterprise plan.
 order: 7
-lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

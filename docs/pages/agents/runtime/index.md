@@ -3,7 +3,6 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -36,7 +35,7 @@ From a connected client, ask your agent to create one. [`create_agent`](/docs/re
 
 With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Runtimes** to choose the agents offered during creation.
 
-1. Choose **Create custom runtime** to add a new choice, or remove one with **… → Remove from list**. Once you remove a runtime, choose **Add runtime** to restore it or create a custom one.
+1. Choose **Add runtime** to add a choice, or remove one with its **… → Remove from list** action.
 2. Drag the rows into your preferred order. You can also focus a row's reorder handle and use the arrow keys.
 
 Each change saves as you make it. The Create Agent cards and Configuration runtime choices follow the order. Removing a choice preserves existing agents and their runtime configuration.

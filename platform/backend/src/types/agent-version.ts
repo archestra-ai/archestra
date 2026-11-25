@@ -45,6 +45,9 @@ export const AgentConfigSnapshotSchema = z.object({
   missingCredentialBehavior: z.string().default("allow"),
   accessAllTools: z.boolean(),
   accessAllSubagents: z.boolean(),
+  // Snapshots from before the setting existed are filled in on read with what
+  // the agent did then (see normalizeAgentVersion).
+  progressiveSubagentLoading: z.boolean().default(false),
   activationSkillMode: AgentActivationSkillModeSchema.default("all"),
   activationSkillRules: z
     .array(

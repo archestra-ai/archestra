@@ -87,6 +87,7 @@ export function resolveAutoSelectedModel(params: {
 // ===== Model resolution =====
 
 interface ModelInfo {
+  apiKeyIds?: string[];
   /** The models.id UUID. */
   id: string;
   isBest?: boolean;
@@ -131,16 +132,20 @@ interface ResolvedModel {
  * Priority: agent default -> organization default ->
  * best available model. Returns null when no model can be resolved.
  *
- * Delegates to the shared `resolveModelSelection` so the client and the
- * server resolve identically.
+ * The preview uses the same priority chain as the server. The server resolves
+ * the final selection when a chat inherits its configuration.
  */
 export function resolveInitialModel(
   params: ResolveInitialModelParams,
 ): ResolvedModel | null {
   const { modelsByProvider, agent, chatApiKeys, organization } = params;
 
-  const findKeyForProvider = (provider: string): string | null =>
-    chatApiKeys.find((k) => k.provider === provider)?.id ?? null;
+  const findKeyForModel = (provider: string, model: ModelInfo): string | null =>
+    chatApiKeys.find(
+      (key) =>
+        key.provider === provider &&
+        (model.apiKeyIds?.includes(key.id) ?? true),
+    )?.id ?? null;
 
   const allModels = Object.values(modelsByProvider).flat();
   if (allModels.length === 0) {
@@ -161,7 +166,7 @@ export function resolveInitialModel(
   // A per-user provider (e.g. GitHub Copilot) is catalogued org-wide, but its
   // credential is the viewer's own and resolved at send time — the viewer holds
   // no key for it. So a per-user model is selectable by model alone: pairing it
-  // with `findKeyForProvider` (null) would otherwise drop it from the catalog
+  // with a required key would otherwise drop it from the catalog
   // and leave an org/agent default pointing at one half-pinned and skipped.
   const isPerUserModel = (
     modelId: string | null | undefined,
@@ -185,12 +190,14 @@ export function resolveInitialModel(
   // default pointing at a per-user model is handled by `toLevel` below.
   const availableModels: RankedModel[] = [];
   for (const [provider, models] of Object.entries(modelsByProvider)) {
-    const apiKeyId = findKeyForProvider(provider);
-    if (!apiKeyId) {
-      continue;
-    }
-    for (const m of models) {
-      availableModels.push({ modelId: m.id, apiKeyId, isBest: m.isBest });
+    for (const model of models) {
+      const apiKeyId = findKeyForModel(provider, model);
+      if (apiKeyId)
+        availableModels.push({
+          modelId: model.id,
+          apiKeyId,
+          isBest: model.isBest,
+        });
     }
   }
 
@@ -229,10 +236,11 @@ export function resolveInitialModel(
     ) {
       return toLevel(modelId, apiKeyId);
     }
-    const provider = providerForModel(modelId);
     return {
       modelId,
-      apiKeyId: provider ? findKeyForProvider(provider) : null,
+      apiKeyId:
+        availableModels.find((model) => model.modelId === modelId)?.apiKeyId ??
+        null,
     };
   };
 
@@ -277,13 +285,15 @@ export function resolveConversationKeyForModel(params: {
   currentModelProvider: string | undefined;
   agentApiKeyId: string | null | undefined;
   modelProvider: string | undefined;
-  usableKeys: Array<{ id: string; provider: string }>;
+  modelApiKeyIds?: string[];
+  usableKeys: Array<{ id: string; provider: string; isGithubAppKey?: boolean }>;
 }): string | null {
   const {
     currentKeyId,
     currentModelProvider,
     agentApiKeyId,
     modelProvider,
+    modelApiKeyIds,
     usableKeys,
   } = params;
   if (!modelProvider) return null;
@@ -292,9 +302,20 @@ export function resolveConversationKeyForModel(params: {
     const currentKeyProvider =
       usableCurrentKey?.provider ??
       (currentKeyId === agentApiKeyId ? currentModelProvider : undefined);
-    if (currentKeyProvider === modelProvider) return currentKeyId;
+    if (
+      currentKeyProvider === modelProvider &&
+      (currentKeyId === agentApiKeyId ||
+        (modelApiKeyIds?.includes(currentKeyId) ?? true))
+    )
+      return currentKeyId;
   }
-  return usableKeys.find((k) => k.provider === modelProvider)?.id ?? null;
+  return (
+    usableKeys.find(
+      (k) =>
+        k.provider === modelProvider &&
+        (modelApiKeyIds?.includes(k.id) ?? true),
+    )?.id ?? null
+  );
 }
 
 /**

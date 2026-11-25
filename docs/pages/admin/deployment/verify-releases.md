@@ -2,7 +2,6 @@
 title: Verify Releases
 description: Check that an Archestra image was built by Archestra, and get its signed SBOM and VEX statements for your vulnerability scanner.
 order: 10
-lastUpdated: 2026-11-20
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

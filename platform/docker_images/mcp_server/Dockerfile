@@ -1,10 +1,10 @@
 # Base images sit on their FROM lines, not in ARGs, so Dependabot can bump them
 # (platform/dev/RELEASE.md, "Catch Findings Before A Release").
 
-# Go toolchain is sourced from the official golang:alpine image because Alpine's
+# Go toolchain is sourced from Docker's hardened golang image because Alpine's
 # community repo lags upstream Go patch releases. Stays binary-compatible since
-# both images share the Alpine base.
-FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-bin
+# both images share the Alpine 3.23 base.
+FROM dhi.io/golang:1.26.11-alpine3.23@sha256:acf89e2888e1a2943188524b51ec60da1467b42cf541f349338d479a42218012 AS go-bin
 
 FROM ghcr.io/astral-sh/uv:0.9.30@sha256:538e0b39736e7feae937a65983e49d2ab75e1559d35041f9878b7b7e51de91e4 AS uv-bin
 
@@ -14,7 +14,7 @@ FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb
 # Multi-stage build for minimal final image
 # Alpine is pinned to 3.23 (not the floating `-alpine`): 3.24's git and musl
 # are reported vulnerable until 3.24 publishes the fixes 3.23 already has.
-FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:0bc00c86d1ea5ca081791c8fae35d98311c7addbcb37219ca25fca1991a69d43 AS python-builder
+FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:e7fad2d54fd070b112f45884a9645f83a0daf9dbc34ee1161d342cef67224dee AS python-builder
 
 # Install Python build dependencies
 RUN apk add --no-cache \
@@ -46,7 +46,11 @@ RUN uv pip sync \
    python -c "import mcp; import pydantic_core"
 
 # Node.js stage
-FROM node:20.20.2-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS node-builder
+FROM dhi.io/node:20.20.2-alpine3.23-dev@sha256:e155683884a967bd60e6cb82f7a8cb0fa1b8c10f04b91c7973d5e44d4c884294 AS node-builder
+# The hardened image keeps npm under /usr/lib. Global installs go to /usr/local,
+# so the upgraded npm below lands in /usr/local/lib/node_modules/npm and runs
+# ahead of the image's own npm on PATH.
+ENV NPM_CONFIG_PREFIX=/usr/local
 
 # Upgrade npm to a version whose bundled dependencies already include the fixes for
 # picomatch CVE-2026-33671, sigstore CVE-2026-48815, and undici CVE-2026-12151
@@ -116,7 +120,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Final stage - minimal runtime image with Python 3.12
-FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:0bc00c86d1ea5ca081791c8fae35d98311c7addbcb37219ca25fca1991a69d43
+FROM dhi.io/python:3.12.16-alpine3.23-dev@sha256:e7fad2d54fd070b112f45884a9645f83a0daf9dbc34ee1161d342cef67224dee
 
 # Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \
@@ -197,13 +201,14 @@ RUN apk add --no-cache \
    # earlier line upgrades it; it is the only installed krb5-origin package.
    apk add --no-cache --upgrade "krb5-libs>=1.22.3-r0"
 
-# Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
-COPY --from=go-bin /usr/local/go /usr/local/go
+# Go toolchain sourced from the hardened golang image (Alpine apk currently ships go-1.25.9-r0).
+# DHI keeps GOROOT at /usr/lib/go; it stays at /usr/local/go here, since go finds its root from its own path.
+COPY --from=go-bin /usr/lib/go /usr/local/go
 
 COPY --from=node-runtime /usr/bin/node /usr/local/bin/node
 
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
-# node:20-alpine has npm in /usr/local/lib/node_modules/npm
+# node-builder installs its npm in /usr/local/lib/node_modules/npm
 COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx

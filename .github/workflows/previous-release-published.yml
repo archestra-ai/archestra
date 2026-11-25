@@ -47,7 +47,7 @@ jobs:
       actions: read # Link each draft's Release Please run.
     steps:
       - name: Check the previous release is published
-        uses: archestra-ai/.github/actions/previous-release-published@v1.25.2
+        uses: archestra-ai/.github/actions/previous-release-published@v1.31.1
         with:
           tag-prefix: platform-v
           release-branches: "true"
@@ -67,7 +67,7 @@ jobs:
       actions: write # Re-run a release PR's failed check once it is clear.
     steps:
       - name: Re-run checks that are now clear
-        uses: archestra-ai/.github/actions/previous-release-published@v1.25.2
+        uses: archestra-ai/.github/actions/previous-release-published@v1.31.1
         with:
           mode: recheck
           tag-prefix: platform-v

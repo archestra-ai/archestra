@@ -2,7 +2,6 @@
 title: Install a Server
 description: Connect a personal account or shared service account to an MCP registry entry
 order: 2
-lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

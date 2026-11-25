@@ -158,7 +158,8 @@ describe("ToolOutput for results that are not plain text", () => {
       "src",
       `data:image/png;base64,${TINY_PNG}`,
     );
-    expect(screen.getByText(/\[image\]/)).toBeVisible();
+    // The code block may be syntax-highlighted into token spans by now.
+    expect(document.body).toHaveTextContent("[image]");
   });
 
   it("shows the image of a result stored with its payload in the text, never the payload", () => {
@@ -175,8 +176,9 @@ describe("ToolOutput for results that are not plain text", () => {
     );
 
     expect(screen.getByRole("img")).toBeVisible();
-    expect(screen.queryByText(new RegExp(TINY_PNG.slice(0, 24)))).toBeNull();
-    expect(screen.getByText(/\[image\]/)).toBeVisible();
+    expect(document.body).not.toHaveTextContent(TINY_PNG.slice(0, 24));
+    // The code block may be syntax-highlighted into token spans by now.
+    expect(document.body).toHaveTextContent("[image]");
   });
 
   it("leaves out an image whose payload was stripped or is not a picture format", () => {
@@ -231,6 +233,7 @@ describe("ToolOutput for results that are not plain text", () => {
     );
 
     expect(screen.getByText("Gave up")).toBeVisible();
-    expect(screen.getByText(/"attempts":/)).toBeVisible();
+    // The code block may be syntax-highlighted into token spans by now.
+    expect(document.body).toHaveTextContent('"attempts": 3');
   });
 });

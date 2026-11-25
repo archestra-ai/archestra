@@ -17262,6 +17262,7 @@ export type GetAgentCatalogResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                progressiveSubagentLoading: boolean;
                 subagentLoadBalancing?: {
                     enabled: boolean;
                     algorithm: 'round_robin' | 'weighted' | 'random';
@@ -17668,6 +17669,7 @@ export type GetAgentsResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            progressiveSubagentLoading: boolean;
             subagentLoadBalancing?: {
                 enabled: boolean;
                 algorithm: 'round_robin' | 'weighted' | 'random';
@@ -17830,6 +17832,7 @@ export type CreateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        progressiveSubagentLoading?: boolean;
         subagentLoadBalancing?: {
             enabled?: boolean;
             algorithm?: 'round_robin' | 'weighted' | 'random';
@@ -18128,6 +18131,7 @@ export type CreateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -19427,6 +19431,7 @@ export type GetDefaultMcpGatewayResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -19752,6 +19757,7 @@ export type ImportAgentResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            progressiveSubagentLoading: boolean;
             subagentLoadBalancing?: {
                 enabled: boolean;
                 algorithm: 'round_robin' | 'weighted' | 'random';
@@ -20086,6 +20092,7 @@ export type GetAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -20237,6 +20244,7 @@ export type UpdateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        progressiveSubagentLoading?: boolean;
         subagentLoadBalancing?: {
             enabled?: boolean;
             algorithm?: 'round_robin' | 'weighted' | 'random';
@@ -20434,6 +20442,7 @@ export type UpdateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -20989,6 +20998,7 @@ export type GetAgentVersionResponses = {
             missingCredentialBehavior: string;
             accessAllTools: boolean;
             accessAllSubagents: boolean;
+            progressiveSubagentLoading: boolean;
             activationSkillMode: 'all' | 'manual';
             passthroughHeaders: Array<string>;
             incomingEmailEnabled: boolean;
@@ -21236,6 +21246,7 @@ export type RestoreAgentVersionResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -21502,6 +21513,7 @@ export type CloneAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -24004,6 +24016,7 @@ export type RestoreAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        progressiveSubagentLoading: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
             algorithm: 'round_robin' | 'weighted' | 'random';
@@ -45928,6 +45941,7 @@ export type GetBootstrapResponses = {
             defaultUserLimitModel: Array<string> | null;
             defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             defaultMemberRole: string | null;
+            departingMemberOwnerId: string | null;
             defaultAgentId: string | null;
             favicon: string | null;
             appName: string | null;
@@ -46434,6 +46448,7 @@ export type GetNewChatBootstrapResponses = {
                 } | null;
             };
             isBest?: boolean;
+            apiKeyIds?: Array<string>;
             isFree: boolean;
             embeddingDimensions?: EmbeddingDimensions | null;
             requiresUserConnection?: boolean;
@@ -46522,6 +46537,7 @@ export type GetNewChatBootstrapResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                progressiveSubagentLoading: boolean;
                 subagentLoadBalancing?: {
                     enabled: boolean;
                     algorithm: 'round_robin' | 'weighted' | 'random';
@@ -46684,6 +46700,7 @@ export type GetNewChatBootstrapResponses = {
                     } | null;
                 };
                 isBest?: boolean;
+                apiKeyIds?: Array<string>;
                 isFree: boolean;
                 embeddingDimensions?: EmbeddingDimensions | null;
                 requiresUserConnection?: boolean;
@@ -47049,6 +47066,7 @@ export type GetConversationBootstrapResponses = {
                     } | null;
                 };
                 isBest?: boolean;
+                apiKeyIds?: Array<string>;
                 isFree: boolean;
                 embeddingDimensions?: EmbeddingDimensions | null;
                 requiresUserConnection?: boolean;
@@ -47137,6 +47155,7 @@ export type GetConversationBootstrapResponses = {
                     activationSkillMode: 'all' | 'manual';
                     activationSkillPolicyRevision: number;
                     accessAllSubagents: boolean;
+                    progressiveSubagentLoading: boolean;
                     subagentLoadBalancing?: {
                         enabled: boolean;
                         algorithm: 'round_robin' | 'weighted' | 'random';
@@ -47299,6 +47318,7 @@ export type GetConversationBootstrapResponses = {
                         } | null;
                     };
                     isBest?: boolean;
+                    apiKeyIds?: Array<string>;
                     isFree: boolean;
                     embeddingDimensions?: EmbeddingDimensions | null;
                     requiresUserConnection?: boolean;
@@ -48331,6 +48351,7 @@ export type CreateChatConversationData = {
         projectId?: string | null;
         encryptedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
+        strictModelSelection?: boolean;
     };
     path?: never;
     query?: never;
@@ -48953,6 +48974,7 @@ export type UpdateChatConversationData = {
         projectId?: string | null;
         pinnedAt?: string | null;
         thinkingEffort?: 'low' | 'medium' | 'high';
+        strictModelSelection?: boolean;
     };
     path: {
         id: string;
@@ -109236,6 +109258,7 @@ export type GetLlmModelsResponses = {
             } | null;
         };
         isBest?: boolean;
+        apiKeyIds?: Array<string>;
         isFree: boolean;
         embeddingDimensions?: EmbeddingDimensions | null;
         requiresUserConnection?: boolean;
@@ -115090,6 +115113,113 @@ export type GetMembersResponses = {
 
 export type GetMembersResponse = GetMembersResponses[keyof GetMembersResponses];
 
+export type GetMemberOwnedResourcesData = {
+    body?: never;
+    path: {
+        userId: string;
+    };
+    query?: never;
+    url: '/api/members/{userId}/owned-resources';
+};
+
+export type GetMemberOwnedResourcesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMemberOwnedResourcesError = GetMemberOwnedResourcesErrors[keyof GetMemberOwnedResourcesErrors];
+
+export type GetMemberOwnedResourcesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Resources others use. They move to the new owner.
+         */
+        shared: Array<{
+            id: string;
+            kind: 'agent' | 'mcpGateway' | 'skill' | 'plugin' | 'catalog' | 'app' | 'remoteAgent';
+            name: string;
+            sharedWith: {
+                organization: boolean;
+                teams: Array<string>;
+                people: number;
+            };
+        }>;
+        /**
+         * Resources only this member can reach, by kind. They are deleted with the member.
+         */
+        personal: Array<{
+            kind: 'agent' | 'mcpGateway' | 'skill' | 'plugin' | 'catalog' | 'app' | 'remoteAgent';
+            count: number;
+        }>;
+    };
+};
+
+export type GetMemberOwnedResourcesResponse = GetMemberOwnedResourcesResponses[keyof GetMemberOwnedResourcesResponses];
+
 export type BulkDeleteMembersData = {
     body: {
         /**
@@ -115102,6 +115232,10 @@ export type BulkDeleteMembersData = {
             kind: 'pendingSignup';
             id: string;
         }>;
+        /**
+         * User id of an active member who becomes the owner of everything the removed members shared with others (agents, MCP gateways, skills, plugins, MCP registry entries, apps, remote agents). Defaults to you.
+         */
+        newOwnerId?: string;
     };
     path?: never;
     query?: never;
@@ -132515,6 +132649,7 @@ export type GetOrganizationResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -132633,7 +132768,9 @@ export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganiza
 export type GetOrganizationDefaultModelData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        forChat?: 'true';
+    };
     url: '/api/organization/default-model';
 };
 
@@ -132719,6 +132856,8 @@ export type GetOrganizationDefaultModelResponses = {
         autoRouters: Array<{
             id: string;
             name: string;
+            unavailableReason?: string | null;
+            normalOnlyReason?: string | null;
             tiers: {
                 fast: {
                     id: string;
@@ -132995,6 +133134,7 @@ export type UpdateAppearanceSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -133243,6 +133383,7 @@ export type UpdateSecuritySettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -133487,6 +133628,7 @@ export type UpdateMcpSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -133730,6 +133872,7 @@ export type UpdateSkillsSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -134397,6 +134540,7 @@ export type UpdateAgentSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -134664,6 +134808,7 @@ export type UpdateConnectionSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -134967,6 +135112,7 @@ export type UpdateIntegrationSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -135220,6 +135366,7 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -135344,6 +135491,7 @@ export type UpdateAuthSettingsData = {
          * One or more organization role identifiers, separated by commas
          */
         defaultMemberRole?: string | null;
+        departingMemberOwnerId?: string | null;
     };
     path?: never;
     query?: never;
@@ -135468,6 +135616,7 @@ export type UpdateAuthSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -135718,6 +135867,7 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -135958,6 +136108,7 @@ export type DropEmbeddingConfigResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -136560,6 +136711,7 @@ export type CompleteOnboardingResponses = {
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultMemberRole: string | null;
+        departingMemberOwnerId: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;

@@ -6,6 +6,8 @@ The folder tree under docs/pages is the docs navigation:
   - every folder has an index.md, which is that folder's own page;
   - folders nest at most MAX_DEPTH levels, and paths use lowercase words and hyphens;
   - every page has `title`, `description`, and a numeric `order` unique among its siblings.
+  - a `<page>-agentic.md` is not a page: it needs no frontmatter, only a `<page>.md` beside it.
+    The website shows it in the page's AI docs section.
 
 Redirect sources must not shadow a page, and destinations must resolve to a page.
 """
@@ -22,6 +24,9 @@ SEGMENT = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 
 
+AGENTIC_SUFFIX = "-agentic.md"
+
+
 def validate_tree(docs_dir: Path) -> list[str]:
     pages_dir = docs_dir / "pages"
     if not pages_dir.is_dir():
@@ -32,7 +37,7 @@ def validate_tree(docs_dir: Path) -> list[str]:
     errors = [
         f"Page must live in a section folder: {page.name}"
         for page in sorted(pages_dir.glob("*.md"))
-        if page.name != "index.md"
+        if page.name != "index.md" and not page.name.endswith(AGENTIC_SUFFIX)
     ]
     for folder in sorted(path for path in pages_dir.rglob("*") if path.is_dir()):
         relative = folder.relative_to(pages_dir)
@@ -44,6 +49,10 @@ def validate_tree(docs_dir: Path) -> list[str]:
     orders: dict[tuple[Path, int], str] = {}
     for page in sorted(pages_dir.rglob("*.md")):
         relative = page.relative_to(pages_dir)
+        if page.name.endswith(AGENTIC_SUFFIX):
+            if not page.with_name(page.name.removesuffix(AGENTIC_SUFFIX) + ".md").is_file():
+                errors.append(f"Agentic docs have no page beside them: {relative.as_posix()}")
+            continue
         if not all(SEGMENT.fullmatch(part) for part in (*relative.parent.parts, relative.stem)):
             errors.append(f"Docs paths use lowercase words and hyphens: {relative.as_posix()}")
         fields = read_frontmatter(page)

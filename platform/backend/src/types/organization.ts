@@ -426,6 +426,8 @@ export const OrganizationDefaultModelSchema = z.object({
     z.object({
       id: z.string().uuid(),
       name: z.string(),
+      unavailableReason: z.string().nullable().optional(),
+      normalOnlyReason: z.string().nullable().optional(),
       tiers: z.object({
         fast: OrganizationDefaultModelRefSchema,
         normal: OrganizationDefaultModelRefSchema,
@@ -615,6 +617,11 @@ export const UpdateAuthSettingsSchema = z.object({
   // Role slug (predefined or custom) assigned to new self-signup / ChatOps
   // members. `null` clears it back to the built-in "member" fallback.
   defaultMemberRole: RoleAssignmentSchema.nullable().optional(),
+  // User id of an active member who receives what a departing member shared
+  // with others when nobody picks a new owner (SCIM deactivation, leaving or
+  // deleting one's own account). `null` falls back to the longest-standing
+  // active admin.
+  departingMemberOwnerId: z.string().min(1).nullable().optional(),
 });
 
 export const UpdateConnectionSettingsSchema = z.object({

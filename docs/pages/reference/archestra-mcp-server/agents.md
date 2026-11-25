@@ -2,7 +2,6 @@
 title: "Agents and Runtime"
 description: "Archestra MCP Server tools for agents and runtime"
 order: 4
-lastUpdated: 2026-11-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -90,7 +89,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `agent_id` | `string` | No | The agent to do the work (UUID or agent__<slug> tool name). Omit when calling from a load-balanced agent or MCP gateway to select an assigned runtime subagent using its load-balancing policy, or pass a load-balanced router agent to select from its assigned runtime subagents. |
+| `agent_id` | `string` | No | The agent to do the work (UUID or agent__&lt;slug&gt; tool name). Omit when calling from a load-balanced agent or MCP gateway to select an assigned runtime subagent using its load-balancing policy, or pass a load-balanced router agent to select from its assigned runtime subagents. |
 | `exclude_agent_ids` | `string[]` | No | Runtime subagents that already failed on a previous attempt for this request, to skip when selecting a fallback on an MCP gateway. |
 | `credential_grant_ids` | `string[]` | No | One-time credential_grant_id handles minted by transfer_credential({ ephemeral: true }). Consumed at launch and bound only to the winning runtime pod. |
 | `message` | `string` | Yes | What the agent should do, including handoff context and acceptance criteria. |
@@ -282,7 +281,7 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `agent_id` | `string` | No | The Agent to give the credential to (UUID or agent__<slug> tool name). Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway, or pass a load-balanced router agent to target its assigned runtime subagents. |
+| `agent_id` | `string` | No | The Agent to give the credential to (UUID or agent__&lt;slug&gt; tool name). Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway, or pass a load-balanced router agent to target its assigned runtime subagents. |
 | `environment` | `object[]` | Yes | Exactly one credential to transfer. Never include more than the task needs. |
 | `environment[].key` | `string` | Yes | Environment variable name, e.g. AWS_SECRET_ACCESS_KEY. |
 | `environment[].type` | `"secret"` | Yes | Always 'secret'. Marks the value for redaction in logs. |
@@ -345,6 +344,7 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. MCP gateways defer skill, file, sandbox, run lifecycle and policy-management capabilities in this mode; questions and guardrails session/peer-message controls remain directly available. search_tools summarizes the caller's available built-in capability groups as well as connected MCP servers. Manual gateways also keep explicitly assigned MCP App UI tools available for client rendering. Internal chat keeps assigned skill discovery/loading, file, sandbox and run lifecycle tools directly available for its skill activation and file guidance. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
+| `progressiveSubagentLoading` | `boolean` | No | Progressive subagent loading for explicitly-configured delegation targets: when true they are not listed as agent__ tools and are found with search_tools and run with run_tool instead. Defaults to false. Has no effect while accessAllSubagents is true, which always loads subagents this way. |
 | `subagentLoadBalancing` | `object \| null` | No | Optional subagent load-balancing and automatic failover policy across assigned runtime subagents. |
 | `subagentLoadBalancing.enabled` | `boolean` | No |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | No |  |
@@ -416,6 +416,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | Yes | How tools are loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | Yes | Whether search_tools/run_tool may dynamically access every tool the calling user can access. |
 | `accessAllSubagents` | `boolean` | Yes | Whether the agent may delegate to every internal agent the calling user can access. |
+| `progressiveSubagentLoading` | `boolean` | Yes | Whether explicitly-configured delegation targets are found with search_tools instead of listed as agent__ tools. |
 | `subagentLoadBalancing` | `object \| null` | No | Configured subagent load-balancing and failover policy across assigned runtime subagents, or null when unconfigured. |
 | `subagentLoadBalancing.enabled` | `boolean` | Yes |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | Yes |  |
@@ -499,7 +500,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `limit` | `integer` | No | Maximum number of agents to return. |
 | `name` | `string` | No | Optional agent name filter. Use this when the user names an agent but you still need to look up the ID. |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my agents". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output
@@ -556,6 +557,7 @@ Required RBAC permission: `update` on the agent (granted per item)
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only'. |
 | `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). |
+| `progressiveSubagentLoading` | `boolean` | No | Progressive subagent loading for explicitly-configured delegation targets: when true they are not listed as agent__ tools and are found with search_tools and run with run_tool instead. Defaults to false. Has no effect while accessAllSubagents is true, which always loads subagents this way. |
 | `subagentLoadBalancing` | `object \| null` | No | Optional subagent load-balancing and automatic failover policy across assigned runtime subagents. |
 | `subagentLoadBalancing.enabled` | `boolean` | No |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | No |  |

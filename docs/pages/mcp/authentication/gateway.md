@@ -3,7 +3,6 @@ title: MCP Gateway Authentication
 sidebarTitle: Gateway Authentication
 description: Authenticate a client to an MCP Gateway with OAuth, a platform token, your identity provider's JWT, or a GitHub Actions token
 order: 1
-lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

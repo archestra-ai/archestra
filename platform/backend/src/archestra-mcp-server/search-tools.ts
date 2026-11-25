@@ -240,7 +240,9 @@ const SearchToolsOutputSchema = z.object({
             "more deeply nested) — consult the task instructions or the full schema for its shape. " +
             "Empty string when the tool takes no input. Pass matching values inside tool_args when " +
             `calling ${TOOL_RUN_TOOL_SHORT_NAME}; if a call is rejected as invalid, the error describes ` +
-            "the expected input (for third-party tools, the full input schema).",
+            "the expected input (for third-party tools, the full input schema). A long description " +
+            "that an earlier tool in this result already gave for the same parameter is not repeated: " +
+            "it reads `same as in <toolName>`.",
         ),
     }),
   ),
@@ -314,9 +316,9 @@ const registry = defineArchestraTools([
       ];
       // Both rankings break ties by tool name, so the same query pages
       // through one stable order.
-      const tools = ranked
-        .slice(args.offset, args.offset + args.limit)
-        .map(toSearchResult);
+      const tools = toSearchResults(
+        ranked.slice(args.offset, args.offset + args.limit),
+      );
       const nextOffset =
         args.offset + tools.length < matchCount
           ? args.offset + tools.length
@@ -1122,28 +1124,54 @@ function schemaHidesDetailBelow(
   );
 }
 
-function toSearchResult(candidate: SearchCandidate) {
-  return {
+/**
+ * One page of results. Tools of one kind often share a parameter and its whole
+ * description — every subagent takes the same `return_schema`, whose rules run
+ * to 600 characters — so a page would repeat that text once per row. The first
+ * row that has it keeps it; later rows point back to that row.
+ */
+function toSearchResults(candidates: SearchCandidate[]) {
+  const firstShownIn: FirstShownIn = new Map();
+  return candidates.map((candidate) => ({
     toolName: candidate.toolName,
     description: candidate.description,
     source: candidate.source,
     server: candidate.server,
     available: candidate.available,
     unavailableReason: candidate.unavailableReason,
-    params: formatParamsSignature(candidate.inputParameters),
-  };
+    params: formatParamsSignature(candidate.inputParameters, {
+      toolName: candidate.toolName,
+      firstShownIn,
+    }),
+  }));
 }
+
+/** A long parameter description, keyed with its parameter name, to the first tool on the page that shows it. */
+type FirstShownIn = Map<string, string>;
+
+/** The row a signature is rendered for, and what the rows before it showed. */
+type ResultPageRow = { toolName: string; firstShownIn: FirstShownIn };
+
+// Below this a pointer to another row saves nothing worth the indirection.
+const REPEATED_DESCRIPTION_MIN_LENGTH = 120;
 
 // Render the structured per-tool parameter summaries as a single compact line so
 // repeated search_tools calls do not accumulate verbose nested JSON in context.
 // Intentionally bounded (see PARAM_ENUM_VALUE_CAP) — the full schema stays
 // recoverable through run_tool's validation feedback, matching the existing
 // "deeper structure is left to the actual call" design above.
-function formatParamsSignature(params: InputParameterSummary[]): string {
-  return params.map(formatParamSignature).join("; ");
+function formatParamsSignature(
+  params: InputParameterSummary[],
+  /** The page the signature is a row of; absent, the signature stands alone. */
+  page?: ResultPageRow,
+): string {
+  return params.map((param) => formatParamSignature(param, page)).join("; ");
 }
 
-function formatParamSignature(param: InputParameterSummary): string {
+function formatParamSignature(
+  param: InputParameterSummary,
+  page: ResultPageRow | undefined,
+): string {
   const requiredMark = param.required ? "!" : "?";
   const typePart = formatParamType(param);
   const typeSuffix = typePart ? `:${typePart}` : "";
@@ -1152,8 +1180,30 @@ function formatParamSignature(param: InputParameterSummary): string {
   const description = param.description
     ? param.description.replace(/\s+/g, " ").trim()
     : "";
-  const descriptionSuffix = description ? ` — ${description}` : "";
+  const shown = page
+    ? withoutRepeatedDescription({ paramName: param.name, description, page })
+    : description;
+  const descriptionSuffix = shown ? ` — ${shown}` : "";
   return `${param.name}${requiredMark}${typeSuffix}${descriptionSuffix}`;
+}
+
+function withoutRepeatedDescription(params: {
+  paramName: string;
+  description: string;
+  page: ResultPageRow;
+}): string {
+  const { paramName, description } = params;
+  const { toolName, firstShownIn } = params.page;
+  if (description.length < REPEATED_DESCRIPTION_MIN_LENGTH) {
+    return description;
+  }
+  const key = `${paramName}\n${description}`;
+  const firstTool = firstShownIn.get(key);
+  if (firstTool === undefined) {
+    firstShownIn.set(key, toolName);
+    return description;
+  }
+  return `same as in ${firstTool}`;
 }
 
 // Additive: a parameter can carry a scalar type, a nested object shape (up to

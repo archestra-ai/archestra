@@ -2,7 +2,6 @@
 title: "Okta AI Agents"
 description: "Give each agent its own Okta AI agent, so Okta's delegation rules and logs apply per agent"
 order: 2
-lastUpdated: 2026-11-14
 beta: "Preview. Okta for AI Agents is in early access at Okta, and your Okta plan must include it."
 ---
 

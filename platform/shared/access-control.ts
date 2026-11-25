@@ -1564,6 +1564,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
   [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
   [RouteId.BulkDeleteMembers]: { member: ["delete"] },
+  // Shown in the Remove user dialog, to whoever may remove the member.
+  [RouteId.GetMemberOwnedResources]: { member: ["delete"] },
   // Visibility is scoped in the handler: member:read sees every member,
   // everyone else only the users they share a team with, so the route itself
   // is open to any authenticated user.

@@ -10,7 +10,15 @@ import logger from "@/logging";
 import { MemberModel } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { removeMemberTarget } from "@/services/member-removal";
-import { constructResponseSchema, MemberListItemSchema } from "@/types";
+import {
+  assertEligibleNewOwner,
+  describeOwnedResources,
+} from "@/services/owned-resource-handoff";
+import {
+  ApiError,
+  constructResponseSchema,
+  MemberListItemSchema,
+} from "@/types";
 
 const MemberBulkTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("member"), id: z.string().uuid() }),
@@ -24,6 +32,44 @@ const BulkDeleteMembersBodySchema = z.object({
     .max(MAX_BULK_IDS)
     .describe(
       "Member targets to remove. Duplicates are collapsed by kind and id.",
+    ),
+  newOwnerId: z
+    .string()
+    .optional()
+    .describe(
+      "User id of an active member who becomes the owner of everything the removed members shared with others (agents, MCP gateways, skills, plugins, MCP registry entries, apps, remote agents). Defaults to you.",
+    ),
+});
+
+const OwnedResourceKindSchema = z.enum([
+  "agent",
+  "mcpGateway",
+  "skill",
+  "plugin",
+  "catalog",
+  "app",
+  "remoteAgent",
+]);
+
+const MemberOwnedResourcesSchema = z.object({
+  shared: z
+    .array(
+      z.object({
+        id: z.string(),
+        kind: OwnedResourceKindSchema,
+        name: z.string(),
+        sharedWith: z.object({
+          organization: z.boolean(),
+          teams: z.array(z.string()),
+          people: z.number().int(),
+        }),
+      }),
+    )
+    .describe("Resources others use. They move to the new owner."),
+  personal: z
+    .array(z.object({ kind: OwnedResourceKindSchema, count: z.number().int() }))
+    .describe(
+      "Resources only this member can reach, by kind. They are deleted with the member.",
     ),
 });
 
@@ -80,6 +126,30 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/members/:userId/owned-resources",
+    {
+      schema: {
+        operationId: RouteId.GetMemberOwnedResources,
+        description:
+          "What a member owns: the resources others use, which move to a new owner when the member is removed, and counts of the personal resources deleted with them.",
+        tags: ["Member"],
+        params: z.object({ userId: z.string() }),
+        response: constructResponseSchema(MemberOwnedResourcesSchema),
+      },
+    },
+    async ({ params, organizationId }, reply) => {
+      if (!(await MemberModel.getByUserId(params.userId, organizationId)))
+        throw new ApiError(404, "Member not found");
+      return reply.send(
+        await describeOwnedResources({
+          userId: params.userId,
+          organizationId,
+        }),
+      );
+    },
+  );
+
   fastify.delete(
     "/api/members/bulk",
     {
@@ -94,6 +164,24 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const targets = deduplicateTargets(request.body.targets);
+      const { newOwnerId } = request.body;
+      if (newOwnerId) {
+        const ownerMemberId = await assertEligibleNewOwner({
+          candidateId: newOwnerId,
+          organizationId: request.organizationId,
+        });
+        if (
+          targets.some(
+            (target) =>
+              (target.kind === "member" && target.id === ownerMemberId) ||
+              (target.kind === "pendingSignup" && target.id === newOwnerId),
+          )
+        )
+          throw new ApiError(
+            400,
+            "The new owner cannot be someone you are removing",
+          );
+      }
       const succeeded: z.infer<typeof MemberBulkTargetSchema>[] = [];
       const failed: z.infer<typeof MemberBulkFailedTargetSchema>[] = [];
 
@@ -102,6 +190,7 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const result = await removeMemberTarget({
             organizationId: request.organizationId,
             actorUserId: request.user.id,
+            newOwnerId,
             target,
           });
           if (result.status === "removed") {

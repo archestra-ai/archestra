@@ -169,7 +169,7 @@ class StageTests(unittest.TestCase):
 class StageShapeTests(unittest.TestCase):
     def test_stage_reads_only_the_lock_on_a_pinned_native_image(self):
         # assertTrue, not assertIn: a failure must not print the whole Dockerfile.
-        self.assertRegex(DOCKERFILE, r"(?m)^FROM --platform=\$BUILDPLATFORM node:\S+@sha256:[0-9a-f]{64}"
+        self.assertRegex(DOCKERFILE, r"(?m)^FROM --platform=\$BUILDPLATFORM dhi\.io/node:\S+@sha256:[0-9a-f]{64}"
                                      r" AS archestra-cli-release$")
         instructions = re.findall(r"^(?:COPY|ADD|ARG|ENV) .*$", STAGE.split("RUN <<", 1)[0], re.M)
         self.assertEqual(instructions, ["COPY archestra-cli/release.lock.json ./release.lock.json"])

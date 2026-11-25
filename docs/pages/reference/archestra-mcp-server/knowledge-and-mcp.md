@@ -2,7 +2,6 @@
 title: "Knowledge and MCP"
 description: "Archestra MCP Server tools for knowledge and mcp"
 order: 5
-lastUpdated: 2026-11-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -87,7 +86,7 @@ Required RBAC permission: [`knowledgeSource:read`](/docs/reference/permissions#k
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my knowledge bases". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output
@@ -371,7 +370,7 @@ Required RBAC permission: [`mcpRegistry:read`](/docs/reference/permissions#mcpRe
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Optional search query to filter MCP servers by name or description. |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my MCP servers". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output
@@ -396,7 +395,7 @@ Required RBAC permission: [`mcpRegistry:read`](/docs/reference/permissions#mcpRe
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my MCP servers". |
-| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:&lt;roleId&gt;, team:&lt;teamId&gt;, user:&lt;userId&gt;, serviceAccount:&lt;serviceAccountId&gt;. Omit for no filtering. |
 | `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 #### Output
@@ -639,6 +638,7 @@ Required RBAC permission: [`mcpGateway:create`](/docs/reference/permissions#mcpG
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
+| `progressiveSubagentLoading` | `boolean` | No | Progressive subagent loading for explicitly-configured delegation targets: when true they are not listed as agent__ tools and are found with search_tools and run with run_tool instead. Defaults to false. Has no effect while accessAllSubagents is true, which always loads subagents this way. |
 | `subagentLoadBalancing` | `object \| null` | No | Optional subagent load-balancing and automatic failover policy across assigned runtime subagents. |
 | `subagentLoadBalancing.enabled` | `boolean` | No |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | No |  |
@@ -673,6 +673,7 @@ Required RBAC permission: [`mcpGateway:read`](/docs/reference/permissions#mcpGat
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | Yes | How tools are loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | Yes | Whether search_tools/run_tool may dynamically access every tool the calling user can access. |
 | `accessAllSubagents` | `boolean` | Yes | Whether the agent may delegate to every internal agent the calling user can access. |
+| `progressiveSubagentLoading` | `boolean` | Yes | Whether explicitly-configured delegation targets are found with search_tools instead of listed as agent__ tools. |
 | `subagentLoadBalancing` | `object \| null` | No | Configured subagent load-balancing and failover policy across assigned runtime subagents, or null when unconfigured. |
 | `subagentLoadBalancing.enabled` | `boolean` | Yes |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | Yes |  |
@@ -716,6 +717,7 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
+| `progressiveSubagentLoading` | `boolean` | No | Progressive subagent loading for explicitly-configured delegation targets: when true they are not listed as agent__ tools and are found with search_tools and run with run_tool instead. Defaults to false. Has no effect while accessAllSubagents is true, which always loads subagents this way. |
 | `subagentLoadBalancing` | `object \| null` | No | Optional subagent load-balancing and automatic failover policy across assigned runtime subagents. |
 | `subagentLoadBalancing.enabled` | `boolean` | No |  |
 | `subagentLoadBalancing.algorithm` | `"round_robin" \| "weighted" \| "random"` | No |  |

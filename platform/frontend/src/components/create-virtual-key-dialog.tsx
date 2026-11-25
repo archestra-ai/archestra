@@ -166,8 +166,12 @@ export function CreateVirtualKeyDialog({
   const canSetAutoRouters = useCanSetAutoRouters();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
-  const createdKeyValue = createdKey?.value ?? null;
+  const [createdKey, setCreatedKey] = useState<{
+    key: CreatedVirtualKey;
+    hasGrantedRoutes: boolean;
+  } | null>(null);
+  const revealedKey = createdKey?.key;
+  const createdKeyValue = revealedKey?.value ?? null;
 
   // False so a dialog mounted already open is seeded too.
   const prevOpenRef = useRef(false);
@@ -371,7 +375,13 @@ export function CreateVirtualKeyDialog({
           onCreated(result);
           onOpenChange(false);
         } else {
-          setCreatedKey(result);
+          setCreatedKey({
+            key: result,
+            hasGrantedRoutes:
+              !isPassthrough &&
+              ((canSetModelPools && modelPoolIds.length > 0) ||
+                (canSetAutoRouters && autoRouterIds.length > 0)),
+          });
         }
       }
     } catch {
@@ -424,7 +434,7 @@ export function CreateVirtualKeyDialog({
             : "Requests with this key use the provider keys, model pools and auto routers selected below."
       }
       size={createdKeyValue ? "large" : "small"}
-      className={createdKeyValue ? "max-w-4xl" : "sm:max-w-[720px]"}
+      className={createdKeyValue ? "h-auto max-w-4xl" : "sm:max-w-[720px]"}
       isDirty={isDirty}
     >
       <form
@@ -439,18 +449,21 @@ export function CreateVirtualKeyDialog({
           className="space-y-6"
           data-testid={E2eTestId.VirtualKeyCreateDialog}
         >
-          {createdKey ? (
+          {revealedKey && createdKey ? (
             <VirtualKeyConnectionGuide
-              keyValue={createdKey.value}
-              keyType={createdKey.keyType}
-              virtualApiKeyId={createdKey.id}
-              mappedProviderKeys={createdKey.providerApiKeys}
-              includeFutureProviders={createdKey.includeFutureProviders}
+              keyValue={revealedKey.value}
+              keyType={revealedKey.keyType}
+              virtualApiKeyId={revealedKey.id}
+              mappedProviderKeys={revealedKey.providerApiKeys}
+              includeFutureProviders={revealedKey.includeFutureProviders}
+              hasGrantedRoutes={createdKey.hasGrantedRoutes}
+              editKeyHref={`/llm/proxy/virtual-keys?edit=${revealedKey.id}`}
+              onEditKeyNavigate={() => onOpenChange(false)}
               connectionBaseUrl={connectionBaseUrl}
-              name={createdKey.name}
-              expiration={formatExpiration(createdKey.expiresAt)}
+              name={revealedKey.name}
+              expiration={formatExpiration(revealedKey.expiresAt)}
               visibleTo={
-                createdKey.keyType === "passthrough" ? null : "Only you"
+                revealedKey.keyType === "passthrough" ? null : "Only you"
               }
             />
           ) : (
@@ -551,7 +564,9 @@ export function CreateVirtualKeyDialog({
             </>
           )}
         </DialogBody>
-        <DialogStickyFooter className="mt-0">
+        <DialogStickyFooter
+          className={createdKeyValue ? "mt-0 sm:justify-start" : "mt-0"}
+        >
           {noProviderKeys && !createdKeyValue && (
             <p className="mr-auto text-xs text-muted-foreground">
               <span>

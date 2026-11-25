@@ -58,6 +58,7 @@ import InvitationModel from "@/models/invitation";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
+import { port } from "@/models/ports";
 import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
 import UserModel from "@/models/user";
@@ -482,6 +483,23 @@ export const auth = betterAuth({
       },
       delete: {
         before: async (user: { id: string }) => {
+          // Shared resources go to an admin before anything below deletes the
+          // personal ones and `author_id` nulls on the rest.
+          try {
+            const handoff = await port("ownedResourceHandoff");
+            for (const organizationId of await MemberModel.findOrganizationIdsByUserId(
+              user.id,
+            ))
+              await handoff.handOffSharedResources({
+                userId: user.id,
+                organizationId,
+              });
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to hand off shared resources",
+            );
+          }
           // The agents.author_id FK uses ON DELETE SET NULL so non-personal agents
           // keep their authorship history. Personal MCP gateways must NOT survive
           // the user — the deletion guard in routes/agent.ts blocks DELETE while
@@ -2179,9 +2197,12 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
     // otherwise a failed removal would still write a member.deleted audit row
     // and purge a member's personal resources.
     if (stash && !(await membershipStillExists(stash))) {
+      // The admin who removed the member receives their shared resources.
+      let actorUserId: string | null = null;
       try {
         const headers = new Headers(request.headers as HeadersInit);
         const resolved = await auth.api.getSession({ headers });
+        actorUserId = resolved?.user?.id ?? null;
         if (resolved?.user && resolved?.session) {
           await AuditLogModel.create({
             organizationId: stash.organizationId,
@@ -2228,7 +2249,10 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           "[auth] failed to sync system role after member removal",
         );
       }
-      await cleanupAfterMembershipRemoval(stash);
+      await cleanupAfterMembershipRemoval({
+        ...stash,
+        recipientId: actorUserId,
+      });
       await openappaBatteriesService.recompileOrganizations([
         stash.organizationId,
       ]);

@@ -2,7 +2,6 @@
 title: Triggers & Channels
 description: Start agent runs from webhooks, A2A calls, email, Slack, Microsoft Teams, Telegram, and Jira
 order: 7
-lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -7,13 +7,17 @@
 // Dagger sandbox containers), the browser-stream feature (browser pods), and
 // the external-IdP session token resolver (IdP network call).
 import {
+  AGENT_TOOL_PREFIX,
   getArchestraToolFullName,
   MCP_EXECUTED_AS_META_KEY,
+  SELF_FORK_TOOL_NAME,
   SKILL_TOOL_PREFIX,
+  slugify,
   TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
   TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_AGENT_RUN_FULL_NAME,
   TOOL_STEER_AGENT_RUN_FULL_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
@@ -33,6 +37,7 @@ import {
 } from "@/utils/tool-result-cap";
 import * as chatClient from "./chat-mcp-client";
 import mcpClient from "./mcp-client";
+import { createSubagentToolStreamBridge } from "./subagent-tool-stream";
 import {
   MAX_IDENTICAL_TOOL_CALLS,
   REPEAT_CALL_TERMINATION_CEILING,
@@ -733,6 +738,73 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
       expect.objectContaining({
         toolName: delegationTool.name,
         isError: false,
+      }),
+    );
+  });
+
+  test("with All agents the chat lists no subagent and runs one through run_tool, nested under that call", async () => {
+    const { agent, org, user, conversation, gatewayClient, baseParams } =
+      await setupChatToolEnv({
+        gatewayTools: [
+          {
+            name: TOOL_RUN_TOOL_FULL_NAME,
+            description: "",
+            inputSchema: {
+              type: "object",
+              properties: {
+                tool_name: { type: "string" },
+                tool_args: { type: "object" },
+              },
+            },
+          },
+        ],
+      });
+    await AgentModel.update(agent.id, { accessAllSubagents: true });
+    // Changing how subagents are loaded drops the agent's gateway client.
+    chatClient.__test.setCachedClient(
+      chatClient.__test.getCacheKey(agent.id, user.id, conversation?.id ?? ""),
+      gatewayClient,
+    );
+    const child = await f.makeAgent({
+      organizationId: org.id,
+      name: "Child Worker",
+      agentType: "agent",
+    });
+    const childToolName = `${AGENT_TOOL_PREFIX}${slugify(child.name)}`;
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "child-msg-1",
+      text: "child says hi",
+      finishReason: "stop",
+    });
+    const subagentToolStream = createSubagentToolStreamBridge();
+
+    const tools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: agent.id,
+      subagentToolStream,
+    });
+
+    // Every agent the user can access would otherwise be a tool of its own.
+    expect(
+      Object.keys(tools).filter(
+        (name) =>
+          name.startsWith(AGENT_TOOL_PREFIX) && name !== SELF_FORK_TOOL_NAME,
+      ),
+    ).toEqual([]);
+
+    const result = await tools[TOOL_RUN_TOOL_FULL_NAME].execute?.(
+      { tool_name: childToolName, tool_args: { message: "do the work" } },
+      execOptions("call-run-tool"),
+    );
+
+    expect(toolResultContent(result)).toContain("child says hi");
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: child.id,
+        message: "do the work",
+        parentDelegationChain: agent.id,
+        subagentToolStream,
+        delegationToolCallId: "call-run-tool",
       }),
     );
   });

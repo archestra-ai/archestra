@@ -24,11 +24,16 @@ import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
 export function useOrganizationDefaultModel({
   enabled = true,
   followsRouting = true,
+  forChat = false,
 }: {
   enabled?: boolean;
   followsRouting?: boolean;
+  forChat?: boolean;
 } = {}) {
-  const { data: summary } = useOrganizationDefaultModelSummary(enabled);
+  const { data: summary } = useOrganizationDefaultModelSummary(
+    enabled,
+    forChat,
+  );
   const { data: canReadLlmModels } = useHasPermissions({
     llmModel: ["read"],
   });
@@ -48,6 +53,8 @@ export function useOrganizationDefaultModel({
         label: autoRouterLabel(router.name),
         description: tiersLabel(router.tiers),
         tiers: router.tiers,
+        unavailableReason: router.unavailableReason ?? null,
+        normalOnlyReason: router.normalOnlyReason ?? null,
       })),
     [summary?.autoRouters],
   );

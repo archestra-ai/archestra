@@ -13508,6 +13508,7 @@ context_control = true
           organization_id: organizationId,
           caller_id: "user:fixture",
           session_id: String(randomUUID()),
+          presenter: "attended",
         };
         const presentation = {
           control_tool: "archestra__execute_remedy_plan",
@@ -13551,6 +13552,7 @@ context_control = true
               organization_id: organizationId,
               caller_id: parent.caller_id,
               trajectory: currentTrajectory(parent),
+              presenter: "attended",
               execution_mode: "tracked",
               tool_call_id: "declare-return",
               arguments: {
@@ -13599,6 +13601,7 @@ context_control = true
               organization_id: organizationId,
               caller_id: badParent.caller_id,
               trajectory: currentTrajectory(badParent),
+              presenter: "attended",
               execution_mode: "tracked",
               tool_call_id: "bad-label",
               arguments: {
@@ -13716,6 +13719,7 @@ context_control = true
               organization_id: organizationId,
               caller_id: optionsParent.caller_id,
               trajectory: currentTrajectory(optionsParent),
+              presenter: "attended",
               execution_mode: "tracked",
               tool_call_id: "options-declare",
               arguments: {
@@ -13747,6 +13751,7 @@ context_control = true
           ...parent,
           session_id: `${parent.session_id}:child`,
           parent_id: parent.session_id,
+          presenter: "delegated",
         };
         expect((await hook(child, { event: "session_start" })).decision).toBe(
           "ack",

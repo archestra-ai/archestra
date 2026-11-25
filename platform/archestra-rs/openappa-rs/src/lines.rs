@@ -249,8 +249,8 @@ impl Family {
 }
 
 /// The families this process has routed, by organization and root. A family's line and
-/// settings never change once it opened, so an entry is never stale; the map is
-/// cleared when it grows past its bound.
+/// settings never change once it opened, so an entry is never stale; a new family
+/// past the bound replaces an arbitrary one, which is read again from its log.
 #[derive(Default)]
 pub(crate) struct Families(Mutex<HashMap<(String, String), Family>>);
 
@@ -267,13 +267,14 @@ impl Families {
 
     pub(crate) fn remember(&self, organization_id: &str, root: &str, family: &Family) {
         let mut held = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        if held.len() >= FAMILIES_HELD {
-            held.clear();
+        let key = (organization_id.to_owned(), root.to_owned());
+        if held.len() >= FAMILIES_HELD
+            && !held.contains_key(&key)
+            && let Some(evicted) = held.keys().next().cloned()
+        {
+            held.remove(&evicted);
         }
-        held.insert(
-            (organization_id.to_owned(), root.to_owned()),
-            family.clone(),
-        );
+        held.insert(key, family.clone());
     }
 }
 

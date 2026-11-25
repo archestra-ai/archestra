@@ -177,11 +177,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # on every boot (KinD recreates its node each run and its containerd cannot see
 # the host Docker image cache). tagged to match the engine ref the rendered
 # manifest uses, so imagePullPolicy: IfNotPresent finds it locally.
-FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS dagger-engine-image
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS dagger-engine-image
 ARG TARGETARCH
 ARG DAGGER_VERSION
 RUN apk add --no-cache skopeo
-RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
+# skopeo stages layers in /var/tmp, which the hardened Node image leaves out.
+RUN mkdir -p /var/tmp && skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
         "docker://registry.dagger.io/engine:${DAGGER_VERSION}" \
         "docker-archive:/dagger-engine.tar:registry.dagger.io/engine:${DAGGER_VERSION}"
 
@@ -226,7 +227,7 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
 # The script uses paths relative to / so that
 # .github/scripts/test_archestra_cli_image_stage.py can run it in a directory
 # of its own.
-FROM --platform=$BUILDPLATFORM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS archestra-cli-release
+FROM --platform=$BUILDPLATFORM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS archestra-cli-release
 WORKDIR /
 COPY archestra-cli/release.lock.json ./release.lock.json
 RUN <<'ARCHESTRA_CLI_RELEASE'
@@ -291,7 +292,7 @@ rm "$sums"
 printf '{ "version": "%s" }\n' "$version" > manifest.json
 ARCHESTRA_CLI_RELEASE
 
-FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS base
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"
@@ -547,8 +548,8 @@ RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 # The same hardened Node release without the -dev tools: no shell, no apk, only
 # node and its libraries. The Kubernetes image is built on it (unified-slim).
 # Keep its digest on the same Node release as the -dev pin below.
-FROM dhi.io/node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS runtime-base-distroless
-FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256: AS runtime
+FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb4c1b88473096ec9c3660345cb54 AS runtime-base-distroless
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS runtime
 WORKDIR /app
 # The hardened image runs as UID 1000 by default. This stage installs packages,
 # and the full image starts as root (see the archestra user below).

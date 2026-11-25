@@ -298,6 +298,56 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
     });
   });
 
+  test("deduplicates preset and custom domains without collapsing exact and wildcard rules", () => {
+    const options = {
+      name: "mcp-egress-test",
+      podSelectorLabels: { app: "mcp-server", "mcp-server-id": "server-id" },
+      effectivePolicy: makeEffectivePolicy({
+        egressMode: "restricted",
+        domainPreset: "package_managers",
+        allowedDomains: [
+          "registry.npmjs.org",
+          "api.example.com",
+          "api.example.com",
+          "example.com",
+          "*.example.com",
+        ],
+      }),
+    };
+    const aws = buildManagedAwsApplicationNetworkPolicy({
+      ...options,
+      clusterDnsIps: ["10.96.0.10"],
+    });
+    const domains = (
+      aws.spec as { egress: { to?: { domainNames?: string[] }[] }[] }
+    ).egress.flatMap(
+      (rule) => rule.to?.flatMap((peer) => peer.domainNames ?? []) ?? [],
+    );
+    expect(
+      domains.filter((domain) => domain === "registry.npmjs.org"),
+    ).toHaveLength(1);
+    expect(
+      domains.filter((domain) => domain === "api.example.com"),
+    ).toHaveLength(1);
+    expect(domains.slice(-3)).toEqual([
+      "api.example.com",
+      "example.com",
+      "*.example.com",
+    ]);
+    expect(new Set(domains).size).toBe(domains.length);
+
+    const cilium = buildManagedCiliumNetworkPolicy(options);
+    const ciliumRules = (
+      cilium.spec as { egress: { toFQDNs?: unknown[] }[] }
+    ).egress.flatMap((rule) => rule.toFQDNs ?? []);
+    expect(ciliumRules).toHaveLength(domains.length);
+    const gke = buildManagedGkeFqdnNetworkPolicy(options);
+    const gkeRules = (
+      gke.spec as { egress: { matches: unknown[] }[] }
+    ).egress.flatMap((rule) => rule.matches);
+    expect(gkeRules).toHaveLength(domains.length);
+  });
+
   test("omits DNS bootstrap access when the cluster resolver is unknown", () => {
     const manifest = buildManagedAwsApplicationNetworkPolicy({
       name: "mcp-egress-test",

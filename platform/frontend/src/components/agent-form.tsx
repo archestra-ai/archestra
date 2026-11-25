@@ -209,6 +209,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -429,6 +430,7 @@ function SubagentWeightSection({
   readOnly: boolean;
   onWeightChange: (rawValue: string) => void;
 }) {
+  const inputId = useId();
   const [draft, setDraft] = useState(() => String(weight));
 
   useEffect(() => {
@@ -471,30 +473,43 @@ function SubagentWeightSection({
   };
 
   return (
-    <div className="shrink-0 space-y-3 border-b p-4">
-      <p className="text-sm font-medium text-foreground">Load balancing</p>
+    <div className="shrink-0 border-b p-4">
+      <p className="text-xs font-medium text-muted-foreground">
+        Load balancing
+      </p>
 
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between gap-3">
-          <span className="shrink-0 text-sm text-muted-foreground">Weight</span>
-          {readOnly ? (
+      <div className="mt-2 flex items-center justify-between gap-3">
+        {readOnly ? (
+          <>
+            <span className="shrink-0 text-sm font-medium text-foreground">
+              Weight
+            </span>
             <span className="text-sm font-medium tabular-nums text-foreground">
               {weight}
             </span>
-          ) : (
-            <div className="flex items-center">
+          </>
+        ) : (
+          <>
+            <Label
+              htmlFor={inputId}
+              className="shrink-0 text-sm font-medium text-foreground"
+            >
+              Weight
+            </Label>
+            <div className="inline-flex items-center rounded-lg border border-input bg-background/60 p-0.5 transition-[color,box-shadow] has-[:focus-visible]:border-ring has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50 dark:bg-input/25">
               <Button
                 type="button"
-                variant="outline"
-                size="icon-sm"
-                className="rounded-r-none border-r-0"
+                variant="ghost"
+                size="icon-xs"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-0 active:scale-95"
                 disabled={weight <= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
                 onClick={() => commitNumber(weight - 1)}
                 aria-label={`Decrease weight for ${agentName}`}
               >
-                <Minus className="h-3.5 w-3.5" />
+                <Minus className="size-3.5" />
               </Button>
               <Input
+                id={inputId}
                 type="number"
                 inputMode="numeric"
                 min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
@@ -503,40 +518,36 @@ function SubagentWeightSection({
                 value={draft}
                 onChange={(event) => handleDraftChange(event.target.value)}
                 onBlur={handleBlur}
-                className="h-8 w-16 rounded-none px-2 text-center text-sm font-medium tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                className="h-7 w-12 border-0 bg-transparent px-1 text-center text-sm font-medium tabular-nums shadow-none focus-visible:ring-0 dark:bg-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
               <Button
                 type="button"
-                variant="outline"
-                size="icon-sm"
-                className="rounded-l-none border-l-0"
+                variant="ghost"
+                size="icon-xs"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-0 active:scale-95"
                 disabled={weight >= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
                 onClick={() => commitNumber(weight + 1)}
                 aria-label={`Increase weight for ${agentName}`}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="size-3.5" />
               </Button>
             </div>
-          )}
-        </div>
+          </>
+        )}
+      </div>
 
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium tabular-nums text-foreground">
-              {sharePercent}%
-            </span>{" "}
-            of runs will be delegated to this agent.
-          </p>
-          <div
-            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
-            aria-hidden="true"
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-150"
-              style={{ width: `${sharePercent}%` }}
-            />
-          </div>
-        </div>
+      <div className="mt-3 space-y-1.5">
+        <Progress
+          value={sharePercent}
+          aria-hidden="true"
+          className="h-1 bg-primary/15"
+        />
+        <p className="text-xs leading-normal text-muted-foreground">
+          <span className="font-medium tabular-nums text-foreground">
+            {sharePercent}%
+          </span>{" "}
+          of runs will be delegated to this agent.
+        </p>
       </div>
     </div>
   );

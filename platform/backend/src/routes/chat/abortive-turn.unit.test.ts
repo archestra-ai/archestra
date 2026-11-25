@@ -1,6 +1,6 @@
 import type { UIMessageChunk } from "ai";
 import { describe, expect, test, vi } from "vitest";
-import { createAbortiveTurnTracker } from "./abortive-turn";
+import { createAbortiveTurnTracker, isAbortWithCause } from "./abortive-turn";
 
 const SENTINEL_ERROR: UIMessageChunk = {
   type: "error",
@@ -147,5 +147,20 @@ describe("createAbortiveTurnTracker", () => {
     );
     expect(onUnresolvedToolCall).toHaveBeenCalledTimes(1);
     expect(out.some((c) => c.type === "error")).toBe(false);
+  });
+});
+
+describe("isAbortWithCause", () => {
+  test("a stop has no cause; an abort that carries an error has one", () => {
+    const stop = new AbortController();
+    stop.abort();
+    const failure = new AbortController();
+    failure.abort(new Error("The chat run could not be saved."));
+    const running = new AbortController();
+
+    // A stopped run's calls are recorded as stopped; a failed run's are not.
+    expect(isAbortWithCause(stop.signal)).toBe(false);
+    expect(isAbortWithCause(failure.signal)).toBe(true);
+    expect(isAbortWithCause(running.signal)).toBe(false);
   });
 });

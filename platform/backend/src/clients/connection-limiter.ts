@@ -14,6 +14,12 @@ export class ConnectionLimiter {
     connectionKey: string,
     limit: number,
     fn: () => Promise<T>,
+    /**
+     * Told `true` when the operation has to wait for a free place, then
+     * `false` when it starts. Never called for an operation that starts at
+     * once.
+     */
+    onQueueChange?: (queued: boolean) => void,
   ): Promise<T> {
     if (limit <= 0) {
       return fn();
@@ -54,8 +60,24 @@ export class ConnectionLimiter {
         return;
       }
 
-      state.queue.push(execute);
+      notifyQueueChange(onQueueChange, true);
+      state.queue.push(() => {
+        notifyQueueChange(onQueueChange, false);
+        execute();
+      });
     });
+  }
+}
+
+/** A reporting callback must never break the queue it reports on. */
+function notifyQueueChange(
+  onQueueChange: ((queued: boolean) => void) | undefined,
+  queued: boolean,
+): void {
+  try {
+    onQueueChange?.(queued);
+  } catch {
+    // The call still runs; only its "queued" indication is lost.
   }
 }
 

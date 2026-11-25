@@ -810,6 +810,7 @@ describe("McpClient", () => {
     // Name resolution (listTools) is on the same cancellable path.
     expect(mockListTools).toHaveBeenCalledWith(undefined, {
       signal: controller.signal,
+      timeout: config.mcpGateway.toolCallTimeoutMs,
     });
   });
 
@@ -1184,6 +1185,196 @@ describe("McpClient", () => {
     expect(failure.message).not.toContain(upstreamBody);
     expect(failure.message).not.toContain("secret detail");
     expect(mockClose).toHaveBeenCalledTimes(1);
+  });
+
+  describe("connectAndGetTools on a remote server that limits requests", () => {
+    const remoteCatalogItem = async () => {
+      const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+      if (!catalogItem) throw new Error("expected catalog item");
+      return {
+        ...catalogItem,
+        serverType: "remote" as const,
+        serverUrl: "https://example.test/mcp",
+      };
+    };
+    const rateLimited = async () => {
+      const { StreamableHTTPError } = await import(
+        "@modelcontextprotocol/sdk/client/streamableHttp.js"
+      );
+      return new StreamableHTTPError(
+        429,
+        "Error POSTing to endpoint: The MCP server returned HTTP 429 (Too Many Requests).",
+      );
+    };
+    /** The server's initialize answer, as the transport delivers it. */
+    const declareSkillsExtension = (transport: {
+      onmessage?: (message: unknown) => void;
+    }) => {
+      transport.onmessage = () => {};
+      transport.onmessage?.({
+        jsonrpc: "2.0",
+        id: 0,
+        result: {
+          protocolVersion: "2025-06-18",
+          capabilities: {
+            extensions: { "io.modelcontextprotocol/skills": {} },
+          },
+        },
+      });
+    };
+
+    test("tries again, and connects once the server lets the request through", async () => {
+      const catalogItem = await remoteCatalogItem();
+      mockListTools
+        .mockRejectedValueOnce(await rateLimited())
+        .mockRejectedValueOnce(await rateLimited())
+        .mockResolvedValueOnce({
+          tools: [{ name: "search", inputSchema: { type: "object" } }],
+        });
+
+      const tools = await withVirtualWakeTime(
+        () =>
+          mcpClient.connectAndGetTools({
+            catalogItem,
+            mcpServerId,
+            secrets: {},
+          }),
+        10_000,
+      );
+
+      expect(tools.map((tool) => tool.name)).toEqual(["search"]);
+      expect(mockListTools).toHaveBeenCalledTimes(3);
+      // Each failed attempt closed its own connection.
+      expect(mockClose).toHaveBeenCalledTimes(3);
+    });
+
+    test("gives up on a server that keeps limiting requests, and says what to do", async () => {
+      const catalogItem = await remoteCatalogItem();
+      mockListTools.mockRejectedValue(await rateLimited());
+
+      const failure = await withVirtualWakeTime(
+        () =>
+          mcpClient
+            .connectAndGetTools({ catalogItem, mcpServerId, secrets: {} })
+            .catch((error: Error) => error),
+        30_000,
+      );
+
+      expect(mockListTools).toHaveBeenCalledTimes(4);
+      expect((failure as Error).message).toContain(
+        "Upstream MCP server returned HTTP 429 while listing tools. The MCP server is limiting requests. Try again in a minute.",
+      );
+    });
+
+    test("does not try a refused credential again", async () => {
+      const catalogItem = await remoteCatalogItem();
+      const { StreamableHTTPError } = await import(
+        "@modelcontextprotocol/sdk/client/streamableHttp.js"
+      );
+      mockListTools.mockRejectedValue(
+        new StreamableHTTPError(401, "Error POSTing to endpoint: no"),
+      );
+
+      await expect(
+        mcpClient.connectAndGetTools({ catalogItem, mcpServerId, secrets: {} }),
+      ).rejects.toThrow("HTTP 401");
+      expect(mockListTools).toHaveBeenCalledTimes(1);
+    });
+
+    test("keeps a Skills server that has no tool list, as a server with no tools", async () => {
+      const catalogItem = await remoteCatalogItem();
+      mockConnect.mockImplementationOnce(async (transport) =>
+        declareSkillsExtension(transport),
+      );
+      // Such servers refuse the two methods in more ways than
+      // method-not-found; none of them is a reason to fail the install.
+      mockListTools.mockRejectedValueOnce({ code: -32601 });
+      mockListResources.mockRejectedValueOnce({
+        code: -32603,
+        message: "resources are not served here",
+      });
+
+      expect(
+        await mcpClient.connectAndGetTools({
+          catalogItem,
+          mcpServerId,
+          secrets: {},
+        }),
+      ).toEqual([]);
+    });
+
+    test.each([
+      [401, "invalid_token"],
+      [403, "Forbidden"],
+    ])("fails a Skills server that refuses the credential with HTTP %i, instead of installing it with no tools", async (status, body) => {
+      const catalogItem = await remoteCatalogItem();
+      mockConnect.mockImplementationOnce(async (transport) =>
+        declareSkillsExtension(transport),
+      );
+      const { StreamableHTTPError } = await import(
+        "@modelcontextprotocol/sdk/client/streamableHttp.js"
+      );
+      // The server turned down who is asking. It said nothing about whether
+      // it has a tool list.
+      mockListTools.mockRejectedValueOnce(
+        new StreamableHTTPError(status, `Error POSTing to endpoint: ${body}`),
+      );
+
+      await expect(
+        mcpClient.connectAndGetTools({ catalogItem, mcpServerId, secrets: {} }),
+      ).rejects.toThrow(`HTTP ${status}`);
+    });
+
+    test("fails a Skills server whose error reply is about the credential, instead of installing it with no tools", async () => {
+      const catalogItem = await remoteCatalogItem();
+      mockConnect.mockImplementationOnce(async (transport) =>
+        declareSkillsExtension(transport),
+      );
+      const { McpError } = await import("@modelcontextprotocol/sdk/types.js");
+      // Some servers answer a bad token with HTTP 200 and a JSON-RPC error.
+      mockListTools.mockRejectedValueOnce(
+        new McpError(-32001, "Unauthorized: token expired"),
+      );
+
+      await expect(
+        mcpClient.connectAndGetTools({ catalogItem, mcpServerId, secrets: {} }),
+      ).rejects.toThrow("token expired");
+    });
+
+    test("fails a Skills server whose tool list never answered, instead of installing it with no tools", async () => {
+      const catalogItem = await remoteCatalogItem();
+      mockConnect.mockImplementationOnce(async (transport) =>
+        declareSkillsExtension(transport),
+      );
+      // The request failed on its way: the server said nothing about what it
+      // offers.
+      mockListTools.mockRejectedValueOnce(new Error("fetch failed"));
+
+      await expect(
+        mcpClient.connectAndGetTools({ catalogItem, mcpServerId, secrets: {} }),
+      ).rejects.toThrow("fetch failed");
+    });
+
+    test("fails a Skills server that limits requests, instead of installing it with no tools", async () => {
+      const catalogItem = await remoteCatalogItem();
+      mockConnect.mockImplementation(async (transport) =>
+        declareSkillsExtension(transport),
+      );
+      mockListTools.mockRejectedValue(await rateLimited());
+
+      const failure = await withVirtualWakeTime(
+        () =>
+          mcpClient
+            .connectAndGetTools({ catalogItem, mcpServerId, secrets: {} })
+            .catch((error: Error) => error),
+        30_000,
+      );
+
+      // A rate limit says nothing about what the server offers. Reading it as
+      // "no tools" installed the server empty, or failed with "No tools found".
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toContain("HTTP 429");
+    });
   });
 
   describe("executeToolCallForOwner (app owner)", () => {

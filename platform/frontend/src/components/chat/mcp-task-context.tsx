@@ -14,6 +14,11 @@ interface McpTaskContextValue {
    * button flash and invites a second click.
    */
   cancelRequestedTaskIds: ReadonlySet<string>;
+  /**
+   * Tool calls that wait for a free place on their server before they start.
+   * A server runs a few calls at a time, so the rest of a large batch waits.
+   */
+  queuedToolCallIds?: ReadonlySet<string>;
 }
 
 const McpTaskContext = createContext<McpTaskContextValue | null>(null);
@@ -41,11 +46,16 @@ export function useMcpTaskFor(toolCallId: string | undefined): {
   task: McpTaskPartData | undefined;
   cancel: (taskId: string) => void;
   isCancelling: boolean;
+  /** The call waits for its turn on its server; it has not started yet. */
+  isQueued: boolean;
 } {
   const context = useContext(McpTaskContext);
   const task = toolCallId ? context?.byToolCallId.get(toolCallId) : undefined;
   return {
     task,
+    isQueued: Boolean(
+      toolCallId && context?.queuedToolCallIds?.has(toolCallId),
+    ),
     cancel: context?.cancel ?? noop,
     isCancelling: Boolean(
       task && context?.cancelRequestedTaskIds.has(task.taskId),

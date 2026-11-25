@@ -36,6 +36,7 @@ import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
+  CommonMcpToolDefinition,
   InsertMcpServer,
   InternalMcpCatalogServerType,
   McpServer,
@@ -2611,13 +2612,20 @@ class McpServerModel {
   }
 
   /**
-   * Validate that an MCP server can be connected to with given secretId
+   * Validate that an MCP server can be connected to with given secretId.
+   * A valid connection returns the tools it listed, so the install that
+   * follows does not connect a second time for the same list: every
+   * connection counts against a server that limits requests.
    */
   static async validateConnection(
     serverName: string,
     catalogId?: string,
     secretId?: string,
-  ): Promise<{ isValid: boolean; errorMessage?: string }> {
+  ): Promise<{
+    isValid: boolean;
+    errorMessage?: string;
+    tools?: CommonMcpToolDefinition[];
+  }> {
     // Load secrets if secretId is provided
     let secrets: Record<string, unknown> = {};
     if (secretId) {
@@ -2641,10 +2649,9 @@ class McpServerModel {
             secrets,
             secretId,
           });
-          return {
-            isValid: tools.length > 0,
-            errorMessage: tools.length > 0 ? undefined : "No tools found",
-          };
+          return tools.length > 0
+            ? { isValid: true, tools }
+            : { isValid: false, errorMessage: "No tools found" };
         }
       } catch (error) {
         logger.error(

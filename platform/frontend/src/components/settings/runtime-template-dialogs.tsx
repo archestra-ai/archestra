@@ -388,7 +388,7 @@ export function CustomRuntimeDialog({
           </SettingsSection>
           <SettingsSection
             title="Limits"
-            description="Run time, spend and tiers."
+            description="Default run time, spend, and tiers for new agents."
           >
             <AgentRuntimeLimitFields value={runtime} onChange={setRuntime} />
           </SettingsSection>
@@ -595,7 +595,7 @@ export function BuiltInRuntimeDialog({
           />
           <SettingsSection
             title="Limits"
-            description="Run time, spend and tiers."
+            description="Default run time, spend, and tiers for new agents."
           >
             <AgentRuntimeLimitFields value={runtime} onChange={setRuntime} />
           </SettingsSection>
@@ -648,12 +648,10 @@ function AccessSection({ scope }: { scope: string | null }) {
 // SPDX-SnippetEnd
 
 /**
- * A runtime's account rule holds for every agent on it as soon as it is
- * saved. Its other settings only change agents created afterwards: this
- * brings the agents created before up to date with those, on request. The
- * section says which settings that is. For a built-in runtime only the
- * limits change this way; the Container section already explains that its
- * image follows each release.
+ * Brings existing agents on a runtime up to date with its saved settings on
+ * request. Account rules already state under "Accounts that can run it" that
+ * they apply on save, and a built-in runtime's image states under "Container"
+ * that it follows each release.
  */
 function ExistingAgentsSection({
   runtimeId,
@@ -684,8 +682,8 @@ function ExistingAgentsSection({
       title="Existing agents"
       description={
         builtIn
-          ? "Allowed accounts apply to every agent on this runtime as soon as you save. Limit changes apply to new agents, and to existing agents once you update them here."
-          : "Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here."
+          ? "Apply saved limits to agents already on this runtime."
+          : "Apply saved settings to agents already on this runtime."
       }
     >
       <div ref={anchor}>
@@ -706,7 +704,8 @@ function ExistingAgentsSection({
           <div className="space-y-3">
             <div className="space-y-1">
               <p className="text-sm font-medium">
-                {agents(count ?? 0)} on {name} still use older settings
+                {agents(count ?? 0)} on {name} still{" "}
+                {count === 1 ? "uses" : "use"} older settings
               </p>
               <p className="text-sm text-muted-foreground">
                 {builtIn
@@ -751,7 +750,7 @@ function RuntimeAccountsSection(
   return (
     <SettingsSection
       title="Accounts that can run it"
-      description="Which accounts agents on this runtime may allow. Each agent's settings pick from these."
+      description="Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save."
     >
       <RuntimeAccountsField {...props} />
     </SettingsSection>

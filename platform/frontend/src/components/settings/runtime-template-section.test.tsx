@@ -368,16 +368,25 @@ describe("RuntimeTemplateSection", () => {
     expect(
       within(dialog).getByText("Locked to a company API key"),
     ).toBeVisible();
-    // The image follows each release by itself; only limits are editable.
+    // Each section explains its own scope in place.
     expect(
       within(dialog).getByText(
         "Updates automatically for every agent with each Test Platform release. It can't be changed.",
       ),
     ).toBeInTheDocument();
-    // Accounts reach every agent on save; the update is for the limits.
     expect(
       within(dialog).getByText(
-        "Allowed accounts apply to every agent on this runtime as soon as you save. Limit changes apply to new agents, and to existing agents once you update them here.",
+        "Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "Default run time, spend, and tiers for new agents.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "Apply saved limits to agents already on this runtime.",
       ),
     ).toBeInTheDocument();
     await user.type(

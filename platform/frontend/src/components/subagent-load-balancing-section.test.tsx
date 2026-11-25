@@ -149,7 +149,8 @@ describe("SubagentLoadBalancingSection", () => {
     ).toEqual([AGENT_B_ID, AGENT_A_ID]);
   });
 
-  it("renders regular agent copy and All-agents weighted notice without Beta badge", () => {
+  it("disables Weighted and falls back to Round robin in All-agents mode without Beta badge", async () => {
+    const user = userEvent.setup();
     renderSection(
       {
         enabled: true,
@@ -166,11 +167,16 @@ describe("SubagentLoadBalancingSection", () => {
         "Load balance Agent Runtime subagent runs or call directly.",
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'In "All agents" mode, every runtime subagent gets weight 1. Switch to Manual mode above to set custom weights.',
-      ),
-    ).toBeInTheDocument();
+
+    const select = screen.getByRole("combobox", {
+      name: "Agent Runtime Delegation",
+    });
+    expect(select).toHaveTextContent("Round robin");
+
+    await user.click(select);
+    const weightedOption = screen.getByRole("option", { name: /Weighted/ });
+    expect(weightedOption).toHaveAttribute("aria-disabled", "true");
+    expect(weightedOption).toHaveTextContent("Requires Manual mode.");
   });
 
   it("renders gateway copy and empty-assignment weighted notice using agent terminology", () => {

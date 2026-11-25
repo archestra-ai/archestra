@@ -27,12 +27,14 @@ const DEFAULT_LOAD_BALANCING_CONFIG: SubagentLoadBalancingConfig = {
 function getModeOptions(params: {
   noun: string;
   nouns: string;
+  isAllSubagentsMode: boolean;
 }): ReadonlyArray<{
   value: LoadBalancingMode;
   label: string;
   description: string;
+  disabled?: boolean;
 }> {
-  const { noun, nouns } = params;
+  const { noun, nouns, isAllSubagentsMode } = params;
   return [
     {
       value: "disabled",
@@ -47,7 +49,10 @@ function getModeOptions(params: {
     {
       value: "weighted",
       label: "Weighted",
-      description: "Split runs by custom weights.",
+      description: isAllSubagentsMode
+        ? "Requires Manual mode."
+        : "Split runs by custom weights.",
+      disabled: isAllSubagentsMode,
     },
     {
       value: "random",
@@ -83,18 +88,23 @@ export function SubagentLoadBalancingSection({
   const sectionDescription = isGateway
     ? "Load balance Agent Runtime agent runs or call directly."
     : "Load balance Agent Runtime subagent runs or call directly.";
-  const modeOptions = getModeOptions({ noun, nouns });
+  const modeOptions = getModeOptions({ noun, nouns, isAllSubagentsMode });
 
   const isEnabled = value?.enabled === true;
   const currentConfig: SubagentLoadBalancingConfig = value ?? {
     ...DEFAULT_LOAD_BALANCING_CONFIG,
     enabled: false,
   };
-  const selectedMode: LoadBalancingMode = isEnabled
-    ? currentConfig.algorithm
-    : "disabled";
+  const selectedMode: LoadBalancingMode = !isEnabled
+    ? "disabled"
+    : isAllSubagentsMode && currentConfig.algorithm === "weighted"
+      ? "round_robin"
+      : currentConfig.algorithm;
 
   const handleModeChange = (mode: LoadBalancingMode) => {
+    if (mode === "weighted" && isAllSubagentsMode) {
+      return;
+    }
     if (mode === "disabled") {
       if (!value) return;
       onChange({
@@ -111,15 +121,14 @@ export function SubagentLoadBalancingSection({
     });
   };
 
-  // In Manual mode with assigned agents, weights are edited inline directly on
-  // each assigned runtime card above to avoid duplicating the list here.
+  // In Manual mode with assigned agents, weights are edited in the Assigned
+  // table above; only show a hint when nothing is assigned yet.
   const weightedNotice =
-    isEnabled && currentConfig.algorithm === "weighted"
-      ? isAllSubagentsMode
-        ? `In "All agents" mode, every runtime ${noun} gets weight 1. Switch to Manual mode above to set custom weights.`
-        : selectedAgentIds.length === 0
-          ? `Assign ${nouns} above to set custom weights.`
-          : null
+    !isAllSubagentsMode &&
+    isEnabled &&
+    currentConfig.algorithm === "weighted" &&
+    selectedAgentIds.length === 0
+      ? `Assign ${nouns} above to set custom weights.`
       : null;
 
   return (
@@ -157,6 +166,7 @@ export function SubagentLoadBalancingSection({
               <SelectItem
                 key={option.value}
                 value={option.value}
+                disabled={option.disabled}
                 description={option.description}
               >
                 {option.label}

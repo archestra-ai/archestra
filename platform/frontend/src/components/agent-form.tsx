@@ -5380,9 +5380,17 @@ export function AgentForm({
                           isInternalAgent ? "Subagent access" : "Agent access"
                         }
                         mode={accessAllSubagents ? "all" : "manual"}
-                        onModeChange={(mode) =>
-                          setAccessAllSubagents(mode === "all")
-                        }
+                        onModeChange={(mode) => {
+                          const nextAll = mode === "all";
+                          setAccessAllSubagents(nextAll);
+                          if (nextAll) {
+                            setSubagentLoadBalancing((prev) =>
+                              prev?.enabled && prev.algorithm === "weighted"
+                                ? { ...prev, algorithm: "round_robin" }
+                                : prev,
+                            );
+                          }
+                        }}
                         all={{
                           title: "All agents",
                           rule: "Every local agent, including ones added later. Exclude the ones you don't want.",

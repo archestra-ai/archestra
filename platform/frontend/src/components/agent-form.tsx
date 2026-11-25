@@ -412,8 +412,6 @@ function AgentToolsList({ agentId }: { agentId: string }) {
   );
 }
 
-const WEIGHT_PRESETS = [1, 2, 3, 5, 10] as const;
-
 /**
  * Load balancing weight controls shown inside a runtime `SubagentPill` popover
  * when Weighted delegation is active.
@@ -474,15 +472,12 @@ function SubagentWeightSection({
 
   return (
     <div className="shrink-0 space-y-3 border-b px-4 py-3">
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="font-medium text-foreground">Load balancing</span>
-          <span className="shrink-0 font-mono font-medium tabular-nums text-primary">
-            {sharePercent}%
-          </span>
-        </div>
+      <div className="flex items-center gap-3 text-xs">
+        <span className="shrink-0 font-medium text-muted-foreground">
+          Runs share
+        </span>
         <div
-          className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+          className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
           aria-hidden="true"
         >
           <div
@@ -490,74 +485,61 @@ function SubagentWeightSection({
             style={{ width: `${sharePercent}%` }}
           />
         </div>
+        <span className="shrink-0 font-mono font-medium tabular-nums text-primary">
+          {sharePercent}%
+        </span>
       </div>
 
       {readOnly ? (
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Weight</span>
-          <span className="font-mono font-medium tabular-nums text-foreground">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium text-foreground">
+            Load balancing weight
+          </span>
+          <span className="font-mono text-sm font-medium tabular-nums text-foreground">
             {weight}
           </span>
         </div>
       ) : (
-        <>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">Weight</span>
-            <div className="flex items-center">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                className="rounded-r-none border-r-0"
-                disabled={weight <= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
-                onClick={() => commitNumber(weight - 1)}
-                aria-label={`Decrease weight for ${agentName}`}
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </Button>
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
-                max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
-                aria-label={`Weight for ${agentName}`}
-                value={draft}
-                onChange={(event) => handleDraftChange(event.target.value)}
-                onBlur={handleBlur}
-                className="h-8 w-16 rounded-none px-2 text-center font-mono text-xs tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                className="rounded-l-none border-l-0"
-                disabled={weight >= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
-                onClick={() => commitNumber(weight + 1)}
-                aria-label={`Increase weight for ${agentName}`}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium text-foreground">
+            Load balancing weight
+          </span>
+          <div className="flex items-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="rounded-r-none border-r-0"
+              disabled={weight <= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+              onClick={() => commitNumber(weight - 1)}
+              aria-label={`Decrease weight for ${agentName}`}
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </Button>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+              max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+              aria-label={`Weight for ${agentName}`}
+              value={draft}
+              onChange={(event) => handleDraftChange(event.target.value)}
+              onBlur={handleBlur}
+              className="h-8 w-16 rounded-none px-2 text-center font-mono text-xs tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="rounded-l-none border-l-0"
+              disabled={weight >= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+              onClick={() => commitNumber(weight + 1)}
+              aria-label={`Increase weight for ${agentName}`}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
           </div>
-
-          <div className="flex items-center gap-1">
-            {WEIGHT_PRESETS.map((preset) => (
-              <Button
-                key={preset}
-                type="button"
-                variant={weight === preset ? "secondary" : "ghost"}
-                size="xs"
-                className={cn(
-                  "flex-1 font-mono text-xs tabular-nums",
-                  weight === preset && "font-semibold text-foreground",
-                )}
-                onClick={() => commitNumber(preset)}
-              >
-                <span>{preset}</span>
-              </Button>
-            ))}
-          </div>
-        </>
+        </div>
       )}
     </div>
   );

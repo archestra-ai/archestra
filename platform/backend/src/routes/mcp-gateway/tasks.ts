@@ -181,7 +181,18 @@ export async function runToolCallMaybeTask(params: {
                   "The tool requested interactive input while running as a background task. Re-run it without task mode to answer interactively.",
               },
             }
-          : { kind: "completed", result };
+          : // An upload request has to precede the task (File Uploads): one
+            // that arrives after detaching has no caller left to upload.
+            result?.resultType === "upload_required"
+            ? {
+                kind: "failed",
+                error: {
+                  code: -32603,
+                  message:
+                    "The tool asked for files after it was already running as a background task, so it didn't run. Call it again.",
+                },
+              }
+            : { kind: "completed", result };
     } catch (error) {
       outcome = {
         kind: "failed",

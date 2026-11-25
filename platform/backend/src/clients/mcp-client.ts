@@ -51,6 +51,13 @@ import {
 } from "@/auth/permission-gated";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
+import {
+  discoverUpstreamFilesSupport,
+  GATEWAY_UPSTREAM_FILES_CAPABILITIES,
+  listStatelessTools,
+  StatelessUpstreamError,
+  type UpstreamHttpTarget,
+} from "@/clients/mcp-files/stateless-upstream";
 import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import { browserStorageSync } from "@/features/browser-stream/services/browser-storage-sync";
@@ -178,6 +185,7 @@ import {
   captureServerExtensions,
   type DirectServerSession,
 } from "./mcp-server-extensions";
+import { UpstreamHttpTransport } from "./mcp-upstream-http-transport";
 
 type PassiveMcpClient = {
   execute: <T>(operation: (client: Client) => Promise<T>) => Promise<
@@ -512,6 +520,50 @@ type CachedServerState = {
   credentialFingerprint: string | null;
 };
 
+/**
+ * A tool call made by the caller of {@link McpClient.executeToolCallForOwner}
+ * itself, once the server, its credentials and its address are resolved.
+ *
+ * Every failure must come back as an outcome; the only throw expected is the
+ * abort of `signal` by the caller's own abort signal.
+ */
+export type UpstreamHttpCall = (params: {
+  target: UpstreamHttpTarget;
+  /** The tool's name on its server. */
+  toolName: string;
+  /** Stable for one installation of one catalog item. */
+  installKey: string;
+  /** Which environment's egress policy governs addresses the server names. */
+  networkPolicyScope: {
+    environmentId: string | null;
+    organizationId: string | null | undefined;
+  };
+  /** Bounded by the tool-call timeout and the caller's abort signal. */
+  signal: AbortSignal;
+}) => Promise<UpstreamHttpCallOutcome>;
+
+export type UpstreamHttpCallPlan = {
+  run: UpstreamHttpCall;
+  /**
+   * The arguments the tool-call record keeps in place of the call's own: a
+   * file call's inline bytes have no place in the log.
+   */
+  recordedArguments: Record<string, unknown>;
+};
+
+export type UpstreamHttpCallOutcome =
+  | {
+      kind: "result";
+      result: {
+        content: ContentBlock[];
+        isError: boolean;
+        _meta?: Record<string, unknown>;
+        structuredContent?: Record<string, unknown>;
+      };
+    }
+  /** An interim step the caller handles itself: not a tool call to record. */
+  | { kind: "unrecorded" };
+
 /** Options for {@link McpClient.executeToolCallForOwner}. */
 interface ExecuteToolCallForOwnerOptions {
   conversationId?: string;
@@ -530,6 +582,16 @@ interface ExecuteToolCallForOwnerOptions {
    * which rethrows an aborted call instead of retrying it.
    */
   abortSignal?: AbortSignal;
+  /**
+   * Given the input schema of the tool being called, decide whether to make
+   * the call as one 2026-07-28 request to the server's HTTP address instead of
+   * on the pooled connection: the File Uploads extension exists only in that
+   * revision (see mcp-files/stateless-upstream.ts). A call made that way is
+   * never retried.
+   */
+  upstreamHttpFor?: (
+    inputSchema: Record<string, unknown> | null,
+  ) => UpstreamHttpCallPlan | undefined;
   /**
    * Overrides the default upstream tool-call timeout. Set by the gateway
    * for task-eligible calls, whose bound is the task TTL rather than the
@@ -806,6 +868,10 @@ class McpClient {
     // transport exactly where passthrough headers are, and the credential
     // fingerprint check discards a cached connection whose baked headers no
     // longer match, so per-call values cannot leak across pooled calls.
+    const upstreamHttp = options?.upstreamHttpFor?.(
+      (tool.parameters as Record<string, unknown> | null) ?? null,
+    );
+
     const mcpParamHeaders = mcpParamHeadersForCall({
       inputSchema: tool.parameters,
       args: toolCall.arguments,
@@ -827,6 +893,10 @@ class McpClient {
         { toolName: toolCall.name, headers: Object.keys(mcpParamHeaders) },
         "Skipping Mcp-Param headers: no token auth context to carry them",
       );
+    }
+    // From here on the call is recorded with what the file call says to keep.
+    if (upstreamHttp) {
+      toolCall = { ...toolCall, arguments: upstreamHttp.recordedArguments };
     }
 
     // App backing servers have no upstream to connect to: the `open` launch tool is
@@ -1145,6 +1215,8 @@ class McpClient {
         // cached client may already be a fresh one a sibling call is using.
         let attemptClient: Client | undefined;
         let attemptSessionId: string | undefined;
+        // Once a file call has gone out, nothing below may send it again.
+        let upstreamHttpStarted = false;
         try {
           const hasRefreshToken = !!(
             currentSecrets as { refresh_token?: string }
@@ -1187,8 +1259,79 @@ class McpClient {
             );
           }
 
+          // A file-bearing call is one 2026-07-28 exchange with the server's
+          // HTTP address, which only an HTTP server has.
+          if (
+            upstreamHttp &&
+            (await this.getTransportKind(catalogItem, targetMcpServerId)) !==
+              "http"
+          ) {
+            return await this.createErrorResult({
+              toolCall,
+              owner,
+              error: `"${mcpServerName}" is not reached over HTTP, so it cannot take files.`,
+              mcpServerName,
+              authInfo,
+              encryptedChatContent,
+              startedAt,
+            });
+          }
+
           // Get the appropriate transport
           const transport = await getTransport();
+
+          if (upstreamHttp) {
+            if (!(transport instanceof UpstreamHttpTransport)) {
+              throw new Error(
+                "An HTTP MCP server was given a transport without an HTTP target",
+              );
+            }
+            const timeoutMs =
+              options?.upstreamTimeoutMs ?? config.mcpGateway.toolCallTimeoutMs;
+            const timeoutSignal = AbortSignal.timeout(timeoutMs);
+            upstreamHttpStarted = true;
+            const outcome = await upstreamHttp.run({
+              target: transport.httpTarget,
+              toolName: this.storedUpstreamToolName(
+                tool,
+                toolCall.name,
+                mcpServerName,
+              ),
+              installKey: `${catalogItem.id}:${targetMcpServerId}`,
+              networkPolicyScope: {
+                environmentId: catalogItem.environmentId,
+                organizationId:
+                  catalogItem.organizationId ?? tokenAuth?.organizationId,
+              },
+              signal: options?.abortSignal
+                ? AbortSignal.any([options.abortSignal, timeoutSignal])
+                : timeoutSignal,
+            });
+            // Never re-run: unlike the pooled path, this call is not retried on
+            // an auth error or a dropped session. A file call whose outcome is
+            // unknown must not be sent twice.
+            if (outcome.kind === "unrecorded") {
+              return {
+                id: toolCall.id,
+                name: toolCall.name,
+                content: [],
+                isError: false,
+              };
+            }
+            await clearStaleOAuthRefreshError();
+            return await this.createSuccessResult({
+              toolCall,
+              owner,
+              mcpServerName,
+              content: outcome.result.content,
+              isError: outcome.result.isError,
+              _meta: outcome.result._meta,
+              authInfo,
+              encryptedChatContent,
+              startedAt,
+              structuredContent: outcome.result.structuredContent,
+            });
+          }
 
           // Get or create client
           const client = await this.getOrCreateClient(
@@ -1226,37 +1369,11 @@ class McpClient {
             await browserStorageSync.ensureRestored(browserStorageTarget);
           }
 
-          // Determine the actual upstream tool name. Prefer the stored raw name
-          // (tools.raw_name): it is exact even when the slug's server-prefix was
-          // truncated to fit the 64-char cap or the raw name itself contains the
-          // `__` separator. Fall back to prefix-stripping the slug for legacy rows
-          // whose raw_name has not been backfilled/re-synced yet.
-          let targetToolName: string;
-          if (tool.rawName) {
-            targetToolName = tool.rawName;
-          } else {
-            // We prioritize the `catalogName` prefix, which is standard for local
-            // MCP servers. If the tool name doesn't match the catalog prefix, we
-            // fall back to the resolved `mcpServerName`.
-            targetToolName = this.stripServerPrefix(
-              toolCall.name,
-              tool.catalogName || "",
-            );
-
-            if (targetToolName === toolCall.name) {
-              // No prefix match with catalogName; attempt to strip using mcpServerName instead.
-              targetToolName = this.stripServerPrefix(
-                toolCall.name,
-                mcpServerName,
-              );
-            }
-
-            if (targetToolName === toolCall.name) {
-              // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
-              // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
-              targetToolName = parseFullToolName(toolCall.name).toolName;
-            }
-          }
+          let targetToolName = this.storedUpstreamToolName(
+            tool,
+            toolCall.name,
+            mcpServerName,
+          );
 
           // The server's questions during this call go to this call's handler,
           // whatever else runs on the connection. Every request the call makes
@@ -1440,6 +1557,18 @@ class McpClient {
               startedAt,
             });
             throw error;
+          }
+
+          if (upstreamHttpStarted) {
+            return await this.createErrorResult({
+              toolCall,
+              owner,
+              error: describeToolCallFailure(error),
+              mcpServerName,
+              authInfo,
+              encryptedChatContent,
+              startedAt,
+            });
           }
 
           const stopped =
@@ -3110,13 +3239,19 @@ class McpClient {
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
 
+        // Taken before passthrough headers join: those are the caller's, not
+        // the credential the gateway holds for this server.
+        const localCredentialHeaders = { ...localHeaders };
         mergePassthroughHeaders(localHeaders, tokenAuth?.passthroughHeaders);
         this.trackTransportCredentialFingerprint(connectionKey, localHeaders);
 
-        return new StreamableHTTPClientTransport(new URL(endpointUrl), {
+        return new UpstreamHttpTransport({
+          url: new URL(endpointUrl),
           sessionId,
-          requestInit: { headers: new Headers(localHeaders) },
+          headers: localHeaders,
+          credentialHeaders: localCredentialHeaders,
           fetch: withReadableHttpFailures(),
+          signsRequests: false,
         });
       }
 
@@ -3165,6 +3300,9 @@ class McpClient {
           headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
         }
 
+        // Taken before passthrough headers join: those are the caller's, not
+        // the credential the gateway holds for this server.
+        const credentialHeaders = { ...headers };
         mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
         this.trackTransportCredentialFingerprint(connectionKey, headers);
 
@@ -3179,28 +3317,28 @@ class McpClient {
           : undefined;
         // SPDX-SnippetEnd
         const baseFetch = withReadableHttpFailures(signingFetch);
-        return new StreamableHTTPClientTransport(
-          new URL(catalogItem.serverUrl),
-          {
-            requestInit: { headers: new Headers(headers) },
-            // Discovery diagnostics are deliberately limited to status and a
-            // known Bearer error code. Never retain an upstream body or header.
-            fetch: onHttpFailure
-              ? async (url, init) => {
-                  const response = await baseFetch(url, init);
-                  if (!response.ok) {
-                    onHttpFailure({
-                      status: response.status,
-                      authError: getMcpDiscoveryAuthError(
-                        response.headers.get("www-authenticate"),
-                      ),
-                    });
-                  }
-                  return response;
+        return new UpstreamHttpTransport({
+          url: new URL(catalogItem.serverUrl),
+          headers,
+          credentialHeaders,
+          // Discovery diagnostics are deliberately limited to status and a
+          // known Bearer error code. Never retain an upstream body or header.
+          fetch: onHttpFailure
+            ? async (url, init) => {
+                const response = await baseFetch(url, init);
+                if (!response.ok) {
+                  onHttpFailure({
+                    status: response.status,
+                    authError: getMcpDiscoveryAuthError(
+                      response.headers.get("www-authenticate"),
+                    ),
+                  });
                 }
-              : baseFetch,
-          },
-        );
+                return response;
+              }
+            : baseFetch,
+          signsRequests: !!signingFetch,
+        });
       }
     }
 
@@ -3486,6 +3624,35 @@ class McpClient {
    * Strip server prefix from tool name
    * Slugifies the prefix using ToolModel.slugifyName to match how tool names are created
    */
+  /**
+   * The tool's name on its server, as far as the stored row tells it. Prefer
+   * the stored raw name (tools.raw_name): it is exact even when the slug's
+   * server-prefix was truncated to fit the 64-char cap or the raw name itself
+   * contains the `__` separator. Fall back to prefix-stripping the slug for
+   * legacy rows whose raw_name has not been backfilled/re-synced yet.
+   */
+  private storedUpstreamToolName(
+    tool: { rawName?: string | null; catalogName?: string | null },
+    toolName: string,
+    mcpServerName: string,
+  ): string {
+    if (tool.rawName) return tool.rawName;
+    // We prioritize the `catalogName` prefix, which is standard for local
+    // MCP servers. If the tool name doesn't match the catalog prefix, we
+    // fall back to the resolved `mcpServerName`.
+    let stripped = this.stripServerPrefix(toolName, tool.catalogName || "");
+    if (stripped === toolName) {
+      // No prefix match with catalogName; attempt to strip using mcpServerName instead.
+      stripped = this.stripServerPrefix(toolName, mcpServerName);
+    }
+    if (stripped === toolName) {
+      // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
+      // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
+      stripped = parseFullToolName(toolName).toolName;
+    }
+    return stripped;
+  }
+
   private stripServerPrefix(toolName: string, prefixName: string): string {
     // Slugify the prefix the same way ToolModel.slugifyName does
     const slugifiedPrefix = ToolModel.slugifyName(prefixName, "");
@@ -4639,6 +4806,15 @@ class McpClient {
           }
         }
 
+        if (transport instanceof UpstreamHttpTransport) {
+          tools = await this.addToolsListedWithFileSupport({
+            target: transport.httpTarget,
+            installKey: `${catalogItem.id}:${mcpServerId}`,
+            serverName: catalogItem.name,
+            tools,
+          });
+        }
+
         // Close connection (we just needed the tools)
         await client.close();
 
@@ -4714,6 +4890,62 @@ class McpClient {
         lastError?.message || "Unknown error"
       }`,
     );
+  }
+
+  /**
+   * The server's tools as a client of the File Uploads extension sees them.
+   *
+   * A conforming server lists a tool that takes a file only to a 2026-07-28
+   * request declaring the extension, which the pooled 2025-11-25 listing is
+   * not. When the server supports the extension, list again that way and take
+   * its definitions: same-named tools are replaced, new ones added. A failure
+   * of this second listing keeps the first one, so a server whose newer
+   * revision misbehaves still installs with the tools it always had.
+   */
+  private async addToolsListedWithFileSupport(params: {
+    target: UpstreamHttpTarget;
+    installKey: string;
+    serverName: string;
+    tools: Tool[];
+  }): Promise<Tool[]> {
+    const signal = AbortSignal.timeout(30_000);
+    const support = await discoverUpstreamFilesSupport({
+      target: params.target,
+      cacheKey: params.installKey,
+      signal,
+    });
+    if (!support.upload && support.maxInlineBytes === 0) return params.tools;
+
+    let listed: Record<string, unknown>[];
+    try {
+      listed = await listStatelessTools({
+        target: params.target,
+        clientCapabilities: GATEWAY_UPSTREAM_FILES_CAPABILITIES,
+        signal,
+      });
+    } catch (error) {
+      if (!(error instanceof StatelessUpstreamError)) throw error;
+      logger.warn(
+        { server: params.serverName, error: error.message },
+        "Listing tools with file support failed; keeping the tools listed without it",
+      );
+      return params.tools;
+    }
+
+    const byName = new Map(params.tools.map((tool) => [tool.name, tool]));
+    for (const tool of listed) {
+      const { name, inputSchema } = tool;
+      if (
+        typeof name !== "string" ||
+        typeof inputSchema !== "object" ||
+        inputSchema === null ||
+        Array.isArray(inputSchema)
+      ) {
+        continue;
+      }
+      byName.set(name, tool as unknown as Tool);
+    }
+    return [...byName.values()];
   }
 
   private async discoverToolsOrResourceTools(client: Client): Promise<Tool[]> {

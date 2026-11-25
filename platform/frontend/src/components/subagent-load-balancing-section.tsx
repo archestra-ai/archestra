@@ -4,7 +4,7 @@ import type {
   SubagentLoadBalancingAlgorithm,
   SubagentLoadBalancingConfig,
 } from "@archestra/shared";
-import { Scale } from "lucide-react";
+import { Split } from "lucide-react";
 import { useId } from "react";
 import { SettingIcon } from "@/components/setting-icon";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -126,7 +126,7 @@ export function SubagentLoadBalancingSection({
     <div className="space-y-2 border-t pt-4">
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 sm:flex sm:items-start">
         <SettingIcon tone={isEnabled ? "on" : "off"}>
-          <Scale className="h-4 w-4" />
+          <Split className="h-4 w-4" />
         </SettingIcon>
         <div className="min-w-0 flex-1 space-y-1">
           <Label htmlFor={modeSelectId}>

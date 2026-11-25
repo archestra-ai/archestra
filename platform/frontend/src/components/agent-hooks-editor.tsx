@@ -1,11 +1,9 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { ChevronRight, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { forwardRef, useId, useImperativeHandle, useState } from "react";
 import { toast } from "sonner";
 import { Editor } from "@/components/editor";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -377,89 +375,80 @@ const AgentHooksEditorContent = forwardRef<
     }
   };
 
+  // The section's own label names it and links the docs, so this row carries
+  // only the list's status and the button that adds to it.
+  const status =
+    isPersisted && isLoading
+      ? "Loading hooks..."
+      : rows.length === 0 && panel === null
+        ? "No hooks yet."
+        : null;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold">Hooks ({rows.length})</h3>
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-              Beta
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Run a script in the sandbox when a lifecycle event fires.{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformAgentHooks)}
-              className="underline"
-              showIcon={false}
+      {(status !== null || panel === null) && (
+        <div className="flex items-center gap-2">
+          {status !== null && (
+            <p className="text-xs text-muted-foreground">{status}</p>
+          )}
+          {panel === null && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => setPanel({ mode: "add" })}
             >
-              Learn more
-            </ExternalDocsLink>
-          </p>
+              <Plus className="h-4 w-4 mr-1" />
+              Add hook
+            </Button>
+          )}
         </div>
-        {panel === null && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setPanel({ mode: "add" })}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Add hook
-          </Button>
-        )}
-      </div>
+      )}
 
-      {isPersisted && isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading hooks...</p>
-      ) : rows.length === 0 && panel === null ? (
-        <p className="text-xs text-muted-foreground">No hooks yet.</p>
-      ) : (
-        rows.length > 0 && (
-          <div className="space-y-2">
-            {rows.map((row) => (
-              <div
-                key={row.key}
-                className="flex items-center gap-3 rounded-md border p-3"
-              >
-                <Badge variant="secondary">{EVENT_LABELS[row.event]}</Badge>
-                <code className="flex-1 truncate text-xs">{row.fileName}</code>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className="text-muted-foreground"
-                    onClick={() => setPanel({ mode: "edit", row })}
-                    aria-label={`Edit ${row.fileName}`}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Switch
-                    checked={row.enabled}
-                    disabled={updateHook.isPending}
-                    onCheckedChange={(checked) =>
-                      handleToggleEnabled(row, checked)
-                    }
-                    aria-label={`Toggle ${row.fileName}`}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className="text-muted-foreground hover:text-destructive"
-                    disabled={deleteHook.isPending}
-                    onClick={() => handleDelete(row)}
-                    aria-label={`Delete ${row.fileName}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+      {status === null && rows.length > 0 && (
+        <div className="space-y-2">
+          {rows.map((row) => (
+            <div
+              key={row.key}
+              className="flex items-center gap-3 rounded-md border p-3"
+            >
+              <Badge variant="secondary">{EVENT_LABELS[row.event]}</Badge>
+              <code className="flex-1 truncate text-xs">{row.fileName}</code>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-muted-foreground"
+                  onClick={() => setPanel({ mode: "edit", row })}
+                  aria-label={`Edit ${row.fileName}`}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Switch
+                  checked={row.enabled}
+                  disabled={updateHook.isPending}
+                  onCheckedChange={(checked) =>
+                    handleToggleEnabled(row, checked)
+                  }
+                  aria-label={`Toggle ${row.fileName}`}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-muted-foreground hover:text-destructive"
+                  disabled={deleteHook.isPending}
+                  onClick={() => handleDelete(row)}
+                  aria-label={`Delete ${row.fileName}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
-            ))}
-          </div>
-        )
+            </div>
+          ))}
+        </div>
       )}
 
       {panel !== null && (

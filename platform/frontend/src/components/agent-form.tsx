@@ -125,6 +125,7 @@ import {
 } from "@/components/agent-tools-editor";
 import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
+import { BetaBadge } from "@/components/beta-badge";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
 import { noCompanyConnection } from "@/components/claude-connection-pickers.utils";
@@ -5124,8 +5125,25 @@ export function AgentForm({
                   create. */}
               {showsHooks && (
                 <SettingsSection
-                  title="Hooks"
-                  description="Commands this agent runs around its own tool calls, inside its sandbox."
+                  title={
+                    <span className="flex items-center gap-2">
+                      <span>Hooks</span>
+                      <BetaBadge />
+                    </span>
+                  }
+                  description={
+                    <>
+                      Scripts this agent runs in its sandbox when a lifecycle
+                      event fires.{" "}
+                      <ExternalDocsLink
+                        href={getDocsUrl(DocsPage.PlatformAgentHooks)}
+                        className="underline"
+                        showIcon={false}
+                      >
+                        Learn more
+                      </ExternalDocsLink>
+                    </>
+                  }
                 >
                   <AgentHooksEditor
                     ref={agentHooksEditorRef}

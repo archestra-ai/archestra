@@ -7413,6 +7413,8 @@ describe("rendering runtime text for this client", () => {
           ["grok-headless-run", "grok-headless"],
         ] as const) {
           const result = await run(sessionId, how);
+          // No verdict would forward the original batch.
+          expect(result, how).toBeDefined();
           const sent =
             result?.decision === "allow"
               ? result.toolCalls.map((call) => call.name)

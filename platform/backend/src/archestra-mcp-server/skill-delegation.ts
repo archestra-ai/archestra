@@ -62,10 +62,23 @@ export async function getSkillDelegationTools(context: {
     return [];
   }
 
-  const [skills, targetsBySlug] = await Promise.all([
-    findAgentDesignatedSkills({ agentId, organizationId, userId, lookups }),
-    findDelegationTargetsBySlug({ agentId, organizationId, userId, lookups }),
-  ]);
+  // Skills first: the targets are every agent the caller can access, which
+  // is not worth reading when no skill names an agent to run in.
+  const skills = await findAgentDesignatedSkills({
+    agentId,
+    organizationId,
+    userId,
+    lookups,
+  });
+  if (skills.length === 0) {
+    return [];
+  }
+  const targetsBySlug = await findDelegationTargetsBySlug({
+    agentId,
+    organizationId,
+    userId,
+    lookups,
+  });
 
   const seenNames = new Set<string>();
   const tools: Tool[] = [];

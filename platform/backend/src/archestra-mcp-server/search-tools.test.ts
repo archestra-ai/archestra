@@ -285,6 +285,73 @@ describe("search_tools", () => {
     expect(returnedToolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 
+  test("gives a long parameter description once per result, and points later tools to it", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeAgentTool,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    await seedAndAssignArchestraTools(agent.id);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Ledger MCP",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const rules =
+      `The filter the ledger applies. ${"Every clause must name a column, an operator and a bounded value. ".repeat(3)}`.trim();
+    for (const name of ["ledger__alpha_export", "ledger__beta_export"]) {
+      const tool = await makeTool({
+        name,
+        description: "Export ledger rows.",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: {
+            filter: { type: "string", description: rules },
+            limit: { type: "integer", description: "Maximum rows." },
+          },
+        },
+      });
+      await makeAgentTool(agent.id, tool.id);
+    }
+
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "^ledger__", mode: "regex" },
+      {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      },
+    );
+
+    const { tools } = result.structuredContent as SearchToolsStructuredContent;
+    expect(tools.map(({ toolName, params }) => ({ toolName, params }))).toEqual(
+      [
+        {
+          toolName: "ledger__alpha_export",
+          params: `filter?:string — ${rules}; limit?:integer — Maximum rows.`,
+        },
+        {
+          toolName: "ledger__beta_export",
+          // The short description is cheaper to repeat than to point at.
+          params:
+            "filter?:string — same as in ledger__alpha_export; limit?:integer — Maximum rows.",
+        },
+      ],
+    );
+  });
+
   test("finds OpenAPPA tools on an agent that was never assigned them", async ({
     makeAgent,
     makeMember,

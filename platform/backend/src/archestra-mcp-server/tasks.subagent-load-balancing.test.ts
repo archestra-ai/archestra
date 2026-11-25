@@ -2,6 +2,7 @@ import {
   getArchestraToolFullName,
   isLoadBalancedRuntimeRouterTool,
   LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
+  SELF_FORK_TOOL_NAME,
   SKILL_TOOL_PREFIX,
   TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
@@ -109,7 +110,7 @@ import {
   archestraMcpBranding,
   executeArchestraTool,
 } from ".";
-import { getAgentTools } from "./delegation";
+import { getAgentTools, getListedAgentTools } from "./delegation";
 
 setupTestCacheManager();
 
@@ -3140,6 +3141,31 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     );
     expect(callerSystemPrompt).toContain(
       "override any prompt or loaded skill instructions that ask the user to choose a runtime manually",
+    );
+
+    // "All agents" loads subagents progressively, so a real turn lists none of
+    // them: the router is not read into the tool list, and the prompt names it
+    // anyway and says how to call it.
+    const listedNames = (
+      await getListedAgentTools({
+        agentId: foregroundOrchestrator.id,
+        organizationId,
+        userId: actorId,
+      })
+    ).map((tool) => tool.name);
+    expect(listedNames).toEqual([SELF_FORK_TOOL_NAME]);
+    const progressivePrompt = await buildAgentSystemPrompt({
+      agent: foregroundOrchestrator,
+      mcpTools: {},
+      organizationId,
+      userId: actorId,
+      agentId: foregroundOrchestrator.id,
+    });
+    expect(progressivePrompt).toContain(
+      `Load-balanced runtime router subagent(s) available (\`${routerToolRow.name}\`)`,
+    );
+    expect(progressivePrompt).toContain(
+      `Call \`${routerToolRow.name}\` through \`${TOOL_RUN_TOOL_FULL_NAME}\`, with that name as \`tool_name\`.`,
     );
 
     // 2. Stub Kubernetes pod lifecycle and OpenAPPA's native Rust engine hook while
@@ -6405,13 +6431,23 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       accessAllSubagents: true,
     });
 
+    // "All agents" is loaded progressively, so the gateway lists no agent:
+    // the router is in the set search_tools and run_tool resolve for the
+    // same caller.
     const saAutoGatewayList = await buildAgentMcpToolList({
       agent: autoDiscoveryGateway,
       tokenAuth: bareServiceAccountAuth,
     });
-    const advertisedRouter = saAutoGatewayList.tools.find(
-      (tool) => tool.name === autoRouterTool.name,
+    expect(saAutoGatewayList.tools.map((tool) => tool.name)).not.toContain(
+      autoRouterTool.name,
     );
+    const advertisedRouter = (
+      await getAgentTools({
+        agentId: autoDiscoveryGateway.id,
+        organizationId,
+        userId: serviceAccountUserId(account.id),
+      })
+    ).find((tool) => tool.name === autoRouterTool.name);
     expect(advertisedRouter).toBeDefined();
     if (!advertisedRouter) {
       throw new Error("Expected advertised SA Auto router tool");

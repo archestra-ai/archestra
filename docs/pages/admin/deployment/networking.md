@@ -2,7 +2,6 @@
 title: Networking
 description: Configure public endpoints, streaming, and workload network isolation
 order: 5
-lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

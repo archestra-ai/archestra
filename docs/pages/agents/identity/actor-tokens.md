@@ -2,7 +2,6 @@
 title: "Agent Actor Tokens"
 description: "Name the agent as the actor in each RFC 8693 token exchange, so downstream tokens carry the person and the agent"
 order: 3
-lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

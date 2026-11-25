@@ -25,7 +25,7 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "ai";
 import {
   archestraMcpBranding,
-  getAgentTools,
+  getListedAgentTools,
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
@@ -1199,11 +1199,12 @@ export async function getChatMcpTools({
 
     // Fetch and add agent + skill delegation tools if organizationId is
     // available. Both dispatch through executeArchestraTool, so they share the
-    // same AI SDK wrapper.
+    // same AI SDK wrapper. Only the listed agent tools: with progressive
+    // subagent loading the rest stay behind search_tools/run_tool.
     if (organizationId) {
       try {
         const [agentToolsList, skillToolsList] = await Promise.all([
-          getAgentTools({
+          getListedAgentTools({
             agentId,
             organizationId,
             userId,

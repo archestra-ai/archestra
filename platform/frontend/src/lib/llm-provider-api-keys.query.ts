@@ -230,7 +230,9 @@ export function soleAvailableLlmProviderApiKeyId(
   const keys = client.getQueryData<AvailableLlmProviderApiKeys>(
     availableKeysQueryKey(undefined, undefined),
   );
-  return keys?.length === 1 ? keys[0].id : undefined;
+  // The unscoped catalog also includes personal Copilot models. A GitHub
+  // App key only lists the models linked to the App.
+  return keys?.length === 1 && !keys[0].isGithubAppKey ? keys[0].id : undefined;
 }
 
 export function useCreateLlmProviderApiKey() {

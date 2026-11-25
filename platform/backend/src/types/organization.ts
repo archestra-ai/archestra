@@ -426,6 +426,8 @@ export const OrganizationDefaultModelSchema = z.object({
     z.object({
       id: z.string().uuid(),
       name: z.string(),
+      unavailableReason: z.string().nullable().optional(),
+      normalOnlyReason: z.string().nullable().optional(),
       tiers: z.object({
         fast: OrganizationDefaultModelRefSchema,
         normal: OrganizationDefaultModelRefSchema,

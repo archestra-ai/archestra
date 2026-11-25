@@ -1483,6 +1483,7 @@ const baseAgent = {
   missingCredentialBehavior: "allow" as const,
   accessAllTools: false,
   accessAllSubagents: false,
+  progressiveSubagentLoading: false,
   accessAllSkills: false,
   activationSkillMode: "all" as const,
   activationSkillPolicyRevision: 0,
@@ -4785,6 +4786,7 @@ describe("AgentForm save payload and failure handling", () => {
       "connectorIds",
       "knowledgeBaseIds",
       "missingCredentialBehavior",
+      "progressiveSubagentLoading",
       "toolExposureMode",
     ]);
   });

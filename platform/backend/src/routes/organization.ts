@@ -135,11 +135,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get the model agents and chats on the organization default run on, and the tiers auto routing routes them across",
         tags: ["Organization"],
+        querystring: z.object({ forChat: z.literal("true").optional() }),
         response: constructResponseSchema(OrganizationDefaultModelSchema),
       },
     },
-    async ({ organizationId }, reply) =>
-      reply.send(await describeOrganizationDefaultModel(organizationId)),
+    async ({ organizationId, user, query }, reply) =>
+      reply.send(
+        await describeOrganizationDefaultModel(
+          organizationId,
+          query.forChat ? user.id : undefined,
+        ),
+      ),
   );
 
   fastify.patch(

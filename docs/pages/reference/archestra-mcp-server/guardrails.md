@@ -2,7 +2,6 @@
 title: "Guardrails"
 description: "Archestra MCP Server tools for guardrails"
 order: 6
-lastUpdated: 2026-11-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

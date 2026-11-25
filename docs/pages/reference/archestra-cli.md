@@ -3,7 +3,6 @@ title: Archestra CLI
 description: The archestra program on your device, with the commands that start, stop, update, and remove the MCP bridge
 order: 6
 beta: "The MCP bridge is in Beta."
-lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

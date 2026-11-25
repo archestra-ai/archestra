@@ -56,6 +56,7 @@ import {
   type RoutingPlan,
   type RoutingSessionKey,
 } from "@/types/auto-routing";
+import { canReachMember, providerChatWire } from "@/utils/model-pool-wire";
 import {
   checkAutoTierEligibility,
   type EligibleTier,
@@ -248,6 +249,100 @@ export async function resolveAutoModel(params: {
       };
     }
   }
+}
+
+/**
+ * Chat starts on the pinned normal credential. The proxy may use alternative
+ * user-authorized keys for the other tiers, and rechecks all access per turn.
+ */
+export async function chatAutoRouterAvailability(params: {
+  router: AutoRouter;
+  auth: Awaited<ReturnType<typeof userModelRouterAuth>>;
+  trio?: Trio;
+  checkTiers?: false;
+}): Promise<
+  { kind: "available" } | { kind: "normal" | "unavailable"; reason: string }
+> {
+  const { router, auth } = params;
+  const normalKeyId = router.normalApiKeyId;
+  const anchorAuth = withRequestSecretsOf(auth, {
+    ...auth,
+    providerApiKeys: auth.providerApiKeys.filter(
+      (key) => key.providerApiKeyId === normalKeyId,
+    ),
+  });
+  const loaded =
+    router.enabled && params.checkTiers !== false && !params.trio
+      ? await loadTrio(router)
+      : null;
+  const trio = params.trio ?? (loaded?.kind === "ok" ? loaded.trio : null);
+  const normal =
+    trio?.[NORMAL_TIER] ??
+    (router.normalModelId
+      ? await ModelModel.findById(router.normalModelId)
+      : null);
+  if (!normal || !normalKeyId)
+    return {
+      kind: "unavailable",
+      reason: "Auto has no normal model configured.",
+    };
+  if (
+    !anchorAuth.providerApiKeys.length ||
+    !(
+      await checkAutoTierEligibility({
+        auth: anchorAuth,
+        endpoint: null,
+        model: normal,
+      })
+    ).eligible
+  ) {
+    return {
+      kind: "unavailable",
+      reason:
+        "You don't have access to Auto's normal model or connection. Choose another model or ask an admin for access.",
+    };
+  }
+  if (params.checkTiers === false) return { kind: "available" };
+  if (!router.enabled)
+    return {
+      kind: "normal",
+      reason: "Auto is off. This chat uses the normal tier.",
+    };
+  if (!trio)
+    return {
+      kind: "normal",
+      reason:
+        "Auto needs a model configured for each tier. This chat uses the normal tier.",
+    };
+  const wire = providerChatWire(normal.provider);
+  if (
+    !wire ||
+    trio.some(
+      (model) =>
+        responsesOnly(model) ||
+        (wire === "bedrock-converse" && model.provider !== "bedrock") ||
+        !canReachMember(wire, model.provider),
+    )
+  ) {
+    return {
+      kind: "normal",
+      reason:
+        "Auto's tiers can't run together in chat. This chat uses the normal tier.",
+    };
+  }
+  const tiers = await checkTrio({
+    auth,
+    endpoint: null,
+    trio,
+    preferredTierKeyIds: tierApiKeyIds(router),
+  });
+  return tiers.some((tier) => !tier.eligible)
+    ? {
+        kind: "normal",
+        reason:
+          "You don't have access to all of Auto's tiers. This chat uses the normal tier.",
+      }
+    : { kind: "available" };
 }
 
 /** The tier model an auto-routed platform call runs on, with the key it is sent with. */

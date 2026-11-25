@@ -3,7 +3,6 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

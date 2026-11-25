@@ -2,7 +2,6 @@
 title: "Okta"
 description: "Configure Okta for SSO sign-in and RFC 8693 token exchange for MCP tools"
 order: 4
-lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

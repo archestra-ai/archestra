@@ -3,7 +3,6 @@ title: Managing the Policy
 description: Change the Guardrails policy with the APPA Keeper, include batteries, and validate it
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

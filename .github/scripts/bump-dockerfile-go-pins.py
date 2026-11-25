@@ -29,7 +29,10 @@ from pathlib import Path
 
 DOCKERFILES = ("platform/Dockerfile", "platform/docker_images/agent/Dockerfile")
 MIN_AGE_DAYS = 7
-PIN = re.compile(r"(go get )([A-Za-z0-9./_~-]+)@(v[0-9]+\.[0-9]+\.[0-9]+)(?=[\s\\&;]|$)")
+# One `go get` command and its module@version arguments; PIN finds each
+# argument, so every module on a multi-module line is bumped, not just the first.
+GO_GET = re.compile(r"go get(?: +[A-Za-z0-9./_~-]+@v[0-9]+\.[0-9]+\.[0-9]+(?=[\s\\&;]|$))+")
+PIN = re.compile(r"([A-Za-z0-9./_~-]+)@(v[0-9]+\.[0-9]+\.[0-9]+)")
 SEMVER = re.compile(r"v([0-9]+)\.([0-9]+)\.([0-9]+)")
 PROXY = "https://proxy.golang.org"
 
@@ -54,8 +57,9 @@ def plan(files, fetch, now, patch_only=False):
     """module -> (lowest pinned version, version to pin) for each module that moves."""
     pinned = {}
     for text in files.values():
-        for _, module, version in PIN.findall(text):
-            pinned.setdefault(module, set()).add(version)
+        for command in GO_GET.findall(text):
+            for module, version in PIN.findall(command):
+                pinned.setdefault(module, set()).add(version)
     bumps = {}
     for module, versions in pinned.items():
         current = max(versions, key=key)
@@ -66,7 +70,9 @@ def plan(files, fetch, now, patch_only=False):
 
 
 def rewrite(text, bumps):
-    return PIN.sub(lambda m: f"{m[1]}{m[2]}@{bumps[m[2]][1]}" if m[2] in bumps else m[0], text)
+    def pin(m):
+        return f"{m[1]}@{bumps[m[1]][1]}" if m[1] in bumps else m[0]
+    return GO_GET.sub(lambda command: PIN.sub(pin, command[0]), text)
 
 
 def newest(module, current, fetch, now, patch_only=False):

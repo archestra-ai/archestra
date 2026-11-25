@@ -3530,6 +3530,14 @@ class AgentModel {
     environmentId: string | null;
     lookups?: PrincipalSource;
     includeDetails?: boolean;
+    /**
+     * Narrows the read in SQL for a caller that needs one kind of target
+     * only: `runtime` keeps the agents with a runtime, `load_balanced_routers`
+     * the agents without one that have subagent load balancing enabled. An
+     * organization can hold tens of thousands of targets, so a caller that
+     * would drop the rest anyway must not read them.
+     */
+    only?: "runtime" | "load_balanced_routers";
   }): Promise<
     (Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig"> & {
       hasRuntime: boolean;
@@ -3548,6 +3556,15 @@ class AgentModel {
         ? isNull(schema.agentsTable.environmentId)
         : eq(schema.agentsTable.environmentId, environmentId),
       notDeleted(schema.agentsTable),
+      ...(params.only === "runtime"
+        ? [isNotNull(schema.agentsTable.runtime)]
+        : []),
+      ...(params.only === "load_balanced_routers"
+        ? [
+            isNull(schema.agentsTable.runtime),
+            sql`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
+          ]
+        : []),
     ];
 
     if (isAdmin) {
@@ -4737,9 +4754,14 @@ class AgentModel {
       // change here must evict the client — otherwise switching an agent to
       // "all tools" / search_and_run_only doesn't expose run_tool/search_tools
       // until the connection is rebuilt for some unrelated reason.
+      // The subagent settings decide the same thing for delegation tools:
+      // listed as `agent__…` tools, or left behind search_tools/run_tool.
       if (
         updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
-        updatedAgent.accessAllTools !== existingAgent.accessAllTools
+        updatedAgent.accessAllTools !== existingAgent.accessAllTools ||
+        updatedAgent.accessAllSubagents !== existingAgent.accessAllSubagents ||
+        updatedAgent.progressiveSubagentLoading !==
+          existingAgent.progressiveSubagentLoading
       ) {
         agentToolSurfaceChanged(id);
       }
@@ -5681,6 +5703,7 @@ class AgentModel {
           accessAllTools: false,
           // Keep subagents closed until their exclusions have been copied.
           accessAllSubagents: false,
+          progressiveSubagentLoading: sourceAgent.progressiveSubagentLoading,
           // Skill policy rules are copied below. Start closed so a partial
           // clone can never transiently widen a Manual source to All.
           activationSkillMode: "manual",

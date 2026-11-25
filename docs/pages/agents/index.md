@@ -2,110 +2,59 @@
 title: Agents
 description: Build agents with instructions, tools, skills, subagents, and triggers
 order: 2
-lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
-An agent is a reusable assistant: instructions, a model, and the tools, knowledge, skills, and subagents it can use. You build it once and use it everywhere: in Chat, from your coding agent, in messaging channels, and from other systems.
+Archestra can run agents itself, and it can give tools to [agents that run somewhere else](/docs/get-started/connect). An agent in Archestra is a system prompt, a [model](/docs/llm-proxy/providers), and the [tools](/docs/mcp) connected to it. You can switch its [runtime](/docs/agents/runtime) too: from Archestra's native runtime to Claude Code, Codex, and others.
+
+For example, you can build a Project Manager agent by connecting it to Slack and Jira through [MCP](/docs/mcp/servers). Or build a Feature Factory agent with [Claude Code as its runtime](/docs/agents/runtime).
 
 ![The Agents catalog](/docs/automated_screenshots/agents_catalog.webp)
 
 <span id="creating-and-editing-an-agent"></span>
-
-## Create an Agent
-
-1. Go to **Agents** and click **Add Agent**.
-2. Start from scratch, or pick a template under **Agent Runtimes**.
-3. On **Configuration**, enter a name and instructions, and choose the model.
-4. Click **Continue setup** to choose tools, knowledge, skills, subagents, and messaging channels.
-5. Click **Create**, then **Chat** to send your first task.
-
-What to know:
-
-- Instructions can use your details, such as your name, teams, and today's date. See [Prompt Templates](#prompt-templates).
-- To run the agent in its own container, with a live terminal, give it a [dedicated runtime](/docs/agents/runtime).
-
-<span id="tool-access-modes"></span>
-<span id="custom-mode"></span>
-<span id="auto-mode"></span>
-<span id="knowledge-sources"></span>
-<span id="skills"></span>
-<span id="delegation"></span>
-
-## Choose What the Agent Can Use
-
-On the **Tools, Skills & Knowledge** tab, each kind of resource has two modes:
-
-- **All:** the agent can use everything the person using it can access, in the agent's [environment](/docs/admin/environments). You can exclude items under **All … except**.
-- **Manual:** the agent uses only what you assign.
-
-This works the same for tools, knowledge sources, [skills](/docs/agents/skills), and [subagents](/docs/agents/subagents).
-
-What to know:
-
-- Each person uses their own access, so two people can get different tools from one agent. In **Manual** mode, a person gets an assigned tool only if they can access its MCP server. In both modes, a tool that needs an account uses the person's own connection, unless you pin one.
-- Built-in platform tools are excluded by default in All mode. Review the exclusions before you give an agent tools that change Archestra itself.
-- The agent loads tools as it needs them. It starts with [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool), not the full list. In **Manual** mode, you can turn off **Progressive tool loading** to send every assigned tool.
-- <span id="missing-connections"></span>**Missing connections:** in **Manual** mode, choose when the agent prompts users to connect missing tool accounts (on call, on chat open, or required before chat). To use one account for everyone, pin a connection or [resolve credentials at call time](/docs/mcp/authentication/servers#resolve-at-call-time).
-
 <span id="invocation-paths"></span>
 <span id="messaging-channel-assignment"></span>
 
-## Use an Agent
+## Handover from Local Agents to Archestra Agents
 
-Run an agent interactively, delegate work to it from your coding client, or trigger it from team channels and APIs:
+![A coding agent hands its session over from a laptop to Archestra](/docs/agents-handoff.svg)
 
-- **Chat and Projects:** select the agent from the picker in [Chat](/docs/chat) or scope it to a [Project](/docs/chat/projects).
-- **Coding agents:** once [connected](/docs/get-started/connect), hand off background tasks from your editor or CLI with [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) and monitor their progress. See [Hand Off Work](/docs/agents/runtime/handoff).
-- **Messaging channels:** connect [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), [Telegram](/docs/agents/triggers-and-channels/telegram), or [Email](/docs/agents/triggers-and-channels/email) on the agent's **Messaging Channels** tab. See [Triggers & Channels](/docs/agents/triggers-and-channels).
-- **Automations and APIs:** invoke the agent programmatically via [Agent-to-Agent (A2A) calls or incoming webhooks](/docs/agents/triggers-and-channels/webhook-a2a).
+Once we let Codex, Claude Code, OpenCode, and other coding agents [run in the cloud](/docs/agents/runtime), we noticed how handy it is to [hand a long task](/docs/agents/runtime/handoff) from the local agent on your laptop to an agent in Archestra. It's similar to [Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web) from Anthropic or [Codex cloud](https://developers.openai.com/codex/cloud) from OpenAI, with one difference: these agents don't run "somewhere in the cloud", they run in [your infrastructure](/docs/admin/deployment), under your full control. You can also hand over across platforms, for example from a local [Pi](https://github.com/badlogic/pi-mono) to a remote Claude Code.
+
+## Agents in Chat and over API, Not Only on the Web
+
+Archestra agents are available in [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), [Telegram](/docs/agents/triggers-and-channels/telegram), and [Email](/docs/agents/triggers-and-channels/email). You can also call them through [Agent-to-Agent (A2A) calls or incoming webhooks](/docs/agents/triggers-and-channels/webhook-a2a).
+
+> Fun fact: Archestra the company replaced its project manager with a Slack agent called "Archestra PM". It prioritizes tasks, reviews customer calls, and makes borderline jokes.
 
 <span id="default-agents"></span>
 <span id="organizing-agents"></span>
-
-What to know:
-
-- **Default agent:** new chats automatically use your default agent. To change it, click **Set as default** on any agent card under **Agents**.
-- **Sidebar pinning:** click **Pin** on an agent to keep it in the left navigation sidebar for quick access.
-
 <span id="system-prompt-templating"></span>
 
-## Prompt Templates
+<span id="prompt-templates"></span>
 
-Tailor an agent's instructions to the person using it. Write [Handlebars](https://handlebarsjs.com/) expressions in the **Instructions** field, on the agent's **General** tab. Archestra fills them in on each run:
+## Prompt Templates for Archestra Agent Runtime
 
+Archestra's native agent runtime supports [Handlebars](https://handlebarsjs.com/) expressions in the **Instructions** field, so the agent can behave differently for each person. For example:
+
+<!-- prettier-ignore -->
 ```handlebars
 You help {{user.name}}. Today is {{currentDate}}.
 {{#includes user.teams "Engineering"}}You can use the engineering tools.{{/includes}}
 ```
 
-| Expression | Gives |
-| --- | --- |
-| `{{user.name}}`, `{{user.email}}` | The person's name and email |
-| `{{user.role}}` | Their organization role |
-| `{{user.teams}}` | Their team names, as a list |
+| Expression                           | Gives                                                             |
+| ------------------------------------ | ----------------------------------------------------------------- |
+| `{{user.name}}`, `{{user.email}}`    | The person's name and email                                       |
+| `{{user.role}}`                      | Their organization role                                           |
+| `{{user.teams}}`                     | Their team names, as a list                                       |
 | `{{currentDate}}`, `{{currentTime}}` | The date and time in UTC, such as `2026-03-12` and `14:30:00 UTC` |
-| `{{archestraVersion}}` | The version of the running platform, such as `1.4.0` |
+| `{{archestraVersion}}`               | The version of the running platform, such as `1.4.0`              |
 
-What to know:
+<span id="code-sandbox"></span>
 
-- **Helpers:** Handlebars [blocks](https://handlebarsjs.com/guide/builtin-helpers.html) such as `#if` and `#each` work, and so do `includes`, `equals`, `contains`, and `json`.
-- [Skills](/docs/agents/skills) can use templates too. Add `templated: true` to the skill's frontmatter. See [Writing Skills](/docs/agents/skills/writing).
-- To keep an expression as text, add a backslash: `\{{user.name}}`. An expression Handlebars cannot read stays as written.
+## Code Sandbox in Archestra Agent Runtime
 
-## Code Sandbox
-
-Each conversation gets a private Linux container, so the agent can run shell commands and Python with [`run_command`](/docs/reference/archestra-mcp-server#run_command).
-
-- **Files you attach** appear under `/home/sandbox/attachments/`.
-- **Large tool results** go to `/home/sandbox/tool-results/`. When a tool returns more than 32 KB of text, the agent sees only the beginning, plus the file's path to grep the rest.
-- **Files the agent saves** appear in the conversation's **Files** panel.
-- **Network access** follows the [egress policy](/docs/admin/environments#network-egress-policies) of the agent's environment, unless the agent [sets its own](/docs/admin/environments#give-one-agent-its-own-policy).
-
-What to know:
-
-- Files stay between commands. Running processes do not.
-- Without the sandbox, or in an encrypted chat, a large tool result is cut to its first 32 KB.
-- The sandbox is on by default. To turn it off, set [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED). For setup, see [Code Sandbox deployment](/docs/admin/deployment/networking#code-sandbox-requirements).
+Archestra's native runtime can run shell commands and Python with [`run_command`](/docs/reference/archestra-mcp-server#run_command). Under the hood it runs on [Dagger](https://dagger.io), which makes it very fast, but it can make deploying the platform harder, because it needs [privileged pods](/docs/admin/deployment/networking#code-sandbox-requirements).

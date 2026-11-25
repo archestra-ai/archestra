@@ -237,6 +237,7 @@ const {
         isGithubAppKey?: boolean;
         githubOrganizationName?: string | null;
       }>;
+      isFetched?: boolean;
     } => ({ data: [] }),
   ),
   useLlmModelsByProviderMock: vi.fn(() => ({ modelsByProvider: {} })),
@@ -611,7 +612,10 @@ vi.mock("@/lib/llm-models.query", () => ({
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
-  useAvailableLlmProviderApiKeys: useAvailableLlmProviderApiKeysMock,
+  // The list has answered unless a test says otherwise.
+  useAvailableLlmProviderApiKeys: (
+    ...args: Parameters<typeof useAvailableLlmProviderApiKeysMock>
+  ) => ({ isFetched: true, ...useAvailableLlmProviderApiKeysMock(...args) }),
 }));
 
 vi.mock("@/lib/hooks/use-app-name");
@@ -1563,14 +1567,16 @@ describe("AgentForm delegation state", () => {
   it.each([
     "mcp_gateway",
     "profile",
-  ] as const)("offers Subagents on %s forms, seeded from that record's sets", (agentType) => {
+  ] as const)("offers Agents, not Subagents, on %s forms, seeded from that record's sets", (agentType) => {
     render(
       <AgentForm agentType={agentType} agent={{ ...baseAgent, agentType }} />,
     );
 
+    // A gateway's agents are called by its clients, not by another agent.
+    expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Subagents" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Subagents" }),
+    ).not.toBeInTheDocument();
     expect(useAgentDelegationsMock).toHaveBeenCalledWith(baseAgent.id);
   });
 
@@ -1620,15 +1626,16 @@ describe("AgentForm delegation state", () => {
     render(<AgentForm agentType="mcp_gateway" agent={gateway} />);
 
     const section = screen
-      .getByRole("heading", { name: "Subagents" })
+      .getByRole("heading", { name: "Agents" })
       .closest("section") as HTMLElement;
+    expect(within(section).getByText("No agents assigned")).toBeInTheDocument();
     expect(
       within(section).getByText(
         "No delegation tools appear in this gateway's tool list.",
       ),
     ).toBeInTheDocument();
     await user.click(
-      within(section).getByRole("combobox", { name: "Add subagent" }),
+      within(section).getByRole("combobox", { name: "Add agent" }),
     );
     await user.click(screen.getByRole("option", { name: /Target Agent/ }));
     await user.click(screen.getByRole("button", { name: /update/i }));
@@ -4010,7 +4017,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
   });
 
-  it("enables Save after disabling a runtime with a stale preflight incompatibility", async () => {
+  it("keeps a saved agent's dedicated runtime when it is switched off", async () => {
     vi.mocked(useFeature).mockImplementation(
       ((flag: string) =>
         flag === "agentRuntime") as unknown as typeof useFeature,
@@ -4066,15 +4073,11 @@ describe("AgentForm save payload and failure handling", () => {
     await screen.findByText("Choose a compatible model or runtime to save.");
     await user.click(screen.getByRole("button", { name: "Disable runtime" }));
 
-    await waitFor(() =>
-      expect(
-        screen.queryByText("Choose a compatible model or runtime to save."),
-      ).not.toBeInTheDocument(),
-    );
-    expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: /update/i }));
-    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody()).toEqual({ runtime: null });
+    // Nothing changed: the runtime stays, and so does what it needs.
+    expect(
+      screen.getByText("Choose a compatible model or runtime to save."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
   });
 
   it("requires an image and a command before saving a runtime newly enabled on an existing agent", async () => {
@@ -4436,7 +4439,7 @@ describe("AgentForm save payload and failure handling", () => {
     // one is taken for it.
     expect(
       await screen.findByText(
-        "Every run uses this connection. Each person picks their model.",
+        "Every run uses this connection. Each person picks their model on the agent's page, unless you set one here.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
@@ -4472,9 +4475,10 @@ describe("AgentForm save payload and failure handling", () => {
       screen.getByRole("checkbox", { name: /A company API key/ });
     const user = userEvent.setup();
 
-    // Codex runs its company key on OpenAI, beside ChatGPT subscriptions.
+    // Codex runs its company key on OpenAI, beside ChatGPT subscriptions. A
+    // creator with no ChatGPT of their own starts with both ways open.
     const codex = renderRuntime("codex");
-    await user.click(companyKeyWay());
+    await waitFor(() => expect(companyKeyWay()).toBeChecked());
     expect(screen.getByTestId("runtime-provider-filter")).toHaveTextContent(
       '{"gemini":false,"openai":true,"anthropic":false,"bedrock":false,"xai":false}',
     );
@@ -4954,11 +4958,17 @@ describe("AgentForm save payload and failure handling", () => {
     await user.clear(instructions);
     await user.paste("Start with the failing build logs.");
 
+    // Without a ChatGPT subscription of their own the creator starts with
+    // both ways open; subscriptions alone wait for theirs.
     await user.click(screen.getByRole("radio", { name: /Codex/ }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("checkbox", { name: /A company API key/ }),
+      ).toBeChecked(),
+    );
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
     await user.click(
-      screen.getByRole("checkbox", {
-        name: /Each person's ChatGPT subscription/,
-      }),
+      screen.getByRole("checkbox", { name: /A company API key/ }),
     );
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     expect(
@@ -4973,8 +4983,11 @@ describe("AgentForm save payload and failure handling", () => {
         name: "Connect your ChatGPT subscription before creating the agent",
       }),
     ).not.toBeInTheDocument();
+    // Back on Codex the start is applied again: both ways open.
     await user.click(screen.getByRole("radio", { name: /Codex/ }));
-    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Create" })).toBeEnabled(),
+    );
     await user.click(screen.getByRole("radio", { name: "OpenCode" }));
 
     expect(name).toHaveValue("Incident helper");
@@ -5018,10 +5031,14 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
     await user.click(screen.getByRole("radio", { name: /Codex/ }));
+    // Subscriptions alone, which wait for the creator's own ChatGPT.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("checkbox", { name: /A company API key/ }),
+      ).toBeChecked(),
+    );
     await user.click(
-      screen.getByRole("checkbox", {
-        name: /Each person's ChatGPT subscription/,
-      }),
+      screen.getByRole("checkbox", { name: /A company API key/ }),
     );
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     expect(
@@ -5517,7 +5534,7 @@ describe("AgentForm save payload and failure handling", () => {
 
       expect(
         screen.getByText(
-          "Every run uses this connection. Each person picks their model.",
+          "Every run uses this connection. Each person picks their model on the agent's page, unless you set one here.",
         ),
       ).toBeVisible();
       expect(screen.queryByText(/This connection is not used/)).toBeNull();
@@ -6219,7 +6236,7 @@ describe("AgentForm save payload and failure handling", () => {
       expect(screen.getAllByTestId("selected-model")).toHaveLength(1);
       expect(
         screen.getByText(
-          "Each person chooses between their own subscription and a company API key.",
+          "Each person who runs this agent chooses their own subscription or a company API key on the agent's page.",
         ),
       ).toBeVisible();
 
@@ -6280,15 +6297,42 @@ describe("AgentForm save payload and failure handling", () => {
       expect(companyKeyWay()).not.toBeChecked();
     });
 
-    it("locks an agent to personal subscriptions while it keeps a company key of its own", async () => {
+    it("locks an agent with an incompatible company key to personal subscriptions and drops the unused pair", async () => {
       // The runtime has a subscription of its own, so the lock does not
       // depend on what the agent's own connection is.
-      withGrokKeys();
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [companyKey, xaiKey, superGrokKey],
+      });
+      useLlmModelsByProviderMock.mockReturnValue({
+        modelsByProvider: {
+          openai: [
+            {
+              dbId: "openai-model",
+              id: "gpt-5",
+              displayName: "GPT-5",
+              provider: "openai",
+              isFree: false,
+            },
+          ],
+          xai: [
+            {
+              dbId: "grok-model",
+              id: "grok-4",
+              displayName: "Grok 4",
+              provider: "xai",
+              isFree: false,
+            },
+          ],
+        },
+      });
       const user = userEvent.setup();
       render(
         <AgentForm
           agentType="agent"
-          agent={grokAgent({})}
+          agent={{
+            ...grokAgent({ llmApiKeyId: "openai-key" }),
+            modelId: "openai-model",
+          }}
           sections={["configuration"]}
         />,
       );
@@ -6306,8 +6350,64 @@ describe("AgentForm save payload and failure handling", () => {
       expect(savedBody().runtime).toMatchObject({
         accountLock: "subscription",
       });
-      // Its company key stays stored: unticking the way does not clear it.
-      expect(savedBody()).not.toHaveProperty("llmApiKeyId");
+      // SuperGrok does not serve OpenAI models, so neither the company key nor
+      // its model is used by any run and both are cleared.
+      expect(savedBody()).toMatchObject({ llmApiKeyId: null, modelId: null });
+    });
+
+    it("keeps a subscription-served model when locking a company-key agent to personal subscriptions", async () => {
+      withGrokKeys();
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={grokAgent({})}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(companyKeyWay());
+      expect(superGrokWay()).toBeChecked();
+      expect(companyKeyWay()).not.toBeChecked();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({
+        accountLock: "subscription",
+      });
+      // SuperGrok serves xAI models (`grok-4`), so saving preserves the model
+      // instead of clearing it (runs bind each person's SuperGrok and ignore
+      // the stored company key).
+      expect(savedBody().llmApiKeyId).toBeUndefined();
+      expect(savedBody().modelId).toBeUndefined();
+    });
+
+    it("does not clear a stored personal subscription on an unrelated edit when keys are unreadable or still loading", async () => {
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [],
+        isFetched: false,
+      });
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={grokAgent({
+            lock: "subscription",
+            llmApiKeyId: "supergrok-key",
+          })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      const descriptionInput = screen.getByLabelText("Description");
+      await user.clear(descriptionInput);
+      await user.type(descriptionInput, "Updated description");
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().description).toBe("Updated description");
+      expect(savedBody().llmApiKeyId).toBeUndefined();
+      expect(savedBody().modelId).toBeUndefined();
     });
 
     it("lifts the ChatGPT requirement when a new Codex agent runs only on a company API key", async () => {
@@ -6326,22 +6426,11 @@ describe("AgentForm save payload and failure handling", () => {
           }}
         />,
       );
-      expect(
-        await screen.findByText("ChatGPT Subscription required"),
-      ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /create/i })).toBeDisabled();
-
-      await user.click(companyKeyWay());
-      await waitFor(() =>
-        expect(
-          screen.queryByText("ChatGPT Subscription required"),
-        ).not.toBeInTheDocument(),
-      );
-      // Beside subscriptions the company key is still what the agent's own
-      // setting runs on, so the creator needs no subscription either.
-      await user.click(subscriptionWay());
+      // The creator has no ChatGPT of their own: the agent starts with both
+      // ways open. Beside subscriptions the company key is still what the
+      // agent's own setting runs on, so the creator needs no subscription.
+      await waitFor(() => expect(companyKeyWay()).toBeChecked());
       expect(subscriptionWay()).toBeChecked();
-      expect(companyKeyWay()).toBeChecked();
       expect(
         screen.queryByText("ChatGPT Subscription required"),
       ).not.toBeInTheDocument();
@@ -6351,6 +6440,14 @@ describe("AgentForm save payload and failure handling", () => {
         screen.getByText("ChatGPT Subscription required"),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /create/i })).toBeDisabled();
+      // The company key alone needs no subscription either.
+      await user.click(companyKeyWay());
+      await user.click(subscriptionWay());
+      expect(subscriptionWay()).not.toBeChecked();
+      expect(companyKeyWay()).toBeChecked();
+      expect(
+        screen.queryByText("ChatGPT Subscription required"),
+      ).not.toBeInTheDocument();
     });
 
     it.each([
@@ -6445,8 +6542,23 @@ describe("AgentForm save payload and failure handling", () => {
       });
     });
 
+    it("keeps a Codex agent's own ChatGPT subscription once it allows subscriptions alone", async () => {
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command: codex, llmApiKeyId: "chatgpt-key" })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(companyKeyWay());
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody()).not.toHaveProperty("llmApiKeyId");
+    });
+
     it.each([
-      ["is turned off", "Disable runtime"],
       ["becomes one with a single account", "Set runtime image and command"],
     ])("forgets that both options were unticked when the runtime %s", async (_change, button) => {
       const user = userEvent.setup();
@@ -6985,7 +7097,9 @@ describe("AgentForm save payload and failure handling", () => {
         ).toBeInTheDocument();
         // The line speaks only of what is left to the agent: the model.
         expect(
-          screen.getByText("Each person picks their model."),
+          screen.getByText(
+            "Each person picks their model on the agent's page, unless you set one here.",
+          ),
         ).toBeInTheDocument();
         expect(row()).toHaveTextContent("Runtime OpenAI, each person's model");
         // The notice names the connection, and not the model, as the
@@ -7047,7 +7161,9 @@ describe("AgentForm save payload and failure handling", () => {
         ).toBeInTheDocument();
         await user.click(screen.getByRole("button", { name: "Clear model" }));
         expect(
-          screen.getByText("Each person picks their model."),
+          screen.getByText(
+            "Each person picks their model on the agent's page, unless you set one here.",
+          ),
         ).toBeInTheDocument();
         await user.click(screen.getByRole("button", { name: /update/i }));
         await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
@@ -7095,7 +7211,9 @@ describe("AgentForm save payload and failure handling", () => {
         ).toHaveTextContent("Runtime OpenAI");
         expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
         expect(
-          screen.getByText("Each person picks their model."),
+          screen.getByText(
+            "Each person picks their model on the agent's page, unless you set one here.",
+          ),
         ).toBeInTheDocument();
         const body = await renameAndUpdate(user);
         expect(body).not.toHaveProperty("llmApiKeyId");
@@ -7155,11 +7273,16 @@ describe("AgentForm save payload and failure handling", () => {
           renderNew(id);
 
           await waitFor(() => expectOneCard(id, kind));
-          if (kind === "key") {
-            // Its fields follow the same rule as anywhere: both optional.
-            expect(
-              screen.getByText("Each person picks their connection and model."),
-            ).toBeInTheDocument();
+          // Its fields follow the same rule as anywhere: both optional. No
+          // company connection here runs Claude, and then the fields say
+          // only that.
+          const nothingSet = screen.queryByText(
+            "Optional. Set a connection and model to fix them for every run on the company account. Leave them empty and each person picks their own on the agent's page.",
+          );
+          if (kind === "key" && id !== "claude-code") {
+            expect(nothingSet).toBeInTheDocument();
+          } else {
+            expect(nothingSet).toBeNull();
           }
           const body = await create(user);
           // The rule is the runtime's: the agent names no lock, and stores
@@ -7621,9 +7744,10 @@ describe("AgentForm save payload and failure handling", () => {
       };
       const row = () =>
         screen.getByRole("button", { name: /^Accounts that can run it/ });
-      const NOTHING_SET = "Each person picks their connection and model.";
+      const NOTHING_SET =
+        "Optional. Set a connection and model to fix them for every run on the company account. Leave them empty and each person picks their own on the agent's page.";
       const CONNECTION_SET =
-        "Every run uses this connection. Each person picks their model.";
+        "Every run uses this connection. Each person picks their model on the agent's page, unless you set one here.";
       const BOTH_SET = "Every run uses this connection and model.";
       /** The creator's own default connection, which the picker also offers. */
       const ownDefault = { ...companyKey, id: "key-1", isPrimary: true };
@@ -7747,18 +7871,19 @@ describe("AgentForm save payload and failure handling", () => {
         expect(savedBody()).toMatchObject(payload);
       });
 
-      it("asks who pays for a new Codex agent whatever default connection its creator has, and needs no connection for the company API key", async () => {
+      it("starts a new Codex agent on its creator's ChatGPT subscription, and needs no connection for the company API key", async () => {
         const user = userEvent.setup();
         renderNew("codex");
 
-        // Two kinds of account and no rule: neither starts ticked.
-        expect(
-          await screen.findByText("Select at least one option."),
-        ).toBeInTheDocument();
+        // Two kinds of account and no rule: the creator has ChatGPT, so the
+        // agent starts on subscriptions, like Claude Code, and can be
+        // created at once.
+        await waitFor(() => expect(subscriptionWay()).toBeChecked());
         expect(companyKeyWay()).not.toBeChecked();
-        expect(subscriptionWay()).not.toBeChecked();
+        expect(screen.queryByText("Select at least one option.")).toBeNull();
 
         await user.click(companyKeyWay());
+        await user.click(subscriptionWay());
         expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
         // The company key runs it, so their own ChatGPT is not asked for,
         // and is not kept as the company option's connection.
@@ -7775,10 +7900,11 @@ describe("AgentForm save payload and failure handling", () => {
       it("takes the creator's ChatGPT subscription again once a new Codex agent is left on subscriptions alone", async () => {
         const user = userEvent.setup();
         renderNew("codex");
-        await screen.findByText("Select at least one option.");
+        await waitFor(() => expect(subscriptionWay()).toBeChecked());
 
         // The company card alone, then both, then the subscription alone.
         await user.click(companyKeyWay());
+        await user.click(subscriptionWay());
         await user.click(subscriptionWay());
         await user.click(companyKeyWay());
         expect(subscriptionWay()).toBeChecked();
@@ -7792,8 +7918,7 @@ describe("AgentForm save payload and failure handling", () => {
       it("opens the company API key beside subscriptions on Codex with nothing set for it", async () => {
         const user = userEvent.setup();
         renderNew("codex");
-        await screen.findByText("Select at least one option.");
-        await user.click(subscriptionWay());
+        await waitFor(() => expect(subscriptionWay()).toBeChecked());
         await user.click(companyKeyWay());
 
         expect(subscriptionWay()).toBeChecked();
@@ -7835,7 +7960,8 @@ describe("AgentForm save payload and failure handling", () => {
             name: /Each person's Claude subscription/,
           }),
         ).not.toBeChecked();
-        expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
+        // No company connection here runs Claude: the fields say only that.
+        expect(screen.queryByText(NOTHING_SET)).toBeNull();
         expect(
           screen.queryByRole("img", { name: /Select a provider/ }),
         ).not.toBeInTheDocument();
@@ -7861,7 +7987,8 @@ describe("AgentForm save payload and failure handling", () => {
         await user.click(companyKeyWay());
         expect(claudeSubscriptionWay()).toBeChecked();
         expect(companyKeyWay()).toBeChecked();
-        expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
+        // No company connection here runs Claude: the fields say only that.
+        expect(screen.queryByText(NOTHING_SET)).toBeNull();
         // Nothing is asked for the company card.
         expect(screen.queryByText(/^Choose a connection and model/)).toBeNull();
         expect(await create(user)).toMatchObject({
@@ -7911,13 +8038,27 @@ describe("AgentForm save payload and failure handling", () => {
               onCreated={onCreated}
             />,
           );
-          await screen.findByText("Select at least one option.");
+          await waitFor(() => expect(subscriptionWay()).toBeChecked());
           // The fields are not shown yet: nothing is said about them.
           expect(screen.queryByText(NOTE)).toBeNull();
 
+          // Beside each person's own subscription their runs need no
+          // connection: nothing is said yet.
           await user.click(companyKeyWay());
           expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
-          expect(screen.getByText(NOTE)).toBeInTheDocument();
+          expect(screen.queryByText(NOTE)).toBeNull();
+          // The company API key alone: each person needs a connection.
+          await user.click(subscriptionWay());
+          const noticeText = screen.getByText(NOTE);
+          expect(noticeText).toBeInTheDocument();
+          const notice = noticeText.closest('[data-slot="inline-notice"]');
+          expect(notice).toHaveAttribute("role", "status");
+          expect(notice).toHaveClass(
+            "[&>svg]:text-[#A25E07]",
+            "dark:[&>svg]:text-amber-400",
+            "text-muted-foreground",
+          );
+          expect(notice).not.toHaveClass("border");
           // What the API resolves for each person is the API's to say: the
           // form holds no save back for it.
           await user.type(screen.getByLabelText(/Name/), "Their agent");
@@ -7958,9 +8099,10 @@ describe("AgentForm save payload and failure handling", () => {
           organizationDefault("openai", "GPT-5");
           const user = userEvent.setup();
           renderNew("codex");
-          await screen.findByText("Select at least one option.");
+          await waitFor(() => expect(subscriptionWay()).toBeChecked());
 
           await user.click(companyKeyWay());
+          await user.click(subscriptionWay());
           expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
           expect(screen.queryByText(/cannot run on this runtime/)).toBeNull();
         });
@@ -7980,7 +8122,8 @@ describe("AgentForm save payload and failure handling", () => {
           );
 
           await user.click(companyKeyWay());
-          expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
+          // No company connection here runs Claude: the fields say only that.
+          expect(screen.queryByText(NOTHING_SET)).toBeNull();
           expect(screen.queryByText(/cannot run on this runtime/)).toBeNull();
         });
       });
@@ -8047,6 +8190,19 @@ describe("AgentForm save payload and failure handling", () => {
             initialValues={copilot?.initialValues}
           />,
         );
+      /**
+       * A new Copilot agent starts on each person's own Copilot, like Claude
+       * Code on Claude; unticking it leaves nothing ticked.
+       */
+      const untickCopilot = async (
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await waitFor(() => expect(copilotWay()).toBeChecked());
+        await user.click(copilotWay());
+        expect(
+          await screen.findByText("Select at least one option."),
+        ).toBeInTheDocument();
+      };
       const createCopilot = async (
         user: ReturnType<typeof userEvent.setup>,
       ) => {
@@ -8063,11 +8219,7 @@ describe("AgentForm save payload and failure handling", () => {
         withPlans(plan("plan-a", "Example Org"), plan("plan-b", "Second Org"));
         const user = userEvent.setup();
         renderNewCopilot();
-
-        // Two kinds of account: neither starts ticked.
-        expect(
-          await screen.findByText("Select at least one option."),
-        ).toBeInTheDocument();
+        await untickCopilot(user);
         // One plan ticked alone is fixed for every run.
         await user.click(planWay("Example Org"));
         expect(planWay("Example Org")).toBeChecked();
@@ -8075,7 +8227,7 @@ describe("AgentForm save payload and failure handling", () => {
         expect(copilotWay()).not.toBeChecked();
         expect(
           within(cardOf(planWay("Example Org"))).getByText(
-            "Each person picks their model.",
+            "Each person picks their model on the agent's page, unless you set one here.",
           ),
         ).toBeInTheDocument();
         // Ticking the other opens the company's way on every plan: none is
@@ -8119,7 +8271,7 @@ describe("AgentForm save payload and failure handling", () => {
         withPlans(plan("plan-a", "Example Org"), plan("plan-b", "Second Org"));
         const user = userEvent.setup();
         renderNewCopilot();
-        await screen.findByText("Select at least one option.");
+        await untickCopilot(user);
 
         // Fixed with its model, then every plan opened: the model is now
         // the one set for that plan.
@@ -8158,7 +8310,7 @@ describe("AgentForm save payload and failure handling", () => {
         withPlans(plan("plan-a", "Example Org"), plan("plan-b", "Second Org"));
         const user = userEvent.setup();
         renderNewCopilot();
-        await screen.findByText("Select at least one option.");
+        await untickCopilot(user);
 
         await user.click(planWay("Second Org"));
         await user.click(
@@ -8191,7 +8343,7 @@ describe("AgentForm save payload and failure handling", () => {
         withPlans(plan("plan-a", "Example Org"), plan("plan-b", "Second Org"));
         const user = userEvent.setup();
         renderNewCopilot();
-        await screen.findByText("Select at least one option.");
+        await untickCopilot(user);
         await user.click(planWay("Example Org"));
         await user.click(planWay("Second Org"));
 
@@ -8238,7 +8390,9 @@ describe("AgentForm save payload and failure handling", () => {
         ).not.toBeInTheDocument();
         // The lone plan is the connection: its model is optional.
         expect(
-          screen.getByText("Each person picks their model."),
+          screen.getByText(
+            "Each person picks their model on the agent's page, unless you set one here.",
+          ),
         ).toBeInTheDocument();
         const body = await createCopilot(user);
         expect(body).toMatchObject({ llmApiKeyId: null, modelId: null });

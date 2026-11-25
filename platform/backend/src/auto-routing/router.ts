@@ -64,6 +64,7 @@ import {
   userModelRouterAuth,
 } from "./eligibility";
 import { firstUserText } from "./first-user-text";
+import { classifyAutoRoutingHousekeeping } from "./housekeeping";
 import { scoringContext, scoringContextFingerprint } from "./scoring-context";
 import {
   activeSourceVersion,
@@ -161,6 +162,26 @@ export async function resolveAutoModel(params: {
     headers: request.headers,
     body,
   });
+  const housekeepingReason = classifyAutoRoutingHousekeeping({
+    endpoint,
+    headers: request.headers,
+    body,
+    client: metadata.client,
+  });
+  if (housekeepingReason) {
+    logger.info(
+      {
+        routerId: settings.id,
+        reason: housekeepingReason,
+      },
+      "[AutoRouting] Housekeeping request bypassed to the fast tier",
+    );
+    return {
+      kind: "routed",
+      model: tiers[0].routedModel,
+      auth: onTier(tiers[0]),
+    };
+  }
   const { sessionId } = followAppaSessionHeader({
     headers: request.headers,
     source: "model_router",
@@ -899,6 +920,7 @@ async function scoreSession(
     const reading = await preRunSource(settings.scorerModel).read(input, {
       organizationId: settings.organizationId,
       apiKeyId: settings.scorerApiKeyId,
+      useCircuitBreaker: true,
     });
     return {
       kind: "scored",

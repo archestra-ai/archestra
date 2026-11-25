@@ -5,6 +5,8 @@ order: 8
 lastUpdated: 2026-10-28
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Track API latency, database connections, audit failures, and stored-file cleanup.
 
 ## Metrics

@@ -585,6 +585,11 @@ async function dispatchTool({
               }),
             }
           : {}),
+        // A call that waits for a free place on its server says so, as a
+        // direct call does.
+        ...(context.onUpstreamQueueChange
+          ? { onQueueChange: context.onUpstreamQueueChange }
+          : {}),
         // EncryptedChat: the persisted mcp_tool_calls row is encrypted under the
         // conversation key, or redacted when there is none to encrypt under.
         ...(context.suppressContentLogging

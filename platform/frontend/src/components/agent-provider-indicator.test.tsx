@@ -45,6 +45,24 @@ describe("AgentProviderIndicator", () => {
     ).toBeInTheDocument();
   });
 
+  it("names each person's subscription, not a key, for an agent that runs on it", async () => {
+    render(
+      <AgentProviderIndicator provider="anthropic" personalSubscription />,
+    );
+    await userEvent.setup().tab();
+    const tooltip = await screen.findByRole("tooltip");
+    expect(
+      within(tooltip).getByText("Each person's Claude subscription"),
+    ).toBeInTheDocument();
+    expect(within(tooltip).getByText("Each person picks")).toBeInTheDocument();
+    expect(
+      within(tooltip).queryByText("Organization default"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(tooltip).queryByText("No key configured"),
+    ).not.toBeInTheDocument();
+  });
+
   it("identifies an unpinned agent as using the organization default", async () => {
     render(<AgentProviderIndicator usesOrganizationDefault />);
     await userEvent.setup().tab();

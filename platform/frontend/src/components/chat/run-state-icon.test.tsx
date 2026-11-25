@@ -79,7 +79,7 @@ describe("RunStateIcon", () => {
       />,
     );
     expect(
-      screen.getByLabelText("Running · Needs your input"),
+      screen.getByLabelText("Running · Waiting for input"),
     ).toBeInTheDocument();
   });
 

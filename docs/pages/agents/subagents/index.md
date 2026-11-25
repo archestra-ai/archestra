@@ -6,6 +6,7 @@ lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Split big tasks across specialists. An agent, the parent, can hand part of a task to another agent, its subagent, and use the result. The parent decides on its own when to delegate.
 

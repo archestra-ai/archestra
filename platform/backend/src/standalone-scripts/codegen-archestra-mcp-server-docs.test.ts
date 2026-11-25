@@ -33,6 +33,18 @@ describe("codegen-archestra-mcp-server-docs", () => {
     }
   });
 
+  test("puts the docs writer skill pointer under the frontmatter of every page", () => {
+    const files = generateDocsFiles({
+      readFile: () => null,
+      today: "2026-01-01",
+    });
+    for (const content of Object.values(files)) {
+      expect(content).toContain(
+        "\n---\n\n<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->\n\n",
+      );
+    }
+  });
+
   test("renders compact nullable types without losing nested fields", () => {
     const rows = renderSchemaRows({
       type: "object",

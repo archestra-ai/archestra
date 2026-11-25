@@ -1,6 +1,10 @@
 "use client";
 
-import { MESSAGING_CHANNEL_LABELS, slackHandleFor } from "@archestra/shared";
+import {
+  CHAT_APP_CHANNEL_IDS,
+  MESSAGING_CHANNEL_LABELS,
+  slackHandleFor,
+} from "@archestra/shared";
 import {
   Hash,
   MessageSquare,
@@ -133,11 +137,22 @@ export function AgentWorkSources({
             >
               <Monitor className="size-4" />
             </span>
-            <div className="min-w-0 flex-[1_1_18rem] space-y-1">
+            <div className="min-w-0 flex-[1_1_18rem] space-y-1.5">
               <h3 className="text-sm font-semibold">From your laptop</h3>
-              <p className="text-sm text-muted-foreground">
-                {`Add the ${appName} MCP gateway to Claude Code or Codex once. Your changes, files and credentials move into a run here; "bring it back" returns a patch.`}
-              </p>
+              <ol className="list-decimal space-y-1 pl-4 text-sm text-muted-foreground">
+                <li>
+                  Click Connect your local agent to connect your local coding
+                  agent (such as Claude Code or Codex) to an MCP gateway.
+                </li>
+                <li>
+                  Open MCP Gateways &rarr; your gateway &rarr; Settings &rarr;
+                  Agents, then select Agent access &rarr; Manual &rarr; Add
+                  agent (or Agent access &rarr; All agents).
+                </li>
+                <li>
+                  {`In your local agent, type "hand this over to ${appName}" to start a run with your changes, files, and credentials. Type "bring it back" to get a patch.`}
+                </li>
+              </ol>
             </div>
             <span
               role="img"
@@ -195,7 +210,7 @@ function AgentChannelsCard({
   const { data: config } = useConfig();
   // The chat apps this deployment offers, and of those the ones the
   // organization has connected: the card offers only what can work.
-  const offeredApps = CHAT_APPS.filter(
+  const offeredApps = CHAT_APP_CHANNEL_IDS.filter(
     (provider) =>
       !catalog.isHidden(provider) &&
       (provider !== "telegram" ||
@@ -366,12 +381,7 @@ function AgentChannelsCard({
   );
 }
 
-const CHAT_APPS = [
-  "slack",
-  "ms-teams",
-  "telegram",
-] as const satisfies readonly (keyof typeof MESSAGING_CHANNEL_LABELS)[];
-type ChatApp = (typeof CHAT_APPS)[number];
+type ChatApp = (typeof CHAT_APP_CHANNEL_IDS)[number];
 
 /**
  * One way in per connected chat app. A per-agent Slack bot is set up on the

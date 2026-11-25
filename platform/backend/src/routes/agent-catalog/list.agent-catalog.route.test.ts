@@ -930,4 +930,90 @@ describe("GET /api/agent-catalog", () => {
     expect(pluginSummaries).not.toHaveBeenCalled();
     expect(externalSummaries).not.toHaveBeenCalled();
   });
+
+  test("populates personal subscription provider info for runtime agents", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const claudeUnlocked = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Claude unlocked ${suffix}`,
+      runtime: buildAgentCatalogRuntime({
+        id: "claude-code",
+        image: "registry.test/claude-code:latest",
+      }),
+    });
+    const grokCompanyKey = await makeLlmProviderApiKey(
+      ctx.organizationId,
+      null,
+      {
+        name: "Company xAI",
+        provider: "xai",
+      },
+    );
+    const grokLockedToSubscription = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Grok sub ${suffix}`,
+      llmApiKeyId: grokCompanyKey.id,
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "grok",
+          image: "registry.test/grok:latest",
+        }),
+        accountLock: "subscription",
+      },
+    });
+    const grokOnCompanyKey = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Grok key ${suffix}`,
+      llmApiKeyId: grokCompanyKey.id,
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "grok",
+          image: "registry.test/grok:latest",
+        }),
+        accountLock: "key",
+      },
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agent-catalog?limit=20&offset=0&name=${suffix}`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const rowsById = new Map(
+      response
+        .json()
+        .data.map(
+          (row: { value: Record<string, unknown> }) =>
+            [row.value.id, row.value] as const,
+        ),
+    );
+    expect(rowsById.get(claudeUnlocked.id)).toMatchObject({
+      resolvedLlmProvider: "anthropic",
+      resolvedLlmProviderKeyName: null,
+      resolvedLlmPersonalSubscription: true,
+    });
+    expect(rowsById.get(grokLockedToSubscription.id)).toMatchObject({
+      resolvedLlmProvider: "xai",
+      resolvedLlmProviderKeyName: null,
+      resolvedLlmPersonalSubscription: true,
+    });
+    expect(rowsById.get(grokOnCompanyKey.id)).toMatchObject({
+      resolvedLlmProvider: "xai",
+      resolvedLlmProviderKeyName: "Company xAI",
+    });
+    expect(rowsById.get(grokOnCompanyKey.id)).not.toHaveProperty(
+      "resolvedLlmPersonalSubscription",
+    );
+  });
 });

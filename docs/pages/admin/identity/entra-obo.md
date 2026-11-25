@@ -6,6 +6,7 @@ lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Sign people in with their Microsoft accounts, then let MCP tools call Microsoft Graph and your own APIs as each person. Ask an agent to read your calendar, and Graph sees you, with your permissions, not a shared service account. On every tool call, Archestra uses Entra's [On-Behalf-Of](https://learn.microsoft.com/entra/identity-platform/v2-oauth2-on-behalf-of-flow) exchange to trade the person's sign-in token for a token to the API, so nobody pastes a token.
 

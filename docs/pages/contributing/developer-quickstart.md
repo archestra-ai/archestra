@@ -6,6 +6,7 @@ lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 One command runs all of Archestra from source, with hot reload. The backend and frontend run on your machine. PostgreSQL and MCP servers run in a local Kubernetes cluster. [Tilt](https://tilt.dev) starts everything and rebuilds what you change.
 

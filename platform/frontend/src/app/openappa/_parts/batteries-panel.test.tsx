@@ -1,5 +1,9 @@
 import type { Permissions } from "@archestra/shared";
-import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiClient,
+  type archestraApiTypes,
+  BUILT_IN_AGENT_IDS,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
@@ -23,9 +27,19 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  type OpenAppaBatteryChange,
+  resolveOpenAppaBatteryChangesPrompt,
+  resolveOpenAppaBatteryPrompt,
+} from "@/lib/openappa-chat-prompts";
+import { makeAgent } from "@/mocks/data/agents";
 import { BatteriesPanel } from "./batteries-panel";
 
 vi.mock("@/app/_parts/use-settings-area-access");
+// Monaco does not run in jsdom: the editor is the text it shows.
+vi.mock("@/components/editor", () => ({
+  Editor: ({ value }: { value: string }) => <pre>{value}</pre>,
+}));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("next/navigation");
 vi.mock("sonner");
@@ -277,6 +291,9 @@ beforeEach(() => {
     http.get(`${baseUrl}/api/credentials`, () =>
       HttpResponse.json([credential]),
     ),
+    http.get(`${baseUrl}/api/agents/chat-roster`, () =>
+      HttpResponse.json([keeper]),
+    ),
     http.get(`${baseUrl}/api/openappa/coverage/summary`, () =>
       HttpResponse.json({
         totals: {
@@ -363,14 +380,21 @@ const githubSyncSource = () =>
     }),
   );
 
-/** Pick an item from the row's "More actions" menu. */
-async function rowMenu(battery: string) {
-  const user = userEvent.setup();
-  await user.click(
-    await screen.findByRole("button", { name: `More actions ${battery}` }),
-  );
-  return screen.findByRole("menu");
-}
+/** The configuration agent, which takes each change while Git sync owns the policy. */
+const keeper = makeAgent({
+  id: "keeper",
+  scope: "org",
+  builtIn: true,
+  builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+  authorId: null,
+});
+
+/** The chat link that asks the configuration agent for exactly this change. */
+const agentHref = (change: OpenAppaBatteryChange) =>
+  `/chat?${new URLSearchParams({
+    agentId: keeper.id,
+    user_prompt: resolveOpenAppaBatteryPrompt(change),
+  })}`;
 
 test("with no installed server to attach to, the attach form leads to MCP Registry", async () => {
   declarations = emptyDeclarations();
@@ -812,22 +836,13 @@ test("a battery governing the organization that no rule routes to says how to ro
   );
 });
 
-test("a server whose tools are not synced yet cannot take a battery", async () => {
+test("attaching a server whose tools are not synced yet syncs them first", async () => {
   declarations = emptyDeclarations();
   batteries = [githubBattery()];
-  show();
-  const user = userEvent.setup();
-  await entry("github");
-  await user.click(screen.getByRole("combobox", { name: "MCP server" }));
-  await user.click(screen.getByRole("option", { name: "Fresh" }));
-  expect(await screen.findByRole("note")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
-  // Syncing the picked server's tools is offered right there and, once it
-  // lands, the same server can take the battery.
-  let reloaded: string | null = null;
+  const calls: string[] = [];
   server.use(
     http.post(`${baseUrl}/api/mcp_server/:id/reload-tools`, ({ params }) => {
-      reloaded = String(params.id);
+      calls.push(`sync ${params.id}`);
       freshSynced = true;
       return HttpResponse.json({
         created: 3,
@@ -836,13 +851,120 @@ test("a server whose tools are not synced yet cannot take a battery", async () =
         deleted: 0,
       });
     }),
+    http.post(
+      `${baseUrl}/api/openappa/battery-installs`,
+      async ({ request }) => {
+        const body = (await request.json()) as { catalogId?: string };
+        calls.push(`attach ${body.catalogId}`);
+        return HttpResponse.json(declaredGithub());
+      },
+    ),
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Sync tools" }));
-  await waitFor(() => expect(reloaded).toBe(freshServerId));
+  show();
+  const user = userEvent.setup();
+  await entry("github");
+  await user.click(screen.getByRole("combobox", { name: "MCP server" }));
+  await user.click(screen.getByRole("option", { name: "Fresh" }));
+  // No separate step: Attach syncs the tools, then attaches.
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled(),
   );
   expect(screen.queryByRole("note")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Attach" }));
+  await waitFor(() =>
+    expect(calls).toEqual([
+      `sync ${freshServerId}`,
+      `attach ${freshCatalogId}`,
+    ]),
+  );
+});
+
+test("a tools sync that fails on Attach attaches nothing and says so, with the sync to try again", async () => {
+  declarations = emptyDeclarations();
+  batteries = [githubBattery()];
+  const writes: string[] = [];
+  server.use(
+    http.post(`${baseUrl}/api/mcp_server/:id/reload-tools`, () =>
+      HttpResponse.json(
+        { error: { message: "Connection refused", type: "api_error" } },
+        { status: 500 },
+      ),
+    ),
+    http.post(`${baseUrl}/api/openappa/battery-installs`, ({ request }) => {
+      writes.push(request.url);
+      return HttpResponse.json(declaredGithub());
+    }),
+  );
+  show();
+  const user = userEvent.setup();
+  await entry("github");
+  await user.click(screen.getByRole("combobox", { name: "MCP server" }));
+  await user.click(screen.getByRole("option", { name: "Fresh" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled(),
+  );
+  await user.click(screen.getByRole("button", { name: "Attach" }));
+  expect(await screen.findByRole("note")).toHaveTextContent(
+    "Could not sync this server's tools",
+  );
+  expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Sync tools" })).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test("under Git sync a tools sync that fails on Save opens no chat, names the server and keeps what was staged", async () => {
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ entry: "batteries/github/appa.toml" })],
+    managedInGithub: true,
+  });
+  server.use(
+    githubSyncSource(),
+    http.post(`${baseUrl}/api/mcp_server/:id/reload-tools`, () =>
+      HttpResponse.json(
+        { error: { message: "Connection refused", type: "api_error" } },
+        { status: 500 },
+      ),
+    ),
+  );
+  show();
+  const row = await entry("github");
+  const user = userEvent.setup();
+  await user.click(within(row).getByRole("combobox", { name: "MCP server" }));
+  await user.click(screen.getByRole("option", { name: "Fresh" }));
+  await waitFor(() =>
+    expect(within(row).getByRole("button", { name: "Attach" })).toBeEnabled(),
+  );
+  await user.click(within(row).getByRole("button", { name: "Attach" }));
+  await user.click(within(row).getByRole("button", { name: "Save" }));
+  expect(await within(row).findByRole("alert")).toHaveTextContent(
+    "Could not sync the tools of Fresh, so nothing was saved.",
+  );
+  expect(vi.mocked(useRouter)().push).not.toHaveBeenCalled();
+  expect(within(row).getByText("Attached when you save")).toBeVisible();
+  expect(within(row).getByRole("button", { name: "Save" })).toBeEnabled();
+});
+
+test("without the permission to sync a server's tools, an unsynced server cannot take a battery and says why", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (query) =>
+      ({
+        data: !(
+          (query as Record<string, string[] | undefined>)
+            .mcpServerInstallation ?? []
+        ).includes("create"),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  declarations = emptyDeclarations();
+  batteries = [githubBattery()];
+  show();
+  const user = userEvent.setup();
+  await entry("github");
+  await user.click(screen.getByRole("combobox", { name: "MCP server" }));
+  await user.click(screen.getByRole("option", { name: "Fresh" }));
+  expect(await screen.findByRole("note")).toHaveTextContent(
+    "Sync the server's tools first",
+  );
+  expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
 });
 
 test("detaching a server deletes that server's install alone", async () => {
@@ -944,11 +1066,8 @@ test("removing an entry takes its include out in one write", async () => {
     ),
   );
   show();
-  const user = userEvent.setup();
-  await user.click(
-    within(await rowMenu("github")).getByRole("menuitem", {
-      name: "Remove from policy",
-    }),
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Remove from policy github" }),
   );
   fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
   await waitFor(() => expect(removed).toEqual(["github"]));
@@ -975,11 +1094,8 @@ test("an entry bound to no server this deployment carries is removed the same wa
     ),
   );
   show();
-  const user = userEvent.setup();
-  await user.click(
-    within(await rowMenu("github")).getByRole("menuitem", {
-      name: "Remove from policy",
-    }),
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Remove from policy github" }),
   );
   fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
   await waitFor(() => expect(removed).toEqual(["github"]));
@@ -1104,23 +1220,352 @@ test("a reader who can read credentials but not bind sees the bound credential b
   ).toBeVisible();
 });
 
-test("a policy the repository owns is read-only", async () => {
+test("under Git sync a manager's attaches and detaches wait for Save, which asks the configuration agent for all of them at once", async () => {
+  const writes: string[] = [];
+  const record = ({ request }: { request: Request }) => {
+    writes.push(`${request.method} ${request.url}`);
+    return HttpResponse.json({});
+  };
   declarations = emptyDeclarations({
-    batteries: [declaredGithub()],
+    batteries: [declaredGithub({ entry: "batteries/github/appa.toml" })],
     managedInGithub: true,
   });
-  server.use(githubSyncSource());
+  server.use(
+    githubSyncSource(),
+    http.post(`${baseUrl}/api/openappa/battery-installs`, record),
+    http.delete(`${baseUrl}/api/openappa/battery-installs/:id`, record),
+    http.delete(`${baseUrl}/api/openappa/battery-includes/:name`, record),
+    http.post(`${baseUrl}/api/mcp_server/:id/reload-tools`, record),
+  );
   show();
+  const battery = {
+    name: "github",
+    entry: "batteries/github/appa.toml",
+    namespaces: ["github"],
+  };
+  // The row's own Remove from policy goes to the agent, not to a confirmation.
+  expect(
+    await screen.findByRole("link", { name: "Remove from policy github" }),
+  ).toHaveAttribute("href", agentHref({ promptKey: "removeBattery", battery }));
+  const row = await entry("github");
+  const save = within(row).getByRole("button", { name: "Save" });
+  expect(save).toBeDisabled();
+  expect(within(row).getByRole("button", { name: "Cancel" })).toBeVisible();
+
+  // Detach stages the change, and Undo takes it back.
+  const user = userEvent.setup();
+  await user.click(
+    await within(row).findByRole("button", { name: "Detach github from Code" }),
+  );
+  expect(within(row).getByText("Detached when you save")).toBeVisible();
+  await user.click(
+    within(row).getByRole("button", { name: "Keep github on Code" }),
+  );
+  expect(within(row).queryByText("Detached when you save")).toBeNull();
+  await user.click(
+    within(row).getByRole("button", { name: "Detach github from Code" }),
+  );
+
+  // Attach stages too, each server in turn: Docs, then Fresh, whose tools
+  // are synced on Save.
+  for (const name of ["Docs", "Fresh"]) {
+    await user.click(within(row).getByRole("combobox", { name: "MCP server" }));
+    await user.click(screen.getByRole("option", { name }));
+    await waitFor(() =>
+      expect(within(row).getByRole("button", { name: "Attach" })).toBeEnabled(),
+    );
+    await user.click(within(row).getByRole("button", { name: "Attach" }));
+  }
+  expect(within(row).getAllByText("Attached when you save")).toHaveLength(2);
+  expect(writes).toEqual([]);
+
+  await user.click(save);
+  await waitFor(() =>
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith(
+      `/chat?${new URLSearchParams({
+        agentId: keeper.id,
+        user_prompt:
+          resolveOpenAppaBatteryChangesPrompt([
+            {
+              promptKey: "attachBattery",
+              battery,
+              server: { id: otherCatalogId, name: "Docs" },
+            },
+            {
+              promptKey: "attachBattery",
+              battery,
+              server: { id: freshCatalogId, name: "Fresh" },
+            },
+            {
+              promptKey: "detachBattery",
+              battery,
+              server: { id: catalogId, name: "Code", toolPrefix: "code" },
+            },
+          ]) ?? "",
+      })}`,
+    ),
+  );
+  // Only Fresh's tools were synced; the policy itself is the pull request's.
+  expect(writes).toEqual([
+    `POST ${baseUrl}/api/mcp_server/${freshServerId}/reload-tools`,
+  ]);
+});
+
+test("with self-service on, a server's editor without the permission to update guardrails stages attaches and detaches for the servers they may edit only, and Save asks the agent", async () => {
+  // Reads everything; may not update guardrails.
+  vi.mocked(useHasPermissions).mockImplementation(
+    (query) =>
+      ({
+        data: !(
+          (query as Record<string, string[] | undefined>).guardrailsPolicy ?? []
+        ).includes("update"),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  freshSynced = true;
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ entry: "batteries/github/appa.toml" })],
+    managedInGithub: true,
+  });
+  server.use(
+    githubSyncSource(),
+    http.get(`${baseUrl}/api/openappa/github-sync/self-service`, () =>
+      HttpResponse.json({ enabled: true }),
+    ),
+    // Code and Fresh are theirs to edit; Docs is not.
+    http.get(`${baseUrl}/api/internal_mcp_catalog`, () =>
+      HttpResponse.json([
+        { id: catalogId, name: "Code", effectiveActions: ["read", "update"] },
+        { id: otherCatalogId, name: "Docs", effectiveActions: ["read"] },
+        {
+          id: freshCatalogId,
+          name: "Fresh",
+          effectiveActions: ["read", "update"],
+        },
+        { id: bareCatalogId, name: "Bare", effectiveActions: ["read"] },
+      ]),
+    ),
+  );
+  show();
+  const battery = {
+    name: "github",
+    entry: "batteries/github/appa.toml",
+    namespaces: ["github"],
+  };
+  // The row's Remove is the policy's, not a server's: no Actions column.
   expect(await screen.findByText("GitHub rules")).toBeVisible();
   expect(
     screen.queryByRole("columnheader", { name: "Actions" }),
   ).not.toBeInTheDocument();
+  const row = await entry("github");
+  const user = userEvent.setup();
+  await user.click(
+    await within(row).findByRole("button", { name: "Detach github from Code" }),
+  );
+  // Attach offers the servers they may edit and the battery does not govern.
+  await user.click(within(row).getByRole("combobox", { name: "MCP server" }));
+  expect(screen.queryByRole("option", { name: "Docs" })).toBeNull();
+  await user.click(screen.getByRole("option", { name: "Fresh" }));
+  await waitFor(() =>
+    expect(within(row).getByRole("button", { name: "Attach" })).toBeEnabled(),
+  );
+  await user.click(within(row).getByRole("button", { name: "Attach" }));
+  await user.click(within(row).getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith(
+      `/chat?${new URLSearchParams({
+        agentId: keeper.id,
+        user_prompt:
+          resolveOpenAppaBatteryChangesPrompt(
+            [
+              {
+                promptKey: "attachBattery",
+                battery,
+                server: { id: freshCatalogId, name: "Fresh" },
+              },
+              {
+                promptKey: "detachBattery",
+                battery,
+                server: { id: catalogId, name: "Code", toolPrefix: "code" },
+              },
+            ],
+            // They say they edit the servers, not the organization's policy.
+            { serverEditor: true },
+          ) ?? "",
+      })}`,
+    ),
+  );
+});
+
+test("a server's editor stages up to 21 server changes, as many as one save asks the agent for, and is told to save to change more", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (query) =>
+      ({
+        data: !(
+          (query as Record<string, string[] | undefined>).guardrailsPolicy ?? []
+        ).includes("update"),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ entry: "batteries/github/appa.toml" })],
+    managedInGithub: true,
+  });
+  const many = Array.from({ length: 21 }, (_, index) => ({
+    id: `a1b2c3d4-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    name: `Server ${String(index + 1).padStart(2, "0")}`,
+    effectiveActions: ["read", "update"],
+  }));
+  const installed = [{ id: catalogId, name: "Code" }, ...many].map(
+    ({ id, name }, index) => ({
+      id: `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      name,
+      catalogId: id,
+    }),
+  );
+  server.use(
+    githubSyncSource(),
+    http.get(`${baseUrl}/api/openappa/github-sync/self-service`, () =>
+      HttpResponse.json({ enabled: true }),
+    ),
+    http.get(`${baseUrl}/api/internal_mcp_catalog`, () =>
+      HttpResponse.json([
+        { id: catalogId, name: "Code", effectiveActions: ["read", "update"] },
+        ...many,
+      ]),
+    ),
+    http.get(`${baseUrl}/api/internal_mcp_catalog/registry/issue-index`, () =>
+      HttpResponse.json({
+        catalogItems: [],
+        servers: installed.map((install) => ({
+          ...install,
+          scope: "org",
+          localInstallationStatus: "success",
+          updatedAt: "2026-09-22T12:00:00Z",
+          canUseCredential: true,
+        })),
+      }),
+    ),
+    http.get(`${baseUrl}/api/mcp_server`, () =>
+      HttpResponse.json(
+        installed.map((install) => ({
+          ...install,
+          createdAt: "2026-09-22T12:00:00Z",
+        })),
+      ),
+    ),
+  );
+  show();
+  const row = await entry("github");
+  const user = userEvent.setup();
+  // Detaching Code and attaching twenty servers fills one save.
+  await user.click(
+    await within(row).findByRole("button", { name: "Detach github from Code" }),
+  );
+  for (const { name } of many.slice(0, 20)) {
+    await user.click(within(row).getByRole("combobox", { name: "MCP server" }));
+    await user.click(screen.getByRole("option", { name }));
+    await waitFor(() =>
+      expect(within(row).getByRole("button", { name: "Attach" })).toBeEnabled(),
+    );
+    await user.click(within(row).getByRole("button", { name: "Attach" }));
+  }
   expect(
-    screen.queryByRole("button", { name: /^(Edit|View) github$/ }),
-  ).not.toBeInTheDocument();
+    within(row).getByText(
+      "One save changes up to 21 servers. Save these changes to change more.",
+    ),
+  ).toBeVisible();
+  await user.click(within(row).getByRole("combobox", { name: "MCP server" }));
+  await user.click(screen.getByRole("option", { name: "Server 21" }));
+  expect(within(row).getByRole("button", { name: "Attach" })).toBeDisabled();
+  // Undoing one makes room again.
+  await user.click(
+    within(row).getByRole("button", { name: "Keep github on Code" }),
+  );
+  expect(within(row).queryByText(/One save changes up to/)).toBeNull();
+  await waitFor(() =>
+    expect(within(row).getByRole("button", { name: "Attach" })).toBeEnabled(),
+  );
+}, 60_000);
+
+test("with self-service on, a server's editor changes no battery the policy includes as an uploaded package", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (query) =>
+      ({
+        data: !(
+          (query as Record<string, string[] | undefined>).guardrailsPolicy ?? []
+        ).includes("update"),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  batteries = [
+    {
+      ...githubBattery([install()]),
+      source: "upload",
+      contentHash: uploadHash,
+    },
+  ];
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        entry: `batteries/github@sha256-${uploadHash}/appa.toml`,
+        source: "upload",
+        packageHash: uploadHash,
+      }),
+    ],
+    managedInGithub: true,
+  });
+  server.use(
+    githubSyncSource(),
+    http.get(`${baseUrl}/api/openappa/github-sync/self-service`, () =>
+      HttpResponse.json({ enabled: true }),
+    ),
+    http.get(`${baseUrl}/api/internal_mcp_catalog`, () =>
+      HttpResponse.json([
+        { id: catalogId, name: "Code", effectiveActions: ["read", "update"] },
+      ]),
+    ),
+  );
+  show();
   const row = await entry("github");
   expect(
-    within(row).queryByRole("button", { name: /Detach|Attach/ }),
+    within(row).queryByRole("button", { name: "Detach github from Code" }),
+  ).toBeNull();
+  expect(
+    within(row).queryByRole("combobox", { name: "MCP server" }),
+  ).toBeNull();
+  expect(within(row).queryByRole("button", { name: "Save" })).toBeNull();
+});
+
+test("with self-service off, a reader without the permission to update guardrails changes no battery", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (query) =>
+      ({
+        data: !(
+          (query as Record<string, string[] | undefined>).guardrailsPolicy ?? []
+        ).includes("update"),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ entry: "batteries/github/appa.toml" })],
+    managedInGithub: true,
+  });
+  server.use(
+    githubSyncSource(),
+    http.get(`${baseUrl}/api/openappa/github-sync/self-service`, () =>
+      HttpResponse.json({ enabled: false }),
+    ),
+    http.get(`${baseUrl}/api/internal_mcp_catalog`, () =>
+      HttpResponse.json([
+        { id: catalogId, name: "Code", effectiveActions: ["read", "update"] },
+      ]),
+    ),
+  );
+  show();
+  const row = await entry("github");
+  expect(within(row).getByText("Code")).toBeVisible();
+  expect(
+    within(row).queryByRole("link", { name: /Detach/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(row).queryByRole("combobox", { name: "MCP server" }),
   ).not.toBeInTheDocument();
 });
 
@@ -1140,18 +1585,25 @@ test("a battery not yet included under GitHub sync can bind its credential", asy
   );
   show();
   const row = await entry("jev");
-  // The repository decides what is included, and the dialog says where.
-  expect(
-    within(row).getByRole("switch", { name: "Include in policy" }),
-  ).toBeDisabled();
-  expect(row).toHaveTextContent(
-    "The policy repository decides which batteries are included.",
-  );
-  expect(
-    await within(row).findByRole("link", { name: /Open the policy file/ }),
-  ).toHaveAttribute(
-    "href",
-    "https://github.com/acme/policy/blob/main/org.appa.toml",
+  // The switch stages the include, and Save asks the agent for it; the pull
+  // request changes the policy.
+  const toggle = within(row).getByRole("switch", { name: "Include in policy" });
+  await waitFor(() => expect(toggle).toBeEnabled());
+  fireEvent.click(toggle);
+  expect(toggle).toBeChecked();
+  expect(vi.mocked(useRouter)().push).not.toHaveBeenCalled();
+  fireEvent.click(within(row).getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith(
+      agentHref({
+        promptKey: "includeBattery",
+        battery: {
+          name: "jev",
+          entry: "batteries/jev/appa.toml",
+          namespaces: [],
+        },
+      }),
+    ),
   );
   const select = within(row).getByRole("combobox", {
     name: "APPA_PROVIDER_JEV_API_KEY",
@@ -1196,6 +1648,16 @@ test("a key the policy text sets is locked to the repository line", async () => 
   expect(select).toBeDisabled();
   expect(row).toHaveTextContent(
     "Set in the policy repository. Remove its line there to manage it here.",
+  );
+  expect(
+    await within(row).findByRole("link", { name: "Remove it by pull request" }),
+  ).toHaveAttribute(
+    "href",
+    agentHref({
+      promptKey: "removeCredentialLine",
+      battery: { name: "github", entry: "github", namespaces: ["github"] },
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+    }),
   );
   expect(
     await within(row).findByRole("link", { name: /Open the policy file/ }),
@@ -1251,6 +1713,119 @@ test("without the permission to manage guardrails the controls are read-only", a
   expect(
     within(row).queryByRole("button", { name: /Detach|Attach/ }),
   ).not.toBeInTheDocument();
+  expect(
+    within(row).queryByRole("combobox", { name: "MCP server" }),
+  ).not.toBeInTheDocument();
+  // No dead end: the reader can still open the battery's source.
+  expect(
+    within(row).getByRole("link", { name: "View source" }),
+  ).toBeInTheDocument();
+});
+
+test("an included battery links to its source on the Policy page; one not included yet shows what it checks and opens its source in a dialog of its own", async () => {
+  const user = userEvent.setup();
+  let reads = 0;
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ entry: "batteries/github/appa.toml" })],
+  });
+  batteries = [githubBattery([install()]), jevBattery()];
+  server.use(
+    http.get(`${baseUrl}/api/openappa/batteries/jev/source`, () => {
+      reads += 1;
+      return HttpResponse.json({
+        entry: "batteries/jev/appa.toml",
+        name: "jev",
+        kind: "battery",
+        content: '[[policy.annotator]]\nname = "jev.tool-call"\n',
+      });
+    }),
+  );
+  show();
+  const github = await entry("github");
+  expect(
+    within(github).getByRole("link", { name: "View source" }),
+  ).toHaveAttribute(
+    "href",
+    "/openappa/policy?entry=batteries%2Fgithub%2Fappa.toml",
+  );
+  // The Policy page shows an included battery; the dialog previews nothing.
+  expect(
+    within(github).queryByRole("region", { name: "What it checks" }),
+  ).toBeNull();
+  fireEvent.keyDown(document.activeElement ?? document.body, {
+    key: "Escape",
+  });
+  const jev = await entry("jev");
+  expect(within(jev).queryByRole("link", { name: "View source" })).toBeNull();
+  const checks = within(jev).getByRole("region", { name: "What it checks" });
+  const fact = (label: string) =>
+    within(checks).getByText(label).nextElementSibling?.textContent;
+  expect(fact("Applies to")).toBe("Every tool call in the organization");
+  expect(fact("Namespaces")).toBe("None");
+  expect(fact("Annotators")).toBe("jev.tool-call");
+  expect(fact("Credentials")).toBe("APPA_PROVIDER_JEV_API_KEY");
+  // The source is read only when it is asked for.
+  expect(reads).toBe(0);
+  await user.click(
+    within(checks).getByRole("button", { name: "Preview source" }),
+  );
+  // It opens in a dialog of its own, in the Policy page's editor.
+  const source = await screen.findByRole("dialog", { name: "jev source" });
+  expect(
+    await within(source).findByText(/name = "jev.tool-call"/),
+  ).toBeVisible();
+  expect(reads).toBe(1);
+  // The battery's dialog shows none of it.
+  expect(within(jev).queryByText(/name = "jev.tool-call"/)).toBeNull();
+  // The footer's button, not the corner's X.
+  await user.click(within(source).getByText("Close", { selector: "button" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "jev source" })).toBeNull(),
+  );
+  // Closing the source leaves the battery's dialog open.
+  expect(screen.getByRole("dialog", { name: dialogName("jev") })).toBeVisible();
+});
+
+test("a reader without the permission to manage guardrails previews a battery that is not included, and a failed read offers a retry", async () => {
+  const user = userEvent.setup();
+  let failing = true;
+  grantOnly();
+  declarations = emptyDeclarations();
+  batteries = [githubBattery()];
+  server.use(
+    http.get(`${baseUrl}/api/openappa/batteries/github/source`, () =>
+      failing
+        ? HttpResponse.json(
+            { error: { message: "boom", type: "api_internal_server_error" } },
+            { status: 500 },
+          )
+        : HttpResponse.json({
+            entry: "batteries/github/appa.toml",
+            name: "github",
+            kind: "battery",
+            content: '[[policy.tool]]\nname = "mcp/github/get_me"\n',
+          }),
+    ),
+  );
+  show();
+  const checks = within(await entry("github")).getByRole("region", {
+    name: "What it checks",
+  });
+  expect(
+    within(checks).getByText("Tool calls on the servers it is attached to"),
+  ).toBeVisible();
+  await user.click(
+    within(checks).getByRole("button", { name: "Preview source" }),
+  );
+  const source = await screen.findByRole("dialog", { name: "github source" });
+  expect(
+    await within(source).findByText("Could not load the battery's source"),
+  ).toBeVisible();
+  failing = false;
+  await user.click(within(source).getByRole("button", { name: /retry/i }));
+  expect(
+    await within(source).findByText(/name = "mcp\/github\/get_me"/),
+  ).toBeVisible();
 });
 
 test("an alias no entry declares is a warning beside the filters that leads to its line in the policy", async () => {

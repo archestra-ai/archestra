@@ -41,8 +41,8 @@ beforeEach(() => {
       enabled: false,
       setting: false,
       directory: "mcp",
-      autoMerge: { enabled: false, setting: false },
     },
+    autoMerge: { enabled: false, setting: false },
     source: null,
   };
   server.use(

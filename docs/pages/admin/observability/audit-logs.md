@@ -5,6 +5,8 @@ order: 3
 lastUpdated: 2026-11-20
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Send key changes, permission updates, and other recorded administrative actions to your security monitoring stack. Archestra exports metadata from the same persisted events available through its audit API as OpenTelemetry logs. To inspect these events in Archestra's **Logs** under the **Audit** type, see [Logs](/docs/insights/logs).
 
 Invalid LLM Proxy credentials and malformed proxy requests are recorded in [proxy request log events](/docs/admin/observability/tracing#proxy-request-log-events). Search both `archestra.llm_proxy.request` for credentials rejected inside an inference handler and `archestra.llm_proxy.rejected` for requests rejected before the handler. They are not administrative audit events and do not appear among Audit events or in the audit API. For requests blocked before reaching Archestra, use ingress access logs.

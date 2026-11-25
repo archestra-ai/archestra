@@ -6,6 +6,7 @@ lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 An agent is a reusable assistant: instructions, a model, and the tools, knowledge, skills, and subagents it can use. You build it once and use it everywhere: in Chat, from your coding agent, in messaging channels, and from other systems.
 

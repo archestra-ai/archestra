@@ -136,8 +136,7 @@ export function RuntimeTemplateSection({
       id,
       name: AGENT_CATALOG_NAMES[id],
       description:
-        builtIns.find((item) => item.id === id)?.summary ??
-        "Maintained runtime",
+        builtIns.find((item) => item.id === id)?.summary ?? "Built-in runtime",
       image: images[id],
       icon: null,
       hidden: state.popularAgentOverrides?.[id]?.hidden ?? false,

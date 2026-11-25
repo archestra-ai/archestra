@@ -6,6 +6,8 @@ beta: "Jira messaging channels are in Beta."
 lastUpdated: 2026-11-09
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Mention the bot in a Jira issue comment, and its Archestra agent answers in the issue. Each bot connects one Jira account to one agent. Give each connected project its own instructions.
 
 ## Prepare the Jira Account

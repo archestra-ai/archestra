@@ -7,6 +7,7 @@ lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Each client proves who it is before the gateway shows any tools. Pick the method by the client you have:
 

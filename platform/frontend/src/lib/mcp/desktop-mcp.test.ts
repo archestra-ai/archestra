@@ -89,11 +89,11 @@ describe("desktopArgumentsProgramNotice", () => {
   const appName = "Acme";
   const device = {
     name: "MBP-0142",
-    platform: "macos" as const,
     lastPolledAt: "2026-11-12T12:00:00.000Z",
     programVersion: "0.1.0",
     programUpdate: null,
-    programAutoUpdate: true,
+    // A program of this version does not update by itself on macOS.
+    programAutoUpdate: false,
   };
 
   it("says nothing to a viewer with no device", () => {
@@ -141,11 +141,11 @@ describe("desktopArgumentsProgramNotice", () => {
     });
   });
 
-  it("says that a Windows device updates by itself where the deployment lets it", () => {
+  it("says that a device whose MCP bridge updates by itself does so", () => {
     const notice = desktopArgumentsProgramNotice({
       device: {
         ...device,
-        platform: "windows",
+        programAutoUpdate: true,
         programUpdate: { version: "0.2.0" },
       },
       appName,

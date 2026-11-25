@@ -5,6 +5,8 @@ order: 4
 lastUpdated: 2026-11-14
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Use a password for any PostgreSQL that cannot sign in with a cloud identity, such as a self-managed server. The application and the migration Job read the same URL from one Kubernetes Secret.
 
 ## Store the URL in a Secret

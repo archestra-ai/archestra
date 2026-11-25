@@ -6,6 +6,7 @@ lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Enforce two-factor authentication (2FA) and session expiration for email/password accounts, and recover locked-out users from the command line.
 

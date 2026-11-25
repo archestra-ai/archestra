@@ -6,6 +6,7 @@ lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Automate management tasks from scripts and CI: create agents, install MCP servers, change policies, and export costs and logs. Management endpoints check the same [permissions](/docs/reference/permissions) as the web app.
 

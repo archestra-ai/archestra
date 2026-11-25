@@ -90,36 +90,32 @@ describe("background tool calls check that the MCP server still answers", () => 
     expect(upstream.activity.pings).toBeGreaterThan(0);
   });
 
-  test("a call queued behind a silent server's call does not hang", async ({
+  test("a call queued behind a silent server's calls does not hang", async ({
     makeUser,
   }) => {
     upstream = await startUpstream();
     const install = await installServer({ makeUser, url: upstream.url });
 
-    // An elicitation-capable call runs one at a time per connection, the same
-    // limit a stdio server gets, so the second call queues behind the first.
-    const elicitationHandler = async () => ({ action: "decline" as const });
-    const stuck = callTool({ ...install, tool: "hang", elicitationHandler });
-    const queued = callTool({
-      ...install,
-      tool: "slow",
-      ms: 10,
-      elicitationHandler,
-    });
+    // A connection runs a few calls at a time, so these fill it and the last
+    // call queues behind them.
+    const stuck = Array.from({ length: HTTP_CONCURRENCY_LIMIT }, () =>
+      callTool({ ...install, tool: "hang" }),
+    );
+    const queued = callTool({ ...install, tool: "slow", ms: 10 });
 
-    const [stuckOutcome, queuedOutcome] = await Promise.allSettled([
-      stuck,
-      queued,
-    ]);
-    expect(stuckOutcome).toMatchObject({
-      status: "rejected",
-      reason: expect.objectContaining({
-        message: expect.stringContaining("stopped answering"),
-      }),
-    });
-    expect(queuedOutcome).toMatchObject({
-      status: "fulfilled",
-      value: { isError: false, content: [{ type: "text", text: "slow done" }] },
+    const stuckOutcomes = await Promise.allSettled(stuck);
+    for (const outcome of stuckOutcomes) {
+      expect(outcome).toMatchObject({
+        status: "rejected",
+        reason: expect.objectContaining({
+          message: expect.stringContaining("stopped answering"),
+        }),
+      });
+    }
+    // The dead client was dropped, so the queued call opens a new session.
+    expect(await queued).toMatchObject({
+      isError: false,
+      content: [{ type: "text", text: "slow done" }],
     });
   });
 
@@ -129,11 +125,12 @@ describe("background tool calls check that the MCP server still answers", () => 
     upstream = await startUpstream({ wedgeWholeServer: true });
     const install = await installServer({ makeUser, url: upstream.url });
 
-    const elicitationHandler = async () => ({ action: "decline" as const });
     const startedAt = performance.now();
     const outcomes = await Promise.allSettled([
-      callTool({ ...install, tool: "hang", elicitationHandler }),
-      callTool({ ...install, tool: "slow", ms: 10, elicitationHandler }),
+      ...Array.from({ length: HTTP_CONCURRENCY_LIMIT }, () =>
+        callTool({ ...install, tool: "hang" }),
+      ),
+      callTool({ ...install, tool: "slow", ms: 10 }),
     ]);
 
     for (const outcome of outcomes) {
@@ -144,7 +141,7 @@ describe("background tool calls check that the MCP server still answers", () => 
         }),
       });
     }
-    // The stuck call's check plus one unanswered handshake, not the TTL.
+    // The stuck calls' check plus one unanswered handshake, not the TTL.
     expect(performance.now() - startedAt).toBeLessThan(8_000);
   });
 
@@ -193,6 +190,8 @@ describe("background tool calls check that the MCP server still answers", () => 
 // =============================================================================
 
 const SYNC_TIMEOUT_MS = 400;
+/** How many calls one HTTP connection runs at a time. */
+const HTTP_CONCURRENCY_LIMIT = 4;
 const CLOSE_TEST_SYNC_TIMEOUT_MS = 2_000;
 const TASK_TTL_MS = 30 * 60 * 1000;
 
@@ -234,7 +233,6 @@ function callTool(params: {
   userId: string;
   tool: "hang" | "slow";
   ms?: number;
-  elicitationHandler?: () => Promise<{ action: "decline" }>;
 }) {
   return mcpClient.executeToolCallForOwner(
     {
@@ -252,9 +250,6 @@ function callTool(params: {
     {
       // What a call that detached into a background task carries.
       upstreamTimeoutMs: TASK_TTL_MS,
-      ...(params.elicitationHandler
-        ? { elicitationHandler: params.elicitationHandler }
-        : {}),
     },
   );
 }

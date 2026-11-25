@@ -7,6 +7,7 @@ lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Run your own script at key moments in a chat. A hook is a short Python or shell script. It can add context when a chat starts, or check each tool call before and after it runs. Hooks use the same payload shape as Claude Code hooks, so many port with small changes.
 

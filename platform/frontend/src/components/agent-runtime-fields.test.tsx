@@ -521,6 +521,27 @@ describe("AgentRuntimeFields", () => {
     expect(toggle).toBeDisabled();
   });
 
+  it("cannot switch off the runtime a saved agent keeps", () => {
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime" ? true : undefined,
+    );
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness initial={defaultAgentRuntime()} keepsRuntime />
+      </QueryClientProvider>,
+    );
+    const toggle = screen.getByRole("switch", {
+      name: "Dedicated Agent runtime",
+    });
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeDisabled();
+    expect(screen.getByText(/It keeps its runtime/)).toBeVisible();
+  });
+
   it("shows client-supplied credentials as accepted until turned off", async () => {
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useFeature).mockImplementation((flag) =>
@@ -740,11 +761,21 @@ describe("AgentRuntimeFields", () => {
   });
 });
 
-function Harness({ initial = null }: { initial?: AgentRuntimeConfig | null }) {
+function Harness({
+  initial = null,
+  keepsRuntime = false,
+}: {
+  initial?: AgentRuntimeConfig | null;
+  keepsRuntime?: boolean;
+}) {
   const [value, setValue] = useState<AgentRuntimeConfig | null>(initial);
   return (
     <>
-      <AgentRuntimeFields value={value} onChange={setValue} />
+      <AgentRuntimeFields
+        value={value}
+        onChange={setValue}
+        keepsRuntime={keepsRuntime}
+      />
       <output data-testid="config">{JSON.stringify(value)}</output>
     </>
   );

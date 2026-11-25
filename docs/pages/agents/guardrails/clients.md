@@ -8,6 +8,7 @@ lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Guardrails check the tool calls of any client that sends its traffic through the Archestra [LLM Proxy](/docs/llm-proxy). Built-in clients work out of the box. Any other client needs to add the `X-Appa-Session-ID` and `X-Appa-Parent-ID` headers.
 

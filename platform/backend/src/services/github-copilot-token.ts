@@ -30,8 +30,8 @@ import {
 
 // Copilot endpoints require a recognized VS Code and Copilot Chat identity.
 // An hourly workflow proposes updates from stable upstream releases.
-const GITHUB_COPILOT_VSCODE_VERSION = "1.147.0";
-const GITHUB_COPILOT_CHAT_VERSION = "0.75.0";
+const GITHUB_COPILOT_VSCODE_VERSION = "1.148.0";
+const GITHUB_COPILOT_CHAT_VERSION = "0.76.0";
 
 /**
  * Editor-identity headers the Copilot endpoints require on every request.

@@ -66,7 +66,6 @@ describe("deviceProgramUpdateNotice", () => {
     device: Partial<Parameters<typeof deviceProgramUpdateNotice>[0]>,
   ) =>
     deviceProgramUpdateNotice({
-      platform: "linux",
       programUpdate: { version: "0.2.0" },
       programAutoUpdate: true,
       ...device,
@@ -89,29 +88,20 @@ describe("deviceProgramUpdateNotice", () => {
     );
   });
 
-  it("says that a Windows device updates by itself, and how to update now", () => {
-    const text =
-      "The device updates by itself when no tool call is running. To update now, run archestra update in a terminal on that device.";
-    expect(sentence({ platform: "windows" })).toBe(text);
-  });
-
-  it("tells a macOS or Linux user to run the command", () => {
-    expect(sentence({ platform: "macos" })).toBe(
-      "Run archestra update in a terminal on that device.",
-    );
-    expect(sentence({ platform: "linux" })).toBe(
-      "Run archestra update in a terminal on that device.",
+  it("says that a device whose MCP bridge updates by itself does so, and how to update now", () => {
+    expect(sentence({ programAutoUpdate: true })).toBe(
+      "The device updates by itself when no tool call is running. To update now, run archestra update in a terminal on that device.",
     );
   });
 
-  it("tells every user to run the command when auto-update is off", () => {
-    expect(sentence({ platform: "windows", programAutoUpdate: false })).toBe(
+  it("tells the user to run the command on a device that does not update by itself", () => {
+    expect(sentence({ programAutoUpdate: false })).toBe(
       "Run archestra update in a terminal on that device.",
     );
   });
 
   it("gives the command apart from the words around it", () => {
-    expect(notice({ platform: "macos" })?.text).toEqual({
+    expect(notice({ programAutoUpdate: false })?.text).toEqual({
       before: "Run ",
       command: "archestra update",
       after: " in a terminal on that device.",
@@ -125,6 +115,8 @@ function server(overrides: Partial<Server>): Server {
   return {
     catalogId: "catalog-1",
     name: "Filesystem",
+    icon: null,
+    iconUrl: null,
     state: "running",
     lastError: null,
     command: "npx -y @modelcontextprotocol/server-filesystem",
@@ -179,6 +171,22 @@ describe("deviceServerRows", () => {
       ["Blender", "Failed"],
       ["Chrome DevTools", "Running"],
       ["Playwright", "Starting"],
+    ]);
+  });
+
+  it("gives the image of a server before its emoji, and nothing with none", () => {
+    const rows = deviceServerRows([
+      server({ catalogId: "a", icon: "🧩" }),
+      server({
+        catalogId: "b",
+        iconUrl: "/api/internal_mcp_catalog/b/icon?v=1",
+      }),
+      server({ catalogId: "c" }),
+    ]);
+    expect(rows.map((row) => row.icon)).toEqual([
+      "🧩",
+      "/api/internal_mcp_catalog/b/icon?v=1",
+      null,
     ]);
   });
 

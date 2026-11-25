@@ -6,6 +6,7 @@ lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 [MCP](https://modelcontextprotocol.io/specification) (Model Context Protocol) is the open standard that gives AI agents tools. An MCP server offers tools, such as "create a GitHub issue". An MCP client, such as Claude Code or Cursor, calls them.
 

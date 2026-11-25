@@ -42,6 +42,7 @@
     "./system-prompt-template": "./system-prompt-template.ts",
     "./test-mcp-server": "./test-mcp-server.ts",
     "./time-zone": "./time-zone.ts",
+    "./tool-call-normalization": "./tool-call-normalization.ts",
     "./types": "./types.ts",
     "./utils": "./utils.ts",
     "./websocket": "./websocket.ts",

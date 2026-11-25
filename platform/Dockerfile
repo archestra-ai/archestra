@@ -177,11 +177,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # on every boot (KinD recreates its node each run and its containerd cannot see
 # the host Docker image cache). tagged to match the engine ref the rendered
 # manifest uses, so imagePullPolicy: IfNotPresent finds it locally.
-FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS dagger-engine-image
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS dagger-engine-image
 ARG TARGETARCH
 ARG DAGGER_VERSION
 RUN apk add --no-cache skopeo
-RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
+# skopeo stages layers in /var/tmp, which the hardened Node image leaves out.
+RUN mkdir -p /var/tmp && skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
         "docker://registry.dagger.io/engine:${DAGGER_VERSION}" \
         "docker-archive:/dagger-engine.tar:registry.dagger.io/engine:${DAGGER_VERSION}"
 
@@ -192,7 +193,7 @@ RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
 # framework-neutral IL (net472 assemblies zipped into a .mfappx), so the
 # stage always runs on the build platform — never under target-arch
 # emulation — and the same bytes land in every target arch.
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0-alpine@sha256:4f4992f8f302150e4adb5e78c324731e968493a30c0638985ba29cb42a858cd6 AS vaf-add-on-builder
+FROM --platform=$BUILDPLATFORM dhi.io/dotnet:8.0-sdk-alpine3.23@sha256:65fbafc42fea930cc099c0a9536fff7cf31abc812b00818722aafe45af1eafb6 AS vaf-add-on-builder
 WORKDIR /src
 COPY backend/src/knowledge-base/connectors/mfiles/vaf-add-on/ ./
 # The csproj's packaging target writes exactly one versioned
@@ -226,7 +227,7 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
 # The script uses paths relative to / so that
 # .github/scripts/test_archestra_cli_image_stage.py can run it in a directory
 # of its own.
-FROM --platform=$BUILDPLATFORM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS archestra-cli-release
+FROM --platform=$BUILDPLATFORM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS archestra-cli-release
 WORKDIR /
 COPY archestra-cli/release.lock.json ./release.lock.json
 RUN <<'ARCHESTRA_CLI_RELEASE'
@@ -291,7 +292,7 @@ rm "$sums"
 printf '{ "version": "%s" }\n' "$version" > manifest.json
 ARCHESTRA_CLI_RELEASE
 
-FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS base
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"

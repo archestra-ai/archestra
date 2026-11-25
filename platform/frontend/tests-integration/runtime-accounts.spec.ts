@@ -202,11 +202,14 @@ test("an administrator sees both account cards on the Claude Code runtime with n
   await expect(
     accounts.getByRole("checkbox", { name: /A company API key/ }),
   ).toBeChecked();
-  // The rule reaches every agent on save; the update is for the rest.
+  // Each section states its own scope in place: accounts apply on save, limits update existing agents here.
   await expect(
     dialog.getByText(
-      "Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here. The container image updates with each release, for every agent.",
+      "Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save.",
     ),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("Apply saved limits to agents already on this runtime."),
   ).toBeVisible();
 
   // One card left names that kind for every agent of the runtime.

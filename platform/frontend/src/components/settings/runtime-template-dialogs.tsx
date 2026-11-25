@@ -388,7 +388,7 @@ export function CustomRuntimeDialog({
           </SettingsSection>
           <SettingsSection
             title="Limits"
-            description="Run time, spend and tiers."
+            description="Default run time, spend, and tiers for new agents."
           >
             <AgentRuntimeLimitFields value={runtime} onChange={setRuntime} />
           </SettingsSection>
@@ -438,6 +438,7 @@ export function BuiltInRuntimeDialog({
   onSave: (value: BuiltInRuntime, onSaved: () => void) => void;
 }) {
   const name = AGENT_CATALOG_NAMES[id];
+  const appName = useAppName();
   const [section, setSection] = useState<Section>("general");
   const [initial, setInitial] = useState<AgentRuntimeConfig>(() =>
     withAgentRuntimeDefaults({
@@ -579,7 +580,8 @@ export function BuiltInRuntimeDialog({
                 {image}
               </code>
               <p className="text-sm text-muted-foreground">
-                Kept up to date with each release. It can't be changed.
+                Updates automatically for every agent with each {appName}{" "}
+                release. It can't be changed.
               </p>
             </div>
           </SettingsSection>
@@ -593,7 +595,7 @@ export function BuiltInRuntimeDialog({
           />
           <SettingsSection
             title="Limits"
-            description="Run time, spend and tiers."
+            description="Default run time, spend, and tiers for new agents."
           >
             <AgentRuntimeLimitFields value={runtime} onChange={setRuntime} />
           </SettingsSection>
@@ -646,10 +648,10 @@ function AccessSection({ scope }: { scope: string | null }) {
 // SPDX-SnippetEnd
 
 /**
- * A runtime's account rule holds for every agent on it as soon as it is
- * saved. Its other settings only change agents created afterwards: this
- * brings the agents created before up to date with those, on request. The
- * section says which settings that is, and what happens to the image.
+ * Brings existing agents on a runtime up to date with its saved settings on
+ * request. Account rules already state under "Accounts that can run it" that
+ * they apply on save, and a built-in runtime's image states under "Container"
+ * that it follows each release.
  */
 function ExistingAgentsSection({
   runtimeId,
@@ -664,8 +666,9 @@ function ExistingAgentsSection({
   name: string;
   /**
    * A built-in runtime's image follows each release by itself: an update
-   * gives agents its limits only. A custom runtime's update also gives them
-   * its image, launch command, inference API and follow-up delivery.
+   * gives agents its limits only, and the copy names those limits. A custom
+   * runtime's update also gives them its image, launch command, inference
+   * API and follow-up delivery.
    */
   builtIn: boolean;
   blockedReason: string | null;
@@ -677,7 +680,11 @@ function ExistingAgentsSection({
   return (
     <SettingsSection
       title="Existing agents"
-      description={`Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here.${builtIn ? " The container image updates with each release, for every agent." : ""}`}
+      description={
+        builtIn
+          ? "Apply saved limits to agents already on this runtime."
+          : "Apply saved settings to agents already on this runtime."
+      }
     >
       <div ref={anchor}>
         {blockedReason ? (
@@ -697,11 +704,12 @@ function ExistingAgentsSection({
           <div className="space-y-3">
             <div className="space-y-1">
               <p className="text-sm font-medium">
-                {agents(count ?? 0)} on {name} still use older settings
+                {agents(count ?? 0)} on {name} still{" "}
+                {count === 1 ? "uses" : "use"} older settings
               </p>
               <p className="text-sm text-muted-foreground">
                 {builtIn
-                  ? "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier. It does not change the container image."
+                  ? "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier."
                   : "Updating gives them the saved container image, launch command, inference API, follow-up delivery and limits (idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier). Their own environment variables, credentials and ports stay as they are."}
               </p>
             </div>
@@ -742,7 +750,7 @@ function RuntimeAccountsSection(
   return (
     <SettingsSection
       title="Accounts that can run it"
-      description="Which accounts agents on this runtime may allow. Each agent's settings pick from these."
+      description="Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save."
     >
       <RuntimeAccountsField {...props} />
     </SettingsSection>

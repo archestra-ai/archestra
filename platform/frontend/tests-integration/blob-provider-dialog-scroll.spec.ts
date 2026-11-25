@@ -86,6 +86,12 @@ async function scrollBody(page: Page, dialog: Locator, lastField: Locator) {
   const footer = dialog.locator('[data-slot="dialog-footer"]');
   await expect(header).toBeInViewport({ ratio: 1 });
   await expect(footer).toBeInViewport({ ratio: 1 });
+  // The opening animation scales the dialog and changes both bounding boxes.
+  await dialog.evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations().map((animation) => animation.finished),
+    );
+  });
   const headerBefore = await header.boundingBox();
   const footerBefore = await footer.boundingBox();
   await body.hover();

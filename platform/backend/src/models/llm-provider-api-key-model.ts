@@ -600,6 +600,7 @@ class LlmProviderApiKeyModelLinkModel {
       model: Model;
       isBest: boolean;
       recommendedForAgents: boolean | null;
+      apiKeyIds: string[];
     }>
   > {
     if (apiKeyIds.length === 0) {
@@ -619,6 +620,9 @@ class LlmProviderApiKeyModelLinkModel {
           ),
         // bool_and skips NULLs: false if any key says false, true if every
         // key with evidence says true, null when no key has evidence.
+        apiKeyIds: sql<
+          string[]
+        >`array_agg(${schema.llmProviderApiKeyModelsTable.apiKeyId})`,
         recommendedForAgents: sql<
           boolean | null
         >`bool_and(${schema.llmProviderApiKeyModelsTable.recommendedForAgents})`.as(
@@ -641,6 +645,7 @@ class LlmProviderApiKeyModelLinkModel {
       model: ModelModel.withProviderPricing(r.model, r.pricing),
       isBest: r.isBest,
       recommendedForAgents: r.recommendedForAgents,
+      apiKeyIds: r.apiKeyIds,
     }));
   }
   /**

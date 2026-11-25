@@ -25,6 +25,7 @@ import { configSeed } from "@/mocks/data/config";
 import { makeLlmProviderApiKey } from "@/mocks/data/llm-keys";
 import {
   appearanceSettingsSeed,
+  organizationDefaultModelSeed,
   organizationSeed,
 } from "@/mocks/data/organization";
 import { ChatPageContent } from "./page.client";
@@ -102,6 +103,9 @@ const server = setupServer(
   ),
   http.get("/api/resource-permissions", () => HttpResponse.json([])),
   http.get("/api/organization", () => HttpResponse.json(organizationSeed)),
+  http.get("/api/organization/default-model", () =>
+    HttpResponse.json(organizationDefaultModelSeed),
+  ),
   http.get("/api/organization/appearance-settings", () =>
     HttpResponse.json(appearanceSettingsSeed),
   ),
@@ -210,12 +214,10 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   // under a loaded CI runner.
   await waitFor(() => expect(sent).toHaveLength(1), { timeout: 5000 });
   expect(createBodies).toEqual([
-    expect.objectContaining({
-      agentId: agent.id,
-      modelId: "test-model",
-      chatApiKeyId: "test-llm-key",
-    }),
+    expect.objectContaining({ agentId: agent.id }),
   ]);
+  expect(createBodies[0]).not.toHaveProperty("modelId");
+  expect(createBodies[0]).not.toHaveProperty("chatApiKeyId");
   expect(createBodies[0]).not.toHaveProperty("origin");
   expect(`${window.location.pathname}${window.location.search}`).toBe(
     "/chat/configuration-conversation",
@@ -337,10 +339,8 @@ test("an ordinary launch ready on mount creates and sends once under StrictMode"
   // Match the async session/agent/model bootstrap budget of the launch test above.
   await waitFor(() => expect(sent).toHaveLength(1), { timeout: 5000 });
   expect(createBodies).toHaveLength(1);
-  expect(createBodies[0]).toMatchObject({
-    agentId: agent.id,
-    modelId: "test-model",
-  });
+  expect(createBodies[0]).toMatchObject({ agentId: agent.id });
+  expect(createBodies[0]).not.toHaveProperty("modelId");
   expect(window.location.pathname).toBe("/chat/configuration-conversation");
 });
 
@@ -468,11 +468,9 @@ test("a thin roster waits for selected settings before an automatic chat launch"
   expect(createBodies).toEqual([]);
   release?.();
   await waitFor(() => expect(sent).toHaveLength(1), { timeout: 5000 });
-  expect(createBodies[0]).toMatchObject({
-    agentId: agent.id,
-    modelId: "test-model",
-    chatApiKeyId: "test-llm-key",
-  });
+  expect(createBodies[0]).toMatchObject({ agentId: agent.id });
+  expect(createBodies[0]).not.toHaveProperty("modelId");
+  expect(createBodies[0]).not.toHaveProperty("chatApiKeyId");
 });
 
 test("selected settings provide suggested prompts without loading catalogue-wide prompts", async () => {

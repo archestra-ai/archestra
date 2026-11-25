@@ -508,6 +508,11 @@ export type AutoRoutingPreviewResponse = z.infer<
 export const AUTO_ROUTING_BACKFILL_MAX_SESSIONS = 5000;
 
 /** Starts scoring what `scoreOffer` named; refused with a 409 once it names something else. */
+export const AutoRoutingScanBackfillBodySchema = z.strictObject({
+  /** The organization's newest backfill as the caller saw it, or null when it saw none; refused with a 409 once another is newer. */
+  latestBackfillId: z.string().uuid().nullable(),
+});
+
 export const AutoRoutingScoreBackfillBodySchema = z.strictObject({
   backfillId: z.string().uuid(),
   scorerVersionId: z.string().uuid(),
@@ -584,6 +589,8 @@ export const AutoRoutingBackfillResponseSchema = z.object({
       cutoff: z.date(),
       sessions: z.number().int().positive(),
       remaining: z.number().int().positive(),
+      /** The most scored sessions the sample can yield: those scored and those left; skipped and failed ones never count. */
+      usableSessions: z.number().int().positive(),
       estimatedCostUsd: z.number(),
       suggestedMaxCostUsd: z.number(),
       /** The sessions were scored before by another scorer version. */

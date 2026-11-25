@@ -282,13 +282,27 @@ export function pastReads(): PastReads {
 
 /**
  * A fit's past-sessions read as its plan recorded it, replayed as is: its
- * frame and volume source stand whatever the router's settings are now.
+ * frame, volume source and whether past sessions counted stand whatever the
+ * router's settings and the cold-start minimum are now.
  */
 type RecordedPastRead = {
   frameId: string | null;
   volumeSource: RoutingVolumeSource;
   volumeFactor: number;
+  countsPastSessions: boolean;
 };
+
+/** The read `plan` recorded; null for a plan recorded before plans stored it. */
+export function recordedPastRead(plan: RoutingPlan): RecordedPastRead | null {
+  if (plan.volumeSource === null) return null;
+  const recorded = RecordedPastSchema.safeParse(plan.diagnostics?.history);
+  return {
+    frameId: plan.historyFrameId,
+    volumeSource: plan.volumeSource,
+    volumeFactor: Number(plan.volumeFactor ?? 1),
+    countsPastSessions: (recorded.data?.past_sessions ?? 0) > 0,
+  };
+}
 
 /**
  * Whether the router learns from the organization's past sessions: it is set
@@ -845,10 +859,10 @@ function summarizeWindow(
       : "live");
   const factor = recorded?.volumeFactor ?? router.expectedTrafficFactor;
   const liveMin = liveMinSessions();
-  const pastSessions =
-    live.sessions < liveMin && past.scored >= pastSessionsNeeded()
-      ? past.scored
-      : 0;
+  const countsPast =
+    recorded?.countsPastSessions ??
+    (live.sessions < liveMin && past.scored >= pastSessionsNeeded());
+  const pastSessions = countsPast ? past.scored : 0;
   return {
     sessions: live.sessions + pastSessions,
     minSessions: pastSessions === 0 ? liveMin : config.autoRouting.minSessions,
@@ -990,9 +1004,13 @@ function liveMinSessions(): number {
   return Math.min(LIVE_FIT_MIN_SESSIONS, config.autoRouting.minSessions);
 }
 
-/** Scored past sessions that start a router sooner than its own would: fewer never reach the minimum before it has those. */
+/**
+ * Scored past sessions that start a router sooner than its own would: with
+ * fewer, it reaches the minimum only once it has `liveMinSessions()` of its
+ * own, which it starts on alone.
+ */
 export function pastSessionsNeeded(): number {
-  return config.autoRouting.minSessions - liveMinSessions();
+  return config.autoRouting.minSessions - liveMinSessions() + 1;
 }
 
 /** Bounds refits when settings keep changing under an inline fit. */

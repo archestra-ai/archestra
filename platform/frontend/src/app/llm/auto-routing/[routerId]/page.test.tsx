@@ -1057,6 +1057,7 @@ describe("past sessions", () => {
     cutoff: "2026-10-26T00:00:00.000Z",
     sessions: 240,
     remaining: 240,
+    usableSessions: 240,
     estimatedCostUsd: 0.24,
     suggestedMaxCostUsd: 1,
     rescore: false,
@@ -1091,18 +1092,22 @@ describe("past sessions", () => {
 
   /** Counts the scans the Score dialog starts. */
   function serveScan() {
-    const scans = { count: 0 };
+    const scans = { count: 0, seen: [] as unknown[] };
     server.use(
-      http.post(`${API_ORIGIN}/api/auto-routing/backfill/scan`, () => {
-        scans.count++;
-        return HttpResponse.json({
-          backfill: scanned({ status: "running" }),
-          scoreOffer: null,
-          payer: "ready",
-          pastSessionsNeeded: 0,
-          history: [],
-        } satisfies AutoRoutingBackfillState);
-      }),
+      http.post(
+        `${API_ORIGIN}/api/auto-routing/backfill/scan`,
+        async ({ request }) => {
+          scans.count++;
+          scans.seen.push(await request.json());
+          return HttpResponse.json({
+            backfill: scanned({ status: "running" }),
+            scoreOffer: null,
+            payer: "ready",
+            pastSessionsNeeded: 0,
+            history: [],
+          } satisfies AutoRoutingBackfillState);
+        },
+      ),
     );
     return scans;
   }
@@ -1540,15 +1545,17 @@ describe("past sessions", () => {
     );
 
     await waitFor(() => expect(scans.count).toBe(1));
+    // Names the count it showed, so a newer one someone else started refuses it.
+    expect(scans.seen).toEqual([{ latestBackfillId: scanned().id }]);
   });
 
   it.each([
     [240, false],
     [241, true],
-  ])("with %i past sessions needed, warns that scoring a 240-session sample will not start routers sooner: %s", async (needed, warned) => {
+  ])("with %i past sessions needed, warns that scoring a sample yielding at most 240 of its 250 will not start routers sooner: %s", async (needed, warned) => {
     serveBackfill({
       backfill: scanned(),
-      scoreOffer: offer,
+      scoreOffer: { ...offer, sessions: 250, remaining: 230 },
       payer: "ready",
       pastSessionsNeeded: needed,
       history: [],

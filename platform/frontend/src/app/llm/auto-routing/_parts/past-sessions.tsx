@@ -166,7 +166,7 @@ function PastSessionsAction({
         size="sm"
         variant="outline"
         disabled={scan.isPending}
-        onClick={() => scan.mutate()}
+        onClick={() => scan.mutate(backfill.id)}
       >
         Scan again (free)
       </Button>
@@ -358,12 +358,13 @@ function PastSessionsDialog({
     backfill?.status !== "running" &&
     (backfill === null || isScanStale(backfill));
 
+  const latestBackfillId = backfill?.id ?? null;
   useEffect(() => {
     if (stale && !scanRequested.current) {
       scanRequested.current = true;
-      scan.mutate();
+      scan.mutate(latestBackfillId);
     }
-  }, [stale, scan]);
+  }, [stale, scan, latestBackfillId]);
 
   const scanning =
     data === undefined ||
@@ -532,7 +533,7 @@ function ScoreDialog({
       </DialogHeader>
       <DialogBody className="space-y-4">
         {details}
-        {offer.sessions < pastSessionsNeeded && (
+        {offer.usableSessions < pastSessionsNeeded && (
           <InlineNotice data-testid="auto-routing-score-too-few">
             <AlertTriangle />
             <span className="font-medium">
@@ -540,9 +541,9 @@ function ScoreDialog({
             </span>
             <InlineNoticeText>
               Past sessions count toward a router&apos;s first plan from{" "}
-              {count(pastSessionsNeeded)} scored ones, and this sample has{" "}
-              {count(offer.sessions)}. With fewer, a router starts on its own
-              sessions alone.
+              {count(pastSessionsNeeded)} scored ones, and this sample can yield
+              at most {count(offer.usableSessions)}. With fewer, a router starts
+              on its own sessions alone.
             </InlineNoticeText>
           </InlineNotice>
         )}

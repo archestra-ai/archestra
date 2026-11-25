@@ -139661,6 +139661,12 @@
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
+                        "usableSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
                         "estimatedCostUsd": {
                           "type": "number"
                         },
@@ -139678,6 +139684,7 @@
                         "cutoff",
                         "sessions",
                         "remaining",
+                        "usableSessions",
                         "estimatedCostUsd",
                         "suggestedMaxCostUsd",
                         "rescore"
@@ -140048,6 +140055,28 @@
           "Auto Routing"
         ],
         "description": "Count the past sessions auto routing could learn from; reads the database only\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:update`](/docs/reference/permissions#llmProxy:update): Modify LLM Proxy configuration",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "latestBackfillId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "latestBackfillId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Default Response",
@@ -140252,6 +140281,12 @@
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
+                        "usableSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
                         "estimatedCostUsd": {
                           "type": "number"
                         },
@@ -140269,6 +140304,7 @@
                         "cutoff",
                         "sessions",
                         "remaining",
+                        "usableSessions",
                         "estimatedCostUsd",
                         "suggestedMaxCostUsd",
                         "rescore"
@@ -140884,6 +140920,12 @@
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
+                        "usableSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
                         "estimatedCostUsd": {
                           "type": "number"
                         },
@@ -140901,6 +140943,7 @@
                         "cutoff",
                         "sessions",
                         "remaining",
+                        "usableSessions",
                         "estimatedCostUsd",
                         "suggestedMaxCostUsd",
                         "rescore"
@@ -141499,6 +141542,12 @@
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
+                        "usableSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
                         "estimatedCostUsd": {
                           "type": "number"
                         },
@@ -141516,6 +141565,7 @@
                         "cutoff",
                         "sessions",
                         "remaining",
+                        "usableSessions",
                         "estimatedCostUsd",
                         "suggestedMaxCostUsd",
                         "rescore"

@@ -178,8 +178,14 @@ describe("auto routing backfill", () => {
     return keys;
   }
 
+  /** The scan an admin starts from what the page shows them: the organization's newest backfill. */
+  async function seen() {
+    const latest = await RoutingBackfillModel.findLatest(organizationId);
+    return { kind: "latest", backfillId: latest?.id ?? null } as const;
+  }
+
   async function scan() {
-    await startBackfillScan(organizationId, userId);
+    await startBackfillScan(organizationId, userId, await seen());
     await runBackfill();
   }
 
@@ -961,7 +967,7 @@ describe("auto routing backfill", () => {
       .where(eq(schema.autoRoutersTable.id, routerId));
 
     await expect(
-      startBackfillScan(organizationId, userId),
+      startBackfillScan(organizationId, userId, await seen()),
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
@@ -1319,6 +1325,35 @@ describe("auto routing backfill", () => {
     expect(scoreOffer).toMatchObject({ remaining: 1 });
   });
 
+  test("a scan started from a view an admin saw before another scan is refused, and the newer scan keeps waiting", async () => {
+    await sessions(2);
+    await scanAndScore({});
+    const stale = await seen();
+    await sessions(1, "new");
+    await scan();
+    const waiting = await describeBackfill(organizationId);
+    expect(waiting.scoreOffer).toMatchObject({ remaining: 1 });
+
+    await expect(
+      startBackfillScan(organizationId, userId, stale),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(await describeBackfill(organizationId)).toEqual(waiting);
+  });
+
+  test("the offer bounds the scored sessions a sample can yield by those it skipped", async () => {
+    await sessions(3);
+    await turn("empty", "   ");
+    await scanAndScore({});
+    await sessions(1, "new");
+    await scan();
+
+    expect((await describeBackfill(organizationId)).scoreOffer).toMatchObject({
+      sessions: 5,
+      remaining: 1,
+      usableSessions: 4,
+    });
+  });
+
   test("a stop names the phase it saw, so it never cancels the scoring that took over the scan", async () => {
     await sessions(2);
     await scan();
@@ -1608,7 +1643,8 @@ describe("auto routing backfill", () => {
   });
 
   describe("past sessions count toward the minimum only once they start a router sooner than its own would", () => {
-    // Ten past sessions short of the minimum is what the live minimum leaves.
+    // Ten sessions above the live minimum, so a router with eleven past
+    // sessions and 199 of its own starts one session sooner.
     beforeEach(() => {
       config.autoRouting.minSessions = LIVE_MIN_SESSIONS + 10;
     });
@@ -1632,12 +1668,12 @@ describe("auto routing backfill", () => {
         pastSessions: 0,
       });
       expect((await describeBackfill(organizationId)).pastSessionsNeeded).toBe(
-        10,
+        11,
       );
     });
 
-    test("one short of enough still counts none", async () => {
-      await sessions(9);
+    test("as many as the live minimum leaves still count none: the router would reach both minimums together", async () => {
+      await sessions(10);
       await scanAndScore({});
 
       expect(await window()).toMatchObject({
@@ -1647,23 +1683,23 @@ describe("auto routing backfill", () => {
     });
 
     test("enough count toward the configured minimum, but not for a router that does not read them", async () => {
-      await sessions(10);
+      await sessions(11);
       await scanAndScore({});
       const cold = await ensureAutoRouter(organizationId, "auto:cold");
 
       expect(await window()).toEqual({
-        sessions: 10,
+        sessions: 11,
         minSessions: LIVE_MIN_SESSIONS + 10,
-        pastSessions: 10,
+        pastSessions: 11,
       });
       expect(await window(cold)).toMatchObject({
         minSessions: LIVE_MIN_SESSIONS,
         pastSessions: 0,
       });
       const progress = {
-        sessions: 10,
+        sessions: 11,
         required: LIVE_MIN_SESSIONS + 10,
-        pastSessions: 10,
+        pastSessions: 11,
       };
       expect(
         (await getAutoRouter(organizationId, routerId)).status.coldStart,
@@ -2031,6 +2067,29 @@ describe("auto routing backfill", () => {
     ).toEqual({
       status: "basis_unavailable",
     });
+  });
+
+  test("diagnostics replay the past sessions a plan counted after the minimum rises above what they make up", async () => {
+    config.autoRouting.minSessions = 3;
+    await sessions(4);
+    await scanAndScore({ maxSessions: 4 });
+    await runFit(routerId);
+    expect(await RoutingPlanModel.findActive(routerId)).toMatchObject({
+      diagnostics: { history: { past_sessions: 4 } },
+    });
+    const fitted = await diagnoseAutoRouting(
+      await liveRouter(),
+      undefined,
+      true,
+    );
+    expect(fitted.status).toBe("ready");
+
+    config.autoRouting.minSessions = 1000;
+    await forgetDiagnosticsBasis();
+
+    expect(
+      await diagnoseAutoRouting(await liveRouter(), undefined, true),
+    ).toEqual(fitted);
   });
 
   test("diagnostics show past sessions one by one only to a caller who may read the organization's logs", async () => {
@@ -2519,7 +2578,7 @@ describe("auto routing backfill", () => {
       .update(schema.routingBackfillsTable)
       .set({ windowStart: olderWindow })
       .where(eq(schema.routingBackfillsTable.id, older?.id ?? ""));
-    await startBackfillScan(organizationId, userId);
+    await startBackfillScan(organizationId, userId, await seen());
     await cancelLatest();
 
     const { backfill, scoreOffer } = await describeBackfill(organizationId);

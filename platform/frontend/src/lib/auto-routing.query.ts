@@ -371,8 +371,11 @@ export function useAutoRoutingBackfill() {
 export function useScanAutoRoutingBackfill() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await scanAutoRoutingBackfill();
+    /** Takes the newest backfill the admin saw; the scan is refused once another is newer. */
+    mutationFn: async (latestBackfillId: string | null) => {
+      const { data, error } = await scanAutoRoutingBackfill({
+        body: { latestBackfillId },
+      });
       throwOnApiError(error);
       return data;
     },

@@ -47,6 +47,7 @@ import {
   AutoRoutingPlansQuerySchema,
   AutoRoutingPreviewBodySchema,
   AutoRoutingPreviewResponseSchema,
+  AutoRoutingScanBackfillBodySchema,
   AutoRoutingScoreBackfillBodySchema,
   AutoRoutingSimulateBodySchema,
   AutoRoutingSimulateResponseSchema,
@@ -394,11 +395,15 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Count the past sessions auto routing could learn from; reads the database only",
         tags: TAGS,
+        body: AutoRoutingScanBackfillBodySchema,
         response: constructResponseSchema(AutoRoutingBackfillResponseSchema),
       },
     },
-    async ({ organizationId, user }, reply) => {
-      await startBackfillScan(organizationId, humanUserId(user.id));
+    async ({ organizationId, user, body }, reply) => {
+      await startBackfillScan(organizationId, humanUserId(user.id), {
+        kind: "latest",
+        backfillId: body.latestBackfillId,
+      });
       return reply.send(await describeBackfill(organizationId));
     },
   );

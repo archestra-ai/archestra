@@ -37668,6 +37668,7 @@ export type GetAutoRoutingBackfillResponses = {
             cutoff: string;
             sessions: number;
             remaining: number;
+            usableSessions: number;
             estimatedCostUsd: number;
             suggestedMaxCostUsd: number;
             rescore: boolean;
@@ -37693,7 +37694,9 @@ export type GetAutoRoutingBackfillResponses = {
 export type GetAutoRoutingBackfillResponse = GetAutoRoutingBackfillResponses[keyof GetAutoRoutingBackfillResponses];
 
 export type ScanAutoRoutingBackfillData = {
-    body?: never;
+    body: {
+        latestBackfillId: string | null;
+    };
     path?: never;
     query?: never;
     url: '/api/auto-routing/backfill/scan';
@@ -37807,6 +37810,7 @@ export type ScanAutoRoutingBackfillResponses = {
             cutoff: string;
             sessions: number;
             remaining: number;
+            usableSessions: number;
             estimatedCostUsd: number;
             suggestedMaxCostUsd: number;
             rescore: boolean;
@@ -37954,6 +37958,7 @@ export type ScoreAutoRoutingBackfillResponses = {
             cutoff: string;
             sessions: number;
             remaining: number;
+            usableSessions: number;
             estimatedCostUsd: number;
             suggestedMaxCostUsd: number;
             rescore: boolean;
@@ -38097,6 +38102,7 @@ export type CancelAutoRoutingBackfillResponses = {
             cutoff: string;
             sessions: number;
             remaining: number;
+            usableSessions: number;
             estimatedCostUsd: number;
             suggestedMaxCostUsd: number;
             rescore: boolean;

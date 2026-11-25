@@ -17,6 +17,7 @@ import {
   matchesRecordedHistory,
   planInput,
   readFitHistory,
+  recordedPastRead,
 } from "./fit";
 import { routerFeatures } from "./signals";
 import { type RouterTierSet, TIER_NAMES } from "./tiers";
@@ -255,21 +256,15 @@ async function buildBasis(
   active: RoutingPlan,
   tiers: RouterTierSet,
 ): Promise<Basis | null> {
-  const { historyFrameId, volumeSource } = active;
+  const recorded = recordedPastRead(active);
   const history = await readFitHistory({
     router,
     scorerVersionId: active.scorerVersionId,
     inputWatermark: active.inputWatermark,
     longContextThreshold: tiers.long_context_threshold,
-    ...(volumeSource !== null && {
-      recorded: {
-        frameId: historyFrameId,
-        volumeSource,
-        volumeFactor: Number(active.volumeFactor ?? 1),
-      },
-    }),
+    ...(recorded && { recorded }),
   });
-  if (volumeSource !== null && !matchesRecordedHistory(active, history)) {
+  if (recorded && !matchesRecordedHistory(active, history)) {
     return null;
   }
   const features = history.sample.map((row) => routerFeatures(row.features));

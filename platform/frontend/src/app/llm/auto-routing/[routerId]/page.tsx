@@ -147,7 +147,7 @@ function ColdStartText({
       const pastCanStart =
         settings.readsPastSessions &&
         !!offer &&
-        offer.sessions >= data.pastSessionsNeeded;
+        offer.usableSessions >= data.pastSessionsNeeded;
       return (
         <span>
           No sessions yet. The router learns from requests sent to{" "}
@@ -178,8 +178,8 @@ function ColdStartText({
     case "building":
       return (
         <span>
-          Enough sessions are scored; the first plan is being fitted. Until it
-          is, sessions use the normal model.
+          Enough sessions are counted; the first plan is built at the next fit.
+          Until then, sessions use the normal model.
         </span>
       );
   }

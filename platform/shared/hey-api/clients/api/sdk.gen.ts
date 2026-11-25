@@ -2771,7 +2771,14 @@ export const getAutoRoutingBackfill = <ThrowOnError extends boolean = false>(opt
  *
  * [`llmProxy:update`](/docs/reference/permissions#llmProxy:update): Modify LLM Proxy configuration
  */
-export const scanAutoRoutingBackfill = <ThrowOnError extends boolean = false>(options?: Options<ScanAutoRoutingBackfillData, ThrowOnError>) => (options?.client ?? client).post<ScanAutoRoutingBackfillResponses, ScanAutoRoutingBackfillErrors, ThrowOnError>({ url: '/api/auto-routing/backfill/scan', ...options });
+export const scanAutoRoutingBackfill = <ThrowOnError extends boolean = false>(options: Options<ScanAutoRoutingBackfillData, ThrowOnError>) => (options.client ?? client).post<ScanAutoRoutingBackfillResponses, ScanAutoRoutingBackfillErrors, ThrowOnError>({
+    url: '/api/auto-routing/backfill/scan',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Score a sample of the scanned past sessions with the session scorer, up to a USD ceiling

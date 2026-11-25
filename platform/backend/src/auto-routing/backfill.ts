@@ -49,19 +49,30 @@ const SCORER_CALL_RESERVATION_USD = 0.001;
 const DEFAULT_BACKFILL_SESSIONS = 3000;
 
 /**
+ * Which backfill a scan expects to be the organization's newest: the one an
+ * admin saw, so a stale click never retires a newer scan someone else is
+ * about to score; or any, for the scan routing makes on its own.
+ */
+export type ScanPrecondition =
+  | { kind: "latest"; backfillId: string | null }
+  | { kind: "any" };
+
+/**
  * Starts a free scan of the organization's past interactions, retiring a
- * scan that still waits to be scored. Refused while a backfill runs, and
- * when no router learns from past sessions.
+ * scan that still waits to be scored. Refused while a backfill runs, when
+ * the newest backfill is not the one `precondition` expects, and when no
+ * router learns from past sessions.
  */
 export async function startBackfillScan(
   organizationId: string,
   startedBy: string | null,
+  precondition: ScanPrecondition,
 ): Promise<RoutingBackfill> {
   await requirePastSessionsReader(organizationId);
   const cutoff = new Date();
   const backfill = await withDbTransaction(async (tx) => {
     await RoutingBackfillModel.supersedeWaiting(organizationId, tx);
-    return RoutingBackfillModel.createScan(
+    const created = await RoutingBackfillModel.createScan(
       {
         organizationId,
         cutoff,
@@ -70,6 +81,24 @@ export async function startBackfillScan(
       },
       tx,
     );
+    if (!created) return null;
+    switch (precondition.kind) {
+      case "latest": {
+        // Checked once admitted: a backfill started since, even one already
+        // finished, is committed by now, and one still starting would have
+        // kept this one out. Throwing undoes the retirement above.
+        const previous = await RoutingBackfillModel.findLatestBefore(
+          created,
+          tx,
+        );
+        if ((previous?.id ?? null) !== precondition.backfillId) {
+          throw new ApiError(409, STALE_SCAN_MESSAGE);
+        }
+        return created;
+      }
+      case "any":
+        return created;
+    }
   });
   if (!backfill) throw new ApiError(409, BUSY_MESSAGE);
   await enqueueRun();
@@ -82,10 +111,12 @@ export async function startBackfillScan(
  */
 export async function scanOnFirstEnable(organizationId: string) {
   if (await RoutingBackfillModel.findLatest(organizationId)) return;
-  await startBackfillScan(organizationId, null).catch((error: unknown) => {
-    if (error instanceof ApiError && error.statusCode === 409) return;
-    throw error;
-  });
+  await startBackfillScan(organizationId, null, { kind: "any" }).catch(
+    (error: unknown) => {
+      if (error instanceof ApiError && error.statusCode === 409) return;
+      throw error;
+    },
+  );
 }
 
 /**
@@ -336,6 +367,8 @@ async function runPayer(backfill: RoutingBackfill): Promise<string | null> {
 
 const BUSY_MESSAGE =
   "A backfill is already running for this organization; wait for it or cancel it.";
+const STALE_SCAN_MESSAGE =
+  "The past sessions changed since this page loaded; review them before scanning again.";
 const NO_JEV_KEY_MESSAGE =
   "No Jev API key is shared with the whole organization; add one on the Model Providers page before scoring.";
 const STALE_OFFER_MESSAGE =
@@ -422,6 +455,7 @@ function scoreOffer(params: {
     cutoff: scan.cutoff,
     sessions,
     remaining,
+    usableSessions: done.scored + remaining,
     estimatedCostUsd,
     suggestedMaxCostUsd: Math.max(1, Math.ceil(estimatedCostUsd * 125) / 100),
     rescore:

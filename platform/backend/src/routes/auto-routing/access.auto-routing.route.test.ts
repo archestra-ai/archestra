@@ -43,7 +43,11 @@ const writes = (routerId: string, backfillId = NO_BACKFILL_ID) =>
       url: `/api/auto-routing/routers/${routerId}/preview`,
       payload: { text: "Fix a typo" },
     },
-    { method: "POST", url: "/api/auto-routing/backfill/scan" },
+    {
+      method: "POST",
+      url: "/api/auto-routing/backfill/scan",
+      payload: { latestBackfillId: null },
+    },
     {
       method: "POST",
       url: "/api/auto-routing/backfill/score",

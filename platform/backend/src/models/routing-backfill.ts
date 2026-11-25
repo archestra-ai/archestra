@@ -1,4 +1,15 @@
-import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import db, { schema, type Transaction } from "@/database";
 import {
@@ -145,6 +156,25 @@ class RoutingBackfillModel {
       .select()
       .from(t)
       .where(eq(t.organizationId, organizationId))
+      .orderBy(desc(t.createdAt), desc(t.id))
+      .limit(1);
+    return row ? SelectRoutingBackfillSchema.parse(row) : null;
+  }
+
+  /** The organization's newest backfill other than `backfill`. */
+  static async findLatestBefore(
+    backfill: RoutingBackfill,
+    tx: Transaction,
+  ): Promise<RoutingBackfill | null> {
+    const [row] = await tx
+      .select()
+      .from(t)
+      .where(
+        and(
+          eq(t.organizationId, backfill.organizationId),
+          ne(t.id, backfill.id),
+        ),
+      )
       .orderBy(desc(t.createdAt), desc(t.id))
       .limit(1);
     return row ? SelectRoutingBackfillSchema.parse(row) : null;

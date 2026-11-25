@@ -33,7 +33,6 @@ import {
   type DotItem,
   DotList,
   formatLimit,
-  formatRelative,
   formatUsd,
   LINK_CLASS,
   pluralUsers,
@@ -269,12 +268,6 @@ function AffectedByLimits({
     0,
   );
 
-  const resetsItem: DotItem | null = summary?.resetsAt
-    ? {
-        key: "resets",
-        node: <span>{`Resets ${formatRelative(summary.resetsAt)}`}</span>,
-      }
-    : null;
   const unlimitedItem: DotItem | null =
     unlimited > 0 && (!allUnlimited || noOneAffected)
       ? {
@@ -297,7 +290,6 @@ function AffectedByLimits({
     meta = [];
   } else if (noOneAffected) {
     main = null;
-    // No reset time here: nobody is waiting for one.
     meta = [unlimitedItem];
   } else if (allUnlimited) {
     main = (
@@ -367,7 +359,7 @@ function AffectedByLimits({
         </div>
       </>
     );
-    meta = [unlimitedItem, resetsItem];
+    meta = [unlimitedItem];
   }
 
   return (

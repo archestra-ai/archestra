@@ -809,7 +809,10 @@ export default function LimitsPage() {
           if (row.original.kind === "default") {
             return (
               <DefaultLimitAppliedTo
-                name={defaultLimitScopeName(row.original.limit, environments)}
+                scopeName={defaultLimitScopeName(
+                  row.original.limit,
+                  environments,
+                )}
               />
             );
           }
@@ -2498,16 +2501,17 @@ function LimitUsage({
 }
 
 /** A default user limit's "Applied to" cell: its scope, then what it is. */
-function DefaultLimitAppliedTo({ name }: { name: string }) {
+/** "Default user limit" first; where it applies ("All environments" or one) under it. */
+function DefaultLimitAppliedTo({ scopeName }: { scopeName: string }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
       <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted">
         <UsersRound className="h-4 w-4 shrink-0 text-muted-foreground" />
       </span>
       <div className="min-w-0">
-        <div className="truncate">{name}</div>
+        <div className="truncate">Default user limit</div>
         <div className="truncate text-xs text-muted-foreground">
-          Default user limit
+          {scopeName}
         </div>
       </div>
     </div>

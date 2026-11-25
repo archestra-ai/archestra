@@ -155,6 +155,39 @@ describe("CompactToolGroup", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("tells its host before a circle's card opens and before it closes", () => {
+    mockGetToolShortName.mockReturnValue(null);
+    const onBeforeToggle = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "read-1",
+              toolName: "fs__read_file",
+              part: {
+                type: "tool-fs__read_file",
+                state: "output-available",
+                toolCallId: "call-read",
+                input: { path: "/notes.md" },
+                output: "notes",
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+          onBeforeToggle={onBeforeToggle}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "read file" }));
+    expect(onBeforeToggle).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "read file" }));
+    expect(onBeforeToggle).toHaveBeenCalledTimes(2);
+  });
+
   it("opens the latest policy result instead of an earlier preview", () => {
     mockGetToolShortName.mockImplementation((name: string) =>
       name.replace(/^archestra__/, ""),

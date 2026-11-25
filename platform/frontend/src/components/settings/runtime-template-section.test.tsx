@@ -369,10 +369,25 @@ describe("RuntimeTemplateSection", () => {
     expect(companyCard(dialog)).toBeChecked();
     await user.click(subscriptionCard(dialog));
     expect(within(dialog).getByText("Locked to an API key")).toBeVisible();
-    // Accounts reach every agent on save; the update is for the rest.
+    // Each section explains its own scope in place.
     expect(
       within(dialog).getByText(
-        "Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here. The container image updates with each release, for every agent.",
+        "Updates automatically for every agent with each Test Platform release. It can't be changed.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "Which credentials agents on this runtime may allow. Changes apply to every agent as soon as you save.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "Default run time, spend, and tiers for new agents.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "Apply saved limits to agents already on this runtime.",
       ),
     ).toBeInTheDocument();
     await user.type(
@@ -413,10 +428,10 @@ describe("RuntimeTemplateSection", () => {
       screen.getByRole("dialog", { name: "Edit Claude Code runtime" }),
     ).toBe(dialog);
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-    // The update names the limits it brings, and leaves the image alone.
+    // The update names the limits it brings.
     expect(
       within(dialog).getByText(
-        "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier. It does not change the container image.",
+        "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier.",
       ),
     ).toBeInTheDocument();
     await user.click(

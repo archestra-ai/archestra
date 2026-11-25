@@ -145,4 +145,13 @@ Choose **Make owner** on another person's row in the permissions editor. You nee
 
 The new owner receives **Full access**. The previous owner keeps their grant until you remove it separately. An owner's grant cannot be removed while they still own the resource.
 
+### When an owner leaves
+
+When someone leaves the organization, everything they shared with others gets a new owner, so the teams that use it can keep managing it. That covers agents, MCP gateways, skills, plugins, MCP registry entries, apps and remote agents. Items only they could see are deleted with their account.
+
+- **Removed by an admin:** the admin who removed them becomes the owner.
+- **Left on their own, deleted their account, or deactivated through [SCIM](/docs/admin/identity/scim):** the longest-standing active admin becomes the owner.
+
+The previous owner keeps their own grant, so a deactivated user who is reactivated still has their access. Each handoff appears in the audit log as an update to the item. If an item can't change hands, for example because the new owner can't use the agent's model API key, it keeps its old owner; transfer it by hand.
+
 For request and audit-log access, see [Logs](/docs/insights/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api/organization).

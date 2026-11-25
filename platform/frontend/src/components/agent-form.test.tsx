@@ -2058,6 +2058,14 @@ describe("AgentForm delegation state", () => {
     expect(codexProgress).toHaveAttribute("aria-valuenow", "25");
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(screen.getByText("25%")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent ===
+            "75% of runs will be delegated to this agent.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("does not replace external assignments after their read fails", async () => {

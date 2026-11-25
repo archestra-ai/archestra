@@ -520,12 +520,15 @@ function SubagentWeightSection({
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="shrink-0 text-sm text-muted-foreground">
-            Runs share
-          </span>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium tabular-nums text-foreground">
+              {sharePercent}%
+            </span>{" "}
+            of runs will be delegated to this agent.
+          </p>
           <div
-            className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
             aria-hidden="true"
           >
             <div
@@ -533,9 +536,6 @@ function SubagentWeightSection({
               style={{ width: `${sharePercent}%` }}
             />
           </div>
-          <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">
-            {sharePercent}%
-          </span>
         </div>
       </div>
     </div>

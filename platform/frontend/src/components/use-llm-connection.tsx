@@ -36,6 +36,9 @@ import {
 
 type LlmOauthClient =
   archestraApiTypes.GetOauthClientsResponses["200"]["data"][number];
+type NamedProviderMapping = ProviderApiKeyMappings[number] & {
+  providerApiKeyName: string;
+};
 
 /** How callers authenticate to the LLM Proxy. */
 export type LlmAuthMethod = "standard" | "passthrough" | "oauth" | "idp";
@@ -126,7 +129,7 @@ export function useLlmConnection({
     canReadPools === true &&
     (auth === "standard" || auth === "oauth") &&
     isRouter;
-  const { data: pools = [] } = useModelPools({
+  const { data: pools = [], isFetching: poolsFetching } = useModelPools({
     enabled: offersPools,
     toastOnError: false,
   });
@@ -146,7 +149,9 @@ export function useLlmConnection({
     (auth === "standard" || auth === "oauth") &&
     isRouter &&
     !pool;
-  const { data: routers = [] } = useAutoRouters({ enabled: offersRouters });
+  const { data: routers = [], isFetching: routersFetching } = useAutoRouters({
+    enabled: offersRouters,
+  });
   const hasRouter = (key: { id: string }) =>
     offersRouters &&
     routers.some((router) => router.virtualApiKeyIds.includes(key.id));
@@ -154,14 +159,59 @@ export function useLlmConnection({
     offersRouters &&
     takesPools(client) &&
     routers.some((router) => client.autoRouterIds.includes(router.id));
+  // The list API returns explicit mappings. Resolve automatic access for
+  // the endpoint picker just as the proxy does, keeping explicit overrides.
+  const withSharedPrimaries = (
+    mappings: NamedProviderMapping[],
+    includeFutureProviders: boolean,
+  ): NamedProviderMapping[] => {
+    if (!includeFutureProviders) return mappings;
+    const explicitProviders = new Set(
+      mappings.map((mapping) => mapping.provider),
+    );
+    return [
+      ...mappings,
+      ...targetProviderKeys
+        .filter(
+          (key) =>
+            key.isPrimary &&
+            key.userId === null &&
+            !key.subscriptionKind &&
+            !key.requiresReauthentication &&
+            (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+              !!key.baseUrl?.trim()) &&
+            !explicitProviders.has(key.provider),
+        )
+        .map((key) => ({
+          provider: key.provider,
+          providerApiKeyId: key.id,
+          providerApiKeyName: key.name,
+        })),
+    ];
+  };
+  const keyMappings = (key: {
+    providerApiKeys: NamedProviderMapping[];
+    includeFutureProviders?: boolean;
+  }) =>
+    withSharedPrimaries(
+      key.providerApiKeys,
+      key.includeFutureProviders === true,
+    );
   // A credential with a pool or auto router added still fits the Unified
-  // Model API when it maps no provider key here, such as one on current and
-  // future providers.
-  const keyOptions = (virtualKeys?.data ?? []).filter((key) =>
+  // Model API when it cannot call a provider directly.
+  const listedKeys = virtualKeys?.data ?? [];
+  // A just-created key can be beyond the first page of the list.
+  const requestedCreatedKey = created?.id === pickedId ? created : null;
+  const candidateKeys =
+    requestedCreatedKey &&
+    !listedKeys.some((key) => key.id === requestedCreatedKey.id)
+      ? [...listedKeys, requestedCreatedKey]
+      : listedKeys;
+  const keyOptions = candidateKeys.filter((key) =>
     pool
       ? callsPool(key, pool)
       : auth === "passthrough" ||
-        reaches(key) ||
+        reaches({ providerApiKeys: keyMappings(key) }) ||
         poolsOf(key).length > 0 ||
         hasRouter(key),
   );
@@ -214,7 +264,7 @@ export function useLlmConnection({
           // The key's start shows in the key field; the picker stays short.
           label: key.name,
           description: keySummary(key),
-          mappings: key.providerApiKeys,
+          mappings: keyMappings(key),
           oauth: null,
         }));
   // The reader's own credentials come first, so the default pick is one they
@@ -235,7 +285,16 @@ export function useLlmConnection({
   const picked =
     pickedId === null
       ? undefined
-      : (options.find((option) => option.id === pickedId) ?? options[0]);
+      : (options.find((option) => option.id === pickedId) ??
+        (requestedCreatedKey ? undefined : options[0]));
+  const createdWithoutEndpointAccess =
+    requestedCreatedKey &&
+    !providerKeysPending &&
+    !poolsFetching &&
+    !routersFetching &&
+    !picked
+      ? { id: requestedCreatedKey.id, name: requestedCreatedKey.name }
+      : null;
   // The chosen key goes into the request masked, revealed or copied on
   // request — but only for keys the reader may read (their own, or one just
   // created here); anyone else's key is read from an env var.
@@ -315,10 +374,7 @@ export function useLlmConnection({
   let credential: RequestCredential;
   let credentialEnvVar: string;
   let ready: boolean;
-  let mappedProviderKeys: Array<{
-    provider: SupportedProvider;
-    providerApiKeyId: string;
-  }> = [];
+  let mappedProviderKeys: NamedProviderMapping[] = [];
   if (auth === "standard") {
     credential = "standard";
     credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY";
@@ -340,26 +396,7 @@ export function useLlmConnection({
       pickedClient.includeFutureProviders &&
       pickedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE)
     ) {
-      // Match runtime automatic access: explicit provider overrides win;
-      // only usable shared primary keys fill the remaining providers.
-      const explicitProviders = new Set(
-        mappedProviderKeys.map((mapping) => mapping.provider),
-      );
-      mappedProviderKeys = [
-        ...mappedProviderKeys,
-        ...targetProviderKeys
-          .filter(
-            (key) =>
-              key.isPrimary &&
-              key.userId === null &&
-              !key.subscriptionKind &&
-              !key.requiresReauthentication &&
-              (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
-                !!key.baseUrl?.trim()) &&
-              !explicitProviders.has(key.provider),
-          )
-          .map((key) => ({ provider: key.provider, providerApiKeyId: key.id })),
-      ];
+      mappedProviderKeys = withSharedPrimaries(mappedProviderKeys, true);
     }
   } else {
     credential = "token";
@@ -410,6 +447,7 @@ export function useLlmConnection({
     canCreateOauth: !!canCreateOauth,
     options,
     picked,
+    createdWithoutEndpointAccess,
     pickKey,
     pickedKey,
     pickedClient,

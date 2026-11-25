@@ -2528,6 +2528,49 @@ describe("LLM Provider API Keys — API keys and personal subscriptions the orga
     );
   });
 
+  test("refuses Anthropic OAuth tokens (sk-ant-oat) once Claude Code is off, and still takes Anthropic API keys", async () => {
+    await turnOff("anthropic", "personal");
+
+    const oauth = await createKey("anthropic", "sk-ant-oat01-personal-token");
+    expect(oauth.statusCode).toBe(400);
+    expect(oauth.json().error.message).toContain("Claude Code is turned off");
+
+    const apiKey = await createKey("anthropic", "sk-ant-api03-company-key");
+    expect(apiKey.statusCode, apiKey.body).toBe(200);
+
+    const replaceWithOauth = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${apiKey.json().id}`,
+      payload: { apiKey: "sk-ant-oat01-sneaked-in" },
+    });
+    expect(replaceWithOauth.statusCode).toBe(400);
+    expect(replaceWithOauth.json().error.message).toContain(
+      "Claude Code is turned off",
+    );
+  });
+
+  test("freezes an existing Anthropic OAuth token once Claude Code is off, but keeps it deletable", async () => {
+    const created = await createKey("anthropic", "sk-ant-oat01-existing");
+    expect(created.statusCode, created.body).toBe(200);
+    const keyId = created.json().id;
+
+    await turnOff("anthropic", "personal");
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode).toBe(400);
+    expect(update.json().error.message).toContain("Claude Code is turned off");
+
+    const removal = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+    });
+    expect(removal.statusCode).toBe(200);
+  });
+
   test("freezes an existing API key once API keys are off, but keeps it deletable", async () => {
     const created = await createKey("openai", "sk-openai-existing");
     expect(created.statusCode, created.body).toBe(200);

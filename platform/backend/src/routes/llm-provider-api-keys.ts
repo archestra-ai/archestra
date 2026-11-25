@@ -4,6 +4,7 @@ import {
   builtInProviderLabel,
   credentialRequiresPerUserScope,
   integrationLabel,
+  isAnthropicOAuthToken,
   isCredentialLevelSubscriptionProvider,
   isGithubAppCredential,
   isProviderApiKeyOptional,
@@ -1529,16 +1530,18 @@ function assertPerUserCredentialOwnership(params: {
 
 /**
  * The plan a credential set up through this API belongs to: a personal
- * subscription (a sign-in on a per-user provider, or a ChatGPT or SuperGrok
- * sign-in) or an ordinary API key. GitHub App credentials never come through
- * here: the enterprise plan has its own setup.
+ * subscription (a sign-in on a per-user provider, a ChatGPT or SuperGrok
+ * sign-in, or an Anthropic `sk-ant-oat…` OAuth token) or an ordinary API key.
+ * GitHub App credentials never come through here: the enterprise plan has its
+ * own setup.
  */
 function credentialPlan(params: {
   provider: SupportedProvider;
   apiKey: string | null | undefined;
 }): ProviderPlan {
   return providerRequiresPerUserCredential(params.provider) ||
-    isSubscriptionCredential(params.apiKey)
+    isSubscriptionCredential(params.apiKey) ||
+    (params.provider === "anthropic" && isAnthropicOAuthToken(params.apiKey))
     ? "personal"
     : "apiKey";
 }

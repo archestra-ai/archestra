@@ -1,5 +1,7 @@
 import {
   isProviderPlanHidden,
+  type ModelProviderOverrides,
+  type ProviderPlan,
   providerDisplayNames,
   providerPlanTurnedOffMessage,
   providerRequiresPerUserCredential,
@@ -140,9 +142,22 @@ export async function ensureConnectionVirtualKey(params: {
   // key for per-user providers, so skip the admin-default precedence entirely.
   // The user may instead pick a key they can use themselves: canUseKey refuses
   // anyone else's sign-in and admits an organization plan shared with them.
+  //
+  // Each plan has its own switch (API keys, a personal subscription, a GitHub
+  // Copilot enterprise plan): an account of a plan the admins turned off is
+  // not set up again, though it keeps serving existing setups. On a
+  // multi-plan non-per-user provider (OpenAI, Anthropic, xAI), skip keys whose
+  // plan is hidden so a disabled personal sign-in falls through to an enabled
+  // team/org API key rather than shadowing it.
   const isPerUser = providerRequiresPerUserCredential(provider);
-  const providerApiKey = isPerUser
-    ? selectedProviderKeyId
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(organizationId);
+  let providerApiKey: Awaited<
+    ReturnType<typeof LlmProviderApiKeyModel.findById>
+  > = null;
+  let firstHiddenPlan: ProviderPlan | null = null;
+  if (isPerUser) {
+    const resolved = selectedProviderKeyId
       ? await resolveSelectedPerUserKey({
           organizationId,
           userId,
@@ -156,39 +171,57 @@ export async function ensureConnectionVirtualKey(params: {
           userTeamIds,
           provider,
           conversationId: null,
-        })
-    : ((await resolvePreferredProviderKey({
-        preferredProviderKeyId,
-        organizationId,
-        provider,
-      })) ??
-      (await LlmProviderApiKeyModel.getCurrentApiKey({
-        organizationId,
-        userId,
-        userTeamIds,
-        provider,
-        conversationId: null,
-      })));
+        });
+    if (resolved) {
+      const plan = await LlmProviderApiKeyModel.findPlan(resolved);
+      if (isProviderPlanHidden(modelProviderOverrides, provider, plan)) {
+        firstHiddenPlan = plan;
+      } else {
+        providerApiKey = resolved;
+      }
+    }
+  } else {
+    const preferred = await resolvePreferredProviderKey({
+      preferredProviderKeyId,
+      organizationId,
+      provider,
+    });
+    const ranked = await LlmProviderApiKeyModel.getRankedAvailableKeys({
+      organizationId,
+      userId,
+      userTeamIds,
+      provider,
+    });
+    const candidates = [
+      ...(preferred ? [preferred] : []),
+      ...ranked.filter((key) => key.id !== preferred?.id),
+    ];
+    for (const candidate of candidates) {
+      const plan = await LlmProviderApiKeyModel.findPlan(candidate);
+      if (isProviderPlanHidden(modelProviderOverrides, provider, plan)) {
+        firstHiddenPlan ??= plan;
+        continue;
+      }
+      providerApiKey = await LlmProviderApiKeyModel.findById(candidate.id);
+      if (providerApiKey) break;
+    }
+  }
   if (!providerApiKey) {
+    if (firstHiddenPlan) {
+      throw new ApiError(
+        400,
+        providerPlanTurnedOffMessage(
+          modelProviderOverrides,
+          provider,
+          firstHiddenPlan,
+        ),
+      );
+    }
     throw new ApiError(
       400,
       isPerUser
         ? `Connect your own ${provider} account before generating a setup command — each user links their own.`
         : `No ${provider} API key is configured for your account, teams, or organization. Ask an admin to add one under LLM provider keys.`,
-    );
-  }
-  // Each plan has its own switch (API keys, a personal subscription, a
-  // GitHub Copilot enterprise plan): an account of a plan the admins turned
-  // off is not set up again, though it keeps serving the setups that already
-  // use it. (assertProviderPlanAllowed says the same, but lives outside this
-  // project.)
-  const plan = await LlmProviderApiKeyModel.findPlan(providerApiKey);
-  const { modelProviderOverrides } =
-    await OrganizationModel.getIntegrationOverrides(organizationId);
-  if (isProviderPlanHidden(modelProviderOverrides, provider, plan)) {
-    throw new ApiError(
-      400,
-      providerPlanTurnedOffMessage(modelProviderOverrides, provider, plan),
     );
   }
 
@@ -204,6 +237,7 @@ export async function ensureConnectionVirtualKey(params: {
           organizationId,
           userId,
           userTeamIds,
+          modelProviderOverrides,
         })
       : { keyToBind: providerApiKey, creditWarning: undefined };
 
@@ -464,11 +498,18 @@ async function selectAnthropicKeyByCredit(params: {
   organizationId: string;
   userId: string;
   userTeamIds: string[];
+  modelProviderOverrides: ModelProviderOverrides | null;
 }): Promise<{
   keyToBind: CreditProbeCandidate;
   creditWarning?: ConnectionCreditWarning;
 }> {
-  const { resolvedKey, organizationId, userId, userTeamIds } = params;
+  const {
+    resolvedKey,
+    organizationId,
+    userId,
+    userTeamIds,
+    modelProviderOverrides,
+  } = params;
 
   const available = await LlmProviderApiKeyModel.getAvailableKeysForUser(
     organizationId,
@@ -476,11 +517,19 @@ async function selectAnthropicKeyByCredit(params: {
     userTeamIds,
     "anthropic",
   );
+  const enabledFallbacks: CreditProbeCandidate[] = [];
+  for (const key of available) {
+    if (key.id === resolvedKey.id) continue;
+    const plan = await LlmProviderApiKeyModel.findPlan(key);
+    if (!isProviderPlanHidden(modelProviderOverrides, "anthropic", plan)) {
+      enabledFallbacks.push(key);
+    }
+  }
   // Resolved key first (preserves the admin/precedence choice when it works),
   // then the rest — bounded so a pathological key set can't fan out probes.
   const candidates: CreditProbeCandidate[] = [
     resolvedKey,
-    ...available.filter((key) => key.id !== resolvedKey.id),
+    ...enabledFallbacks,
   ].slice(0, MAX_CREDIT_PROBE_CANDIDATES);
 
   // A definitive "balance too low" beats a transient one; `unverified` is the

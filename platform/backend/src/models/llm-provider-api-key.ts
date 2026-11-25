@@ -1,5 +1,6 @@
 import {
   getProvidersWithOptionalApiKey,
+  isAnthropicOAuthToken,
   isCredentialLevelSubscriptionProvider,
   isGithubAppCredential,
   PROVIDERS_REQUIRING_BASE_URL,
@@ -909,6 +910,32 @@ class LlmProviderApiKeyModel {
       }
     }
 
+    const available = await LlmProviderApiKeyModel.getRankedAvailableKeys({
+      organizationId,
+      userId,
+      userTeamIds,
+      provider,
+    });
+    return available[0]
+      ? LlmProviderApiKeyModel.findById(available[0].id)
+      : null;
+  }
+
+  /**
+   * Accessible keys for a provider ordered by resolution precedence:
+   * ownership rank (personal → team → org), primary first, then oldest first.
+   */
+  static async getRankedAvailableKeys({
+    organizationId,
+    userId,
+    userTeamIds,
+    provider,
+  }: {
+    organizationId: string;
+    userId: string;
+    userTeamIds: string[];
+    provider: SupportedProvider;
+  }) {
     const available = await LlmProviderApiKeyModel.withoutOrphans({
       organizationId,
       keys: await LlmProviderApiKeyModel.getAvailableKeysForUser(
@@ -930,9 +957,7 @@ class LlmProviderApiKeyModel {
         Number(b.isPrimary) - Number(a.isPrimary) ||
         a.createdAt.getTime() - b.createdAt.getTime(),
     );
-    return available[0]
-      ? LlmProviderApiKeyModel.findById(available[0].id)
-      : null;
+    return available;
   }
 
   /**
@@ -1401,14 +1426,17 @@ class LlmProviderApiKeyModel {
    * Which of its provider's plans a key belongs to (API key, personal
    * subscription, or GitHub Copilot enterprise plan), read from its recorded
    * credential kind. A key whose secret could not be classified counts as a
-   * personal subscription on a provider that offers one.
+   * personal subscription on a provider that offers one. Anthropic OAuth
+   * subscription tokens (`sk-ant-oat…`) stored as Anthropic keys also count
+   * as `personal` without changing their stored credential kind.
    */
   static async findPlan(apiKey: {
     id: string;
     provider: SupportedProvider;
+    secretId?: string | null;
   }): Promise<ProviderPlan> {
     const kind = await LlmProviderApiKeyModel.findCredentialKind(apiKey.id);
-    return providerKeyPlan({
+    const plan = providerKeyPlan({
       provider: apiKey.provider,
       isGithubAppKey: kind === "github_app",
       subscriptionKind:
@@ -1416,6 +1444,19 @@ class LlmProviderApiKeyModel {
           ? subscriptionKindForProvider(apiKey.provider)
           : subscriptionKindOf(apiKey.provider, kind),
     });
+    if (apiKey.provider === "anthropic" && plan === "apiKey") {
+      const secretId =
+        apiKey.secretId !== undefined
+          ? apiKey.secretId
+          : (await LlmProviderApiKeyModel.findById(apiKey.id))?.secretId;
+      if (secretId) {
+        const secretValue = await getSecretValueForLlmProviderApiKey(secretId);
+        if (isAnthropicOAuthToken(secretValue)) {
+          return "personal";
+        }
+      }
+    }
+    return plan;
   }
 
   /** True when the key stores an organization's GitHub App credential. */

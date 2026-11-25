@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  SUBSCRIPTION_CREDENTIALS,
+} from "@archestra/shared";
 import { beforeEach, vi } from "vitest";
 import {
   LlmProviderApiKeyModel,
@@ -136,6 +139,107 @@ describe("ensureConnectionVirtualKey", () => {
       statusCode: 400,
       message: expect.stringContaining("Anthropic API keys are turned off"),
     });
+  });
+
+  test("all-providers Connect setup also refuses a provider whose API keys are turned off", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await makeLlmProviderApiKey(org.id, (await makeSecret()).id, {
+      provider: "anthropic",
+      isPrimary: true,
+    });
+    const connectAll = () =>
+      ensureConnectionVirtualKey({
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "anthropic",
+        includeFutureProviders: true,
+      });
+
+    // Establish an existing all-providers connection key while enabled.
+    await expect(connectAll()).resolves.toMatchObject({
+      virtualApiKeyId: expect.any(String),
+    });
+
+    // Turning off Anthropic API keys blocks a fresh all-providers setup too.
+    await OrganizationModel.patch(org.id, {
+      modelProviderOverrides: {
+        anthropic: { plans: { apiKey: { hidden: true } } },
+      },
+    });
+    await expect(connectAll()).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining("Anthropic API keys are turned off"),
+    });
+  });
+
+  test("falls back to an enabled org API key when the user's personal subscription is turned off", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const chatgptValue = `${SUBSCRIPTION_CREDENTIALS.chatgpt.marker}${Buffer.from(
+      JSON.stringify({ refreshToken: "rt", accountId: "acc" }),
+    ).toString("base64")}`;
+    const chatgptSecret = await makeSecret({
+      secret: { apiKey: chatgptValue },
+    });
+    const personalChatGpt = await makeLlmProviderApiKey(
+      org.id,
+      chatgptSecret.id,
+      {
+        provider: "openai",
+        userId: user.id,
+      },
+    );
+    await LlmProviderApiKeyModel.recordCredentialKind({
+      id: personalChatGpt.id,
+      apiKeyValue: chatgptValue,
+    });
+    const orgApiKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret()).id,
+      {
+        provider: "openai",
+      },
+    );
+
+    await OrganizationModel.patch(org.id, {
+      modelProviderOverrides: {
+        openai: { plans: { personal: { hidden: true } } },
+      },
+    });
+
+    const { virtualApiKeyId } = await ensureConnectionVirtualKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      userTeamIds: [],
+      provider: "openai",
+    });
+
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
+    ).toEqual([
+      expect.objectContaining({
+        provider: "openai",
+        providerApiKeyId: orgApiKey.id,
+      }),
+    ]);
   });
 
   test("per-user provider: provisions a personal key mapped to the connecting user's own key", async ({

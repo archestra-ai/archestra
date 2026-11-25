@@ -5,6 +5,7 @@ import {
 } from "./model-constants";
 import {
   credentialRequiresPerUserScope,
+  isAnthropicOAuthToken,
   isCredentialLevelSubscriptionProvider,
   isPersonalSubscriptionProvider,
   isSharedGithubAppCredential,
@@ -268,5 +269,26 @@ describe("PERSONAL_SUBSCRIPTION_LABELS", () => {
     ).toEqual(PROVIDERS_REQUIRING_PER_USER_CREDENTIAL);
     expect(isPersonalSubscriptionProvider("anthropic")).toBe(true);
     expect(isPersonalSubscriptionProvider("gemini")).toBe(false);
+  });
+});
+
+describe("isAnthropicOAuthToken", () => {
+  it("recognizes sk-ant-oat tokens with or without a Bearer prefix", () => {
+    expect(isAnthropicOAuthToken("sk-ant-oat01-example-token")).toBe(true);
+    expect(isAnthropicOAuthToken("Bearer:sk-ant-oat01-example-token")).toBe(
+      true,
+    );
+    expect(isAnthropicOAuthToken("Bearer sk-ant-oat01-example-token")).toBe(
+      true,
+    );
+    expect(isAnthropicOAuthToken("  sk-ant-oat01-example-token  ")).toBe(true);
+  });
+
+  it("treats metered API keys and empty values as non-OAuth", () => {
+    expect(isAnthropicOAuthToken("sk-ant-api03-example-key")).toBe(false);
+    expect(isAnthropicOAuthToken("sk-openai-example-key")).toBe(false);
+    expect(isAnthropicOAuthToken("")).toBe(false);
+    expect(isAnthropicOAuthToken(null)).toBe(false);
+    expect(isAnthropicOAuthToken(undefined)).toBe(false);
   });
 });

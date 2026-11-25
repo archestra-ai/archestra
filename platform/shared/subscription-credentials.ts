@@ -322,6 +322,18 @@ export function isSubscriptionCredential(
 }
 
 /**
+ * True when a value is an Anthropic OAuth access token (`sk-ant-oat…`,
+ * issued by Claude Code / Claude Pro/Max), with or without a `Bearer`
+ * transport prefix. Metered Anthropic API keys start with `sk-ant-api…`.
+ */
+export function isAnthropicOAuthToken(
+  value: string | null | undefined,
+): boolean {
+  const credential = stripBearerTransportPrefix(value)?.trim();
+  return typeof credential === "string" && credential.startsWith("sk-ant-oat");
+}
+
+/**
  * True when a specific credential must be governed as **per-user** — personal
  * scope only, owner-matched, never shared through team/org or multi-provider
  * (model-router) virtual keys. Two cases collapse here: the provider is

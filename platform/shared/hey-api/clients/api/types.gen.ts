@@ -4,12 +4,6 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
-export type TextSearchLanguageInput = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
-
-export type ContextualRetrievalModeInput = 'disabled' | 'document' | 'chunk';
-
-export type EmbeddingDimensionsInput = 3072 | 1536 | 1408 | 1024 | 768 | 384;
-
 export type LogContentNotStoredInput = {
     __redacted: 'log_content_policy';
     isError?: boolean;
@@ -38,6 +32,12 @@ export type LogContentNotStoredInput = {
         callerUserId: string | null;
     };
 };
+
+export type TextSearchLanguageInput = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
+
+export type ContextualRetrievalModeInput = 'disabled' | 'document' | 'chunk';
+
+export type EmbeddingDimensionsInput = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
 
@@ -7803,12 +7803,6 @@ export type InteractionVirtualKeyInput = {
     createdByUserName: string | null;
 };
 
-export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
-
-export type ContextualRetrievalMode = 'disabled' | 'document' | 'chunk';
-
-export type EmbeddingDimensions = 3072 | 1536 | 1408 | 1024 | 768 | 384;
-
 export type LogContentNotStored = {
     __redacted: 'log_content_policy';
     isError?: boolean;
@@ -7837,6 +7831,12 @@ export type LogContentNotStored = {
         callerUserId: string | null;
     };
 };
+
+export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
+
+export type ContextualRetrievalMode = 'disabled' | 'document' | 'chunk';
+
+export type EmbeddingDimensions = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefault = string | number | boolean;
 

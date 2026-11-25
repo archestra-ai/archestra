@@ -61,7 +61,7 @@
     {"source": "/docs/platform-security-concepts", "destination": "/docs/agents/guardrails", "permanent": true},
     {"source": "/docs/platform-knowledge-architecture", "destination": "/docs/knowledge", "permanent": true},
     {"source": "/docs/platform-knowledge-bases", "destination": "/docs/knowledge", "permanent": true},
-    {"source": "/docs/platform-migration-kit", "destination": "/docs/get-started/migrate", "permanent": true},
+    {"source": "/docs/platform-migration-kit", "destination": "/docs/agents/migrate-from-openclaw", "permanent": true},
     {"source": "/docs/platform-mfiles-connector", "destination": "/docs/knowledge/connectors/m-files", "permanent": true},
     {"source": "/docs/platform-available-integrations", "destination": "/docs/llm-proxy/providers#turning-providers-off", "permanent": true},
     {"source": "/docs/platform-runtime-credentials", "destination": "/docs/admin/credentials", "permanent": true},
@@ -71,7 +71,7 @@
     {"source": "/docs/platform-connection", "destination": "/docs/get-started/connect", "permanent": true},
     {"source": "/docs/platform-connection-reference", "destination": "/docs/get-started/connect", "permanent": true},
     {"source": "/docs/reference/connection-setup", "destination": "/docs/get-started/connect", "permanent": true},
-    {"source": "/docs/platform-migrate-from-claude-openclaw-hermes", "destination": "/docs/get-started/migrate", "permanent": true},
+    {"source": "/docs/platform-migrate-from-claude-openclaw-hermes", "destination": "/docs/agents/migrate-from-openclaw", "permanent": true},
     {"source": "/docs/platform-pricing-model", "destination": "/pricing", "permanent": true},
     {"source": "/docs/platform-chat", "destination": "/docs/chat", "permanent": true},
     {"source": "/docs/platform-projects", "destination": "/docs/chat/projects", "permanent": true},
@@ -189,6 +189,7 @@
     {"source": "/docs/agents/managed-agents/custom-images", "destination": "/docs/agents/runtime/custom-images", "permanent": true},
     {"source": "/docs/admin/deployment/upgrades", "destination": "/docs/admin/deployment/helm#upgrade", "permanent": true},
     {"source": "/docs/get-started/pricing-model", "destination": "/pricing", "permanent": true},
-    {"source": "/docs/get-started/see-it-work", "destination": "/docs/get-started", "permanent": true}
+    {"source": "/docs/get-started/see-it-work", "destination": "/docs/get-started", "permanent": true},
+    {"source": "/docs/get-started/migrate", "destination": "/docs/agents/migrate-from-openclaw", "permanent": true}
   ]
 }

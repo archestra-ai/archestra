@@ -6,6 +6,7 @@ lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Claude Desktop uses a downloadable setup helper or a terminal command. The setup script supports macOS, Windows, and Linux. Linux requires Anthropic's official Desktop beta.
 

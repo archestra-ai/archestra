@@ -47,6 +47,28 @@ const TARGET_LAUNCH_PROMPTS = {
     `Help me change the Guardrails rules of ${subject}: its own rules file in the policy repository.`,
 } as const;
 
+const BATTERY_LAUNCH_PROMPTS: {
+  [Key in OpenAppaBatteryChange["promptKey"]]: (
+    change: Extract<OpenAppaBatteryChange, { promptKey: Key }>,
+  ) => string;
+} = {
+  /** An organization battery's Include switch, turned on. */
+  includeBattery: ({ battery }) =>
+    `Include the battery "${battery.name}" in my OpenAPPA policy: add its entry to \`include\`.`,
+  /** A battery row's Remove from policy, or the Include switch turned off. */
+  removeBattery: ({ battery }) =>
+    `Remove the battery "${battery.name}" from my OpenAPPA policy: take its entry out of \`include\`, with the \`[aliases.mcp]\` lines that point its namespaces at MCP servers.`,
+  /** The dialog's Attach to a server. */
+  attachBattery: ({ battery, server }) =>
+    `Attach the battery "${battery.name}" to ${describeOpenAppaPolicyTarget("mcp_server", server.name)}: point its namespaces at the server's tools in \`[aliases.mcp]\`, and add its entry to \`include\` if it is not there.`,
+  /** A server's Detach in the dialog. */
+  detachBattery: ({ battery, server }) =>
+    `Detach the battery "${battery.name}" from ${describeOpenAppaPolicyTarget("mcp_server", server.name)}: remove the server from its namespaces in \`[aliases.mcp]\`. If no server is left, take its entry out of \`include\` too.`,
+  /** A credential the policy text sets, so the dialog cannot choose it. */
+  removeCredentialLine: ({ battery, variable }) =>
+    `Remove the \`[credentials]\` line that sets ${variable} from my OpenAPPA policy, so the battery "${battery.name}" reads a credential chosen on the Batteries page.`,
+};
+
 export type OpenAppaLaunchPromptKey =
   | keyof typeof POLICY_LAUNCH_PROMPTS
   | keyof typeof TARGET_LAUNCH_PROMPTS;
@@ -55,6 +77,83 @@ function isOpenAppaTargetPromptKey(
   key: string,
 ): key is keyof typeof TARGET_LAUNCH_PROMPTS {
   return Object.hasOwn(TARGET_LAUNCH_PROMPTS, key);
+}
+
+/**
+ * One battery change, as the Batteries page asks the configuration agent for
+ * it while Git sync owns the policy: the agent previews it, the user approves
+ * the card, and a pull request carries it.
+ */
+export type OpenAppaBatteryChange =
+  | ({ promptKey: "includeBattery" } & BatteryChangeOf)
+  | ({ promptKey: "removeBattery" } & BatteryChangeOf)
+  | ({ promptKey: "attachBattery" } & ServerChangeOf)
+  | ({ promptKey: "detachBattery" } & ServerChangeOf)
+  | ({ promptKey: "removeCredentialLine" } & BatteryChangeOf & {
+        /** The credential variable a `[credentials]` line sets. */
+        variable: string;
+      });
+
+/**
+ * The prompt for one battery change: the request, then the exact battery,
+ * server and variable it names, so the agent edits the right lines.
+ */
+export function resolveOpenAppaBatteryPrompt(
+  change: OpenAppaBatteryChange,
+): string {
+  const request = (
+    BATTERY_LAUNCH_PROMPTS[change.promptKey] as (
+      change: OpenAppaBatteryChange,
+    ) => string
+  )(change);
+  const { battery } = change;
+  return `${request}\n\nBattery: ${battery.name}\nInclude entry: ${
+    battery.entry
+  }\nNamespaces: ${battery.namespaces.join(", ") || "none"}${
+    "server" in change ? serverLines(change.server) : ""
+  }${"variable" in change ? `\nCredential variable: ${change.variable}` : ""}`;
+}
+
+/**
+ * The prompt for the changes a battery's dialog saves together. One change
+ * reads as it does alone. Several, each attaching the battery to a server or
+ * detaching it from one, are asked for as a single change, with each server's
+ * exact lines. A server's editor who may not update guardrails says so, since
+ * their change goes through the servers' own batteries, not the policy.
+ */
+export function resolveOpenAppaBatteryChangesPrompt(
+  changes: readonly OpenAppaBatteryChange[],
+  options: { serverEditor?: boolean } = {},
+): string | undefined {
+  const [first] = changes;
+  if (!first) return undefined;
+  const servers = changes.flatMap((change) =>
+    "server" in change
+      ? [
+          {
+            attach: change.promptKey === "attachBattery",
+            server: change.server,
+          },
+        ]
+      : [],
+  );
+  const editor = options.serverEditor
+    ? `\n\nI may edit ${servers.length > 1 ? "these servers" : "this server"} in the MCP registry, but I may not update the organization's guardrails. Propose it as a change to the ${servers.length > 1 ? "servers'" : "server's"} batteries.`
+    : "";
+  if (changes.length === 1)
+    return `${resolveOpenAppaBatteryPrompt(first)}${editor}`;
+  const { battery } = first;
+  const steps = servers.map(
+    ({ attach, server }) =>
+      `- ${attach ? "Attach it to" : "Detach it from"} ${describeOpenAppaPolicyTarget("mcp_server", server.name)}.`,
+  );
+  const lines = servers.map(
+    ({ attach, server }) =>
+      `\n\nChange: ${attach ? "attach" : "detach"}\nServer: ${server.name}\nTarget type: mcp_server\nTarget ID: ${server.id}${
+        server.toolPrefix ? `\nTool prefix: ${server.toolPrefix}` : ""
+      }`,
+  );
+  return `Make these changes to the battery "${battery.name}" in my OpenAPPA policy, as one change in one pull request:\n${steps.join("\n")}\nPoint its namespaces at each attached server's tools in \`[aliases.mcp]\`, and remove each detached server from them. Add its entry to \`include\` if it is not there; if no server is left, take the entry out.\n\nBattery: ${battery.name}\nInclude entry: ${battery.entry}\nNamespaces: ${battery.namespaces.join(", ") || "none"}${lines.join("")}${editor}`;
 }
 
 export function openAppaYellInvestigationPrompt(yellId: string): string {
@@ -92,6 +191,29 @@ export type OpenAppaLaunchTarget = {
   id: string;
   /** One of the target's tools, by name. */
   tool?: string;
+};
+
+function serverLines(server: {
+  id: string;
+  name: string;
+  toolPrefix?: string;
+}): string {
+  return `${targetLines({ kind: "mcp_server", id: server.id, name: server.name })}${
+    server.toolPrefix ? `\nTool prefix: ${server.toolPrefix}` : ""
+  }`;
+}
+
+type BatteryChangeOf = {
+  /** The battery: its name, include entry and namespaces. */
+  battery: { name: string; entry: string; namespaces: string[] };
+};
+
+type ServerChangeOf = BatteryChangeOf & {
+  /**
+   * The MCP server, by its catalog entry, and the tool prefix the policy
+   * already points the battery at, when it does.
+   */
+  server: { id: string; name: string; toolPrefix?: string };
 };
 
 function targetLines(target: OpenAppaLaunchTarget): string {

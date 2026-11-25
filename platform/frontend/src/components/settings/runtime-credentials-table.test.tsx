@@ -27,9 +27,6 @@ import { RuntimeCredentialsSection } from "./runtime-credentials-section";
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
-vi.mock("@/components/claude-code-account", () => ({
-  ClaudeCodeAccount: () => <div>Claude Code sign-in</div>,
-}));
 vi.mock("@/components/agent-icon-picker", () => ({
   AgentIconPicker: () => null,
 }));
@@ -245,26 +242,13 @@ it("adds a credential only you can use, then asks for its value", async () => {
   });
 });
 
-it("Settings → Credentials shows the reader's Claude Code sign-in above the table", async () => {
+it("Settings → Credentials does not render Claude Code subscription management", async () => {
   vi.mocked(useFeature).mockImplementation(
     (feature) => (feature === "agentRuntime") as never,
   );
-  server.use(
-    http.get(`${origin}/api/agents/options/page`, ({ request }) => {
-      const query = new URL(request.url).searchParams;
-      expect(query.get("runtimeCommand")).toBe("archestra-claude-code");
-      expect(query.get("limit")).toBe("1");
-      return HttpResponse.json({
-        data: [
-          { id: "agent-1", runtime: { command: ["archestra-claude-code"] } },
-        ],
-        pagination: { limit: 1, nextCursor: null, hasNext: false },
-      });
-    }),
-  );
   renderTable();
   await screen.findByText("Credential 0");
-  expect(await screen.findByText("Claude Code sign-in")).toBeVisible();
+  expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
 });
 
 it("Settings Add credential adds one just for you when you cannot create shared ones", async () => {

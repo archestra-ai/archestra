@@ -6,6 +6,7 @@ lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Write a skill on the **Skills** page, or ask an agent to write one for you in chat.
 

@@ -8,11 +8,13 @@ import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import AutoRouterModel from "@/models/auto-router";
 import ModelPoolModel from "@/models/model-pool";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { ensureAutoRouter } from "@/test/auto-routing";
 import { grantEverywhere, grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
@@ -532,8 +534,36 @@ describe("POST /api/llm-virtual-keys", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "At least one provider API key or model pool is required",
+      "At least one provider API key, model pool or auto router is required",
     );
+  });
+
+  test("POST /api/llm-virtual-keys creates a key that reaches only an auto router", async () => {
+    grantEverywhere(["llmVirtualKey"]);
+    // Adding a router takes llmProxy:update.
+    await db
+      .update(schema.membersTable)
+      .set({ role: "admin" })
+      .where(eq(schema.membersTable.userId, user.id));
+    const router = await ensureAutoRouter(organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "router-only",
+        providerApiKeys: [],
+        autoRouterIds: [router.id],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      await AutoRouterModel.hasVirtualApiKeyGrant(
+        router.id,
+        response.json().id,
+      ),
+    ).toBe(true);
   });
 
   test("POST /api/llm-virtual-keys rejects duplicate model router provider mappings", async ({

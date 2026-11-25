@@ -124,17 +124,10 @@ pub fn run(args: StartArgs) -> Result<ExitCode, StartError> {
     Ok(code)
 }
 
-/// The MCP bridge that the OS runs from `~/.archestra/bin/` updates itself,
-/// on Windows only. A run in a terminal never replaces a program. The user
-/// runs `archestra update` on the other systems:
-///
-/// - macOS: the program is not signed, and each build is a new application
-///   to the privacy settings (see [`super::update`]).
-/// - Linux: the downloaded program would run in the systemd unit of the MCP
-///   bridge. Its first step stops that MCP bridge, and systemd then ends the
-///   rest of the unit, the downloaded program too, before it starts the MCP
-///   bridge again.
-#[cfg(windows)]
+/// The MCP bridge that the OS runs from `~/.archestra/bin/` updates itself.
+/// A run in a terminal never replaces a program, and neither does a copy of
+/// the program that is not the installed one (a build of a developer that
+/// runs with `--background`).
 fn auto_update_of(background: bool) -> Option<super::AutoUpdate> {
     if !background {
         return None;
@@ -148,21 +141,16 @@ fn auto_update_of(background: bool) -> Option<super::AutoUpdate> {
     })
 }
 
-#[cfg(not(windows))]
-fn auto_update_of(_background: bool) -> Option<super::AutoUpdate> {
-    None
-}
-
-/// Starts the downloaded program as a process of its own, as `archestra
-/// bridge start`: it stops this MCP bridge, copies itself over the installed
-/// program and starts the MCP bridge again.
-#[cfg(windows)]
+/// Starts the downloaded program as `archestra bridge start`: it stops this
+/// MCP bridge, copies itself over the installed program and starts the MCP
+/// bridge again. Each OS starts it so that it outlives this MCP bridge: see
+/// [`super::autostart::start_downloaded_program`].
 fn start_downloaded_program(
     program: &std::path::Path,
     config_path: &std::path::Path,
 ) -> std::io::Result<()> {
     let arguments = super::update::install_arguments(config_path);
-    super::autostart::spawn_detached(program, &arguments).map(drop)
+    super::autostart::start_downloaded_program(program, &arguments)
 }
 
 /// The last step of the first start on a computer: `archestra` works in each
@@ -173,7 +161,7 @@ fn put_the_program_on_the_path() {
         return;
     };
     match crate::shell_path::add(&home) {
-        Ok(added) => println!("{}", added.message()),
+        Ok(added) => tracing::info!(?added, "the `archestra` command is on the PATH"),
         Err(error) => {
             tracing::warn!(%error, "cannot put the `archestra` command on the PATH");
         }

@@ -6,6 +6,8 @@ lastUpdated: 2026-10-05
 beta: "Set [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) to turn it on."
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from the documents in an M-Files vault, with each file's M-Files permissions. The connector syncs versioned files.
 
 **Indexed:** supported files attached to the configured M-Files object types. The default object type is `0` (documents). Text, Markdown, CSV, JSON, XML, HTML, YAML, Office documents, and PDFs are indexed; supported images are indexed when a multimodal embedding model is configured. Files larger than 25 MB are skipped.

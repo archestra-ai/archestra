@@ -815,7 +815,7 @@ function SidebarNewChatItem() {
       <SidebarMenuButton
         asChild
         tooltip="New chat"
-        className="h-9 rounded-lg border bg-sidebar-raised font-medium shadow-xs group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none"
+        className="h-9 rounded-lg border border-sidebar-raised-edge bg-sidebar-raised font-medium shadow-xs group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none"
       >
         <SidebarPrefetchLink
           href="/chat"

@@ -31,6 +31,13 @@ export const MESSAGING_CHANNEL_LABELS: Record<MessagingChannelId, string> = {
   a2a: "A2A",
 };
 
+/** The messaging channels that are chat apps; Jira, email and A2A are not. */
+export const CHAT_APP_CHANNEL_IDS = [
+  "slack",
+  "ms-teams",
+  "telegram",
+] as const satisfies readonly MessagingChannelId[];
+
 /**
  * Keyed off the label map so a connector type added to
  * `CONNECTOR_TYPE_LABELS` is configurable without a second edit here.

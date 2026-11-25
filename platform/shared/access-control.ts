@@ -595,6 +595,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StartClaudeCodeSignIn]: {},
   [RouteId.CompleteClaudeCodeSignIn]: {},
   [RouteId.DisconnectClaudeCodeAccount]: {},
+  [RouteId.GetMyClaudeCodeAccount]: {},
+  [RouteId.StartMyClaudeCodeSignIn]: {},
+  [RouteId.CompleteMyClaudeCodeSignIn]: {},
+  [RouteId.DisconnectMyClaudeCodeAccount]: {},
   [RouteId.GetClaudeCodeModels]: {},
   [RouteId.SetAgentRuntimeCredential]: {},
   [RouteId.DeleteAgentRuntimeCredential]: {},
@@ -649,11 +653,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetClientConnection]: {},
   [RouteId.DecideClientConnection]: {},
   // Desktop devices. The tunnel client's own calls are public: sign-in start and
-  // poll carry a polling proof, the program download is not secret, and the
-  // tunnel endpoints authenticate with the device key.
+  // poll carry a polling proof, the program download and its install scripts
+  // are not secret, and the tunnel endpoints authenticate with the device key.
   [RouteId.StartDesktopDeviceSignIn]: {},
   [RouteId.PollDesktopDeviceSignIn]: {},
   [RouteId.DownloadArchestraCli]: {},
+  [RouteId.GetArchestraCliInstallScript]: {},
+  [RouteId.GetArchestraCliPowershellInstallScript]: {},
   [RouteId.GetDesktopTunnel]: {},
   [RouteId.PollDesktopTunnel]: {},
   [RouteId.RespondDesktopTunnel]: {},
@@ -1952,6 +1958,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.GetOpenappaBatteries]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaBatterySource]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaEffectivePolicy]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryMatches]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryInstall]: { guardrailsPolicy: ["read"] },

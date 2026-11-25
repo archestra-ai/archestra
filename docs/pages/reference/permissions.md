@@ -4,6 +4,9 @@ description: "What each built-in role can do, and every permission a custom role
 order: 2
 lastUpdated: 2026-11-21
 ---
+
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
 Run `pnpm codegen:access-control-docs` to regenerate.

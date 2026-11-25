@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { startFromConsequence } from "./start-from-consequence";
 
 /**
- * "Start from" on a new cost export: now, a past date (a backfill, picked on
+ * "Include past usage" on a new cost export: now, a past date (a backfill, picked on
  * the organization's daily spend), or all recorded usage. Reports the start
  * through `onChange`; null is now.
  */
@@ -98,7 +98,7 @@ export function CostExportStartFrom({
 
   return (
     <div className="space-y-2">
-      <Label id={`${id}-start`}>Start from</Label>
+      <Label id={`${id}-start`}>Include past usage</Label>
       <RadioGroup
         aria-labelledby={`${id}-start`}
         value={mode}
@@ -110,7 +110,7 @@ export function CostExportStartFrom({
         <ModeRow
           id={`${id}-start-now`}
           value="now"
-          label="Now"
+          label="No, start now"
           hint={
             schedule === "hourly"
               ? "the first file is this hour"
@@ -120,8 +120,8 @@ export function CostExportStartFrom({
         <ModeRow
           id={`${id}-start-date`}
           value="date"
-          label="A date"
-          hint="also write past usage from a day you pick"
+          label="Specific date in the past"
+          hint="also write usage since then"
         >
           {mode === "date" &&
             (days ? (

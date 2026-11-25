@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
+  getRemedyChainRuling,
   getRemedyChainStatus,
   identifyRemedyChains,
   remedyChainPartIndices,
@@ -323,6 +324,85 @@ describe("identifyRemedyChains", () => {
       "c2",
       "c3",
     ]);
+  });
+});
+
+describe("a guarded call in a turn the user stopped", () => {
+  const STOPPED = { type: "data-turn-stopped" } as never;
+  const blockedCall = [
+    notice({ id: "c1", tool: "github__show_board", args: { id: 7 } }),
+    remedy({ id: "c2", offerId: offerFor("c1") }),
+  ];
+
+  it("reads as cancelled when the stop came while it was still being negotiated", () => {
+    // The remedy was accepted and the retry had not started: no call was in
+    // flight to carry the stop, so only the turn's mark tells.
+    const [chain] = identifyRemedyChains([...blockedCall, STOPPED], {
+      getToolShortName,
+    });
+
+    expect(getRemedyChainStatus(chain)).toEqual({ state: "cancelled" });
+  });
+
+  it("stays blocked when the turn ended by itself", () => {
+    const [chain] = identifyRemedyChains(blockedCall, { getToolShortName });
+
+    expect(getRemedyChainStatus(chain)).toEqual({
+      state: "denied",
+      label: "Blocked",
+    });
+  });
+
+  it("stays blocked when the model had moved on from it before the stop", () => {
+    const [chain] = identifyRemedyChains(
+      [
+        ...blockedCall,
+        { type: "text", text: "I could not open the board. Trying search." },
+        call({ id: "c3", toolName: "github__search", input: { q: "board" } }),
+        STOPPED,
+      ] as never,
+      { getToolShortName },
+    );
+
+    expect(getRemedyChainStatus(chain)).toEqual({
+      state: "denied",
+      label: "Blocked",
+    });
+  });
+
+  it("keeps a review the user denied as denied", () => {
+    const [chain] = identifyRemedyChains(
+      [
+        notice({ id: "c1", tool: "github__show_board", args: { id: 7 } }),
+        remedy({ id: "c2", offerId: offerFor("c1"), humanRuling: "deny" }),
+        STOPPED,
+      ],
+      { getToolShortName },
+    );
+
+    expect(getRemedyChainStatus(chain).state).toBe("denied");
+  });
+});
+
+describe("getRemedyChainRuling", () => {
+  it("gives a call that did not run the latest ruling that stopped it", () => {
+    const parts = [
+      notice({ id: "c1", tool: "github__show_board", args: { id: 7 } }),
+      remedy({ id: "c2", offerId: offerFor("c1") }),
+      notice({
+        id: "c3",
+        tool: "github__show_board",
+        args: { id: 7 },
+        note: "Blocked again.",
+      }),
+    ];
+
+    const [chain] = identifyRemedyChains(parts, { getToolShortName });
+
+    // The second ruling, without the runtime's marker.
+    const ruling = getRemedyChainRuling(chain);
+    expect(ruling).toMatch(/^Blocked: github__show_board cannot run yet\./);
+    expect(ruling).toContain("Blocked again.");
   });
 });
 

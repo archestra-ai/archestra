@@ -282,6 +282,28 @@ async function resolveAccount(
       companyProblem: null,
     };
   }
+  // Under a lock to each person's own subscription, a company connection the
+  // agent still stores is the company option's, which none of its runs use:
+  // the lock came after the connection was picked, on the agent or by its
+  // runtime's rule. On a runtime with a subscription of its own, runs never
+  // resolve that connection. They keep the agent's model only where the
+  // subscription serves its provider; otherwise no level set a model, and
+  // the person runs one of their subscription's.
+  const unusedCompanyPair =
+    lock === "subscription" &&
+    !params.asStored &&
+    !claudeCapable &&
+    !!subscriptionKindForRuntimeCommand(runtime.command?.[0]) &&
+    !providerChoice &&
+    !!params.agent.llmApiKeyId &&
+    !(await storesPersonalCredential(params.agent));
+  const keptSubscriptionModel =
+    unusedCompanyPair && params.agent.modelId
+      ? await modelServedBySubscription({
+          modelId: params.agent.modelId,
+          runtime,
+        })
+      : null;
   // A person's choice overrides the runtime's Claude account setting. The
   // agent's account lock does not: saving a lock checks that setting agrees.
   const authentication = usableChoice
@@ -333,12 +355,14 @@ async function resolveAccount(
   // it always did. A connection set without one leaves the model to each
   // person: the organization's default where the connection serves it,
   // until they pick. A person's company-key choice carries all of it.
-  const fixedPair = !!params.agent.llmApiKeyId && !!params.agent.modelId;
+  const fixedPair =
+    !unusedCompanyPair && !!params.agent.llmApiKeyId && !!params.agent.modelId;
   const openModel =
     !params.asStored &&
     !asSaved &&
     !providerChoice &&
     !params.companyProblem &&
+    !unusedCompanyPair &&
     !!params.agent.llmApiKeyId &&
     !params.agent.modelId
       ? await resolveCompanyOption({
@@ -385,6 +409,7 @@ async function resolveAccount(
   const modelFromDefault =
     !onClaudeSubscriptionPath &&
     !subscriptionChoice?.model &&
+    !keptSubscriptionModel &&
     !companySelection &&
     !storedSelection &&
     !(fixedPair && !providerChoice);
@@ -402,25 +427,32 @@ async function resolveAccount(
           selectedModel: subscriptionChoice.model.modelId,
           selectedProvider: subscriptionChoice.model.provider,
         }
-      : (companySelection ??
-        storedSelection ??
-        planDefault ??
-        (await resolveConversationLlmSelectionForAgent({
-          // Only a whole pair of the agent's reaches this chain, and the
-          // connection an agent saved before people could choose stores
-          // alone. With no connection at any level it gives the
-          // organization's default, as it does for an agent that stores none.
-          agent: providerChoice
-            ? { llmApiKeyId: null, modelId: null }
-            : fixedPair
-              ? params.agent
-              : asSaved
-                ? params.own
-                : { llmApiKeyId: null, modelId: null },
-          organizationId: params.organizationId,
-          userId: params.userId,
-          companyConnectionsOnly,
-        })));
+      : keptSubscriptionModel
+        ? {
+            modelId: keptSubscriptionModel.id,
+            chatApiKeyId: null,
+            selectedModel: keptSubscriptionModel.modelId,
+            selectedProvider: keptSubscriptionModel.provider,
+          }
+        : (companySelection ??
+          storedSelection ??
+          planDefault ??
+          (await resolveConversationLlmSelectionForAgent({
+            // Only a whole pair of the agent's reaches this chain, and the
+            // connection an agent saved before people could choose stores
+            // alone. With no connection at any level it gives the
+            // organization's default, as it does for an agent that stores none.
+            agent: providerChoice
+              ? { llmApiKeyId: null, modelId: null }
+              : fixedPair
+                ? params.agent
+                : asSaved
+                  ? params.own
+                  : { llmApiKeyId: null, modelId: null },
+            organizationId: params.organizationId,
+            userId: params.userId,
+            companyConnectionsOnly,
+          })));
   // A model set for the connection the default resolved to holds for
   // everyone on that connection.
   const defaultWithSetModel = companyConnectionsOnly
@@ -674,7 +706,9 @@ async function resolveAccount(
       ? (providerChoice.key?.id ?? null)
       : asSaved
         ? params.own.llmApiKeyId
-        : params.agent.llmApiKeyId,
+        : unusedCompanyPair
+          ? null
+          : params.agent.llmApiKeyId,
     /** Why the account cannot run; the run is refused. */
     accountError,
     /**
@@ -1141,6 +1175,22 @@ async function ownAuthentication(
 }
 
 /** Whether the connection an agent stores is somebody's own subscription. */
+/**
+ * The model, when the personal subscription of the runtime serves its
+ * provider: a subscription runs its own provider's models only.
+ */
+async function modelServedBySubscription(params: {
+  modelId: string;
+  runtime: Pick<ResolvedAgentRuntime, "command">;
+}) {
+  const kind = subscriptionKindForRuntimeCommand(params.runtime.command?.[0]);
+  if (!kind) return null;
+  const model = await ModelModel.findById(params.modelId);
+  return model && SUBSCRIPTION_CREDENTIALS[kind].provider === model.provider
+    ? model
+    : null;
+}
+
 async function storesPersonalCredential(agent: {
   llmApiKeyId: string | null;
 }): Promise<boolean> {

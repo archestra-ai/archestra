@@ -212,6 +212,22 @@ describe("AutoRoutersPage", () => {
     );
   });
 
+  it("links to the setting that turns auto routing on before the first router exists", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
+        HttpResponse.json([]),
+      ),
+      http.get(`${API_ORIGIN}/api/auto-routing/state`, () =>
+        HttpResponse.json({ ...state, enabled: false }),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByRole("link", { name: "Settings" }),
+    ).toHaveAttribute("href", "/settings/llm");
+  });
+
   it("tells a reader without permission who creates auto routers", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>

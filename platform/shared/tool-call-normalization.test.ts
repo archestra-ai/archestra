@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   coerceMalformedToolInputs,
+  isTurnStoppedPart,
+  markTurnStopped,
   stripDanglingToolCalls,
 } from "./tool-call-normalization";
 
@@ -290,5 +292,30 @@ describe("coerceMalformedToolInputs", () => {
       { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] },
     ];
     expect(coerceMalformedToolInputs(messages)[0]).toBe(messages[0]);
+  });
+});
+
+describe("markTurnStopped", () => {
+  const user = { role: "user", parts: [{ type: "text", text: "go" }] };
+  const assistant = {
+    role: "assistant",
+    parts: [{ type: "text", text: "Working on it" }],
+  };
+
+  test("marks the turn the run was writing, once", () => {
+    const marked = markTurnStopped([user, assistant]);
+
+    expect(marked[1].parts.filter(isTurnStoppedPart)).toHaveLength(1);
+    expect(marked[1].parts[0]).toBe(assistant.parts[0]);
+    // A second stop signal on the same turn adds nothing.
+    expect(markTurnStopped(marked)).toBe(marked);
+  });
+
+  test("leaves a run stopped before the assistant wrote anything alone", () => {
+    const messages = [user];
+    const empty = [user, { role: "assistant", parts: [] }];
+
+    expect(markTurnStopped(messages)).toBe(messages);
+    expect(markTurnStopped(empty)).toBe(empty);
   });
 });

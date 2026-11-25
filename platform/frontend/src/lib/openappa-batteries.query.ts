@@ -109,6 +109,23 @@ export function batteryPolicySourceQuery(
   });
 }
 
+/**
+ * The policy text a battery adds once the policy includes it, for one the
+ * organization can include: a look at it before any install.
+ */
+export function useBatterySource(name: string) {
+  return useQuery({
+    queryKey: [...batteriesQueryKey, "source", name],
+    queryFn: async (): Promise<BatteryPolicySource> => {
+      const { data, error } = await archestraApiSdk.getOpenappaBatterySource({
+        path: { name },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return answered(data);
+    },
+  });
+}
+
 /** Every battery the organization can install, bundled and uploaded, with its installs. */
 export function useBatteries(enabled = true) {
   return useQuery({ ...batteriesQuery, enabled });

@@ -959,6 +959,10 @@ function WhoIsAffected({
         key: "later",
         node: <span>Limits apply once someone sends traffic</span>,
       },
+      {
+        key: "shared",
+        node: <span>Shared virtual keys are not counted per person</span>,
+      },
     ];
   } else if (allUnlimited) {
     main = (

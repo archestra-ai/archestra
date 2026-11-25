@@ -1,12 +1,12 @@
 {
   "files": {
-    "archestra-darwin-arm64": "53aa161266b48983167a327129664051a88a92194dda20a686cd1eb0206c02c1",
-    "archestra-darwin-x86_64": "d7c7ce7e101e3d1e03e68103e7b3ed593a6c70a3bc962fecc371b7b3576fae79",
-    "archestra-linux-arm64": "e3215e56d7a7d2967f8a6c1ef14590f31c043cdba43b8ee766a1ab167065bd4f",
-    "archestra-linux-x86_64": "1db7a4bb8ba9775ac9f3333d7a52300e926ddc81169f698041591391bbf09e44",
-    "archestra-windows-arm64.exe": "cb83e8536dfca60496d8175c5ca4c0dbca63c53d663b585092a23a162ca6d126",
-    "archestra-windows-x86_64.exe": "3f1050ed1e96863671d0a1f90e0eda8fba37a1c0f8b1269db0ed7e604ca3d168"
+    "archestra-darwin-arm64": "3f064f510df63ef1a12ca8c42642c4733ab5f8c8b2d37c25747affb7f90bc83b",
+    "archestra-darwin-x86_64": "e4ffa3e75030990e6b6b996329cfda671b299c5248006c654d7b11da7cae40b1",
+    "archestra-linux-arm64": "e50b3ad9a7739b536e112f5bfef0a637ef8d86eece0dc3476d6eb911c5229ee9",
+    "archestra-linux-x86_64": "d3725e38a701bd50ece7090f9dd7ccf75be2a8f5f322a173061dfbe27a9b6aa3",
+    "archestra-windows-arm64.exe": "faee7f573b8961ae06527b83f815a7d9bcde86710764bf3573ceafaa143ffcc4",
+    "archestra-windows-x86_64.exe": "7894df0e6046fce98ceea30ffcc8c0d9ccb6f8fb5707e31fc7b2cbcbb4685dde"
   },
-  "url": "https://github.com/archestra-ai/archestra/releases/download/archestra-cli-v0.1.7",
-  "version": "0.1.7"
+  "url": "https://github.com/archestra-ai/archestra/releases/download/archestra-cli-v0.1.10",
+  "version": "0.1.10"
 }

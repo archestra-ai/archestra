@@ -85,6 +85,7 @@ import {
   canStoreAgentModelSelection,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
+import { populateAgentListSubscriptionAccounts } from "@/services/agent-runtime/agent-list-account";
 import {
   agentCopyAccountLock,
   applyAgentAccountWrite,
@@ -429,6 +430,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
         });
       }
+      await populateAgentListSubscriptionAccounts({
+        agents: result.data,
+        organizationId,
+      });
       return reply.send(result);
     },
   );

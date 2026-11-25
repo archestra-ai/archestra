@@ -489,7 +489,7 @@ function NoModelsInfo({ label }: { label: string }) {
   );
 }
 
-function PrimaryBadge() {
+export function PrimaryBadge() {
   return (
     <span className="shrink-0 rounded bg-muted px-1.5 py-px font-semibold text-[10px] text-muted-foreground uppercase tracking-wide">
       Primary
@@ -513,7 +513,7 @@ function PrimaryNote({ notPrimaryCount }: { notPrimaryCount: number }) {
 }
 
 /** No provider key the caller can use yet: where to get one. */
-function NoProviderKeys() {
+export function NoProviderKeys() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">

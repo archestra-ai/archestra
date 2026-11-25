@@ -5,6 +5,8 @@ order: 6
 lastUpdated: 2026-10-28
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Track skill activations and Code Sandbox command outcomes.
 
 ## Metrics

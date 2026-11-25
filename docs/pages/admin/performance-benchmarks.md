@@ -5,6 +5,8 @@ order: 10
 lastUpdated: 2026-11-21
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json.
 Release benchmark CI updates only the marked MCP table. The LLM comparison is
 pinned to its published evidence; do not replace it with release measurements.

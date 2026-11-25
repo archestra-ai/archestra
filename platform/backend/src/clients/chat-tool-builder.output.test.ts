@@ -42,4 +42,20 @@ describe("buildArchestraToolOutput", () => {
 
     expect(output).not.toHaveProperty("structuredContent");
   });
+
+  it("names an audio block a dispatched tool returned, and keeps its payload out of the text", async () => {
+    const audio = { type: "audio", data: "UklGRg==", mimeType: "audio/wav" };
+    const output = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text", text: "Recording:" }, audio],
+      } as CallToolResult,
+      toolName: archestraMcpBranding.getToolName("run_tool"),
+      toolArguments: { tool_name: "recorder__record", tool_args: {} },
+      agentId: "agent",
+    });
+
+    // The same marker a direct call gets: the base64 would only fill the
+    // model's context.
+    expect(output).toMatchObject({ content: "Recording:\n[audio]" });
+  });
 });

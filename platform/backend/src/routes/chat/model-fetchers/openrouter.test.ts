@@ -15,6 +15,28 @@ describe("fetchOpenrouterModels", () => {
     mockFetch.mockReset();
   });
 
+  test("leaves out batch-only variants", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              { id: "openai/gpt-5.4", created: 1715367049 },
+              { id: "openai/gpt-5.4:batch", created: 1715367049 },
+            ],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const models = await fetchOpenrouterModels("test-api-key");
+
+    expect(models.map((model) => model.id)).toEqual(["openai/gpt-5.4"]);
+  });
+
   test("fetches generation and embedding models with bearer auth and extra headers", async () => {
     mockFetch
       .mockResolvedValueOnce({

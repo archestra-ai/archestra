@@ -238,8 +238,19 @@ export function EditVirtualKeyDialog({
       modelPoolIds === undefined &&
       !virtualKey.includeFutureProviders &&
       virtualKey.providerApiKeys.length === 0);
+  const hasAutoRouters =
+    (autoRouterIds ?? grantedRouterIds).length > 0 ||
+    // Same as the pools: an owner who cannot list routers keeps the key's own.
+    (!canSetAutoRouters &&
+      autoRouterIds === undefined &&
+      modelPoolIds === undefined &&
+      !virtualKey.includeFutureProviders &&
+      virtualKey.providerApiKeys.length === 0);
   const standardReady =
-    includeFutureProviders || providerApiKeyIds.length > 0 || hasModelPools;
+    includeFutureProviders ||
+    providerApiKeyIds.length > 0 ||
+    hasModelPools ||
+    hasAutoRouters;
   const canSubmit =
     name.trim().length > 0 &&
     (isPassthrough || standardReady) &&

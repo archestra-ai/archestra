@@ -599,11 +599,12 @@ export function ChatMessages({
     [session],
   );
   const subagentCallsFor = useCallback(
-    (toolCallId: string | undefined) =>
+    (toolCallId: string | undefined, turnActive: boolean) =>
       toolCallId && subagentParentToolCallIds.has(toolCallId) ? (
         <SubagentToolCalls
           parentToolCallId={toolCallId}
           subagentToolCalls={subagentToolCalls}
+          turnActive={turnActive}
           canExpandToolCalls={canExpandToolCalls}
           connectedCatalogIds={orchestrator.connectedCatalogIds}
           getToolShortName={getToolShortName}
@@ -855,6 +856,7 @@ export function ChatMessages({
                                   errorText: entry.errorText,
                                   nestedToolCalls: subagentCallsFor(
                                     entry.part.toolCallId,
+                                    turnActive,
                                   ),
                                 },
                         ),
@@ -1474,6 +1476,7 @@ export function ChatMessages({
                               toolResultPart={toolResultPart}
                               toolName={toolName}
                               agentId={agentId}
+                              turnActive={turnActive}
                               canExpandToolCalls={canExpandToolCalls}
                               onToolApprovalResponse={onToolApprovalResponse}
                               onInstallMcp={
@@ -1594,6 +1597,7 @@ export function ChatMessages({
                                 toolResultPart={outputPart}
                                 toolName={toolName}
                                 agentId={agentId}
+                                turnActive={turnActive}
                                 canExpandToolCalls={canExpandToolCalls}
                                 onToolApprovalResponse={onToolApprovalResponse}
                                 onInstallMcp={
@@ -1658,6 +1662,7 @@ export function ChatMessages({
                                 toolResultPart={toolResultPart}
                                 toolName={toolName}
                                 agentId={agentId}
+                                turnActive={turnActive}
                                 canExpandToolCalls={canExpandToolCalls}
                                 onToolApprovalResponse={onToolApprovalResponse}
                                 onInstallMcp={
@@ -1675,7 +1680,10 @@ export function ChatMessages({
                                   tcId ? earlyToolUiStarts[tcId] : undefined
                                 }
                                 onSendMessage={sendUserText}
-                                nestedToolCalls={subagentCallsFor(tcId)}
+                                nestedToolCalls={subagentCallsFor(
+                                  tcId,
+                                  turnActive,
+                                )}
                               />
                             );
                           }
@@ -1741,6 +1749,7 @@ export function ChatMessages({
                 toolResultPart={null}
                 toolName={toolCall.toolName}
                 agentId={agentId}
+                turnActive={isTurnLive}
                 canExpandToolCalls={canExpandToolCalls}
                 onToolApprovalResponse={onToolApprovalResponse}
                 onInstallMcp={orchestrator.triggerInstallByCatalogId}
@@ -1961,10 +1970,16 @@ const MessageTool = memo(
     earlyToolUiData,
     toolIconMap,
     nestedToolCalls,
+    turnActive = true,
   }: {
     part: ToolUIPart | DynamicToolUIPart;
     toolResultPart: ToolUIPart | DynamicToolUIPart | null;
     toolName: string;
+    /**
+     * The call's turn is still running. A blocked call's card uses it: once
+     * the turn has ended, a notice without a result did not finish.
+     */
+    turnActive?: boolean;
     agentId?: string;
     canExpandToolCalls?: boolean;
     onToolApprovalResponse?: (params: {
@@ -2215,8 +2230,8 @@ const MessageTool = memo(
           attempt={blockedAttempt}
           notice={{ part, toolResultPart, errorText }}
           // This card stands on its own, like its neighbours here: it opens
-          // and closes the same way and reads as running until it settles.
-          turnActive
+          // and closes the same way.
+          turnActive={turnActive}
           open={isOpen}
           onOpenChange={handleOpenChange}
           isCollapsible={isExpandable}
@@ -2404,6 +2419,7 @@ const MessageTool = memo(
     prev.toolName === next.toolName &&
     prev.agentId === next.agentId &&
     prev.part.toolCallId === next.part.toolCallId &&
+    prev.turnActive === next.turnActive &&
     prev.part.state === next.part.state &&
     (prev.part.state !== "input-streaming" ||
       prev.part.input === next.part.input) &&
@@ -2461,6 +2477,7 @@ function SubagentToolCalls({
   parentToolCallId,
   subagentToolCalls,
   depth = 0,
+  turnActive,
   canExpandToolCalls,
   connectedCatalogIds,
   getToolShortName,
@@ -2469,6 +2486,8 @@ function SubagentToolCalls({
   parentToolCallId: string;
   subagentToolCalls: Map<string, SubagentChildEntry[]>;
   depth?: number;
+  /** The delegation's turn is still running. */
+  turnActive: boolean;
   canExpandToolCalls?: boolean;
   connectedCatalogIds: ReadonlySet<string>;
   getToolShortName: (toolName: string) => ArchestraToolShortName | null;
@@ -2496,6 +2515,7 @@ function SubagentToolCalls({
             part={synthesizeSubagentToolPart(child)}
             toolResultPart={null}
             toolName={child.toolName}
+            turnActive={turnActive}
             canExpandToolCalls={canExpandToolCalls}
             connectedCatalogIds={connectedCatalogIds}
             getToolShortName={getToolShortName}
@@ -2506,6 +2526,7 @@ function SubagentToolCalls({
                   parentToolCallId={child.toolCallId}
                   subagentToolCalls={subagentToolCalls}
                   depth={depth + 1}
+                  turnActive={turnActive}
                   canExpandToolCalls={canExpandToolCalls}
                   connectedCatalogIds={connectedCatalogIds}
                   getToolShortName={getToolShortName}

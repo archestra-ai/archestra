@@ -1,7 +1,13 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -90,7 +96,20 @@ vi.mock("@/components/ai-elements/tool", () => ({
   ToolContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  ToolHeader: ({ type }: { type: string }) => <div>{type}</div>,
+  ToolHeader: ({
+    type,
+    state,
+    statusLabel,
+  }: {
+    type: string;
+    state?: string;
+    statusLabel?: string;
+  }) => (
+    <>
+      <div>{type}</div>
+      <div data-testid="tool-state">{statusLabel ?? state}</div>
+    </>
+  ),
   ToolInput: ({ input }: { input: unknown }) => (
     <pre>{JSON.stringify(input)}</pre>
   ),
@@ -1297,6 +1316,73 @@ describe("ChatMessages", () => {
     expect(screen.getByText("todo-write-tool")).toBeInTheDocument();
     expect(
       screen.queryByText("tool-sparky__todo_write"),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      name: "delivered its ruling",
+      notice: { state: "output-available", output: "[appa] Blocked." },
+      status: "Blocked",
+    },
+    {
+      name: "was cut off when its turn ended",
+      notice: { state: "input-available" },
+      status: "output-cancelled",
+    },
+  ])("shows a subagent's blocked call in the state of a notice that $name", ({
+    notice,
+    status,
+  }) => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-workspace__helper",
+            toolCallId: "call-delegation",
+            state: "output-available",
+            input: { task: "tidy up" },
+            output: "done",
+          },
+          {
+            type: "data-subagent-tool-call",
+            data: {
+              parentToolCallId: "call-delegation",
+              toolCallId: "call-notice",
+              toolName: "sparky__get_remedy_plans",
+              input: {
+                tool: "workspace__delete_file",
+                arguments: { path: "/notes.md" },
+                ruling: "[appa] Blocked.",
+                notice: { v: 1, call_id: "call-notice" },
+              },
+              ...notice,
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "helper" }));
+
+    // The subagent's notice is shown as the call it blocked. The turn has
+    // ended, so a notice without a result did not finish: it never reads as
+    // still running.
+    const blocked = screen.getByText("tool-workspace__delete_file");
+    expect(
+      within(blocked.parentElement as HTMLElement).getByTestId("tool-state"),
+    ).toHaveTextContent(status);
+    expect(
+      screen.queryByText("tool-sparky__get_remedy_plans"),
     ).not.toBeInTheDocument();
   });
 

@@ -70,9 +70,10 @@ RUN apt-get update -qq \
 # predates HNSW indexes. No cluster ships; the agent runs initdb under HOME,
 # and the shared socket directory lets local clients connect without flags.
 # The DHI mirror has served postgresql-common archives that do not match its
-# signed index. Resolve these helpers from signed Debian and PGDG repositories.
+# signed index, and its PostgreSQL builds collide with Debian's helpers. Resolve
+# every PostgreSQL package from the signed Debian and PGDG repositories.
 RUN printf '%s\n' \
-      'Package: postgresql-common postgresql-client-common postgresql-common-dev' \
+      'Package: postgresql* libpq*' \
       'Pin: origin "dhi.io"' \
       'Pin-Priority: -1' > /etc/apt/preferences.d/postgresql-common \
  && apt-get update -qq \

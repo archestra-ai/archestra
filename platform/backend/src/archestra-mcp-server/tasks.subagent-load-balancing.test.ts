@@ -310,6 +310,73 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     });
   });
 
+  test("coerces legacy All-agents weighted policies to round_robin during planning and on unrelated updates", async ({
+    makeAgent,
+  }) => {
+    const subagentA = await createRuntimeSubagent(
+      makeAgent,
+      "Subagent A",
+      false,
+    );
+    const subagentB = await createRuntimeSubagent(
+      makeAgent,
+      "Subagent B",
+      false,
+    );
+    const legacyPolicy = {
+      enabled: true,
+      algorithm: "weighted" as const,
+      weights: {
+        [subagentA.id]: 100,
+        [subagentB.id]: 1,
+      },
+    };
+    // Seed a legacy row directly in Postgres to bypass model normalization.
+    await db
+      .update(schema.agentsTable)
+      .set({
+        accessAllSubagents: true,
+        subagentLoadBalancing: legacyPolicy,
+      })
+      .where(eq(schema.agentsTable.id, gateway.id));
+
+    await mockDetachedTaskStart();
+
+    // Two consecutive runs alternate evenly (round_robin) instead of sending
+    // both to the 100-weight subagent.
+    const firstRun = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "First legacy weighted run" },
+      context,
+    );
+    const secondRun = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Second legacy weighted run" },
+      context,
+    );
+    expect(firstRun.isError).toBeFalsy();
+    expect(secondRun.isError).toBeFalsy();
+    const firstAgentId = (
+      firstRun.structuredContent as { run: { agent_id: string } }
+    ).run.agent_id;
+    const secondAgentId = (
+      secondRun.structuredContent as { run: { agent_id: string } }
+    ).run.agent_id;
+    expect(new Set([firstAgentId, secondAgentId])).toEqual(
+      new Set([subagentA.id, subagentB.id]),
+    );
+
+    // An unrelated update heals the stored policy to round_robin.
+    const updated = await AgentModel.update(gateway.id, {
+      description: "Unrelated metadata edit",
+    });
+    expect(updated?.subagentLoadBalancing).toEqual({
+      enabled: true,
+      algorithm: "round_robin",
+      weights: legacyPolicy.weights,
+    });
+  });
+
   test("intersects exclude_agent_ids with assigned subagents so foreign IDs are ignored and assigned exclusions always fail over until none remain", async ({
     makeAgent,
   }) => {

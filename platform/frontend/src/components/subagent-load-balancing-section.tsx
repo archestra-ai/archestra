@@ -1,8 +1,9 @@
 "use client";
 
-import type {
-  SubagentLoadBalancingAlgorithm,
-  SubagentLoadBalancingConfig,
+import {
+  resolveEffectiveSubagentLoadBalancingConfig,
+  type SubagentLoadBalancingAlgorithm,
+  type SubagentLoadBalancingConfig,
 } from "@archestra/shared";
 import { Split } from "lucide-react";
 import { useId } from "react";
@@ -90,16 +91,18 @@ export function SubagentLoadBalancingSection({
     : "Load balance Agent Runtime subagent runs or let the model pick one. Subagents without a dedicated runtime are always selected by the model.";
   const modeOptions = getModeOptions({ noun, nouns, isAllSubagentsMode });
 
-  const isEnabled = value?.enabled === true;
-  const currentConfig: SubagentLoadBalancingConfig = value ?? {
+  const effectiveConfig = resolveEffectiveSubagentLoadBalancingConfig(
+    value,
+    isAllSubagentsMode,
+  );
+  const isEnabled = effectiveConfig?.enabled === true;
+  const currentConfig: SubagentLoadBalancingConfig = effectiveConfig ?? {
     ...DEFAULT_LOAD_BALANCING_CONFIG,
     enabled: false,
   };
   const selectedMode: LoadBalancingMode = !isEnabled
     ? "disabled"
-    : isAllSubagentsMode && currentConfig.algorithm === "weighted"
-      ? "round_robin"
-      : currentConfig.algorithm;
+    : currentConfig.algorithm;
 
   const handleModeChange = (mode: LoadBalancingMode) => {
     if (mode === "weighted" && isAllSubagentsMode) {

@@ -65,6 +65,27 @@ export function normalizeSubagentLoadBalancingConfig(
   return StoredSubagentLoadBalancingConfigSchema.parse(config);
 }
 
+/**
+ * Returns the effective load-balancing policy for a given subagent access mode.
+ * Custom weights require explicit Manual assignments, so an enabled `weighted`
+ * policy in All-agents mode falls back to `round_robin`.
+ */
+export function resolveEffectiveSubagentLoadBalancingConfig(
+  config: SubagentLoadBalancingConfig | null | undefined,
+  accessAllSubagents?: boolean | null,
+): SubagentLoadBalancingConfig | null {
+  if (!config) {
+    return null;
+  }
+  if (accessAllSubagents && config.enabled && config.algorithm === "weighted") {
+    return {
+      ...config,
+      algorithm: "round_robin",
+    };
+  }
+  return config;
+}
+
 export interface SubagentLoadBalancerScopeInput {
   userId?: string | null;
   serviceAccountId?: string | null;

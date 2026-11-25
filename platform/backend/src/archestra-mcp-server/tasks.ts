@@ -3,6 +3,7 @@ import {
   AGENT_TOOL_PREFIX,
   DEFAULT_APP_NAME,
   normalizeSubagentLoadBalancingConfig,
+  resolveEffectiveSubagentLoadBalancingConfig,
   resolveSubagentLoadBalancerScopeKey,
   SUBAGENT_LOAD_BALANCING_RETRIES,
   slugify,
@@ -353,8 +354,9 @@ export async function startDelegatedTask(params: {
     ? await AgentModel.findById(params.context.agent.id)
     : null;
   let poolAgent: Agent | null = callerAgent;
-  let lbConfig = normalizeSubagentLoadBalancingConfig(
-    callerAgent?.subagentLoadBalancing,
+  let lbConfig = resolveEffectiveSubagentLoadBalancingConfig(
+    normalizeSubagentLoadBalancingConfig(callerAgent?.subagentLoadBalancing),
+    callerAgent?.accessAllSubagents,
   );
   const rawAgentId = params.agentId?.trim();
   let explicitAgentId: string | undefined;
@@ -393,8 +395,11 @@ export async function startDelegatedTask(params: {
   ) {
     const explicitTargetAgent = await AgentModel.findById(explicitAgentId);
     const targetLbConfig = explicitTargetAgent
-      ? normalizeSubagentLoadBalancingConfig(
-          explicitTargetAgent.subagentLoadBalancing,
+      ? resolveEffectiveSubagentLoadBalancingConfig(
+          normalizeSubagentLoadBalancingConfig(
+            explicitTargetAgent.subagentLoadBalancing,
+          ),
+          explicitTargetAgent.accessAllSubagents,
         )
       : undefined;
     if (

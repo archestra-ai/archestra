@@ -26,6 +26,7 @@ import {
   MAX_SUGGESTED_PROMPTS,
   providerSupportsChat,
   resolveAgentCatalogId,
+  resolveEffectiveSubagentLoadBalancingConfig,
   runtimeRequestsClaudeSubscription,
   runtimeSupportsClaudeSubscription,
   SUBAGENT_LOAD_BALANCING_MAX_WEIGHT,
@@ -805,13 +806,18 @@ function SubagentsEditor({
   weights,
   onWeightChange,
 }: SubagentsEditorProps) {
+  const [showAllPills, setShowAllPills] = useState(false);
   const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
-  const visibleIds = selectedIds.slice(0, 20);
+  const showInlineWeights = weightedMode && localMode === "selected";
+  // Weighted shares depend on the full assigned runtime pool (matching backend
+  // routing), not just the first 20 pills shown by default.
+  const lookupIds =
+    showInlineWeights || showAllPills ? selectedIds : selectedIds.slice(0, 20);
   // Every pick changes the id list, and so the lookup's key. Without the
   // previous rows the assigned pills would all vanish until it answers.
   const { data: availableAgents = [], isFetching: agentsFetching } =
     useAgentOptionsByIds({
-      ids: visibleIds,
+      ids: lookupIds,
       enabled: canReadAgents,
       keepPreviousData: true,
     });
@@ -821,12 +827,14 @@ function SubagentsEditor({
       localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
     setIds(ids);
   };
-  const showInlineWeights = weightedMode && localMode === "selected";
-  const visibleTargetIds = visibleIds.filter(
+  const resolvedTargetIds = lookupIds.filter(
     (id) => id !== agentId && (agentsById.has(id) || agentsFetching),
   );
+  const visibleTargetIds = showAllPills
+    ? resolvedTargetIds
+    : resolvedTargetIds.slice(0, 20);
   const runtimeAssignedAgents = showInlineWeights
-    ? visibleTargetIds
+    ? resolvedTargetIds
         .map((id) => agentsById.get(id))
         .filter((agent): agent is AgentOption => Boolean(agent?.runtime))
     : [];
@@ -910,10 +918,21 @@ function SubagentsEditor({
       )}
 
       {selectedIds.length > 20 && (
-        <p className="text-xs text-muted-foreground">
-          Showing 20 of {selectedIds.length} selections. Search the picker to
-          change another selection.
-        </p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            {showAllPills
+              ? `Showing all ${selectedIds.length} selections.`
+              : `Showing 20 of ${selectedIds.length} selections.`}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => setShowAllPills((prev) => !prev)}
+          >
+            {showAllPills ? "Show fewer" : `Show all ${selectedIds.length}`}
+          </Button>
+        </div>
       )}
 
       {!readOnly && (
@@ -2252,9 +2271,11 @@ export function AgentForm({
             initialGrants: [],
             passthroughHeaders: agentData.passthroughHeaders ?? [],
             githubActionsAccess: agentData.githubActionsAccess ?? null,
-            subagentLoadBalancing:
+            subagentLoadBalancing: resolveEffectiveSubagentLoadBalancingConfig(
               (agentData.subagentLoadBalancing as SubagentLoadBalancingConfig | null) ??
-              null,
+                null,
+              agentData.accessAllSubagents ?? false,
+            ),
             runtime: (agentData.runtime as AgentRuntimeConfig | null) ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
@@ -3058,11 +3079,16 @@ export function AgentForm({
       persistedAgent.githubActionsAccess ?? null,
       githubActionsAccess,
     );
+  const effectiveSubagentLoadBalancing =
+    resolveEffectiveSubagentLoadBalancingConfig(
+      subagentLoadBalancing,
+      accessAllSubagents,
+    );
   const subagentLoadBalancingChanged =
     !!persistedAgent &&
     hasUnsavedChanges(
       persistedAgent.subagentLoadBalancing ?? null,
-      subagentLoadBalancing,
+      effectiveSubagentLoadBalancing,
     );
   // The API validates the key and the model against each other, so whichever
   // one moved, both go.
@@ -3350,7 +3376,7 @@ export function AgentForm({
               }),
               ...(supportsSubagents &&
                 subagentLoadBalancingChanged && {
-                  subagentLoadBalancing,
+                  subagentLoadBalancing: effectiveSubagentLoadBalancing,
                 }),
             }),
           },
@@ -3405,7 +3431,9 @@ export function AgentForm({
           ...(supportsSubagents && {
             accessAllSubagents,
             progressiveSubagentLoading,
-            ...(subagentLoadBalancing && { subagentLoadBalancing }),
+            ...(effectiveSubagentLoadBalancing && {
+              subagentLoadBalancing: effectiveSubagentLoadBalancing,
+            }),
           }),
           labels: updatedLabels,
           ...(agentType === "mcp_gateway" && {
@@ -3706,7 +3734,7 @@ export function AgentForm({
     showGitHubActionsAccess,
     githubActionsAccess,
     githubActionsAccessChanged,
-    subagentLoadBalancing,
+    effectiveSubagentLoadBalancing,
     subagentLoadBalancingChanged,
     networkPolicy,
     networkPolicyChanged,
@@ -5381,9 +5409,10 @@ export function AgentForm({
                           setAccessAllSubagents(nextAll);
                           if (nextAll) {
                             setSubagentLoadBalancing((prev) =>
-                              prev?.enabled && prev.algorithm === "weighted"
-                                ? { ...prev, algorithm: "round_robin" }
-                                : prev,
+                              resolveEffectiveSubagentLoadBalancingConfig(
+                                prev,
+                                true,
+                              ),
                             );
                           }
                         }}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   orderSubagentsByLoadBalancing,
+  resolveEffectiveSubagentLoadBalancingConfig,
   resolveSubagentLoadBalancerScopeKey,
   StoredSubagentLoadBalancingConfigSchema,
   SubagentLoadBalancingConfigSchema,
@@ -240,5 +241,34 @@ describe("orderSubagentsByLoadBalancing", () => {
       enabled: true,
       algorithm: "round_robin",
     });
+  });
+
+  it("coerces enabled weighted policies to round_robin in All-agents mode", () => {
+    const weighted = {
+      enabled: true,
+      algorithm: "weighted" as const,
+      weights: { "00000000-0000-4000-8000-00000000000a": 10 },
+    };
+    expect(resolveEffectiveSubagentLoadBalancingConfig(weighted, true)).toEqual(
+      {
+        enabled: true,
+        algorithm: "round_robin",
+        weights: weighted.weights,
+      },
+    );
+    expect(
+      resolveEffectiveSubagentLoadBalancingConfig(weighted, false),
+    ).toEqual(weighted);
+    expect(
+      resolveEffectiveSubagentLoadBalancingConfig(
+        { enabled: false, algorithm: "weighted", weights: weighted.weights },
+        true,
+      ),
+    ).toEqual({
+      enabled: false,
+      algorithm: "weighted",
+      weights: weighted.weights,
+    });
+    expect(resolveEffectiveSubagentLoadBalancingConfig(null, true)).toBeNull();
   });
 });

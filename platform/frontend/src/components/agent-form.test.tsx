@@ -56,7 +56,8 @@ global.ResizeObserver = class ResizeObserver {
 // Legacy behavior fixtures remain local; real HTTP paging is covered by the
 // remote-selector integration suite.
 vi.mock("@/lib/agent-options.query", () => ({
-  useAgentOptionsByIds: () => useDelegationTargetAgentsMock(),
+  useAgentOptionsByIds: (params?: { ids?: readonly string[] }) =>
+    useDelegationTargetAgentsMock(params),
   useAgentOptionIds: () => ({
     data: (
       useDelegationTargetAgentsMock()
@@ -221,7 +222,9 @@ const {
   ),
   saveChannelChangesMock: vi.fn(async () => true),
   useDelegationTargetAgentsMock: vi.fn(
-    (): { data: unknown[]; isFetching?: boolean } => ({
+    (_params?: {
+      ids?: readonly string[];
+    }): { data: unknown[]; isFetching?: boolean } => ({
       data: [],
     }),
   ),
@@ -2067,6 +2070,146 @@ describe("AgentForm delegation state", () => {
             "75% of runs will be delegated to this subagent.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("normalizes legacy All-agents weighted policies to round_robin on display and persists round_robin on save", async () => {
+    const user = userEvent.setup();
+    const updateAgent = vi.fn().mockResolvedValue(baseAgent);
+    const legacyWeights = {
+      "00000000-0000-4000-8000-00000000001a": 10,
+      "00000000-0000-4000-8000-00000000001b": 1,
+    };
+    const legacyWeightedAllAgents = {
+      ...baseAgent,
+      accessAllSubagents: true,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "weighted" as const,
+        weights: legacyWeights,
+      },
+    };
+    useProfileMock.mockReturnValue({
+      data: legacyWeightedAllAgents,
+      refetch: vi.fn(),
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: updateAgent,
+      isPending: false,
+    });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [] });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
+
+    render(<AgentForm agentType="agent" agent={legacyWeightedAllAgents} />);
+
+    const delegationSelect = await screen.findByRole("combobox", {
+      name: "Agent Runtime Delegation",
+    });
+    expect(delegationSelect).toHaveTextContent("Round robin");
+
+    // Edit an unrelated field and save; the normalized round_robin policy must
+    // be included in the update payload so backend routing matches the UI.
+    const nameInput = screen.getByDisplayValue(legacyWeightedAllAgents.name);
+    await user.type(nameInput, " Renamed");
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(updateAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: legacyWeightedAllAgents.id,
+        data: expect.objectContaining({
+          subagentLoadBalancing: {
+            enabled: true,
+            algorithm: "round_robin",
+            weights: legacyWeights,
+          },
+        }),
+      }),
+    );
+  });
+
+  it("calculates weighted shares over the full assigned runtime pool beyond 20 pills and allows expanding to edit hidden weights", async () => {
+    const user = userEvent.setup();
+    const runtimeAgents = Array.from({ length: 21 }, (_, index) => ({
+      ...targetAgent,
+      id: `00000000-0000-4000-8000-000000001${String(index + 1).padStart(3, "0")}`,
+      name: `Runtime Subagent ${index + 1}`,
+      runtime: {
+        image: "ghcr.io/archestra-ai/agent-claude-code:latest",
+        command: ["archestra-claude-code"],
+      },
+    }));
+    const hiddenHeavyAgent = runtimeAgents[20];
+    const weightedLargePoolAgent = {
+      ...baseAgent,
+      accessAllSubagents: false,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "weighted" as const,
+        weights: {
+          [hiddenHeavyAgent.id]: 100,
+        },
+      },
+    };
+    useProfileMock.mockReturnValue({
+      data: weightedLargePoolAgent,
+      refetch: vi.fn(),
+    });
+    useDelegationTargetAgentsMock.mockImplementation(
+      (params?: { ids?: readonly string[] }) => ({
+        data: params?.ids
+          ? runtimeAgents.filter((agent) => params.ids?.includes(agent.id))
+          : runtimeAgents,
+      }),
+    );
+    useAgentDelegationsMock.mockReturnValue({
+      data: runtimeAgents,
+      isSuccess: true,
+    });
+
+    render(<AgentForm agentType="agent" agent={weightedLargePoolAgent} />);
+
+    // First 20 have weight 1 and hidden #21 has weight 100 (total = 120 -> 1% each, not 5%).
+    const firstProgress = await screen.findByRole("progressbar", {
+      name: "Traffic share for Runtime Subagent 1",
+    });
+    expect(firstProgress).toHaveAttribute("aria-valuenow", "1");
+    expect(
+      screen.queryByRole("button", { name: /^Runtime Subagent 21/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Showing 20 of 21 selections."),
+    ).toBeInTheDocument();
+
+    // Expand all pills to inspect and edit the 21st runtime subagent's weight.
+    await user.click(screen.getByRole("button", { name: "Show all 21" }));
+    const heavyProgress = await screen.findByRole("progressbar", {
+      name: "Traffic share for Runtime Subagent 21",
+    });
+    expect(heavyProgress).toHaveAttribute("aria-valuenow", "83");
+
+    await user.click(
+      screen.getByRole("button", { name: /^Runtime Subagent 21/ }),
+    );
+    const heavyWeightInput = screen.getByLabelText(
+      "Weight for Runtime Subagent 21",
+    );
+    expect(heavyWeightInput).toHaveValue(100);
+    fireEvent.change(heavyWeightInput, { target: { value: "20" } });
+
+    // Total weight is now 20 * 1 + 20 = 40 -> #21 is 50%, #1 is 3%.
+    expect(heavyProgress).toHaveAttribute("aria-valuenow", "50");
+    expect(firstProgress).toHaveAttribute("aria-valuenow", "3");
+
+    // Collapsing back to 20 pills keeps the full-pool share accurate.
+    await user.click(screen.getByRole("button", { name: "Show fewer" }));
+    expect(
+      screen.queryByRole("button", { name: /^Runtime Subagent 21/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Traffic share for Runtime Subagent 1",
+      }),
+    ).toHaveAttribute("aria-valuenow", "3");
   });
 
   it("does not replace external assignments after their read fails", async () => {

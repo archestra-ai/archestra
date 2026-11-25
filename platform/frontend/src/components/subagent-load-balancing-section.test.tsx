@@ -163,7 +163,7 @@ describe("SubagentLoadBalancingSection", () => {
     expect(screen.queryByText("Beta")).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "Load balance Agent Runtime subagents runs or invoke directly.",
+        "Load balance Agent Runtime subagent runs or call directly.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -185,7 +185,7 @@ describe("SubagentLoadBalancingSection", () => {
 
     expect(
       screen.getByText(
-        "Load balance Agent Runtime agents runs or invoke directly.",
+        "Load balance Agent Runtime agent runs or call directly.",
       ),
     ).toBeInTheDocument();
     expect(

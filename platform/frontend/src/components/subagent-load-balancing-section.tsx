@@ -81,8 +81,8 @@ export function SubagentLoadBalancingSection({
   const noun = isGateway ? "agent" : "subagent";
   const nouns = isGateway ? "agents" : "subagents";
   const sectionDescription = isGateway
-    ? "Load balance Agent Runtime agents runs or invoke directly."
-    : "Load balance Agent Runtime subagents runs or invoke directly.";
+    ? "Load balance Agent Runtime agent runs or call directly."
+    : "Load balance Agent Runtime subagent runs or call directly.";
   const modeOptions = getModeOptions({ noun, nouns });
 
   const isEnabled = value?.enabled === true;

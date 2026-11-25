@@ -121,8 +121,8 @@ export function SubagentLoadBalancingSection({
     });
   };
 
-  // In Manual mode with assigned agents, weights are edited in the Assigned
-  // table above; only show a hint when nothing is assigned yet.
+  // In Manual mode with assigned agents, weights are edited in each runtime
+  // pill's popover above; only show a hint when nothing is assigned yet.
   const weightedNotice =
     !isAllSubagentsMode &&
     isEnabled &&

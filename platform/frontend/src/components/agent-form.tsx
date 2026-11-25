@@ -784,7 +784,7 @@ interface SubagentsEditorProps {
    * agents on a gateway, whose clients call them.
    */
   noun?: "subagent" | "agent";
-  /** Show inline weight inputs on assigned runtime cards when Weighted delegation is active. */
+  /** Show top share bars on assigned runtime pills and weight controls in their popovers when Weighted round robin is active. */
   weightedMode?: boolean;
   weights?: Record<string, number>;
   onWeightChange?: (agentId: string, rawValue: string) => void;

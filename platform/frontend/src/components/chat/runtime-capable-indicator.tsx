@@ -281,12 +281,12 @@ export function AgentRuntimeBadge({
 }
 
 /**
- * Compact, non-interactive runtime indicator for pills, cards, and dense rows
- * (such as assigned subagent cards and load-balancing weight rows).
+ * Compact runtime indicator for assigned subagent pills and popovers.
  * Renders whenever an agent has a saved `runtime` object — even when the
  * cluster's Agent Runtime feature is currently off — so people can tell at a
  * glance which assigned agents run in an Agent Runtime and which runtime they
- * use. Safe inside interactive triggers like `<Button>`.
+ * use. `chip` and `icon` are non-interactive and safe inside `<Button>`
+ * triggers; `icon-link` renders the hoverable/clickable header logo.
  */
 export function AgentRuntimeChip({
   runtime,

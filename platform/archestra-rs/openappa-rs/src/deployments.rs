@@ -242,11 +242,8 @@ impl Deployments {
             if head.key.as_str() != &*key {
                 return Ok(None);
             }
-            let pin = move || pin_existing(&runtime, &name, &prepared, &head);
-            match marks {
-                Some(marks) => under_marks(&store, &marks, pin)?.transpose(),
-                None => pin().map(Some),
-            }
+            let published = pin_existing(&runtime, &name, &prepared, &head)?;
+            Ok(fresh(&store, marks.as_deref())?.then_some(published))
         })
         .await
         .map_err(panicked)??;
@@ -278,7 +275,7 @@ impl Deployments {
         agent_yell: bool,
     ) -> Result<Pinned, DeploymentError> {
         if let Some(pinned) = self.serving(line, policy) {
-            return Ok(pinned);
+            return current(store, line, policy, pinned).await;
         }
         let gate = self
             .preparing
@@ -289,7 +286,7 @@ impl Deployments {
             .clone();
         let _preparing = gate.lock().await;
         if let Some(pinned) = self.serving(line, policy) {
-            return Ok(pinned);
+            return current(store, line, policy, pinned).await;
         }
         if let Some(held) = self.held(line)
             && let Some(composition) = &policy.composition
@@ -386,37 +383,27 @@ fn prepare(
     let prepared = runtime.prepare_deployment(config).map_err(open_fault)?;
     let name = line.name();
     let head = store.head(&name).map_err(storage)?;
-    // A line with approvers is also composed from the enforced marks, so it is served
-    // under the settings row's lock, which a settings write waits on, and only while the
-    // stored marks are the ones it was composed from.
-    let marked = marked(line, policy);
+    // A line with approvers is also composed from the enforced marks: one composed from
+    // marks a settings save has since replaced is neither published nor served.
+    let marks = marked(line, policy).then_some(&*policy.guardrails.enforced_marks);
     let published = match head {
         // The head already serves this file: pinning it advances nothing.
-        Some(head) if head.key.as_str() == key => {
-            let (runtime, name, prepared) = (runtime.clone(), name.clone(), prepared.clone());
-            let pin = move || pin_existing(&runtime, &name, &prepared, &head);
-            match marked {
-                true => under_marks(store, &policy.guardrails.enforced_marks, pin)?,
-                false => Some(pin()),
-            }
-            .ok_or(DeploymentError::Superseded)??
-        }
+        Some(head) if head.key.as_str() == key => pin_existing(runtime, &name, &prepared, &head)?,
         head => {
             if let Some(composition) = &policy.composition
                 && !stored_composition(store, &line.organization_id, composition)?
             {
                 return Err(DeploymentError::Superseded);
             }
-            let expected = head.map(|head| head.revision);
-            let (runtime, name, prepared) = (runtime.clone(), name.clone(), prepared.clone());
-            let publish = move || publish(&runtime, &name, &prepared, expected);
-            match marked {
-                true => under_marks(store, &policy.guardrails.enforced_marks, publish)?,
-                false => Some(publish()),
+            if !fresh(store, marks)? {
+                return Err(DeploymentError::Superseded);
             }
-            .ok_or(DeploymentError::Superseded)??
+            publish(runtime, &name, &prepared, head.map(|head| head.revision))?
         }
     };
+    if !fresh(store, marks)? {
+        return Err(DeploymentError::Superseded);
+    }
     let pinned = Pinned {
         content: policy.content.as_str().into(),
         enforced_marks: policy.guardrails.enforced_marks.clone(),
@@ -505,33 +492,44 @@ fn marked(line: &Line, policy: &HostedPolicy) -> bool {
         && matches!(line.variant, Variant::Observe | Variant::EnforceApproved)
 }
 
-/// Runs `serve` holding a share lock on the Guardrails settings row, and only while its
-/// enforced marks are `enforced_marks`: a settings write then lands before or after the
-/// served deployment, never between the check and it. None when the marks moved.
-fn under_marks<T: Send + 'static>(
-    store: &LogStore,
-    enforced_marks: &BTreeSet<String>,
-    serve: impl FnOnce() -> T + Send + 'static,
-) -> Result<Option<T>, Fault> {
-    let marks = enforced_marks.clone();
-    Ok(crate::Sql(store).with_client(move |client| {
-        let mut settings = client.transaction()?;
-        let stored: BTreeSet<String> = settings
+/// Whether the Guardrails settings still hold `enforced_marks`, when a line is composed
+/// from them. A dispatch that read the settings before a save then fails as moved, and
+/// the host's retry reads them again. Each check is one short read: no connection or lock
+/// is held while a deployment is pinned or published.
+fn fresh(store: &LogStore, enforced_marks: Option<&BTreeSet<String>>) -> Result<bool, Fault> {
+    let Some(marks) = enforced_marks.cloned() else {
+        return Ok(true);
+    };
+    let stored = crate::Sql(store).with_client(move |client| {
+        Ok(client
             .query_opt(
-                "SELECT enforced_marks FROM guardrails_deployment LIMIT 1 FOR SHARE",
+                "SELECT enforced_marks FROM guardrails_deployment LIMIT 1",
                 &[],
             )?
             .and_then(|row| row.get::<_, Option<Vec<String>>>(0))
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
-        if stored != marks {
-            return Ok(None);
-        }
-        let served = serve();
-        settings.commit()?;
-        Ok(Some(served))
-    })?)
+            .unwrap_or_default())
+    })?;
+    Ok(stored.into_iter().collect::<BTreeSet<_>>() == marks)
+}
+
+/// `pinned` when the settings still hold the marks its line was composed from.
+async fn current(
+    store: &Arc<LogStore>,
+    line: &Line,
+    policy: &HostedPolicy,
+    pinned: Pinned,
+) -> Result<Pinned, DeploymentError> {
+    if !marked(line, policy) {
+        return Ok(pinned);
+    }
+    let (store, marks) = (store.clone(), pinned.enforced_marks.clone());
+    match tokio::task::spawn_blocking(move || fresh(&store, Some(&*marks)))
+        .await
+        .map_err(panicked)??
+    {
+        true => Ok(pinned),
+        false => Err(DeploymentError::Superseded),
+    }
 }
 
 /// The key the event log stores a policy file under: the SHA-256 of its exact bytes,

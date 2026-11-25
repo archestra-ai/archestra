@@ -306,12 +306,12 @@ for (const hasHead of [true, false]) {
  * Runs `dispatches` in a process of its own, as another backend replica over the
  * same database would, and returns each decision or error message.
  */
-function inAnotherProcess(dispatches) {
+function inAnotherProcess(dispatches, connections = 2) {
   const child = spawnSync(process.execPath, ['-e', `
     const native = require('./index.cjs');
     (async () => {
       const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-      await native.initializeOpenappa(input.url, 2);
+      await native.initializeOpenappa(input.url, input.connections);
       const answers = [];
       for (const { session, event, policy } of input.dispatches) {
         try {
@@ -322,7 +322,7 @@ function inAnotherProcess(dispatches) {
       }
       process.stdout.write(JSON.stringify(answers));
     })().catch((error) => { console.error(error.message); process.exitCode = 1; });
-  `], { cwd: __dirname, input: JSON.stringify({ url: databaseUrl, dispatches }), encoding: 'utf8', timeout: 30000 });
+  `], { cwd: __dirname, input: JSON.stringify({ url: databaseUrl, dispatches, connections }), encoding: 'utf8', timeout: 30000 });
   assert.equal(child.status, 0, child.stderr);
   return JSON.parse(child.stdout);
 }
@@ -369,6 +369,15 @@ test('a cold process does not pin an approver line composed from enforced marks 
       { session: scope(), event: start, policy: policy(['review']) },
     ]),
     [POLICY_MOVED.message, 'ack'],
+  );
+  // A warm line answers the same way once the settings move on.
+  await assert.rejects(() => native.dispatchHook(JSON.stringify({ ...scope(), ...start }), policy([])), POLICY_MOVED);
+  assert.equal(JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope(), ...start }), policy(['review']))).decision, 'ack');
+  // A process with a single pooled connection still publishes an approver line.
+  await setMarks(['review', 'pii']);
+  assert.deepEqual(
+    inAnotherProcess([{ session: scope(), event: start, policy: policy(['pii', 'review']) }], 1),
+    ['ack'],
   );
 });
 

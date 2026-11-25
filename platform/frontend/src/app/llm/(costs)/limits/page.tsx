@@ -23,6 +23,7 @@ import {
   Trash2,
   User,
   Users,
+  UsersRound,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -85,10 +86,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
-import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
+import {
+  type DefaultUserLimit,
+  useCreateDefaultUserLimit,
+  useDefaultUserLimits,
+  useDeleteDefaultUserLimit,
+  useUpdateDefaultUserLimit,
+  useUserLimitUsageTop,
+} from "@/lib/default-user-limit.query";
 import {
   useLimitLabelKeys,
   useLimitLabelValues,
@@ -118,6 +127,9 @@ import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitCleanupInterval = BudgetCleanupInterval | "minute";
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
+/** What "Apply to" offers: every limit target, plus the default user limit. */
+type FormEntityType = LimitEntityType | typeof DEFAULT_USER_LIMIT_SCOPE;
+type TableRow = LimitTableRow<LimitData>;
 type UsageStatus = "safe" | "warning" | "danger";
 type UsageSummary = {
   percentage: number;
@@ -134,7 +146,7 @@ const ORG_SET_LIMIT_HINT =
 type LimitFormState = {
   behavior: "hard" | "soft";
   limitType: "token_cost" | "requests" | "tokens";
-  entityType: LimitEntityType;
+  entityType: FormEntityType;
   entityId: string;
   limitValue: string;
   cleanupInterval: LimitCleanupInterval;
@@ -163,7 +175,7 @@ const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 100;
 const MAX_VISIBLE_MODEL_BADGES = 3;
 
 const ENTITY_TYPE_ITEMS: Array<{
-  value: LimitEntityType;
+  value: FormEntityType;
   label: string;
   description: string;
   icon: React.ReactNode;
@@ -198,6 +210,12 @@ const ENTITY_TYPE_ITEMS: Array<{
     label: "User",
     description: "Caps one user's spend across the whole organization.",
     icon: <User className="h-4 w-4 shrink-0 text-muted-foreground" />,
+  },
+  {
+    value: DEFAULT_USER_LIMIT_SCOPE,
+    label: "Default user limit",
+    description: "Caps each user's spend, in all environments or in one.",
+    icon: <UsersRound className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
   {
     value: "virtual_key",
@@ -257,10 +275,32 @@ function getLimitValuePlaceholder(
 }
 
 import {
+  ALL_ENVIRONMENTS_SCOPE,
+  availableDefaultLimitScopes,
+  DEFAULT_USER_LIMIT_SCOPE,
+  defaultLimitDeleteDescription,
+  defaultLimitEnvironmentId,
+  defaultLimitNotice,
+  defaultLimitScope,
+  defaultLimitScopeName,
+  type LimitTableRow,
+  matchesDefaultLimitFilters,
+  mergeLimitRows,
+} from "./_parts/default-limit-rows.utils";
+import {
   type LimitFilterModel,
   LimitModelFilter,
 } from "./_parts/limit-model-filter";
-import { UserLimitsOverview } from "./_parts/user-limits-overview";
+import {
+  UserLimitsOverview,
+  type UserLimitsOverviewHandle,
+} from "./_parts/user-limits-overview";
+import {
+  AFFECTED_STACK_SIZE,
+  formatLimit,
+  LINK_CLASS,
+  pluralUsers,
+} from "./_parts/user-limits-shared";
 
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
@@ -296,9 +336,13 @@ export default function LimitsPage() {
       .filter((limit) => limit.entityType === "user")
       .map((limit) => limit.entityId),
   });
-  const { data: defaultUserLimits = [] } = useDefaultUserLimits(
+  const { data: defaultUserLimits = [], isLoading: isDefaultsLoading } =
+    useDefaultUserLimits(access.globalRead);
+  const { data: userUsage } = useUserLimitUsageTop(
+    AFFECTED_STACK_SIZE,
     access.globalRead,
   );
+  const userUsageSummary = userUsage?.summary;
   const { data: virtualKeysData } = useAllVirtualApiKeys({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
     enabled: access.globalRead,
@@ -316,14 +360,22 @@ export default function LimitsPage() {
       .map((limit) => limit.entityId),
     filters: { agentType: "agent" },
   });
-  const { data: environmentsData } = useEnvironments(access.globalRead);
+  const { data: environmentsData, isLoading: isEnvironmentsLoading } =
+    useEnvironments(access.globalRead);
   const environments = environmentsData?.environments ?? [];
+  // Default user limits are named after their environment and offered per
+  // environment, so both lists must be in before either is shown.
+  const isDefaultLimitsLoading = isDefaultsLoading || isEnvironmentsLoading;
   const { data: modelsWithApiKeys = [] } = useLlmModelOptions();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
   const deleteLimit = useDeleteLimit();
   const resetLimitUsage = useResetLimitUsage();
   const bulkDeleteLimits = useBulkDeleteLimits();
+  const createDefaultLimit = useCreateDefaultUserLimit();
+  const updateDefaultLimit = useUpdateDefaultUserLimit();
+  const deleteDefaultLimit = useDeleteDefaultUserLimit();
+  const overviewRef = useRef<UserLimitsOverviewHandle>(null);
 
   const {
     searchParams,
@@ -353,6 +405,13 @@ export default function LimitsPage() {
   const selectedLabels = useSelectedLabels();
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
   const [limitToReset, setLimitToReset] = useState<LimitData | null>(null);
+  // A default user limit is edited in the same dialog, but has no `edit` URL
+  // param: at most one of this and `editingLimit` is set.
+  const [editingDefault, setEditingDefault] = useState<DefaultUserLimit | null>(
+    null,
+  );
+  const [defaultToDelete, setDefaultToDelete] =
+    useState<DefaultUserLimit | null>(null);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [formState, setFormState] =
@@ -415,22 +474,24 @@ export default function LimitsPage() {
   );
   const limitCountByModel = useMemo(() => {
     // The filter keeps all-models limits for every model, so count them too.
-    const allModelsCount = llmLimits.filter(
+    const countedLimits = [...llmLimits, ...defaultUserLimits];
+    const allModelsCount = countedLimits.filter(
       (limit) => getLimitModels(limit).length === 0,
     ).length;
     const counts = new Map<string, number>(
       filterModels.map((model) => [model.modelId, allModelsCount]),
     );
-    for (const limit of llmLimits) {
+    for (const limit of countedLimits) {
       for (const model of getLimitModels(limit)) {
         counts.set(model, (counts.get(model) ?? allModelsCount) + 1);
       }
     }
     return counts;
-  }, [llmLimits, filterModels]);
+  }, [llmLimits, defaultUserLimits, filterModels]);
 
   const handleCreateOpen = useCallback(() => {
     closeEditDialog();
+    setEditingDefault(null);
     setFormState({
       ...DEFAULT_FORM_STATE,
       entityType: access.globalCreate ? "organization" : "team",
@@ -493,8 +554,46 @@ export default function LimitsPage() {
       return;
     }
     seededEditIdRef.current = editingLimit.id;
+    // A deep link or a row click opened a limit: it replaces a default being
+    // edited in the same dialog.
+    setEditingDefault(null);
     setFormState(buildEditFormState(editingLimit));
   }, [editingLimit, buildEditFormState]);
+
+  const openDefaultEditDialog = useCallback(
+    (limit: DefaultUserLimit) => {
+      closeEditDialog();
+      setIsCreateDialogOpen(false);
+      setEditingDefault(limit);
+      const models = limit.model ?? [];
+      setFormState({
+        ...DEFAULT_FORM_STATE,
+        entityType: DEFAULT_USER_LIMIT_SCOPE,
+        entityId: defaultLimitScope(limit),
+        limitValue: String(limit.limitValue),
+        cleanupInterval: limit.cleanupInterval,
+        hasExplicitInterval: true,
+        models,
+        isAllModels: models.length === 0,
+      });
+    },
+    [closeEditDialog],
+  );
+
+  const organizationDefault = defaultUserLimits.find(
+    (limit) => limit.environmentId === null,
+  );
+  const organizationDefaultAmount = organizationDefault
+    ? formatLimit(organizationDefault.limitValue)
+    : undefined;
+  const defaultLimitScopes = useMemo(
+    () =>
+      availableDefaultLimitScopes({
+        defaults: defaultUserLimits,
+        environments,
+      }),
+    [defaultUserLimits, environments],
+  );
 
   const getEntityLabel = useCallback(
     (limit: Pick<LimitData, "entityType" | "entityId">) => {
@@ -630,6 +729,36 @@ export default function LimitsPage() {
     selectedLabels,
   ]);
 
+  // Default user limits pass through the same filters and share the table.
+  // Bulk selection below stays on `filteredLimits`: defaults are never part
+  // of a bulk action.
+  const tableRows = useMemo<TableRow[]>(
+    () =>
+      mergeLimitRows({
+        limits: filteredLimits,
+        defaults: defaultUserLimits.filter((limit) =>
+          matchesDefaultLimitFilters(limit, {
+            status: statusFilter,
+            units: unitsFilter,
+            appliedTo: appliedToFilter,
+            entityId: entityIdFilter,
+            model: modelFilter,
+            hasLabelFilter: Boolean(selectedLabels),
+          }),
+        ),
+      }),
+    [
+      filteredLimits,
+      defaultUserLimits,
+      statusFilter,
+      unitsFilter,
+      appliedToFilter,
+      entityIdFilter,
+      modelFilter,
+      selectedLabels,
+    ],
+  );
+
   const {
     rowSelection,
     setRowSelection,
@@ -652,18 +781,24 @@ export default function LimitsPage() {
     matchDescription: "match the current filters",
   });
 
-  const columns = useMemo<ColumnDef<LimitData>[]>(
+  const columns = useMemo<ColumnDef<TableRow>[]>(
     () => [
-      createSelectColumn<LimitData>({
-        rowLabel: (limit) =>
-          `Select ${getEntityLabel(limit)} ${limitMetricLabel(limit)} rule`,
+      createSelectColumn<TableRow>({
+        rowLabel: (row) =>
+          row.kind === "default"
+            ? `Select ${defaultLimitScopeName(row.limit, environments)} default user limit`
+            : `Select ${getEntityLabel(row.limit)} ${limitMetricLabel(row.limit)} rule`,
         allLabel: "Select all limits on this page",
-        canSelect: (limit) =>
-          canBulkDeleteLimit(limit) && !access.isLocked(limit),
-        disabledReason: (limit) =>
-          access.isLocked(limit)
-            ? ORG_SET_LIMIT_HINT
-            : "User limits must be deleted individually because they can span organizations",
+        canSelect: (row) =>
+          row.kind === "limit" &&
+          canBulkDeleteLimit(row.limit) &&
+          !access.isLocked(row.limit),
+        disabledReason: (row) =>
+          row.kind === "default"
+            ? "Default user limits are deleted one at a time"
+            : access.isLocked(row.limit)
+              ? ORG_SET_LIMIT_HINT
+              : "User limits must be deleted individually because they can span organizations",
       }),
       {
         id: "entityId",
@@ -671,7 +806,14 @@ export default function LimitsPage() {
         size: 220,
         minSize: 160,
         cell: ({ row }) => {
-          const limit = row.original;
+          if (row.original.kind === "default") {
+            return (
+              <DefaultLimitAppliedTo
+                name={defaultLimitScopeName(row.original.limit, environments)}
+              />
+            );
+          }
+          const limit = row.original.limit;
           return (
             <div className="flex min-w-0 items-center gap-2">
               <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted">
@@ -713,7 +855,7 @@ export default function LimitsPage() {
         minSize: 160,
         cell: ({ row }) => (
           <LimitModels
-            models={getLimitModels(row.original)}
+            models={getLimitModels(row.original.limit)}
             modelByModelId={modelByModelId}
           />
         ),
@@ -723,26 +865,55 @@ export default function LimitsPage() {
         header: "Kind",
         size: 120,
         minSize: 110,
-        cell: ({ row }) => (
-          <span className="flex items-center gap-2">
-            <LimitKindLabel limitType={row.original.limitType} />
-            {row.original.behavior === "soft" && (
-              <Badge variant="secondary">Soft</Badge>
-            )}
-          </span>
-        ),
+        cell: ({ row }) =>
+          row.original.kind === "default" ? (
+            <LimitKindLabel limitType="token_cost" />
+          ) : (
+            <span className="flex items-center gap-2">
+              <LimitKindLabel limitType={row.original.limit.limitType} />
+              {row.original.limit.behavior === "soft" && (
+                <Badge variant="secondary">Soft</Badge>
+              )}
+            </span>
+          ),
       },
       {
         id: "usage",
         header: "Usage",
         size: 320,
         minSize: 240,
-        cell: ({ row }) => (
-          <LimitUsage
-            limit={row.original}
-            usage={getUsageStatus(row.original)}
-          />
-        ),
+        cell: ({ row }) => {
+          if (row.original.kind === "default") {
+            const { environmentId } = row.original.limit;
+            return (
+              <DefaultLimitUsage
+                limit={row.original.limit}
+                // The organization default counts who it applies to; an
+                // environment counts who spent there, and opens that list.
+                users={
+                  environmentId === null
+                    ? userUsageSummary?.organizationDefault
+                    : userUsageSummary
+                      ? (userUsageSummary.environments.find(
+                          (entry) => entry.environmentId === environmentId,
+                        )?.users ?? 0)
+                      : undefined
+                }
+                onViewUsers={
+                  environmentId === null
+                    ? undefined
+                    : () => overviewRef.current?.openRoster({ environmentId })
+                }
+              />
+            );
+          }
+          return (
+            <LimitUsage
+              limit={row.original.limit}
+              usage={getUsageStatus(row.original.limit)}
+            />
+          );
+        },
       },
       {
         id: "actions",
@@ -750,36 +921,61 @@ export default function LimitsPage() {
         size: 130,
         minSize: 110,
         cell: ({ row }) => {
-          const locked = access.isLocked(row.original);
+          if (row.original.kind === "default") {
+            const defaultLimit = row.original.limit;
+            return (
+              <TableRowActions
+                size="sm"
+                itemName={`${defaultLimitScopeName(defaultLimit, environments)} default user limit`}
+                actions={[
+                  {
+                    icon: <Edit className="h-4 w-4" />,
+                    label: "Edit limit",
+                    permissions: { llmLimit: ["update"] },
+                    onClick: () => openDefaultEditDialog(defaultLimit),
+                  },
+                  {
+                    icon: <Trash2 className="h-4 w-4" />,
+                    label: "Delete limit",
+                    variant: "destructive",
+                    permissions: { llmLimit: ["delete"] },
+                    onClick: () => setDefaultToDelete(defaultLimit),
+                  },
+                ]}
+              />
+            );
+          }
+          const limit = row.original.limit;
+          const locked = access.isLocked(limit);
           const lockedState = locked
             ? { disabled: true, disabledTooltip: ORG_SET_LIMIT_HINT }
             : {};
           return (
             <TableRowActions
               size="sm"
-              itemName={`${getEntityLabel(row.original)} ${limitMetricLabel(row.original)}`}
+              itemName={`${getEntityLabel(limit)} ${limitMetricLabel(limit)}`}
               actions={[
                 {
                   icon: <Edit className="h-4 w-4" />,
                   label: "Edit limit",
                   permissions:
-                    locked || access.allows("update", row.original)
+                    locked || access.allows("update", limit)
                       ? {}
                       : { llmLimit: ["update"] },
                   ...lockedState,
-                  onClick: () => openEditDialog(row.original),
+                  onClick: () => openEditDialog(limit),
                 },
-                ...(isResettableLimit(row.original)
+                ...(isResettableLimit(limit)
                   ? [
                       {
                         icon: <RotateCcw className="h-4 w-4" />,
                         label: "Reset usage",
                         permissions:
-                          locked || access.allows("update", row.original)
+                          locked || access.allows("update", limit)
                             ? {}
                             : { llmLimit: ["update"] },
                         ...lockedState,
-                        onClick: () => setLimitToReset(row.original),
+                        onClick: () => setLimitToReset(limit),
                       },
                     ]
                   : []),
@@ -788,11 +984,11 @@ export default function LimitsPage() {
                   label: "Delete limit",
                   variant: "destructive",
                   permissions:
-                    locked || access.allows("delete", row.original)
+                    locked || access.allows("delete", limit)
                       ? {}
                       : { llmLimit: ["delete"] },
                   ...lockedState,
-                  onClick: () => setLimitToDelete(row.original),
+                  onClick: () => setLimitToDelete(limit),
                 },
               ]}
             />
@@ -807,6 +1003,9 @@ export default function LimitsPage() {
       getUsageStatus,
       modelByModelId,
       openEditDialog,
+      openDefaultEditDialog,
+      environments,
+      userUsageSummary,
       access,
     ],
   );
@@ -826,8 +1025,11 @@ export default function LimitsPage() {
       const key = limit.entityType;
       counts[key] = (counts[key] ?? 0) + 1;
     }
+    if (defaultUserLimits.length > 0) {
+      counts[DEFAULT_USER_LIMIT_SCOPE] = defaultUserLimits.length;
+    }
     return counts;
-  }, [llmLimits]);
+  }, [llmLimits, defaultUserLimits]);
 
   const hasActiveFilters =
     statusFilter !== "all" ||
@@ -854,8 +1056,27 @@ export default function LimitsPage() {
     formState.entityType === "user" &&
     defaultUserLimits.length > 0;
 
+  const isDefaultForm = formState.entityType === DEFAULT_USER_LIMIT_SCOPE;
+  const isEditing = Boolean(editingLimit || editingDefault);
+  const isSaving =
+    createLimit.isPending ||
+    updateLimit.isPending ||
+    createDefaultLimit.isPending ||
+    updateDefaultLimit.isPending;
+  // Editing shows the one scope the default has; creating offers what is free.
+  const defaultScopeItems = editingDefault
+    ? [
+        {
+          value: defaultLimitScope(editingDefault),
+          label: defaultLimitScopeName(editingDefault, environments),
+        },
+      ]
+    : defaultLimitScopes;
+
   function closeDialog() {
-    if (editingLimit) {
+    if (editingDefault) {
+      setEditingDefault(null);
+    } else if (editingLimit) {
       closeEditDialog();
     } else {
       setIsCreateDialogOpen(false);
@@ -863,7 +1084,28 @@ export default function LimitsPage() {
   }
 
   async function handleSubmit() {
-    if (!canSubmit || createLimit.isPending || updateLimit.isPending) return;
+    if (!canSubmit || isSaving) return;
+    if (formState.entityType === DEFAULT_USER_LIMIT_SCOPE) {
+      // `canSubmit` rules the per-minute interval out; this narrows the type.
+      if (formState.cleanupInterval === "minute") return;
+      const defaultBody = {
+        limitValue: Number(formState.limitValue),
+        cleanupInterval: formState.cleanupInterval,
+        model: formState.isAllModels ? null : formState.models,
+      };
+      // The hooks resolve to null on a failed request: keep the dialog open.
+      const saved = editingDefault
+        ? await updateDefaultLimit.mutateAsync({
+            id: editingDefault.id,
+            ...defaultBody,
+          })
+        : await createDefaultLimit.mutateAsync({
+            ...defaultBody,
+            environmentId: defaultLimitEnvironmentId(formState.entityId),
+          });
+      if (saved) closeDialog();
+      return;
+    }
     const finalLabels =
       labelsRef.current?.saveUnsavedLabel() ?? formState.labels;
     const body = {
@@ -904,6 +1146,15 @@ export default function LimitsPage() {
     setLimitToDelete(null);
   }
 
+  async function handleDefaultDelete() {
+    if (!defaultToDelete) return;
+    // Resolves to null on a failed request: keep the dialog open to retry.
+    const deleted = await deleteDefaultLimit.mutateAsync({
+      id: defaultToDelete.id,
+    });
+    if (deleted) setDefaultToDelete(null);
+  }
+
   function handleReset() {
     if (!limitToReset) return;
     // A failed reset keeps the dialog open so it can be retried.
@@ -924,7 +1175,13 @@ export default function LimitsPage() {
       formState.cleanupInterval !== "minute") ||
       ["organization", "team", "virtual_key"].includes(formState.entityType)) &&
     (formState.isAllModels || formState.models.length > 0) &&
-    (formState.entityType === "organization" || formState.entityId.length > 0);
+    (isDefaultForm
+      ? // The scope must still be free: another admin may have taken it, or
+        // its environment may be gone, since the dialog opened.
+        !isDefaultLimitsLoading &&
+        defaultScopeItems.some((scope) => scope.value === formState.entityId)
+      : formState.entityType === "organization" ||
+        formState.entityId.length > 0);
 
   // Gate the page on the limits list itself. The entity selectors (teams,
   // members, virtual keys, agents, environments, models) degrade locally if
@@ -943,6 +1200,7 @@ export default function LimitsPage() {
   return (
     <div className="-mt-3">
       <UserLimitsOverview
+        ref={overviewRef}
         enabled={access.globalRead}
         limitsTable={
           <BulkActionsScope>
@@ -1143,14 +1401,14 @@ export default function LimitsPage() {
             </BulkActions>
             <DataTable
               columns={columns}
-              data={filteredLimits}
+              data={tableRows}
               pagination={{
                 pageIndex: Number.isFinite(pageIndex) ? pageIndex : 0,
                 pageSize: Number.isFinite(pageSize) ? pageSize : 10,
-                total: filteredLimits.length,
+                total: tableRows.length,
               }}
               onPaginationChange={setPagination}
-              getRowId={(limit) => limit.id}
+              getRowId={(row) => row.id}
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}
               onPageRowIdsChange={onPageRowIdsChange}
@@ -1160,19 +1418,27 @@ export default function LimitsPage() {
               hasActiveFilters={hasActiveFilters}
               filteredEmptyMessage="No limits match your filters"
               onClearFilters={clearFilters}
-              isLoading={(isPending || isFetching) && limits.length === 0}
+              // Default user limits are rows too: wait for them, or an
+              // organization with only defaults flashes the empty state. Once
+              // any row is in, a background refetch leaves the table alone.
+              isLoading={
+                ((isPending || isFetching) &&
+                  limits.length === 0 &&
+                  defaultUserLimits.length === 0) ||
+                isDefaultLimitsLoading
+              }
             />
           </BulkActionsScope>
         }
       />
 
       <FormDialog
-        open={isCreateDialogOpen || !!editingLimit}
+        open={isCreateDialogOpen || isEditing}
         onOpenChange={(open) => !open && closeDialog()}
-        title={editingLimit ? "Edit limit" : "Create limit"}
-        initialFocusRef={editingLimit ? limitValueRef : undefined}
+        title={isEditing ? "Edit limit" : "Create limit"}
+        initialFocusRef={isEditing ? limitValueRef : undefined}
         description={
-          editingLimit
+          isEditing
             ? "Adjust the amount, models or interval."
             : "Choose who this limit applies to and how much they can use."
         }
@@ -1207,10 +1473,26 @@ export default function LimitsPage() {
               </InlineNotice>
             )}
 
+            {/* Nothing left to pick means nothing to explain. */}
+            {isDefaultForm && defaultScopeItems.length > 0 && (
+              <InlineNotice variant="info">
+                <Info aria-hidden="true" />
+                <InlineNoticeText>
+                  {defaultLimitNotice({
+                    scope: formState.entityId,
+                    environmentName: environments.find(
+                      (environment) => environment.id === formState.entityId,
+                    )?.name,
+                    organizationDefaultAmount,
+                  })}
+                </InlineNoticeText>
+              </InlineNotice>
+            )}
+
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Apply to</Label>
-                {editingLimit && (
+                {isEditing && (
                   <FieldDescription>
                     Create a new limit to change who it applies to.
                   </FieldDescription>
@@ -1219,23 +1501,46 @@ export default function LimitsPage() {
                   <SearchableSelect
                     value={formState.entityType}
                     onValueChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        entityType: value as LimitEntityType,
-                        entityId: "",
-                      }))
+                      setFormState((current) => {
+                        const entityType = value as FormEntityType;
+                        if (entityType !== DEFAULT_USER_LIMIT_SCOPE) {
+                          return { ...current, entityType, entityId: "" };
+                        }
+                        // Start on "All environments" while it is free, and
+                        // on the organization default's interval unless the
+                        // person already picked one.
+                        return {
+                          ...current,
+                          entityType,
+                          entityId:
+                            defaultLimitScopes[0]?.value ===
+                            ALL_ENVIRONMENTS_SCOPE
+                              ? ALL_ENVIRONMENTS_SCOPE
+                              : "",
+                          cleanupInterval:
+                            organizationDefault && !current.hasExplicitInterval
+                              ? organizationDefault.cleanupInterval
+                              : current.cleanupInterval,
+                        };
+                      })
                     }
                     placeholder="Select scope"
                     ariaLabel="Limit scope"
-                    disabled={Boolean(editingLimit)}
+                    disabled={isEditing}
                     items={ENTITY_TYPE_ITEMS.filter(
                       (item) =>
                         item.value === formState.entityType ||
-                        (formState.limitType === "token_cost" &&
-                          formState.cleanupInterval !== "minute") ||
-                        ["organization", "team", "virtual_key"].includes(
-                          item.value,
-                        ),
+                        // Which defaults exist is only known with
+                        // organization-wide read access.
+                        (item.value === DEFAULT_USER_LIMIT_SCOPE
+                          ? access.globalRead &&
+                            formState.limitType === "token_cost" &&
+                            formState.cleanupInterval !== "minute"
+                          : (formState.limitType === "token_cost" &&
+                              formState.cleanupInterval !== "minute") ||
+                            ["organization", "team", "virtual_key"].includes(
+                              item.value,
+                            )),
                     ).map((item) => ({
                       value: item.value,
                       label: item.label,
@@ -1266,6 +1571,27 @@ export default function LimitsPage() {
                     className="w-full sm:flex-1"
                     showSearchIcon={false}
                   />
+
+                  {isDefaultForm && (
+                    <SearchableSelect
+                      value={formState.entityId}
+                      onValueChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          entityId: value,
+                        }))
+                      }
+                      placeholder="Select environment"
+                      ariaLabel="Environment"
+                      items={defaultScopeItems}
+                      className="w-full sm:flex-1"
+                      disabled={
+                        isEditing ||
+                        isDefaultLimitsLoading ||
+                        defaultScopeItems.length === 0
+                      }
+                    />
+                  )}
 
                   {formState.entityType === "team" && (
                     <SearchableSelect
@@ -1378,6 +1704,15 @@ export default function LimitsPage() {
                     />
                   )}
                 </div>
+                {isDefaultForm &&
+                  !isEditing &&
+                  !isDefaultLimitsLoading &&
+                  defaultScopeItems.length === 0 && (
+                    <FieldDescription>
+                      Every default user limit is already set. Edit one from the
+                      table.
+                    </FieldDescription>
+                  )}
               </div>
 
               <div className="space-y-2">
@@ -1421,7 +1756,8 @@ export default function LimitsPage() {
                   </Label>
                   <Select
                     value={formState.limitType}
-                    disabled={Boolean(editingLimit)}
+                    // A default user limit is always a spend limit.
+                    disabled={isEditing || isDefaultForm}
                     onValueChange={(value) =>
                       setFormState((current) => ({
                         ...current,
@@ -1504,31 +1840,57 @@ export default function LimitsPage() {
                     Interval
                   </Label>
                   <div>
-                    <LimitCleanupIntervalSelect
-                      id="limit-interval"
-                      ariaLabel="Interval"
-                      includeMinute
-                      minuteDisabled={
-                        Boolean(editingLimit) &&
-                        !["organization", "team", "virtual_key"].includes(
-                          formState.entityType,
-                        )
-                      }
-                      value={formState.cleanupInterval}
-                      onExplicitSelection={() =>
-                        setFormState((current) => ({
-                          ...current,
-                          hasExplicitInterval: true,
-                        }))
-                      }
-                      onValueChange={(value) =>
-                        setFormState((current) => ({
-                          ...current,
-                          cleanupInterval: value,
-                          hasExplicitInterval: true,
-                        }))
-                      }
-                    />
+                    {isDefaultForm ? (
+                      // No per-minute option: a default resets per interval.
+                      <LimitCleanupIntervalSelect
+                        id="limit-interval"
+                        ariaLabel="Interval"
+                        value={
+                          formState.cleanupInterval === "minute"
+                            ? DEFAULT_LIMIT_CLEANUP_INTERVAL
+                            : formState.cleanupInterval
+                        }
+                        onExplicitSelection={() =>
+                          setFormState((current) => ({
+                            ...current,
+                            hasExplicitInterval: true,
+                          }))
+                        }
+                        onValueChange={(value) =>
+                          setFormState((current) => ({
+                            ...current,
+                            cleanupInterval: value,
+                            hasExplicitInterval: true,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <LimitCleanupIntervalSelect
+                        id="limit-interval"
+                        ariaLabel="Interval"
+                        includeMinute
+                        minuteDisabled={
+                          Boolean(editingLimit) &&
+                          !["organization", "team", "virtual_key"].includes(
+                            formState.entityType,
+                          )
+                        }
+                        value={formState.cleanupInterval}
+                        onExplicitSelection={() =>
+                          setFormState((current) => ({
+                            ...current,
+                            hasExplicitInterval: true,
+                          }))
+                        }
+                        onValueChange={(value) =>
+                          setFormState((current) => ({
+                            ...current,
+                            cleanupInterval: value,
+                            hasExplicitInterval: true,
+                          }))
+                        }
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -1538,11 +1900,17 @@ export default function LimitsPage() {
                   requests.
                 </FieldDescription>
               )}
-              <FieldDescription>
-                Per-minute allowance recovers continuously. Rolling intervals
-                reset after elapsed time; calendar intervals reset at the next
-                day, week or month boundary.
-              </FieldDescription>
+              {isDefaultForm ? (
+                <FieldDescription>
+                  Each user's spend resets to $0 at the start of every interval.
+                </FieldDescription>
+              ) : (
+                <FieldDescription>
+                  Per-minute allowance recovers continuously. Rolling intervals
+                  reset after elapsed time; calendar intervals reset at the next
+                  day, week or month boundary.
+                </FieldDescription>
+              )}
               {!(
                 formState.limitType === "token_cost" &&
                 formState.cleanupInterval !== "minute"
@@ -1566,100 +1934,100 @@ export default function LimitsPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="limit-reason">Reason (optional)</Label>
-              <FieldDescription>
-                Shown with the limit so others know why it is there.
-              </FieldDescription>
-              <Input
-                id="limit-reason"
-                placeholder="For example, keep Opus experiments in check"
-                maxLength={500}
-                value={formState.reason}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    reason: event.target.value,
-                  }))
-                }
-              />
-            </div>
+            {/* A default user limit stores no reason, behavior or labels. */}
+            {!isDefaultForm && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="limit-reason">Reason (optional)</Label>
+                  <FieldDescription>
+                    Shown with the limit so others know why it is there.
+                  </FieldDescription>
+                  <Input
+                    id="limit-reason"
+                    placeholder="For example, keep Opus experiments in check"
+                    maxLength={500}
+                    value={formState.reason}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        reason: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
 
-            <AdvancedSection keepMounted>
-              <div className="space-y-2">
-                <Label htmlFor="limit-behavior">Behavior</Label>
-                <FieldDescription id="limit-behavior-description">
-                  Choose whether reaching this limit blocks requests or only
-                  records metrics.
-                </FieldDescription>
-                <Select
-                  value={formState.behavior}
-                  onValueChange={(value) =>
-                    setFormState((current) => ({
-                      ...current,
-                      behavior: value as LimitFormState["behavior"],
-                    }))
-                  }
-                >
-                  <SelectTrigger
-                    id="limit-behavior"
-                    aria-label="Behavior"
-                    aria-describedby="limit-behavior-description"
-                    className="w-full"
-                  >
-                    <SelectValue>
-                      <span className="flex items-center gap-2">
-                        {formState.behavior === "hard" ? (
-                          <ShieldCheck className="size-4" />
-                        ) : (
-                          <Activity className="size-4" />
-                        )}
-                        {formState.behavior === "hard"
-                          ? "Hard limit"
-                          : "Soft limit"}
-                      </span>
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="w-[var(--radix-select-trigger-width)]">
-                    <SelectItem
-                      value="hard"
-                      textValue="Hard limit"
-                      icon={<ShieldCheck className="size-4" />}
-                      description="Block requests when the limit is reached."
+                <AdvancedSection keepMounted>
+                  <div className="space-y-2">
+                    <Label htmlFor="limit-behavior">Behavior</Label>
+                    <FieldDescription id="limit-behavior-description">
+                      Choose whether reaching this limit blocks requests or only
+                      records metrics.
+                    </FieldDescription>
+                    <Select
+                      value={formState.behavior}
+                      onValueChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          behavior: value as LimitFormState["behavior"],
+                        }))
+                      }
                     >
-                      Hard limit
-                    </SelectItem>
-                    <SelectItem
-                      value="soft"
-                      textValue="Soft limit"
-                      icon={<Activity className="size-4" />}
-                      description="Keep requests flowing and record exceeded limits in metrics."
-                    >
-                      Soft limit
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <AdvancedLabelsSection
-                ref={labelsRef}
-                labels={formState.labels}
-                onLabelsChange={(labels) =>
-                  setFormState((current) => ({ ...current, labels }))
-                }
-              />
-            </AdvancedSection>
+                      <SelectTrigger
+                        id="limit-behavior"
+                        aria-label="Behavior"
+                        aria-describedby="limit-behavior-description"
+                        className="w-full"
+                      >
+                        <SelectValue>
+                          <span className="flex items-center gap-2">
+                            {formState.behavior === "hard" ? (
+                              <ShieldCheck className="size-4" />
+                            ) : (
+                              <Activity className="size-4" />
+                            )}
+                            {formState.behavior === "hard"
+                              ? "Hard limit"
+                              : "Soft limit"}
+                          </span>
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="w-[var(--radix-select-trigger-width)]">
+                        <SelectItem
+                          value="hard"
+                          textValue="Hard limit"
+                          icon={<ShieldCheck className="size-4" />}
+                          description="Block requests when the limit is reached."
+                        >
+                          Hard limit
+                        </SelectItem>
+                        <SelectItem
+                          value="soft"
+                          textValue="Soft limit"
+                          icon={<Activity className="size-4" />}
+                          description="Keep requests flowing and record exceeded limits in metrics."
+                        >
+                          Soft limit
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <AdvancedLabelsSection
+                    ref={labelsRef}
+                    labels={formState.labels}
+                    onLabelsChange={(labels) =>
+                      setFormState((current) => ({ ...current, labels }))
+                    }
+                  />
+                </AdvancedSection>
+              </>
+            )}
           </DialogBody>
           <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={closeDialog}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={
-                !canSubmit || createLimit.isPending || updateLimit.isPending
-              }
-            >
-              {editingLimit ? "Save changes" : "Create limit"}
+            <Button type="submit" disabled={!canSubmit || isSaving}>
+              {isEditing ? "Save changes" : "Create limit"}
             </Button>
           </DialogStickyFooter>
         </DialogForm>
@@ -1705,6 +2073,27 @@ export default function LimitsPage() {
         pendingLabel="Deleting..."
       />
       <DeleteConfirmDialog
+        open={!!defaultToDelete}
+        onOpenChange={(open) => !open && setDefaultToDelete(null)}
+        title="Delete limit"
+        description={
+          defaultToDelete
+            ? `${defaultLimitDeleteDescription({
+                target: defaultToDelete,
+                environmentName: defaultLimitScopeName(
+                  defaultToDelete,
+                  environments,
+                ),
+                organizationDefaultAmount,
+              })} This action cannot be undone.`
+            : "This action cannot be undone."
+        }
+        isPending={deleteDefaultLimit.isPending}
+        onConfirm={handleDefaultDelete}
+        confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
+      <DeleteConfirmDialog
         open={isBulkDeleteDialogOpen}
         onOpenChange={setIsBulkDeleteDialogOpen}
         title="Delete limits"
@@ -1733,7 +2122,7 @@ export default function LimitsPage() {
   );
 }
 
-export function getLimitModels(limit: LimitData): string[] {
+export function getLimitModels(limit: { model?: unknown }): string[] {
   return Array.isArray(limit.model)
     ? limit.model.filter((model): model is string => typeof model === "string")
     : [];
@@ -1901,6 +2290,11 @@ const APPLIED_TO_OPTIONS: Array<{
   { value: "team", label: "Team", icon: Users },
   { value: "agent", label: "Agent", icon: Bot },
   { value: "user", label: "User", icon: User },
+  {
+    value: DEFAULT_USER_LIMIT_SCOPE,
+    label: "Default user limit",
+    icon: UsersRound,
+  },
   { value: "virtual_key", label: "Virtual key", icon: Key },
   { value: "llm_oauth_client", label: "LLM OAuth client", icon: KeyRound },
   { value: "environment", label: "Environment", icon: Boxes },
@@ -2097,6 +2491,74 @@ function LimitUsage({
               ? formatResetDate(new Date(limit.throughputUsage.resetsAt))
               : formatNextLimitReset(limit.lastCleanup, cleanupInterval)}
           </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/** A default user limit's "Applied to" cell: its scope, then what it is. */
+function DefaultLimitAppliedTo({ name }: { name: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted">
+        <UsersRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </span>
+      <div className="min-w-0">
+        <div className="truncate">{name}</div>
+        <div className="truncate text-xs text-muted-foreground">
+          Default user limit
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A default user limit's "Usage" cell. Each user has their own spend against
+ * it, so there is no single figure or bar: it shows the amount per user and
+ * how many users it covers.
+ */
+function DefaultLimitUsage({
+  limit,
+  users,
+  onViewUsers,
+}: {
+  limit: DefaultUserLimit;
+  /** Undefined while the count is loading. */
+  users: number | undefined;
+  /** Opens the users list; omitted when there is no list to narrow to. */
+  onViewUsers?: () => void;
+}) {
+  const interval = limit.cleanupInterval;
+  return (
+    <div className="min-w-0 w-full space-y-1 overflow-hidden">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
+        <p className="truncate tabular-nums">
+          <span>{formatLimit(limit.limitValue)}</span>
+          <span className="text-muted-foreground"> per user</span>
+        </p>
+        {users !== undefined && (
+          <p className="flex items-center gap-x-1.5 text-muted-foreground tabular-nums">
+            <span aria-hidden>·</span>
+            {onViewUsers ? (
+              <UnstyledButton onClick={onViewUsers} className={LINK_CLASS}>
+                {pluralUsers(users)}
+              </UnstyledButton>
+            ) : (
+              <span>{pluralUsers(users)}</span>
+            )}
+          </p>
+        )}
+      </div>
+      <p className="truncate text-xs text-muted-foreground">
+        {CLEANUP_INTERVAL_LABELS[interval]}
+        {/* A rolling window starts per user, so only calendar ones have a date. */}
+        {isCalendarCleanupInterval(interval) && (
+          <span>
+            {" · "}
+            {formatResetDate(getNextCalendarResetDate(new Date(), interval))}
+          </span>
         )}
       </p>
     </div>

@@ -30,6 +30,13 @@ const mockResetLimitUsage = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockDataTableSearchParams = vi.fn(() => new URLSearchParams());
 const mockUpdateQueryParams = vi.fn();
+const mockCreateDefaultUserLimit = vi.fn();
+const mockUpdateDefaultUserLimit = vi.fn();
+const mockDeleteDefaultUserLimit = vi.fn();
+// Default user limits are rows of the same table. These tests cover the
+// other limits, so none is set; the row logic is covered in
+// _parts/default-limit-rows.utils.test.ts.
+const mockDefaultUserLimits: never[] = [];
 
 // The ?edit= dialog deep-link syncs open state to the URL through
 // useDialogUrlParam, which reads next/navigation hooks. Bare vi.mock resolves
@@ -69,13 +76,27 @@ vi.mock("@/lib/limits.query", () => ({
   useBulkDeleteLimits: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-// The create dialog notes when a default user limit exists.
+// A default user limit is a row of the table, and the create dialog notes
+// when one exists.
 vi.mock("@/lib/default-user-limit.query", () => ({
-  useDefaultUserLimits: () => ({ data: [{ id: "dul-1" }] }),
+  useDefaultUserLimits: () => ({ data: mockDefaultUserLimits }),
+  useCreateDefaultUserLimit: () => ({
+    mutateAsync: mockCreateDefaultUserLimit,
+    isPending: false,
+  }),
+  useUpdateDefaultUserLimit: () => ({
+    mutateAsync: mockUpdateDefaultUserLimit,
+    isPending: false,
+  }),
+  useDeleteDefaultUserLimit: () => ({
+    mutateAsync: mockDeleteDefaultUserLimit,
+    isPending: false,
+  }),
+  useUserLimitUsageTop: () => ({ data: undefined }),
 }));
 
-// The per-user limits card has its own tests (user-limits-overview.test.tsx);
-// here it only frames the explicit limits table.
+// The "Affected by Limits" line has its own tests
+// (user-limits-overview.test.tsx); here it only frames the limits table.
 vi.mock("./_parts/user-limits-overview", () => ({
   UserLimitsOverview: ({ limitsTable }: { limitsTable: ReactNode }) =>
     limitsTable,
@@ -799,7 +820,8 @@ describe("LimitsPage", () => {
       screen
         .getAllByTestId(/^data-table-row-/)
         .map((row) => row.getAttribute("data-testid")),
-    ).toEqual(["data-table-row-match", "data-table-row-aggregate"]);
+      // Rows created at the same moment are ordered by id.
+    ).toEqual(["data-table-row-aggregate", "data-table-row-match"]);
   });
 
   it("places the limit kind filter after the other filters", () => {

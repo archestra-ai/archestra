@@ -1,9 +1,10 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { createRef, type Ref } from "react";
 import {
   afterAll,
   afterEach,
@@ -15,7 +16,10 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { UserLimitsOverview } from "./user-limits-overview";
+import {
+  UserLimitsOverview,
+  type UserLimitsOverviewHandle,
+} from "./user-limits-overview";
 
 vi.mock("@/lib/auth/auth.query");
 // SearchInput reads the router; the canonical mock's hooks are vi.fn()s.
@@ -97,43 +101,48 @@ describe("UserLimitsOverview", () => {
     archestraApiClient.setConfig({ baseUrl: "" });
   });
 
-  it("shows the default limit and who is at or near it", async () => {
+  it("shows who is at or near their limit above the limits table", async () => {
     renderOverview();
 
-    expect(await screen.findByText("Applies to 2 users")).toBeVisible();
-    expect(screen.getByText("$50")).toBeVisible();
-    expect(screen.getByText("per calendar month")).toBeVisible();
-    expect(screen.getByRole("button", { name: /1\s*at limit/ })).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: /1\s*at limit/ }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Affected by Limits" }),
+    ).toBeVisible();
     expect(screen.getByRole("button", { name: /1\s*near/ })).toBeVisible();
     expect(screen.getByRole("button", { name: "1 custom" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "View all 3 users" }),
+    ).toBeVisible();
+    // The default user limit is a row of the table now, not a card here.
+    expect(screen.queryByText("Default user limit")).not.toBeInTheDocument();
+    expect(screen.getByText("Limits table")).toBeVisible();
   });
 
-  it("waits for defaults and environments before showing either", async () => {
-    defaults = [];
-    let releaseEnvironments = () => {};
-    const environmentsHeld = new Promise<void>((resolve) => {
-      releaseEnvironments = resolve;
-    });
+  it("opens the users list for one environment when the table asks", async () => {
+    const ref = createRef<UserLimitsOverviewHandle>();
+    const requested: (string | null)[] = [];
     server.use(
-      http.get(`${API}/api/environments`, async () => {
-        await environmentsHeld;
-        return HttpResponse.json({ environments: [], resourceDefaults: {} });
+      http.get(`${API}/api/environments`, () =>
+        HttpResponse.json({
+          environments: [{ id: "env-1", name: "Production" }],
+          resourceDefaults: {},
+        }),
+      ),
+      http.get(`${API}/api/default-user-limits/users`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        requested.push(params.get("environmentId"));
+        return HttpResponse.json(usageResponse(rows, params.get("status")));
       }),
     );
-    renderOverview();
+    renderOverview(ref);
+    await screen.findByRole("button", { name: /1\s*at limit/ });
 
-    // Defaults and usage have loaded; environments have not.
-    expect(await screen.findByText(/at limit/)).toBeVisible();
-    expect(screen.queryByText("No limit")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Per-environment limits" }),
-    ).not.toBeInTheDocument();
+    act(() => ref.current?.openRoster({ environmentId: "env-1" }));
 
-    releaseEnvironments();
-    expect(await screen.findByText("No limit")).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Per-environment limits" }),
-    ).toBeVisible();
+    await screen.findByRole("dialog", { name: "Users and their limits" });
+    await waitFor(() => expect(requested).toContain("env-1"));
   });
 
   it("resets a blocked user's usage from the at-limit list", async () => {
@@ -174,7 +183,7 @@ describe("UserLimitsOverview", () => {
     ).toBeVisible();
   });
 
-  it("offers to set a default when there is none", async () => {
+  it("links to the users no limit applies to", async () => {
     defaults = [];
     rows = rows.map((r) =>
       r.source === "custom"
@@ -189,12 +198,8 @@ describe("UserLimitsOverview", () => {
     );
     renderOverview();
 
-    expect(await screen.findByText("No limit")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Set default" })).toBeVisible();
     expect(
-      await screen.findByRole("button", {
-        name: "2 users can spend without a cap",
-      }),
+      await screen.findByRole("button", { name: "2 users with no limit" }),
     ).toBeVisible();
   });
 
@@ -255,13 +260,13 @@ const orgDefault = {
   updatedAt: "2026-10-01T00:00:00.000Z",
 };
 
-function renderOverview() {
+function renderOverview(ref?: Ref<UserLimitsOverviewHandle>) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <UserLimitsOverview limitsTable={<div>Explicit limits table</div>} />
+      <UserLimitsOverview ref={ref} limitsTable={<div>Limits table</div>} />
     </QueryClientProvider>,
   );
 }

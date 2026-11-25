@@ -2,24 +2,14 @@
 
 import type { SupportedProvider } from "@archestra/shared";
 import {
-  Boxes,
   ChevronDown,
-  ChevronRight,
   KeyRound,
   LayersIcon,
   Plus,
   Shuffle,
   X,
 } from "lucide-react";
-import {
-  Fragment,
-  type ReactNode,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
 import {
   poolAnswers,
   poolServes,
@@ -38,6 +28,7 @@ import {
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ProviderIcon } from "@/components/provider-icon";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -63,8 +54,6 @@ import {
   RadioGroupItem,
   radioCardClass,
 } from "@/components/ui/radio-group";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useAutoRouters,
@@ -80,51 +69,16 @@ import {
 } from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
 
-type Kind = "providers" | "pools" | "routers";
-
 /**
  * Everything a new virtual key can reach: whether it follows the
- * organization's shared providers, one picker that adds a provider, a model
- * pool or an auto router, and what's added, on a tab per kind. A provider row
- * picks its key in place; pools and routers open to show what's behind them.
- * Saves the same fields the separate pickers did.
+ * organization's shared providers, one picker that adds an auto router, a
+ * model pool or a provider key, and what's added, in a block per kind. Rows
+ * are read-only: each opens to show what's behind it, and changing one means
+ * removing it and adding another. Saves the same fields the separate pickers
+ * did.
  */
 export function VirtualKeyAccessField(props: AccessProps) {
   const model = useAccess(props);
-  const [tab, setTab] = useState<Kind>("providers");
-
-  const counts = {
-    providers: model.providerRows.length,
-    pools: model.listedPools.length,
-    routers: model.listedRouters.length,
-  };
-  // A tab shows when it has something listed or something left to add.
-  const showPools =
-    counts.pools > 0 ||
-    (props.canSetModelPools && model.addablePools.length > 0);
-  const showRouters =
-    counts.routers > 0 ||
-    (props.canSetAutoRouters && model.addableRouters.length > 0);
-
-  // After an add, switch to that kind's tab so the user sees it land.
-  const previous = useRef(counts);
-  useEffect(() => {
-    const before = previous.current;
-    previous.current = {
-      providers: counts.providers,
-      pools: counts.pools,
-      routers: counts.routers,
-    };
-    if (counts.routers > before.routers) setTab("routers");
-    else if (counts.pools > before.pools) setTab("pools");
-    else if (counts.providers > before.providers) setTab("providers");
-  }, [counts.providers, counts.pools, counts.routers]);
-
-  // A tab that disappears falls back to providers.
-  const active: Kind =
-    (tab === "pools" && !showPools) || (tab === "routers" && !showRouters)
-      ? "providers"
-      : tab;
 
   return (
     <div className="space-y-4">
@@ -136,277 +90,154 @@ export function VirtualKeyAccessField(props: AccessProps) {
             {model.summary}
           </span>
         </div>
-        <ScopedPicker model={model} />
-        <Tabs
-          value={active}
-          onValueChange={(next) => setTab(next as Kind)}
-          className="gap-0 overflow-hidden rounded-md border"
-        >
-          <div className="border-b bg-muted/30 px-2 py-1.5">
-            <TabsList size="sm" className="bg-transparent">
-              <TabsTrigger value="providers">
-                <Boxes aria-hidden />
-                <span>Providers</span>
-                <TabCount
-                  value={
-                    model.includeFutureProviders
-                      ? counts.providers
-                        ? `All +${counts.providers}`
-                        : "All"
-                      : String(counts.providers)
+        <AccessPicker model={model} />
+        <div className="divide-y">
+          {model.listedRouters.length > 0 && (
+            <KindSection
+              title="Auto routers"
+              hint="Apps send its name as the model"
+            >
+              {model.listedRouters.map((router) => (
+                <AccessRow
+                  key={router.id}
+                  icon={<Shuffle className="size-4" aria-hidden />}
+                  name={<span className="font-mono">{router.name}</span>}
+                  label={router.name}
+                  meta={
+                    <span className="truncate">
+                      {tierModelIds(model.tiersByRouter.get(router.id))}
+                    </span>
                   }
-                />
-              </TabsTrigger>
-              {showPools && (
-                <TabsTrigger value="pools">
-                  <LayersIcon aria-hidden />
-                  <span>Model pools</span>
-                  <TabCount value={String(counts.pools)} />
-                </TabsTrigger>
-              )}
-              {showRouters && (
-                <TabsTrigger value="routers">
-                  <Shuffle aria-hidden />
-                  <span>Auto routers</span>
-                  <TabCount value={String(counts.routers)} />
-                </TabsTrigger>
-              )}
-            </TabsList>
-          </div>
-          <TabsContent value="providers">
-            <ProvidersTab model={model} />
-          </TabsContent>
-          {showPools && (
-            <TabsContent value="pools">
-              <PoolsTab model={model} />
-            </TabsContent>
+                  onRemove={() => model.removeRouter(router.id)}
+                >
+                  <RouterDetails model={model} routerId={router.id} />
+                </AccessRow>
+              ))}
+            </KindSection>
           )}
-          {showRouters && (
-            <TabsContent value="routers">
-              <RoutersTab model={model} />
-            </TabsContent>
+          {model.listedPools.length > 0 && (
+            <KindSection
+              title="Model pools"
+              hint="One name that fails over across its members"
+            >
+              {model.listedPools.map((pool) => (
+                <AccessRow
+                  key={pool.id}
+                  icon={<LayersIcon className="size-4" aria-hidden />}
+                  name={<span className="font-mono">{pool.name}</span>}
+                  label={pool.name}
+                  meta={<PoolMeta pool={pool} />}
+                  onRemove={() => model.removePool(pool.id)}
+                >
+                  <PoolDetails model={model} pool={pool} />
+                </AccessRow>
+              ))}
+            </KindSection>
           )}
-        </Tabs>
+          <KindSection
+            title="Providers"
+            hint={
+              model.includeFutureProviders
+                ? "Each shared provider’s primary key, unless you add another key above"
+                : "Apps call each provider’s models by name, on the key shown"
+            }
+          >
+            <ProvidersBlock model={model} />
+          </KindSection>
+        </div>
       </section>
     </div>
   );
 }
 
-function TabCount({ value }: { value: string }) {
-  return (
-    <span className="text-xs font-normal tabular-nums text-muted-foreground">
-      {value}
-    </span>
-  );
-}
-
-function Empty({ children }: { children: string }) {
-  return <p className="px-3 py-3 text-sm text-muted-foreground">{children}</p>;
-}
-
-// ---------------------------------------------------------------------------
-// Providers
-// ---------------------------------------------------------------------------
-
-function ProvidersTab({ model }: { model: AccessModel }) {
-  if (model.noProviderKeys && !model.includeFutureProviders)
-    return (
-      <div className="p-3">
-        <NoProviderKeys />
-      </div>
-    );
-  return (
-    <div>
-      <div className="divide-y">
-        {model.includeFutureProviders && (
-          <div className="px-3 py-2.5">
-            <AllSharedProviders model={model} />
-          </div>
-        )}
-        {model.providerRows.map((row) => (
-          <ProviderLine key={row.provider} row={row} model={model} />
-        ))}
-      </div>
-      {!model.includeFutureProviders && model.providerRows.length === 0 && (
-        <Empty>No providers yet — add one above.</Empty>
-      )}
-    </div>
-  );
-}
-
-function ProviderLine({
-  row,
-  model,
+/** One kind of access: its name and what it gives on the left, rows on the right. */
+function KindSection({
+  title,
+  hint,
+  children,
 }: {
-  row: ProviderRow;
-  model: AccessModel;
+  title: string;
+  hint: string;
+  children: ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-start gap-3 px-3 py-2">
-      <span className="flex min-h-9 min-w-0 items-center gap-2">
-        <ProviderIcon provider={row.provider} size={16} />
-        <span className="min-w-0">
-          <span className="block truncate text-sm">{row.label}</span>
-          {row.replaces && (
-            <span className="block truncate text-xs text-muted-foreground">
-              instead of {row.replaces}
-            </span>
-          )}
-        </span>
-      </span>
-      <div className="min-w-0 space-y-1.5">
-        <ProviderKeySelect row={row} model={model} className="w-full" />
-        {row.chosen.length > 1 && (
-          <ul className="space-y-1">
-            {row.chosen.map((option) => (
-              <li
-                key={option.key.id}
-                className="flex items-center gap-2 text-xs"
-              >
-                <span className="min-w-0 flex-1 truncate">{option.name}</span>
-                <span className="shrink-0 text-muted-foreground">
-                  {option.owner}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={`Remove ${option.name}`}
-                  onClick={() => model.removeKey(option.key.id)}
-                >
-                  <X />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
+    <section
+      aria-label={title}
+      className="grid gap-2 py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4"
+    >
+      <div className="space-y-1 sm:pt-2">
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
       </div>
-      <span className="flex min-h-9 items-center">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          aria-label={`Stop using ${row.label}`}
-          onClick={() => model.removeProvider(row.provider)}
-        >
-          <X />
-        </Button>
-      </span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Model pools and auto routers: read-only rows whose details open on demand
-// ---------------------------------------------------------------------------
-
-function PoolsTab({ model }: { model: AccessModel }) {
-  return (
-    <div>
-      {model.listedPools.length === 0 ? (
-        <Empty>No model pools yet — add one above.</Empty>
-      ) : (
-        <div className="divide-y">
-          {model.listedPools.map((pool) => (
-            <ReadOnlyItem
-              key={pool.id}
-              icon={<LayersIcon className="size-4" aria-hidden />}
-              name={pool.name}
-              meta={<PoolMeta pool={pool} />}
-              onRemove={() => model.removePool(pool.id)}
-            >
-              <PoolDetails model={model} pool={pool} />
-            </ReadOnlyItem>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RoutersTab({ model }: { model: AccessModel }) {
-  return (
-    <div>
-      {model.listedRouters.length === 0 ? (
-        <Empty>No auto routers yet — add one above.</Empty>
-      ) : (
-        <div className="divide-y">
-          {model.listedRouters.map((router) => (
-            <ReadOnlyItem
-              key={router.id}
-              icon={<Shuffle className="size-4" aria-hidden />}
-              name={router.name}
-              meta={
-                <span>
-                  {routerModelCount(model.tiersByRouter.get(router.id))}
-                </span>
-              }
-              onRemove={() => model.removeRouter(router.id)}
-            >
-              <RouterDetails model={model} routerId={router.id} />
-            </ReadOnlyItem>
-          ))}
-        </div>
-      )}
-    </div>
+      <div className="min-w-0 space-y-0.5">{children}</div>
+    </section>
   );
 }
 
 /**
- * A pool or router row, laid out like a provider row: name on the left, a
- * short line in the middle, remove on the right. Its details open under it.
+ * A router, pool or provider: its name and a short line, a chevron that opens
+ * read-only details under it, and remove on the right.
  */
-function ReadOnlyItem({
+function AccessRow({
   icon,
   name,
+  label,
+  nameClassName,
   meta,
   onRemove,
+  removeLabel,
   children,
 }: {
   icon: ReactNode;
-  name: string;
+  name: ReactNode;
+  /** Plain name, for the buttons' labels. */
+  label: string;
+  nameClassName?: string;
   meta: ReactNode;
   onRemove: () => void;
+  removeLabel?: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <div className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2">
+      <div className="flex items-center gap-2">
         <CollapsibleTrigger asChild>
           <UnstyledButton
             type="button"
-            aria-label={`${open ? "Hide" : "Show"} ${name} details`}
-            className="col-span-2 grid min-h-9 grid-cols-subgrid items-center text-left"
+            aria-label={`${open ? "Hide" : "Show"} ${label} details`}
+            className="flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md text-left"
           >
-            <span className="flex min-w-0 items-center gap-2">
-              <ChevronRight
-                className={cn(
-                  "size-4 shrink-0 text-muted-foreground transition-transform",
-                  open && "rotate-90",
-                )}
-                aria-hidden
-              />
-              <span className="shrink-0 text-muted-foreground">{icon}</span>
-              <span className="truncate font-mono text-sm">{name}</span>
+            <span className="shrink-0 text-muted-foreground">{icon}</span>
+            <span
+              className={cn("min-w-0 shrink-0 truncate text-sm", nameClassName)}
+            >
+              {name}
             </span>
             <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
               {meta}
             </span>
+            <ChevronDown
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                open && "rotate-180",
+              )}
+              aria-hidden
+            />
           </UnstyledButton>
         </CollapsibleTrigger>
         <Button
           type="button"
           variant="ghost"
           size="icon-xs"
-          aria-label={`Remove ${name}`}
+          aria-label={removeLabel ?? `Remove ${label}`}
           onClick={onRemove}
         >
           <X />
         </Button>
       </div>
       <CollapsibleContent>
-        <div className="mx-3 mb-2.5 rounded-md bg-muted/40 p-2.5 text-xs">
+        <div className="mb-2 mt-0.5 ml-6 mr-9 rounded-md bg-muted/40 p-2.5 text-xs">
           {children}
         </div>
       </CollapsibleContent>
@@ -415,7 +246,240 @@ function ReadOnlyItem({
 }
 
 // ---------------------------------------------------------------------------
-// Props
+// Providers
+// ---------------------------------------------------------------------------
+
+function ProvidersBlock({ model }: { model: AccessModel }) {
+  if (model.noProviderKeys && !model.includeFutureProviders)
+    return <NoProviderKeys />;
+  return (
+    <>
+      {model.includeFutureProviders && <AllSharedProviders model={model} />}
+      {model.providerRows.map((row) => (
+        <AccessRow
+          key={row.provider}
+          icon={<ProviderIcon provider={row.provider} size={16} />}
+          name={row.label}
+          label={row.label}
+          nameClassName="w-36"
+          meta={<ProviderMeta row={row} />}
+          removeLabel={`Stop using ${row.label}`}
+          onRemove={() => model.removeProvider(row.provider)}
+        >
+          <ProviderDetails row={row} />
+        </AccessRow>
+      ))}
+      {!model.includeFutureProviders && model.providerRows.length === 0 && (
+        <p className="py-2 text-sm text-muted-foreground">
+          No providers yet — add one above.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** "anthropic-prod · 14 models PRIMARY", or "2 keys" for several. */
+function ProviderMeta({ row }: { row: ProviderRow }) {
+  const [only] = row.chosen;
+  if (row.chosen.length > 1)
+    return (
+      <span className="truncate">
+        {plural(row.chosen.length, "key", "keys")}
+      </span>
+    );
+  if (!only) return null;
+  return (
+    <>
+      <span className="truncate">
+        <span>{only.name}</span>
+        {only.modelIds !== null && (
+          <span> · {plural(only.modelIds.length, "model", "models")}</span>
+        )}
+      </span>
+      {only.key.isPrimary && <PrimaryBadge />}
+    </>
+  );
+}
+
+const MODEL_SAMPLE_SIZE = 3;
+
+/** Each key the provider uses: who owns it, how it bills, a few of its models. */
+function ProviderDetails({ row }: { row: ProviderRow }) {
+  return (
+    <div className="space-y-3">
+      {row.replaces && (
+        <p className="text-muted-foreground">
+          Used instead of {row.replaces}, the shared primary key.
+        </p>
+      )}
+      {row.chosen.map((option) => (
+        <div key={option.key.id} className="space-y-2">
+          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+            <span className="text-muted-foreground">Key</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate">{option.name}</span>
+              {option.key.isPrimary && <PrimaryBadge />}
+            </span>
+            <span className="text-muted-foreground">Owner</span>
+            <span className="truncate">{option.detail}</span>
+            <span className="text-muted-foreground">Models</span>
+            <ModelSample modelIds={option.modelIds} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ModelSample({ modelIds }: { modelIds: string[] | null }) {
+  if (modelIds === null)
+    return <span className="text-muted-foreground">Loading…</span>;
+  if (modelIds.length === 0)
+    return (
+      <span className="text-amber-700 dark:text-amber-400">
+        No models found on this key
+      </span>
+    );
+  const sample = [...modelIds].sort().slice(0, MODEL_SAMPLE_SIZE);
+  const more = modelIds.length - sample.length;
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-1">
+      {sample.map((modelId) => (
+        <span
+          key={modelId}
+          className="max-w-full truncate rounded bg-background px-1.5 py-px font-mono"
+        >
+          {modelId}
+        </span>
+      ))}
+      {more > 0 && <span className="text-muted-foreground">+{more} more</span>}
+    </span>
+  );
+}
+
+/** The "All shared providers" line in automatic mode. */
+function AllSharedProviders({ model }: { model: AccessModel }) {
+  return (
+    <div className="flex items-start gap-2 py-2">
+      <KeyRound
+        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+        aria-hidden
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm">All shared providers</span>
+        <span className="block text-xs text-muted-foreground">
+          New providers join automatically; personal and subscription keys are
+          left out.
+        </span>
+      </span>
+      <span className="mt-0.5 flex shrink-0 items-center gap-1 pr-2">
+        {model.sharedProviders.map((provider) => (
+          <ProviderIcon key={provider} provider={provider} size={14} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Model pools and auto routers
+// ---------------------------------------------------------------------------
+
+/** A pool's providers, and whether it won't answer. */
+function PoolMeta({ pool }: { pool: ModelPool }) {
+  const providers = [
+    ...new Set(
+      pool.members.map((member) => member.provider as SupportedProvider),
+    ),
+  ];
+  return (
+    <>
+      <span className="flex shrink-0 items-center gap-1">
+        {providers.map((provider) => (
+          <ProviderIcon key={provider} provider={provider} size={14} />
+        ))}
+      </span>
+      {!poolAnswers(pool) && (
+        <Badge variant="outline" className="text-muted-foreground">
+          Won&apos;t answer
+        </Badge>
+      )}
+    </>
+  );
+}
+
+/** What a pool serves, then its members in priority order. */
+function PoolDetails({ model, pool }: { model: AccessModel; pool: ModelPool }) {
+  const members = [...pool.members].sort((a, b) => a.priority - b.priority);
+  const serves = poolServes(pool);
+  return (
+    <div className="space-y-2">
+      {serves.first && serves.first !== pool.name && (
+        <p className="text-muted-foreground">
+          Serves{" "}
+          <span className="font-mono text-foreground">{serves.first}</span>
+          {serves.otherModels > 0 && (
+            <span> and {plural(serves.otherModels, "other", "others")}</span>
+          )}
+        </p>
+      )}
+      <DetailGrid headings={["Provider", "Model"]}>
+        {members.map((member) => (
+          <Fragment key={member.id}>
+            <ProviderCell
+              provider={member.provider as SupportedProvider}
+              label={model.catalog.label(member.provider)}
+              off={!member.enabled}
+            />
+            <span
+              className={cn(
+                "truncate font-mono",
+                !member.enabled && "text-muted-foreground line-through",
+              )}
+            >
+              {member.modelId}
+            </span>
+          </Fragment>
+        ))}
+      </DetailGrid>
+    </div>
+  );
+}
+
+/** A router's tier table and endpoint note. */
+function RouterDetails({
+  model,
+  routerId,
+}: {
+  model: AccessModel;
+  routerId: string;
+}) {
+  const tierModels = tierModelsOf(model.tiersByRouter.get(routerId));
+  return (
+    <div className="space-y-2">
+      {tierModels.length > 0 ? (
+        <DetailGrid headings={["Tier", "Provider", "Model"]}>
+          {tierModels.map((tier) => (
+            <Fragment key={tier.tier}>
+              <span>{TIER_LABELS[tier.tier]}</span>
+              <ProviderCell
+                provider={tier.provider}
+                label={model.catalog.label(tier.provider)}
+              />
+              <span className="truncate font-mono">{tier.modelId}</span>
+            </Fragment>
+          ))}
+        </DetailGrid>
+      ) : (
+        <p className="text-muted-foreground">{ROUTER_HINT}</p>
+      )}
+      <p className="text-muted-foreground">{ROUTER_ENDPOINT_NOTE}</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Props and state
 // ---------------------------------------------------------------------------
 
 type AccessProps = {
@@ -456,27 +520,31 @@ type KeyOption = {
   /** Owner and billing, e.g. "Organization · Metered". */
   detail: string;
   /** Discovered models; null while they load. */
-  models: number | null;
+  modelIds: string[] | null;
 };
 
 type ProviderRow = {
   provider: SupportedProvider;
   label: string;
-  /** Every key this provider has, for the key dropdown. */
-  allKeys: KeyOption[];
   /** The keys in the list (one, unless a starting value had several). */
   chosen: KeyOption[];
   /** In automatic mode, the shared primary key this row overrides. */
   replaces?: string;
 };
 
+type PickerProvider = {
+  provider: SupportedProvider;
+  label: string;
+  /** Keys the picker offers. `replaces` names the key a pick overrides. */
+  keys: (KeyOption & { replaces?: string })[];
+};
+
 type AccessModel = ReturnType<typeof useAccess>;
 
 /**
- * Everything a variant needs: what's listed, what the picker can still add,
- * and the actions. Adding a provider picks its primary key (or, in automatic
- * mode, its first key that automatic access doesn't already cover); the row's
- * key dropdown changes it.
+ * What's listed, what the picker can still add, and the actions. The picker
+ * adds one key per provider; once a provider is listed its keys leave the
+ * picker until its row is removed.
  */
 function useAccess(props: AccessProps) {
   const {
@@ -530,7 +598,7 @@ function useAccess(props: AccessProps) {
     detail: isOrganizationSubscription(key)
       ? `${ORGANIZATION_SUBSCRIPTIONS_HEADING} · ${organizationSubscriptionSubtitle(key)}`
       : `${ownerLabel(key)} · ${isSubscriptionKey(key) ? "Subscription" : "Metered"}`,
-    models: modelsPending ? null : (modelIdsByKey.get(key.id)?.length ?? 0),
+    modelIds: modelsPending ? null : (modelIdsByKey.get(key.id) ?? []),
   });
   const chosenKeys = (provider: SupportedProvider) => {
     const keys = grouped.get(provider) ?? [];
@@ -545,47 +613,34 @@ function useAccess(props: AccessProps) {
     includeFutureProviders
       ? (grouped.get(provider) ?? []).find(isSharedPrimary)
       : undefined;
-  /** Keys a row may switch to: all of them, minus the automatic one. */
-  const selectableKeys = (provider: SupportedProvider) => {
-    const automatic = automaticKey(provider);
-    return (grouped.get(provider) ?? []).filter(
-      (key) => key.id !== automatic?.id,
-    );
-  };
 
-  const listedProviders = providers.filter(
-    (provider) => chosenKeys(provider).length > 0,
-  );
-  const providerRows: ProviderRow[] = listedProviders.map((provider) => {
-    const automatic = automaticKey(provider);
-    return {
-      provider,
-      label: catalog.label(provider),
-      allKeys: selectableKeys(provider).map(keyOption),
-      chosen: chosenKeys(provider).map(keyOption),
-      replaces: automatic ? keyName(automatic) : undefined,
-    };
-  });
-
-  /** Providers the picker can add: not listed, with a key to add. */
-  const addableProviders = providers
-    .filter((provider) => chosenKeys(provider).length === 0)
-    .flatMap((provider) => {
-      const keys = selectableKeys(provider);
-      if (keys.length === 0) return [];
-      const first = keys.find((key) => key.isPrimary) ?? keys[0];
-      return [
-        {
-          provider,
-          label: catalog.label(provider),
-          keyCount: keys.length,
-          first: keyOption(first),
-          replaces: automaticKey(provider)
-            ? keyName(automaticKey(provider) as LlmProviderApiKeyResponse)
-            : undefined,
-        },
-      ];
+  const providerRows: ProviderRow[] = providers
+    .filter((provider) => chosenKeys(provider).length > 0)
+    .map((provider) => {
+      const automatic = automaticKey(provider);
+      return {
+        provider,
+        label: catalog.label(provider),
+        chosen: chosenKeys(provider).map(keyOption),
+        replaces: automatic ? keyName(automatic) : undefined,
+      };
     });
+
+  // Every key the picker can still add, by provider. A listed provider is
+  // left out: one key per provider, and switching means removing it and
+  // adding the other. With automatic access, a shared provider's primary key
+  // is already used, so only its other keys are offered, as overrides.
+  const pickerProviders: PickerProvider[] = providers.flatMap((provider) => {
+    if (chosenKeys(provider).length > 0) return [];
+    const automatic = automaticKey(provider);
+    const replaces = automatic ? keyName(automatic) : undefined;
+    const keys = (grouped.get(provider) ?? [])
+      .filter((key) => key.id !== automatic?.id)
+      .map((key) => ({ ...keyOption(key), replaces }));
+    return keys.length
+      ? [{ provider, label: catalog.label(provider), keys }]
+      : [];
+  });
 
   const listedRouters = routers.filter((router) =>
     autoRouterIds.includes(router.id),
@@ -598,21 +653,10 @@ function useAccess(props: AccessProps) {
     ? pools.filter((pool) => !modelPoolIds.includes(pool.id))
     : [];
 
-  const addProvider = (provider: SupportedProvider) => {
-    const entry = addableProviders.find((item) => item.provider === provider);
-    if (entry)
-      onChange([...value, { provider, providerApiKeyId: entry.first.key.id }]);
-  };
-  /** Replace every key of this provider with one. */
-  const setProviderKey = (provider: SupportedProvider, keyId: string) =>
-    onChange([
-      ...value.filter((mapping) => mapping.provider !== provider),
-      { provider, providerApiKeyId: keyId },
-    ]);
+  const addKey = (provider: SupportedProvider, providerApiKeyId: string) =>
+    onChange([...value, { provider, providerApiKeyId }]);
   const removeProvider = (provider: SupportedProvider) =>
     onChange(value.filter((mapping) => mapping.provider !== provider));
-  const removeKey = (keyId: string) =>
-    onChange(value.filter((mapping) => mapping.providerApiKeyId !== keyId));
   // Rebuilt from the pools and routers that still exist, so one deleted
   // elsewhere drops out on the next change instead of failing Create.
   const listedPoolIds = listedPools.map((pool) => pool.id);
@@ -651,17 +695,15 @@ function useAccess(props: AccessProps) {
     sharedProviders,
     noProviderKeys: providers.length === 0,
     providerRows,
-    addableProviders,
+    pickerProviders,
     listedRouters,
     listedPools,
     addableRouters,
     addablePools,
     tiersByRouter,
     summary,
-    addProvider,
-    setProviderKey,
+    addKey,
     removeProvider,
-    removeKey,
     addPool,
     removePool,
     addRouter,
@@ -743,15 +785,15 @@ function ModeCard({
 }
 
 // ---------------------------------------------------------------------------
-// The scoped picker: providers, pools and routers, not individual keys
+// The picker: auto routers, model pools and provider keys, by kind
 // ---------------------------------------------------------------------------
 
 /**
- * Adds a provider (on its primary key), a model pool or an auto router. Keys
- * are chosen afterwards, on the provider's row. Closes after each pick;
- * anything already added is left out.
+ * Adds an auto router, a model pool or one provider key. Grouped by kind;
+ * under Providers, every key of each provider not listed yet. Closes after
+ * each pick; anything already added is left out.
  */
-function ScopedPicker({ model }: { model: AccessModel }) {
+function AccessPicker({ model }: { model: AccessModel }) {
   const label = "Add a provider, model pool or auto router";
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -761,7 +803,7 @@ function ScopedPicker({ model }: { model: AccessModel }) {
   };
   const routers = model.addableRouters;
   const pools = model.addablePools;
-  const providers = model.addableProviders;
+  const providers = model.pickerProviders;
   const nothingLeft =
     routers.length === 0 && pools.length === 0 && providers.length === 0;
 
@@ -791,9 +833,9 @@ function ScopedPicker({ model }: { model: AccessModel }) {
           <CommandInput
             value={search}
             onValueChange={setSearch}
-            placeholder="Search providers, pools and routers…"
+            placeholder="Search providers, keys, pools and routers…"
           />
-          <CommandList className="max-h-[320px]">
+          <CommandList className="max-h-[360px]">
             <CommandEmpty>
               {nothingLeft ? "Everything is already added." : "No matches."}
             </CommandEmpty>
@@ -839,27 +881,50 @@ function ScopedPicker({ model }: { model: AccessModel }) {
             )}
             {providers.length > 0 && (
               <CommandGroup heading="Providers">
-                {providers.map((entry) => (
-                  <CommandItem
-                    key={entry.provider}
-                    value={`provider:${entry.provider}`}
-                    keywords={[entry.label, entry.provider, "provider"]}
-                    onSelect={() => {
-                      model.addProvider(entry.provider);
-                      changeOpen(false);
-                    }}
-                  >
-                    <ProviderIcon provider={entry.provider} size={16} />
-                    <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                      <span className="truncate text-sm">{entry.label}</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {entry.keyCount > 1
-                          ? `${plural(entry.keyCount, "key", "keys")} · starts on ${entry.first.name}`
-                          : entry.first.name}
+                {providers.flatMap((entry) =>
+                  entry.keys.map((option) => (
+                    <CommandItem
+                      key={option.key.id}
+                      value={`key:${option.key.id}`}
+                      keywords={[
+                        entry.label,
+                        entry.provider,
+                        option.name,
+                        option.owner,
+                        isSubscriptionKey(option.key)
+                          ? "subscription"
+                          : "metered",
+                      ]}
+                      onSelect={() => {
+                        model.addKey(entry.provider, option.key.id);
+                        changeOpen(false);
+                      }}
+                    >
+                      <span aria-hidden className="shrink-0">
+                        <ProviderIcon provider={entry.provider} size={16} />
                       </span>
-                    </span>
-                  </CommandItem>
-                ))}
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="shrink-0 text-sm">
+                            {entry.label}
+                          </span>
+                          <span className="truncate text-sm text-muted-foreground">
+                            {option.name}
+                          </span>
+                          {option.key.isPrimary && <PrimaryBadge />}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {option.replaces
+                            ? `${option.detail} · replaces ${option.replaces}`
+                            : option.detail}
+                        </span>
+                      </span>
+                      {option.modelIds !== null && (
+                        <ModelCount count={option.modelIds.length} />
+                      )}
+                    </CommandItem>
+                  )),
+                )}
               </CommandGroup>
             )}
           </CommandList>
@@ -870,64 +935,7 @@ function ScopedPicker({ model }: { model: AccessModel }) {
 }
 
 // ---------------------------------------------------------------------------
-// The provider's key dropdown (today's per-provider key picker)
-// ---------------------------------------------------------------------------
-
-/**
- * Picks which of the provider's keys or subscriptions the virtual key uses.
- * Choosing replaces the current key.
- */
-function ProviderKeySelect({
-  row,
-  model,
-  className,
-}: {
-  row: ProviderRow;
-  model: AccessModel;
-  className?: string;
-}) {
-  const current = row.chosen[0];
-  const items = row.allKeys.map((option) => ({
-    value: option.key.id,
-    label: option.name,
-    searchText: `${option.name} ${option.owner}`,
-    description: option.detail,
-    content: (
-      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="min-w-0 basis-full break-words">{option.name}</span>
-        {option.key.isPrimary && <PrimaryBadge />}
-        {option.models !== null && <ModelCount count={option.models} />}
-      </span>
-    ),
-    selectedContent: (
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="truncate">{option.name}</span>
-        {option.key.isPrimary && <PrimaryBadge />}
-        {option.models !== null && <ModelCount count={option.models} />}
-      </span>
-    ),
-  }));
-  return (
-    <SearchableSelect
-      className={cn("min-w-0 bg-background", className)}
-      ariaLabel={`${row.label} key`}
-      value={row.chosen.length === 1 ? (current?.key.id ?? "") : ""}
-      placeholder={
-        row.chosen.length > 1
-          ? plural(row.chosen.length, "key", "keys")
-          : "Choose a key"
-      }
-      onValueChange={(keyId) => model.setProviderKey(row.provider, keyId)}
-      items={items}
-      showSearch={row.allKeys.length > 6}
-      searchPlaceholder={`Search ${row.allKeys.length} ${row.label} keys`}
-      emptyMessage="No key matches."
-    />
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Read-only details for routers and pools, and small shared bits
+// Small shared bits
 // ---------------------------------------------------------------------------
 
 function tierModelsOf(tiers: RouterTiers | undefined) {
@@ -939,111 +947,10 @@ function tierModelsOf(tiers: RouterTiers | undefined) {
   );
 }
 
-/** "3 models", for a router's line. */
-function routerModelCount(tiers: RouterTiers | undefined) {
-  const count = new Set(tierModelsOf(tiers).map((model) => model.modelId)).size;
-  return count ? plural(count, "model", "models") : "";
-}
-
-/** A router's tier table and endpoint note. */
-function RouterDetails({
-  model,
-  routerId,
-}: {
-  model: AccessModel;
-  routerId: string;
-}) {
-  const tierModels = tierModelsOf(model.tiersByRouter.get(routerId));
-  if (!tierModels.length)
-    return (
-      <p className="text-muted-foreground">
-        {ROUTER_HINT} {ROUTER_ENDPOINT_NOTE}
-      </p>
-    );
-  return (
-    <div className="space-y-2">
-      <DetailGrid headings={["Tier", "Provider", "Model"]}>
-        {tierModels.map((tier) => (
-          <Fragment key={tier.tier}>
-            <span>{TIER_LABELS[tier.tier]}</span>
-            <ProviderCell
-              provider={tier.provider}
-              label={model.catalog.label(tier.provider)}
-            />
-            <span className="truncate font-mono">{tier.modelId}</span>
-          </Fragment>
-        ))}
-      </DetailGrid>
-      <p className="text-muted-foreground">{ROUTER_ENDPOINT_NOTE}</p>
-    </div>
-  );
-}
-
-/** A pool's line: the model it serves, how many more, and a warning. */
-function PoolMeta({ pool }: { pool: ModelPool }) {
-  const serves = poolServes(pool);
-  return (
-    <>
-      {serves.first && serves.first !== pool.name && (
-        <span className="truncate font-mono">{serves.first}</span>
-      )}
-      {serves.otherModels > 0 && (
-        <span>+{plural(serves.otherModels, "model", "models")}</span>
-      )}
-      {!poolAnswers(pool) && (
-        <span className="text-amber-700 dark:text-amber-400">won’t answer</span>
-      )}
-    </>
-  );
-}
-
-/** A pool's members in priority order; disabled members struck through. */
-function PoolDetails({ model, pool }: { model: AccessModel; pool: ModelPool }) {
-  const members = [...pool.members].sort((a, b) => a.priority - b.priority);
-  return (
-    <DetailGrid headings={["Provider", "Serves"]}>
-      {members.map((member) => (
-        <Fragment key={member.id}>
-          <ProviderCell
-            provider={member.provider as SupportedProvider}
-            label={model.catalog.label(member.provider)}
-            off={!member.enabled}
-          />
-          <span
-            className={cn(
-              "truncate font-mono",
-              !member.enabled && "text-muted-foreground line-through",
-            )}
-          >
-            {member.modelId}
-          </span>
-        </Fragment>
-      ))}
-    </DetailGrid>
-  );
-}
-
-/** The "All shared providers" line in automatic mode. */
-function AllSharedProviders({ model }: { model: AccessModel }) {
-  return (
-    <div className="flex items-start gap-2">
-      <KeyRound
-        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-        aria-hidden
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm">All shared providers</span>
-        <span className="block text-xs text-muted-foreground">
-          Each shared provider’s primary key. New providers join automatically;
-          personal and subscription keys are left out.
-        </span>
-      </span>
-      <span className="mt-0.5 flex shrink-0 items-center gap-1">
-        {model.sharedProviders.map((provider) => (
-          <ProviderIcon key={provider} provider={provider} size={14} />
-        ))}
-      </span>
-    </div>
+/** "gemini-3-flash · claude-haiku-4-5 · claude-sonnet-4-5", for a router's line. */
+function tierModelIds(tiers: RouterTiers | undefined) {
+  return [...new Set(tierModelsOf(tiers).map((model) => model.modelId))].join(
+    " · ",
   );
 }
 
@@ -1116,12 +1023,13 @@ function RouterSummary({
 }) {
   const models = tierModelsOf(tiers);
   const providers = [...new Set(models.map((model) => model.provider))];
+  const count = new Set(models.map((model) => model.modelId)).size;
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2">
       <span className="truncate font-mono text-sm">{name}</span>
-      {models.length > 0 && (
+      {count > 0 && (
         <span className="shrink-0 text-xs text-muted-foreground">
-          {routerModelCount(tiers)}
+          {plural(count, "model", "models")}
         </span>
       )}
       <span className="ml-auto flex shrink-0 items-center gap-1">

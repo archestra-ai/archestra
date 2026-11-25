@@ -15,8 +15,8 @@ Set budgets and rate limits in **Limits** so a busy key, runaway agent loop, or 
 
 ## Create a Limit
 
-1. Go to **Costs & Limits → Limits** and click **Add Limit**.
-2. Under **Apply to**, choose the scope (**Organization**, **Team**, **Virtual key**, **User**, **Default user limit**, **Agent**, **LLM OAuth client**, or **Environment**) and select the target entity.
+1. Go to **Cost Controls → Limits** and click **Add Limit**.
+2. Under **Apply to**, choose the scope (**Organization**, **Team**, **Virtual key**, **User**, **Agent**, **LLM OAuth client**, or **Environment**) and select the target entity.
 3. Under **Select models**, keep **All models** so every model shares one pool, or pick specific models to cap only those models.
 4. Enter a whole-number **Limit value**, choose the **Limit kind** (**Spend**, **Tokens**, or **Requests**), and pick the reset **Interval**.
 5. Optionally expand **Advanced** to choose **Behavior** (**Hard limit** blocks; **Soft limit** observes without blocking) or add labels, then click **Create limit**.
@@ -25,12 +25,12 @@ Set budgets and rate limits in **Limits** so a busy key, runaway agent loop, or 
 
 ## Scopes and Limit Kinds
 
-**Organization**, **Team**, and **Virtual key** scopes support all three limit kinds, including per-minute rate limits. **User**, **Default user limit**, **Agent**, **LLM OAuth client**, and **Environment** scopes support **Spend** limits on hourly, multi-hour, weekly, monthly, and calendar intervals.
+**Organization**, **Team**, and **Virtual key** scopes support all three limit kinds, including per-minute rate limits. **User**, **Agent**, **LLM OAuth client**, and **Environment** scopes support **Spend** limits on hourly, multi-hour, weekly, monthly, and calendar intervals.
 
 | Scope | Spend (`$`) | Tokens | Requests |
 | --- | --- | --- | --- |
 | **Organization**, **Team**, **Virtual key** | Rolling (`1h`–`1m`) and calendar intervals | **Per minute**, plus all rolling and calendar intervals | **Per minute**, plus all rolling and calendar intervals |
-| **User**, **Default user limit**, **Agent**, **LLM OAuth client**, **Environment** | Rolling (`1h`–`1m`) and calendar intervals | — | — |
+| **User**, **Agent**, **LLM OAuth client**, **Environment** | Rolling (`1h`–`1m`) and calendar intervals | — | — |
 
 When more than one rule matches a call, every matching hard rule must allow it:
 
@@ -43,7 +43,7 @@ When more than one rule matches a call, every matching hard rule must allow it:
 
 ### Team Limits
 
-Open **Costs & Limits** in the sidebar to view usage for teams you administer and their child teams. Use **Add Limit** and select a child team to give it an allowance. See [team member and admin roles](/docs/admin/access-control#team-roles).
+Open **Cost Controls** in the sidebar to view usage for teams you administer and their child teams. Use **Add Limit** and select a child team to give it an allowance. See [team member and admin roles](/docs/admin/access-control#team-roles).
 
 You can create, edit, delete, and reset child-team limits, including allocations set by your organization. Your own team's ceiling stays read-only unless you also administer one of its parent teams. A child with allowance left is still blocked when a parent reaches its limit.
 
@@ -55,7 +55,7 @@ Other limit scopes still require the organization permissions above. Organizatio
 
 **Hard limit** blocks requests when the allowance is exhausted. **Soft limit** keeps requests flowing and records exceeded checks in Prometheus. Use soft limits to observe a workload before enforcing a cap. Existing limits and newly created limits default to hard.
 
-Choose **Behavior** under **Advanced** when creating or editing a limit. Changing behavior preserves recorded usage and the reset schedule. A soft limit does not override another matching hard limit. A [default user limit](#default-user-spend-limits) has no **Behavior**: it always blocks.
+Choose **Behavior** under **Advanced** when creating or editing an explicit spend, token, or request limit. Changing behavior preserves recorded usage and the reset schedule. A soft limit does not override another matching hard limit. Default user allowances remain hard.
 
 See [Limit Metrics](/docs/admin/observability/metrics/limits) for the counters. Your existing monitoring and alerting stack can use them to notify your team.
 
@@ -77,19 +77,16 @@ Unblock a spend limit before its next scheduled reset. In the table, click **Res
 
 - A **Calendar** interval keeps its schedule. A **Rolling** interval next resets one full interval after your reset.
 - Token, request, and per-minute limits have no **Reset usage**. They recover on their own schedule.
-- A default user limit has no **Reset usage** either, because each user has their own spend. [Reset one user](#default-user-spend-limits) instead.
 - Resetting a limit needs [`llmLimit:update`](/docs/reference/permissions#llmLimit:update). Team admins can also reset child-team allocations. Resetting a child does not reset its parents' usage.
 
 ## Default User Spend Limits
 
 <span id="default-user-limits"></span>
 
-A default user limit gives every user their own spend allowance, so you don't create a rule for each member. Click **Add Limit**, choose **Default user limit** under **Apply to**, and pick **All environments** or one [Environment](/docs/admin/environments). Then pick the models, a **Limit value** in dollars, and an **Interval**. Every user gets their own individual counter of that size, while any matching organization, team, virtual key, agent, OAuth client, or environment limits still apply on top.
+A **Default user limit** sets a baseline per-user spend allowance without creating a separate rule for every member. Click **Add Limit**, choose **Default user limit** under **Apply to** and **All environments** next to it, enter a **Limit value**, choose an **Interval**, and pick **All models** or specific models. Every user gets their own individual counter of that size, while any matching organization, team, virtual key, agent, OAuth client, or environment rules still apply on top. Edit or delete a default user limit from its row in the table.
 
-Each default user limit is a row in the table. Edit or delete it there like any other limit.
-
-- **One environment:** a default user limit for one environment sets a different per-user cap there. It can exist without the **All environments** one. Users in other environments then have no default user limit.
-- **Custom limit for one user:** in **Affected by Limits** above the table, click **All N** to open **Users and their limits**, open a user's actions menu (**...**), and select **Set custom limit** (or create a **User** spend limit with **Add Limit**). You can include an optional **Reason** note that appears in the drawer and table. A hard custom user limit replaces the default user limit for that user, and starts its own counter at `$0`. A soft custom user limit observes usage alongside the default user limit.
+- **Environment override:** pick an environment instead of **All environments** to set a different default per-user cap for a specific [Environment](/docs/admin/environments).
+- **Custom limit for one user:** in **Affected by Limits**, click **All N** to open **Users and their limits**, open a user's actions menu (**...**), and select **Set custom limit** (or create a **User** spend limit with **Add Limit**). You can include an optional **Reason** note that appears in the drawer and table. A hard custom user limit overrides any environment override and the organization default, and starts its own counter at `$0`. A soft custom user limit observes usage alongside the hard default allowance.
 - **Reset a user's current window:** in **Users and their limits**, click **Reset** on a user at their limit (or **Reset usage** from **...**, or **Reset all N** when filtered to **At limit**) to zero their spend for the current window immediately. The next scheduled reset stays unchanged and past usage remains in cost reports.
 
 ## How Usage Is Counted

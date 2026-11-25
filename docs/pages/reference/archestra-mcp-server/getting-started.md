@@ -84,7 +84,7 @@ Required RBAC permission: None
 | Tool | Description | Permission |
 |------|-------------|--------------------------|
 | [`search_tools`](#search_tools) | Search the tools available to this agent and to you on demand. | None |
-| [`run_tool`](#run_tool) | Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent__<name>'), or third-party MCP tools exposed through the MCP Gateway (e.g. | None |
+| [`run_tool`](#run_tool) | Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent__&lt;name&gt;'), or third-party MCP tools exposed through the MCP Gateway (e.g. | None |
 
 ### search_tools
 
@@ -104,7 +104,7 @@ Required RBAC permission: None
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `total` | `integer` | Yes | Number of returned tools. |
-| `matchCount` | `integer` | Yes | Total tools matching the query before offset and limit were applied (>= total). |
+| `matchCount` | `integer` | Yes | Total tools matching the query before offset and limit were applied (&gt;= total). |
 | `truncated` | `boolean` | Yes | True when more matches follow this page (results cut by limit). |
 | `nextOffset` | `integer \| null` | Yes | The offset that returns the next page of matches, or null when no matches follow this page. |
 | `hint` | `string \| null` | Yes | Actionable guidance when results were truncated or empty (a truncated result names the offset of the next page; an empty result also names which query terms matched no tool text). |
@@ -125,5 +125,5 @@ Required RBAC permission: None
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `tool_name` | `string` | Yes | Name of the tool to invoke. Use the exact name as it appears in the tools list, e.g. 'archestra__whoami', 'context7__resolve-library-id', or an agent delegation name 'agent__<name>'. |
+| `tool_name` | `string` | Yes | Name of the tool to invoke. Use the exact name as it appears in the tools list, e.g. 'archestra__whoami', 'context7__resolve-library-id', or an agent delegation name 'agent__&lt;name&gt;'. |
 | `tool_args` | `object` | No | Arguments object for the target tool; must match its input schema. |

@@ -235,8 +235,15 @@ impl Deployments {
             .filter(|pinned| pinned.published.revision() == stale.revision())
         else {
             // A concurrent dispatch already moved this line's deployment on, which this
-            // dispatch takes only when it serves the same policy.
-            return Ok(self.serving(line, policy).map(|pinned| pinned.published));
+            // dispatch takes only when it serves the same policy on the marks held now.
+            let Some(moved) = self.serving(line, policy) else {
+                return Ok(None);
+            };
+            return match current(store, line, policy, moved).await {
+                Ok(moved) => Ok(Some(moved.published)),
+                Err(DeploymentError::Failed(fault)) => Err(fault),
+                Err(DeploymentError::Superseded | DeploymentError::Diverged) => Ok(None),
+            };
         };
         let (runtime, store) = (runtime.clone(), store.clone());
         let name = line.name();

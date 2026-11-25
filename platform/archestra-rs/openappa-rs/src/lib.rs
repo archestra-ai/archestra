@@ -1334,11 +1334,13 @@ impl State {
         let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
         // A replayed result of a call nobody recorded answers the same each time, so it is
         // answered without claiming a receipt for it.
-        if result_untracked(pg, &key, &operation)?
-            && inherited_result(pg, input, &call_id)?.is_none()
-        {
-            return Ok(unknown_result_response());
-        }
+        let inherited = match result_untracked(pg, &key, &operation)? {
+            true => match inherited_result(pg, input, &call_id)? {
+                None => return Ok(unknown_result_response()),
+                found => found,
+            },
+            false => None,
+        };
         // A recovered receipt is this same result, claimed by a dispatch that
         // stopped mid-processing. It is driven again and completed.
         if let ResultClaim::Complete(decision) =
@@ -1392,7 +1394,11 @@ impl State {
             OperationState::Absent => {
                 // A fork replays the history of the session it forks: a result from before the
                 // fork comes back as that session processed it, never as an unknown call.
-                let Some(response) = inherited_result(pg, input, &call_id)? else {
+                let inherited = match inherited {
+                    Some(found) => Some(found),
+                    None => inherited_result(pg, input, &call_id)?,
+                };
+                let Some(response) = inherited else {
                     // No call holds this id yet, and one judged under it later must not find
                     // this answer, as a call the runtime could not judge would.
                     return answered_unrecorded(receipts, unknown_result_response());

@@ -509,12 +509,11 @@ test("a fresh pooled chat submits without connecting the owner's subscription or
   fireEvent.click(submit);
   await waitFor(() =>
     expect(submitted).toEqual([
-      expect.objectContaining({
-        agentId: pooledAgent.id,
-        modelPoolId: "agent-pool",
-      }),
+      expect.objectContaining({ agentId: pooledAgent.id }),
     ]),
   );
+  expect(submitted[0]).not.toHaveProperty("modelPoolId");
+  expect(submitted[0]).not.toHaveProperty("chatApiKeyId");
 });
 
 test("an existing pooled chat retains its inherited shared selection without direct keys", async () => {

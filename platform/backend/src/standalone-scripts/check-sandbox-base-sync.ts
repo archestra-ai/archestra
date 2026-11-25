@@ -69,14 +69,16 @@ function tomlDependencies(): string[] {
 
 // 1. The fallback warm base uses uv's image, and the baked DHI base copies
 // uv from that same release. Keep their Python and Debian families aligned.
+// DHI tags can carry an image revision after the Python patch (3.14.10-6).
 const baseImage = strConst("DEFAULT_BASE_IMAGE");
 if (baseImage && !dockerfile.includes(`FROM ${baseImage}@sha256:`)) {
   errors.push(
     `Dockerfile uv source is not the DEFAULT_BASE_IMAGE tag "${baseImage}"`,
   );
 }
+// DHI tags may carry an image revision after the Python version (3.14.10-6).
 if (
-  !/^FROM dhi\.io\/python:3\.14\.\d+-debian13-dev@sha256:[0-9a-f]{64}$/m.test(
+  !/^FROM dhi\.io\/python:3\.14\.\d+(?:-\d+)?-debian13-dev@sha256:[0-9a-f]{64}$/m.test(
     dockerfile,
   )
 ) {

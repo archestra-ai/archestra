@@ -6,6 +6,7 @@ import {
   ChatExternalMcpSkillMetadataSchema,
   type ChatMessageFeedback,
   type ChatSkillMetadata,
+  providerRequiresPerUserCredential,
   type ThinkingEffortSetting,
   toPlaceholderTitle,
 } from "@archestra/shared";
@@ -208,6 +209,7 @@ import { ViewTransition } from "@/lib/view-transition";
 import { appToReopenAsEncryptedChat } from "./app-chat-reopen";
 import {
   buildCreateConversationInput,
+  inheritedChatModelChoice,
   isAutoSendHandoffInProgress,
   resolveChatModelState,
   resolvePreferredModelForProvider,
@@ -466,8 +468,11 @@ export function ChatPageContent({
   const providerCatalog = useModelProviderCatalog();
   const startAgentRunMutation = useStartAgentRun();
   // Fetch profiles and models for initial chat (no conversation)
-  const { modelsByProvider, isPending: isModelsLoading } =
-    useLlmModelsByProvider({ enabled: canUseProviderSettings });
+  const {
+    modelsByProvider,
+    isPending: isModelsLoading,
+    isFetching: isModelsFetching,
+  } = useLlmModelsByProvider({ enabled: canUseProviderSettings });
   const canLoadApiKeys = hasChatAccess && canUseProviderSettings;
   const {
     data: chatApiKeys = [],
@@ -518,6 +523,17 @@ export function ChatPageContent({
     ],
   });
 
+  const initialModelLink = searchParams.get("modelId");
+  const isInitialModelLinkPending =
+    !!initialModelLink &&
+    canUseProviderSettings &&
+    (isModelsLoading ||
+      isLoadingUsableApiKeys ||
+      (isModelsFetching &&
+        !Object.values(modelsByProvider).some((models) =>
+          models.some((model) => model.dbId === initialModelLink),
+        )));
+
   // Shared new-chat initialization (agent/model/key resolution + persistence).
   const {
     agentId: initialAgentId,
@@ -527,6 +543,8 @@ export function ChatPageContent({
     apiKeyId: initialApiKeyId,
     provider: initialProvider,
     modelSource: initialModelSource,
+    hasModelOverride: hasInitialModelOverride,
+    isUrlModelSelectionPending,
     setApiKeyId: setInitialApiKeyId,
     thinkingEffort: initialThinkingEffort,
     setThinkingEffort: setInitialThinkingEffort,
@@ -543,20 +561,24 @@ export function ChatPageContent({
     modelsByProvider,
     chatApiKeys: usableChatApiKeys,
     urlAgentId: searchParams.get("agentId"),
-    urlModelId: searchParams.get("modelId"),
+    urlModelId: initialModelLink,
     projectDefaultAgentId: newChatProject?.defaultAgent?.id ?? null,
     canUseSavedAgent: canSeeAgentPicker === true,
     isPermissionResolving: isAgentPickerPermissionLoading,
     isOrgLoading,
     isProjectLoading: !!newChatProjectId && isNewChatProjectPending,
-    isApiKeysLoading: isLoadingUsableApiKeys,
+    isApiKeysLoading: isLoadingUsableApiKeys || isInitialModelLinkPending,
     routeConversationId,
   });
+  const isInitialModelSelectionPending =
+    isInitialModelLinkPending || isUrlModelSelectionPending;
   // Which auto routers can be picked, and which one the organization default
   // runs on, which a new chat on an agent without a model of its own starts
   // on. While its router cannot route, a chat on one shows the normal tier it
   // runs on.
-  const organizationDefaultModel = useOrganizationDefaultModel();
+  const organizationDefaultModel = useOrganizationDefaultModel({
+    forChat: true,
+  });
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;
@@ -577,22 +599,23 @@ export function ChatPageContent({
     organizationDefaultModel.autoRouters.some((router) => router.id === id)
       ? id
       : null;
-  const initialAutoRouterId =
-    initialModelSource !== "user" && initialRuntimeCandidate?.runtime === null
-      ? initialRuntimeCandidate.autoRouterId
-        ? offeredAutoRouterId(initialRuntimeCandidate.autoRouterId)
-        : initialModelSource !== "agent" && !initialRuntimeCandidate.modelPoolId
-          ? offeredAutoRouterId(organizationDefaultModel.defaultAutoRouterId)
-          : null
-      : null;
-  const initialModelPoolId =
-    initialModelPoolChoice !== undefined
-      ? initialModelPoolChoice
-      : initialAutoRouterId
-        ? autoModelChoice(initialAutoRouterId)
-        : initialModelSource === "agent"
-          ? (initialRuntimeCandidate?.modelPoolId ?? null)
-          : null;
+  const followsInitialModelDefaults =
+    initialModelPoolChoice === undefined && !hasInitialModelOverride;
+  const initialModelPoolId = followsInitialModelDefaults
+    ? inheritedChatModelChoice(
+        initialRuntimeCandidate,
+        organizationDefaultModel,
+      )
+    : (initialModelPoolChoice ?? null);
+  const initialAutoUnavailableReason =
+    organizationDefaultModel.autoRouters.find(
+      (router) => router.id === autoRouterIdOfChoice(initialModelPoolId),
+    )?.unavailableReason;
+  const initialModelUnavailableReason =
+    initialAutoUnavailableReason ??
+    (!followsInitialModelDefaults && !initialModelPoolId && !initialModel
+      ? "Choose a model for this connection."
+      : null);
   const initialRuntimeAgent =
     runtimeEnabled && initialRuntimeCandidate?.runtime
       ? initialRuntimeCandidate
@@ -1092,6 +1115,7 @@ export function ChatPageContent({
     // A configured pool can supply a shared key through agent access even
     // when the viewer has no directly granted keys of their own.
     activePoolSelected ||
+    Boolean(conversationId ? conversation?.autoRouterId : initialModelPoolId) ||
     // Until the permissions and then the keys arrive, keep the composer: the
     // no-provider screen shows only once the list has said there are none.
     // "No data yet", not "fetching": the render that enables the queries is
@@ -1322,39 +1346,54 @@ export function ChatPageContent({
   chatModelsRef.current = chatModels;
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
+  const conversationAgentProviderRef = useRef(
+    conversationAgent?.resolvedLlmProvider,
+  );
+  conversationAgentProviderRef.current = conversationAgent?.resolvedLlmProvider;
   // Picking a model also pins the API key it runs through: a conversation
-  // stores the (model, key) pair as a unit, so a model is never persisted
-  // without its key. Keep the conversation's current key when it serves the
-  // model's provider, otherwise use a key the viewer may use for that provider.
-  const handleModelChange = useCallback((modelId: string) => {
-    const conv = conversationRef.current;
-    if (!conv) return;
-    const model = chatModelsRef.current.find((m) => m.dbId === modelId);
-    const chatApiKeyId = resolveConversationKeyForModel({
-      currentKeyId: conv.chatApiKeyId,
-      // A stored (model, key) pair shares one provider, so the current
-      // model tells which provider the agent's own key serves.
-      currentModelProvider: chatModelsRef.current.find(
-        (m) => m.dbId === conv.modelId,
-      )?.provider,
-      agentApiKeyId: conv.agent?.llmApiKeyId,
-      modelProvider: model?.provider,
-      usableKeys: usableChatApiKeysRef.current,
-    });
-    subscriptionDebug("model change", {
-      source: "conversation-model-selector",
-      conversationId: conv.id,
-      previousModelId: conv.modelId,
-      previousChatApiKeyId: conv.chatApiKeyId,
-      nextModelId: modelId,
-      nextChatApiKeyId: chatApiKeyId,
-    });
-    updateConversationMutateRef.current({
-      id: conv.id,
-      modelId,
-      chatApiKeyId,
-    });
-  }, []);
+  // stores the (model, key) pair as a unit. A personal model clears the key
+  // and uses the viewer's own connection at send time.
+  const handleModelChange = useCallback(
+    (modelId: string, automatic?: true, personal?: true) => {
+      const conv = conversationRef.current;
+      if (!conv) return;
+      const model = chatModelsRef.current.find((m) => m.dbId === modelId);
+      const chatApiKeyId = personal
+        ? null
+        : resolveConversationKeyForModel({
+            currentKeyId: conv.chatApiKeyId,
+            // A stored (model, key) pair shares one provider, so the current
+            // model tells which provider the agent's own key serves.
+            currentModelProvider:
+              chatModelsRef.current.find((m) => m.dbId === conv.modelId)
+                ?.provider ??
+              conversationAgentProviderRef.current ??
+              undefined,
+            agentApiKeyId: conv.agent?.llmApiKeyId,
+            modelProvider: model?.provider,
+            modelApiKeyIds: model?.requiresUserConnection
+              ? undefined
+              : model?.apiKeyIds,
+            usableKeys: usableChatApiKeysRef.current,
+          });
+      subscriptionDebug("model change", {
+        source: "conversation-model-selector",
+        conversationId: conv.id,
+        previousModelId: conv.modelId,
+        previousChatApiKeyId: conv.chatApiKeyId,
+        nextModelId: modelId,
+        nextChatApiKeyId: chatApiKeyId,
+      });
+      updateConversationMutateRef.current({
+        id: conv.id,
+        modelId,
+        chatApiKeyId,
+        strictModelSelection:
+          !automatic && !personal && !model?.requiresUserConnection,
+      });
+    },
+    [],
+  );
 
   // The composer's own state is the one source for the depth. Finishing a
   // message invalidates the conversation query, so the row cannot hold an
@@ -1442,8 +1481,14 @@ export function ChatPageContent({
     (newProvider: SupportedProvider, apiKeyId: string) => {
       if (!conversation) return;
 
+      const personal =
+        providerRequiresPerUserCredential(newProvider) &&
+        !usableChatApiKeysRef.current.find((key) => key.id === apiKeyId)
+          ?.isGithubAppKey;
       const preferredModel = resolvePreferredModelForProvider({
         provider: newProvider,
+        apiKeyId,
+        allowPersonalModels: personal,
         modelsByProvider,
       });
       subscriptionDebug("provider credential change", {
@@ -1457,12 +1502,7 @@ export function ChatPageContent({
           id: conversation.id,
           chatApiKeyId: apiKeyId,
           modelId: preferredModel.modelId,
-        });
-      } else {
-        // No models for this provider yet, still update the key
-        updateConversationMutateRef.current({
-          id: conversation.id,
-          chatApiKeyId: apiKeyId,
+          strictModelSelection: !personal,
         });
       }
     },
@@ -2716,6 +2756,7 @@ export function ChatPageContent({
     ) => {
       if (
         createConversationMutation.isPending ||
+        isInitialModelSelectionPending ||
         isAgentSubscriptionMetadataPending
       ) {
         return false;
@@ -2723,6 +2764,7 @@ export function ChatPageContent({
 
       const input = buildCreateConversationInput({
         agentId: initialAgentId,
+        followDefaults: followsInitialModelDefaults,
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
         modelPoolId: initialModelPoolId,
@@ -2767,6 +2809,8 @@ export function ChatPageContent({
       initialModel,
       initialApiKeyId,
       initialModelPoolId,
+      followsInitialModelDefaults,
+      isInitialModelSelectionPending,
       isEncryptedChatDraft,
       initialThinkingEffort,
       isAgentSubscriptionMetadataPending,
@@ -3016,7 +3060,12 @@ export function ChatPageContent({
     // Skip if conversation already exists
     if (conversationId) return;
 
-    if (!initialAgentId || isAgentSubscriptionMetadataPending) return;
+    if (
+      !initialAgentId ||
+      isInitialModelSelectionPending ||
+      isAgentSubscriptionMetadataPending
+    )
+      return;
     // Skip if mutation is already in progress
     if (createConversationMutation.isPending) return;
 
@@ -3050,6 +3099,7 @@ export function ChatPageContent({
     initialUserPrompt,
     conversationId,
     initialAgentId,
+    isInitialModelSelectionPending,
     isAgentSubscriptionMetadataPending,
     createInitialConversation,
     selectConversation,
@@ -3798,6 +3848,7 @@ export function ChatPageContent({
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending ||
                                 conversationPoolSelected ||
+                                !!conversation?.autoRouterId ||
                                 conversationModelSource === "agent" ||
                                 conversationPerUserConnect.needsConnect
                               }
@@ -4019,18 +4070,22 @@ export function ChatPageContent({
                                   : "ready"
                               }
                               selectedModel={initialModel}
-                              onModelChange={(modelId) => {
-                                setInitialModelPoolChoice(null);
-                                handleInitialModelChange(modelId);
+                              onModelChange={(modelId, automatic, personal) => {
+                                if (!automatic) setInitialModelPoolChoice(null);
+                                handleInitialModelChange(
+                                  modelId,
+                                  automatic,
+                                  personal,
+                                );
                               }}
                               agentId={newChatAgentId}
                               currentProvider={initialProvider}
                               textareaRef={textareaRef}
                               initialApiKeyId={initialApiKeyId}
                               onApiKeyChange={setInitialApiKeyId}
-                              onProviderChange={(provider) => {
+                              onProviderChange={(provider, keyId) => {
                                 setInitialModelPoolChoice(null);
-                                handleInitialProviderChange(provider);
+                                handleInitialProviderChange(provider, keyId);
                               }}
                               allowFileUploads={
                                 organization?.allowChatFileUploads ?? false
@@ -4057,9 +4112,11 @@ export function ChatPageContent({
                               sendDisabled={
                                 isLoadingAgents ||
                                 isLoadingApiKeys ||
+                                isInitialModelSelectionPending ||
                                 !initialAgentId ||
                                 (!isInitialRuntimeMode &&
-                                  isAgentSubscriptionMetadataPending) ||
+                                  (isAgentSubscriptionMetadataPending ||
+                                    !!initialModelUnavailableReason)) ||
                                 (isInitialRuntimeMode &&
                                   (runtimePreflight.isPending ||
                                     runtimePreflight.data?.ready !== true))
@@ -4067,7 +4124,8 @@ export function ChatPageContent({
                               disabledReason={
                                 isLoadingAgents
                                   ? "Loading agents…"
-                                  : isLoadingApiKeys
+                                  : isLoadingApiKeys ||
+                                      isInitialModelSelectionPending
                                     ? "Loading model providers…"
                                     : !initialAgentId
                                       ? "No agent is available to you"
@@ -4077,7 +4135,8 @@ export function ChatPageContent({
                                           )
                                         : isAgentSubscriptionMetadataPending
                                           ? "Checking the agent's credentials…"
-                                          : undefined
+                                          : (initialModelUnavailableReason ??
+                                            undefined)
                               }
                               subscriptionConnectRequired={
                                 initialPerUserConnect.needsConnect
@@ -4110,6 +4169,7 @@ export function ChatPageContent({
                               agentRequiresPerUserConnect={
                                 isAgentSubscriptionMetadataPending ||
                                 initialPoolSelected ||
+                                hasInitialModelOverride ||
                                 initialModelSource === "agent" ||
                                 initialPerUserConnect.needsConnect
                               }

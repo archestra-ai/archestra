@@ -63,6 +63,8 @@ export const LlmModelSchema = z.object({
   createdAt: z.string().optional(),
   capabilities: ModelCapabilitiesSchema.optional(),
   isBest: z.boolean().optional(),
+  /** Credentials available to the caller that serve this model. */
+  apiKeyIds: z.array(z.string()).optional(),
   /** True when the provider charges nothing for this model (both prices are zero). */
   isFree: z.boolean(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
@@ -864,13 +866,14 @@ export async function getAvailableLlmModels(params: {
     .filter(({ model }) =>
       isEmbedding ? true : ModelModel.supportsTextChat(model),
     )
-    .map(({ model, isBest, recommendedForAgents }) => ({
+    .map(({ model, isBest, recommendedForAgents, apiKeyIds }) => ({
       id: model.modelId,
       dbId: model.id,
       displayName: model.description || model.modelId,
       provider: model.provider,
       capabilities: ModelModel.toCapabilities(model, recommendedForAgents),
       isBest,
+      apiKeyIds,
       isFree: isFreeModel(model),
       embeddingDimensions: model.embeddingDimensions,
     }));
@@ -1002,6 +1005,7 @@ async function getPerUserProviderModels(params: {
           isBest,
           isFree: isFreeModel(model),
           embeddingDimensions: model.embeddingDimensions,
+          apiKeyIds: [],
           requiresUserConnection: true,
           isConnected,
         }));

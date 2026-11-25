@@ -20,15 +20,19 @@ RUN apt-get update -qq \
 
 # Upstream gh 2.103.2 and 2.103.3 embed x/net 0.60.0 (CVE-2026-78661).
 # Rebuild the existing CLI release with the fixed module until upstream ships it.
-FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS gh-build
+# Docker's hardened Go image has no curl or gzip: BuildKit fetches and checks the
+# source, and apt adds gzip to unpack it.
+FROM dhi.io/golang:1.27.4-debian13-dev@sha256:a56385e6b77b61ccaf807d5ea72d8593ad7a390fdd1c6552c4e127a90730b05f AS gh-build
 WORKDIR /src
-RUN curl -fsSL --retry 3 \
-      https://codeload.github.com/cli/cli/tar.gz/4f2cfe92e3499f8581bf39db77e0a1431fa7b55c \
-      -o /tmp/gh-source.tar.gz \
- && echo '0eda9a553f1e191d7d63214dd1373f184a8f922b221387af510e63252c1d5419  /tmp/gh-source.tar.gz' | sha256sum -c - \
+ADD --checksum=sha256:0eda9a553f1e191d7d63214dd1373f184a8f922b221387af510e63252c1d5419 \
+    https://codeload.github.com/cli/cli/tar.gz/4f2cfe92e3499f8581bf39db77e0a1431fa7b55c \
+    /tmp/gh-source.tar.gz
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gzip \
+ && rm -rf /var/lib/apt/lists/* \
  && tar -xzf /tmp/gh-source.tar.gz --strip-components=1 \
  && rm /tmp/gh-source.tar.gz \
- && go get golang.org/x/net@v0.62.0 \
+ && go get golang.org/x/net@v0.63.0 \
  && go mod verify \
  && CGO_ENABLED=0 go build -trimpath \
       -ldflags='-s -w -X github.com/cli/cli/v2/internal/build.Version=2.103.2 -X github.com/cli/cli/v2/internal/build.Date=2026-10-23' \
@@ -38,7 +42,7 @@ RUN curl -fsSL --retry 3 \
  && /out/gh api --help >/dev/null \
  && /out/gh auth git-credential --help >/dev/null
 
-FROM dhi.io/node:24.22.3-debian13-dev@sha256:810c2c99b5a81edea5a402abd0afc693ccd51712e22cee6824d910c3e564c182 AS agent-base
+FROM dhi.io/node:24.22.3-debian13-dev@sha256:aa2362cc595c51bcaaed8820482ff4cde2c610d4a9af4fcd281909954bd861ac AS agent-base
 ARG TARGETARCH
 # DHI's apt mirror can serve a stale archive after its signed index changes.
 # Request fresh packages while retaining apt's index and archive verification.

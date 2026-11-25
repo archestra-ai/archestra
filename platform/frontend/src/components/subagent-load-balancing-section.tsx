@@ -86,8 +86,8 @@ export function SubagentLoadBalancingSection({
   const noun = isGateway ? "agent" : "subagent";
   const nouns = isGateway ? "agents" : "subagents";
   const sectionDescription = isGateway
-    ? "Load balance Agent Runtime agent runs or start directly. Agents without a dedicated runtime are always called directly."
-    : "Load balance Agent Runtime subagent runs or start directly. Subagents without a dedicated runtime are always called directly.";
+    ? "Load balance Agent Runtime agent runs or let the model pick one. Agents without a dedicated runtime are always selected by the model."
+    : "Load balance Agent Runtime subagent runs or let the model pick one. Subagents without a dedicated runtime are always selected by the model.";
   const modeOptions = getModeOptions({ noun, nouns, isAllSubagentsMode });
 
   const isEnabled = value?.enabled === true;

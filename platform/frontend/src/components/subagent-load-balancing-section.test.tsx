@@ -166,7 +166,7 @@ describe("SubagentLoadBalancingSection", () => {
     expect(screen.queryByText("Beta")).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "Load balance Agent Runtime subagent runs or start directly. Subagents without a dedicated runtime are always called directly.",
+        "Load balance Agent Runtime subagent runs or let the model pick one. Subagents without a dedicated runtime are always selected by the model.",
       ),
     ).toBeInTheDocument();
 
@@ -195,7 +195,7 @@ describe("SubagentLoadBalancingSection", () => {
 
     expect(
       screen.getByText(
-        "Load balance Agent Runtime agent runs or start directly. Agents without a dedicated runtime are always called directly.",
+        "Load balance Agent Runtime agent runs or let the model pick one. Agents without a dedicated runtime are always selected by the model.",
       ),
     ).toBeInTheDocument();
     expect(

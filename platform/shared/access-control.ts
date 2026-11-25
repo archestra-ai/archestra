@@ -595,6 +595,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StartClaudeCodeSignIn]: {},
   [RouteId.CompleteClaudeCodeSignIn]: {},
   [RouteId.DisconnectClaudeCodeAccount]: {},
+  [RouteId.GetMyClaudeCodeAccount]: {},
+  [RouteId.StartMyClaudeCodeSignIn]: {},
+  [RouteId.CompleteMyClaudeCodeSignIn]: {},
+  [RouteId.DisconnectMyClaudeCodeAccount]: {},
   [RouteId.GetClaudeCodeModels]: {},
   [RouteId.SetAgentRuntimeCredential]: {},
   [RouteId.DeleteAgentRuntimeCredential]: {},
@@ -649,11 +653,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetClientConnection]: {},
   [RouteId.DecideClientConnection]: {},
   // Desktop devices. The tunnel client's own calls are public: sign-in start and
-  // poll carry a polling proof, the program download is not secret, and the
-  // tunnel endpoints authenticate with the device key.
+  // poll carry a polling proof, the program download and its install scripts
+  // are not secret, and the tunnel endpoints authenticate with the device key.
   [RouteId.StartDesktopDeviceSignIn]: {},
   [RouteId.PollDesktopDeviceSignIn]: {},
   [RouteId.DownloadArchestraCli]: {},
+  [RouteId.GetArchestraCliInstallScript]: {},
+  [RouteId.GetArchestraCliPowershellInstallScript]: {},
   [RouteId.GetDesktopTunnel]: {},
   [RouteId.PollDesktopTunnel]: {},
   [RouteId.RespondDesktopTunnel]: {},
@@ -1553,10 +1559,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetOnboardingSeenNavItems]: {}, // Per-user onboarding red-dot state - available to all authenticated users
   [RouteId.MarkOnboardingNavItemsSeen]: {}, // Per-user onboarding red-dot state - available to all authenticated users
-  [RouteId.GetOnboardingSurveyEligibility]: {
-    organizationSettings: ["update"],
-  }, // First-login survey - admins only (same gate as appearance settings)
-  [RouteId.SubmitOnboardingSurvey]: { organizationSettings: ["update"] }, // First-login survey - admins only
+  [RouteId.GetFirstRunSetup]: { organizationSettings: ["update"] }, // First-run setup dialog - admins only
+  [RouteId.CompleteFirstRunSetup]: { organizationSettings: ["update"] }, // First-run setup dialog - admins only
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
   [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
   [RouteId.BulkDeleteMembers]: { member: ["delete"] },
@@ -1954,6 +1958,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.GetOpenappaBatteries]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaBatterySource]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaEffectivePolicy]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryMatches]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryInstall]: { guardrailsPolicy: ["read"] },
@@ -2322,6 +2327,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Also open to a member who may read some MCP server's rules file: the
   // page then lists only those files (`useServerRulesAccess`).
   "/openappa/policy": { guardrailsPolicy: ["read"] },
+  // The file workspace over the same policy; not linked from the navigation.
+  "/openappa/policy/workspace": { guardrailsPolicy: ["read"] },
   "/openappa/batteries": { guardrailsPolicy: ["read"] },
 
   // Logs
@@ -2329,10 +2336,17 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // (`alternativePagePermissionsMap`), and the page shows what the caller
   // may read.
   "/logs": { log: ["read"] },
+  // The per-type log pages the sidebar opens; `/logs` above is not linked
+  // from the navigation yet.
+  "/llm/logs": { log: ["read"] },
+  "/mcp/logs": { log: ["read"] },
+  "/audit/logs": { auditLog: ["read"] },
+  "/consults/logs": { guardrailsLog: ["read"] },
   "/consults/logs/[id]": { guardrailsLog: ["read"] },
   "/consults/logs/yells/[id]": { guardrailsLog: ["read"] },
   "/audit/logs/[id]": { auditLog: ["read"] },
-  "/adoption": { clientConnection: ["admin"] },
+  // Shows every member's connections and the adoption built from them.
+  "/connections/logs": { clientConnection: ["admin"] },
   "/connections/logs/[id]": { clientConnection: ["read"] },
 
   // Knowledge

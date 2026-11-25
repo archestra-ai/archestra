@@ -31,16 +31,19 @@ const inlineNoticeVariants = cva(
   // grid (icon, text, action) so the action can centre on the message and its
   // toggle while the opened details take a row of their own.
   //
-  // Below `sm` the icon is hidden: on a phone it takes a column the message
-  // needs, and the variant's colour already says what kind of notice it is.
-  // The grid drops the icon column with it, so the text, toggle, details and
-  // action each move one column left.
-  "flex flex-wrap items-center gap-x-2 max-sm:flex-wrap gap-y-1 rounded-md border px-2.5 py-1.5 text-xs [&>svg]:size-3.5 [&>svg]:shrink-0 max-sm:[&>svg]:hidden has-[>[data-slot=inline-notice-details-toggle]]:grid has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[minmax(0,1fr)_auto] sm:has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[auto_minmax(0,1fr)_auto] has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-2 sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-3 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-2 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-1",
+  // Below `sm` the icon is hidden on boxed notices: on a phone it takes a
+  // column the message needs, and the variant's colour already says what kind
+  // of notice it is. The grid drops the icon column with it, so the text,
+  // toggle, details and action each move one column left.
+  "flex flex-wrap items-center gap-x-2 max-sm:flex-wrap gap-y-1 [&>svg]:shrink-0 has-[>[data-slot=inline-notice-details-toggle]]:grid has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[minmax(0,1fr)_auto] sm:has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[auto_minmax(0,1fr)_auto] has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-2 sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-3 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-2 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-1",
   {
     variants: {
+      size: {
+        xs: "text-xs [&>svg]:size-3.5",
+        sm: "text-sm [&>svg]:size-4",
+      },
       variant: {
-        warning:
-          "border-[#EBCB8B] bg-[#FFFAEE] text-[#6A3E0E] dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-200 [&>svg]:text-[#A25E07] dark:[&>svg]:text-amber-400 **:data-[slot=inline-notice-text]:text-[#8A5A1C] dark:**:data-[slot=inline-notice-text]:text-amber-300",
+        warning: "",
         error:
           "border-destructive/40 bg-destructive/5 text-destructive [&>svg]:text-destructive **:data-[slot=inline-notice-text]:text-destructive/90",
         success:
@@ -48,6 +51,14 @@ const inlineNoticeVariants = cva(
         info: "border-blue-500/50 bg-blue-50 text-blue-900 dark:border-blue-500/30 dark:bg-blue-950/50 dark:text-blue-200 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400 **:data-[slot=inline-notice-text]:text-blue-800 dark:**:data-[slot=inline-notice-text]:text-blue-300",
         neutral:
           "bg-muted/40 text-foreground [&>svg]:text-muted-foreground **:data-[slot=inline-notice-text]:text-muted-foreground",
+      },
+      /**
+       * Borderless, lower-contrast note for inside cards and forms: keeps only
+       * the pictogram highlighted in the variant's colour while text stays muted.
+       */
+      plain: {
+        false: "rounded-md border px-2.5 py-1.5 max-sm:[&>svg]:hidden",
+        true: "flex-nowrap items-start gap-x-1.5 **:data-[slot=inline-notice-text]:w-auto **:data-[slot=inline-notice-text]:flex-1",
       },
       mobileLayout: {
         stacked:
@@ -68,6 +79,18 @@ const inlineNoticeVariants = cva(
     compoundVariants: [
       {
         variant: "warning",
+        plain: false,
+        class:
+          "border-[#EBCB8B] bg-[#FFFAEE] text-[#6A3E0E] dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-200 [&>svg]:text-[#A25E07] dark:[&>svg]:text-amber-400 **:data-[slot=inline-notice-text]:text-[#8A5A1C] dark:**:data-[slot=inline-notice-text]:text-amber-300",
+      },
+      {
+        variant: "warning",
+        plain: true,
+        class:
+          "text-muted-foreground [&>svg]:text-[#A25E07] dark:[&>svg]:text-amber-400 **:data-[slot=inline-notice-text]:text-muted-foreground",
+      },
+      {
+        variant: "warning",
         floating: true,
         class: "bg-[#FFFAEE]/90 dark:bg-amber-950/60",
       },
@@ -85,7 +108,9 @@ const inlineNoticeVariants = cva(
       { variant: "neutral", floating: true, class: "bg-muted/80" },
     ],
     defaultVariants: {
+      size: "xs",
       variant: "warning",
+      plain: false,
       floating: false,
     },
   },
@@ -93,7 +118,9 @@ const inlineNoticeVariants = cva(
 
 export function InlineNotice({
   className,
+  size,
   variant,
+  plain,
   mobileLayout,
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof inlineNoticeVariants>) {
@@ -101,7 +128,10 @@ export function InlineNotice({
     <div
       role="alert"
       data-slot="inline-notice"
-      className={cn(inlineNoticeVariants({ variant, mobileLayout }), className)}
+      className={cn(
+        inlineNoticeVariants({ size, variant, plain, mobileLayout }),
+        className,
+      )}
       {...props}
     />
   );

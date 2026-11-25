@@ -17331,6 +17331,7 @@ export type GetAgentCatalogResponses = {
                 resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 resolvedLlmProviderKeyName?: string | null;
                 resolvedLlmModelName?: string | null;
+                resolvedLlmPersonalSubscription?: boolean;
                 llmProviderRequiresPerUserCredential?: boolean;
                 sandboxAvailable?: boolean;
                 activationSkillsCount?: number;
@@ -17736,6 +17737,7 @@ export type GetAgentsResponses = {
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
+            resolvedLlmPersonalSubscription?: boolean;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
@@ -18195,6 +18197,7 @@ export type CreateAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -19493,6 +19496,7 @@ export type GetDefaultMcpGatewayResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -19817,6 +19821,7 @@ export type ImportAgentResponses = {
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
+            resolvedLlmPersonalSubscription?: boolean;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
@@ -20150,6 +20155,7 @@ export type GetAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -20497,6 +20503,7 @@ export type UpdateAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -21298,6 +21305,7 @@ export type RestoreAgentVersionResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -21563,6 +21571,7 @@ export type CloneAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -24064,6 +24073,7 @@ export type RestoreAgentResponses = {
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
+        resolvedLlmPersonalSubscription?: boolean;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
@@ -25650,6 +25660,365 @@ export type CompleteClaudeCodeSignInResponses = {
 };
 
 export type CompleteClaudeCodeSignInResponse = CompleteClaudeCodeSignInResponses[keyof CompleteClaudeCodeSignInResponses];
+
+export type DisconnectMyClaudeCodeAccountData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account';
+};
+
+export type DisconnectMyClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisconnectMyClaudeCodeAccountError = DisconnectMyClaudeCodeAccountErrors[keyof DisconnectMyClaudeCodeAccountErrors];
+
+export type DisconnectMyClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type DisconnectMyClaudeCodeAccountResponse = DisconnectMyClaudeCodeAccountResponses[keyof DisconnectMyClaudeCodeAccountResponses];
+
+export type GetMyClaudeCodeAccountData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account';
+};
+
+export type GetMyClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyClaudeCodeAccountError = GetMyClaudeCodeAccountErrors[keyof GetMyClaudeCodeAccountErrors];
+
+export type GetMyClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type GetMyClaudeCodeAccountResponse = GetMyClaudeCodeAccountResponses[keyof GetMyClaudeCodeAccountResponses];
+
+export type StartMyClaudeCodeSignInData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account';
+};
+
+export type StartMyClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartMyClaudeCodeSignInError = StartMyClaudeCodeSignInErrors[keyof StartMyClaudeCodeSignInErrors];
+
+export type StartMyClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type StartMyClaudeCodeSignInResponse = StartMyClaudeCodeSignInResponses[keyof StartMyClaudeCodeSignInResponses];
+
+export type CompleteMyClaudeCodeSignInData = {
+    body: {
+        flowId: string;
+        code?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime/claude-code/account/complete';
+};
+
+export type CompleteMyClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteMyClaudeCodeSignInError = CompleteMyClaudeCodeSignInErrors[keyof CompleteMyClaudeCodeSignInErrors];
+
+export type CompleteMyClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        expiresAt?: string | null;
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type CompleteMyClaudeCodeSignInResponse = CompleteMyClaudeCodeSignInResponses[keyof CompleteMyClaudeCodeSignInResponses];
 
 export type GetClaudeCodeModelsData = {
     body?: never;
@@ -34278,6 +34647,34 @@ export type AssignToolToAppResponses = {
 };
 
 export type AssignToolToAppResponse = AssignToolToAppResponses[keyof AssignToolToAppResponses];
+
+export type GetArchestraCliInstallScriptData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/archestra-cli/install.sh';
+};
+
+export type GetArchestraCliInstallScriptResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetArchestraCliPowershellInstallScriptData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/archestra-cli/install.ps1';
+};
+
+export type GetArchestraCliPowershellInstallScriptResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type DownloadArchestraCliData = {
     body?: never;
@@ -45496,6 +45893,8 @@ export type GetBootstrapResponses = {
             metadata: string | null;
             onboardingComplete: boolean;
             onboardingSurveyCompletedAt: string | null;
+            firstRunSetupCompletedAt: string | null;
+            telemetryEnabled: boolean;
             theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
             customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
             onlineMcpCatalogEnabled: boolean;
@@ -46192,6 +46591,7 @@ export type GetNewChatBootstrapResponses = {
                 resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 resolvedLlmProviderKeyName?: string | null;
                 resolvedLlmModelName?: string | null;
+                resolvedLlmPersonalSubscription?: boolean;
                 llmProviderRequiresPerUserCredential?: boolean;
                 sandboxAvailable?: boolean;
                 activationSkillsCount?: number;
@@ -46806,6 +47206,7 @@ export type GetConversationBootstrapResponses = {
                     resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     resolvedLlmProviderKeyName?: string | null;
                     resolvedLlmModelName?: string | null;
+                    resolvedLlmPersonalSubscription?: boolean;
                     llmProviderRequiresPerUserCredential?: boolean;
                     sandboxAvailable?: boolean;
                     activationSkillsCount?: number;
@@ -58464,6 +58865,8 @@ export type GetDesktopDevicesResponses = {
         servers: Array<{
             catalogId: string;
             name: string;
+            icon: string | null;
+            iconUrl: string | null;
             state: 'no_command' | 'starting' | 'running' | 'failed' | 'stopped';
             lastError: string | null;
             command: string | null;
@@ -58663,6 +59066,8 @@ export type UpdateDesktopDeviceServerResponses = {
         servers: Array<{
             catalogId: string;
             name: string;
+            icon: string | null;
+            iconUrl: string | null;
             state: 'no_command' | 'starting' | 'running' | 'failed' | 'stopped';
             lastError: string | null;
             command: string | null;
@@ -93924,6 +94329,7 @@ export type GetInternalMcpCatalogResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -94100,6 +94506,7 @@ export type CreateInternalMcpCatalogItemData = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -94337,6 +94744,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -95434,6 +95842,7 @@ export type GetInternalMcpCatalogItemResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -95598,6 +96007,7 @@ export type UpdateInternalMcpCatalogItemData = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -95816,6 +96226,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -96526,6 +96937,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -96768,6 +97180,7 @@ export type ApproveCatalogItemImageResponses = {
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            requires_client_credentials?: boolean;
             audience?: string;
             resource?: string;
             redirect_uris: Array<string>;
@@ -122775,14 +123188,14 @@ export type MarkOnboardingNavItemsSeenResponses = {
 
 export type MarkOnboardingNavItemsSeenResponse = MarkOnboardingNavItemsSeenResponses[keyof MarkOnboardingNavItemsSeenResponses];
 
-export type GetOnboardingSurveyEligibilityData = {
+export type GetFirstRunSetupData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/onboarding/survey-eligibility';
+    url: '/api/onboarding/first-run-setup';
 };
 
-export type GetOnboardingSurveyEligibilityErrors = {
+export type GetFirstRunSetupErrors = {
     /**
      * Default Response
      */
@@ -122848,32 +123261,29 @@ export type GetOnboardingSurveyEligibilityErrors = {
     };
 };
 
-export type GetOnboardingSurveyEligibilityError = GetOnboardingSurveyEligibilityErrors[keyof GetOnboardingSurveyEligibilityErrors];
+export type GetFirstRunSetupError = GetFirstRunSetupErrors[keyof GetFirstRunSetupErrors];
 
-export type GetOnboardingSurveyEligibilityResponses = {
+export type GetFirstRunSetupResponses = {
     /**
      * Default Response
      */
     200: {
-        eligible: boolean;
+        show: boolean;
     };
 };
 
-export type GetOnboardingSurveyEligibilityResponse = GetOnboardingSurveyEligibilityResponses[keyof GetOnboardingSurveyEligibilityResponses];
+export type GetFirstRunSetupResponse = GetFirstRunSetupResponses[keyof GetFirstRunSetupResponses];
 
-export type SubmitOnboardingSurveyData = {
+export type CompleteFirstRunSetupData = {
     body: {
-        role: string;
-        workEnvironment: string;
-        referralSource: string;
-        workEmail?: string;
+        telemetryEnabled: boolean;
     };
     path?: never;
     query?: never;
-    url: '/api/onboarding/survey';
+    url: '/api/onboarding/first-run-setup';
 };
 
-export type SubmitOnboardingSurveyErrors = {
+export type CompleteFirstRunSetupErrors = {
     /**
      * Default Response
      */
@@ -122939,9 +123349,9 @@ export type SubmitOnboardingSurveyErrors = {
     };
 };
 
-export type SubmitOnboardingSurveyError = SubmitOnboardingSurveyErrors[keyof SubmitOnboardingSurveyErrors];
+export type CompleteFirstRunSetupError = CompleteFirstRunSetupErrors[keyof CompleteFirstRunSetupErrors];
 
-export type SubmitOnboardingSurveyResponses = {
+export type CompleteFirstRunSetupResponses = {
     /**
      * Default Response
      */
@@ -122950,7 +123360,7 @@ export type SubmitOnboardingSurveyResponses = {
     };
 };
 
-export type SubmitOnboardingSurveyResponse = SubmitOnboardingSurveyResponses[keyof SubmitOnboardingSurveyResponses];
+export type CompleteFirstRunSetupResponse = CompleteFirstRunSetupResponses[keyof CompleteFirstRunSetupResponses];
 
 export type OpenAiAudioSpeechWithDefaultAgentData = {
     body: {
@@ -125550,6 +125960,97 @@ export type GetOpenappaBatteryPolicySourceResponses = {
 
 export type GetOpenappaBatteryPolicySourceResponse = GetOpenappaBatteryPolicySourceResponses[keyof GetOpenappaBatteryPolicySourceResponses];
 
+export type GetOpenappaBatterySourceData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: never;
+    url: '/api/openappa/batteries/{name}/source';
+};
+
+export type GetOpenappaBatterySourceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaBatterySourceError = GetOpenappaBatterySourceErrors[keyof GetOpenappaBatterySourceErrors];
+
+export type GetOpenappaBatterySourceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        entry: string;
+        name: string;
+        kind: 'battery' | 'repository';
+        content: string;
+    };
+};
+
+export type GetOpenappaBatterySourceResponse = GetOpenappaBatterySourceResponses[keyof GetOpenappaBatterySourceResponses];
+
 export type GetOpenappaEffectivePolicyData = {
     body?: never;
     path?: never;
@@ -127725,13 +128226,13 @@ export type GetAppaGithubSyncResponses = {
                 checkName: string;
                 url: string | null;
             };
-            autoMerge: {
-                enabled: boolean;
-                setting: boolean;
-                environment?: {
-                    variable: string;
-                    value: 'enabled' | 'disabled';
-                };
+        };
+        autoMerge: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
             };
         };
         hasPolicy: boolean;
@@ -127887,13 +128388,13 @@ export type UpdateAppaGithubSyncResponses = {
                 checkName: string;
                 url: string | null;
             };
-            autoMerge: {
-                enabled: boolean;
-                setting: boolean;
-                environment?: {
-                    variable: string;
-                    value: 'enabled' | 'disabled';
-                };
+        };
+        autoMerge: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
             };
         };
         hasPolicy: boolean;
@@ -128045,13 +128546,13 @@ export type ConfigureAppaGithubSyncResponses = {
                 checkName: string;
                 url: string | null;
             };
-            autoMerge: {
-                enabled: boolean;
-                setting: boolean;
-                environment?: {
-                    variable: string;
-                    value: 'enabled' | 'disabled';
-                };
+        };
+        autoMerge: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
             };
         };
         hasPolicy: boolean;
@@ -128701,13 +129202,13 @@ export type CreateAppaGithubRepositoryResponses = {
                 checkName: string;
                 url: string | null;
             };
-            autoMerge: {
-                enabled: boolean;
-                setting: boolean;
-                environment?: {
-                    variable: string;
-                    value: 'enabled' | 'disabled';
-                };
+        };
+        autoMerge: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
             };
         };
         hasPolicy: boolean;
@@ -131979,6 +132480,8 @@ export type GetOrganizationResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -132457,6 +132960,8 @@ export type UpdateAppearanceSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -132703,6 +133208,8 @@ export type UpdateSecuritySettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -132945,6 +133452,8 @@ export type UpdateMcpSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -133186,6 +133695,8 @@ export type UpdateSkillsSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -133851,6 +134362,8 @@ export type UpdateAgentSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -134116,6 +134629,8 @@ export type UpdateConnectionSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -134417,6 +134932,8 @@ export type UpdateIntegrationSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -134668,6 +135185,8 @@ export type UpdateDefaultEnvironmentResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -134914,6 +135433,8 @@ export type UpdateAuthSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -135162,6 +135683,8 @@ export type UpdateKnowledgeSettingsResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -135400,6 +135923,8 @@ export type DropEmbeddingConfigResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
@@ -136000,6 +136525,8 @@ export type CompleteOnboardingResponses = {
         metadata: string | null;
         onboardingComplete: boolean;
         onboardingSurveyCompletedAt: string | null;
+        firstRunSetupCompletedAt: string | null;
+        telemetryEnabled: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;

@@ -13,9 +13,9 @@ import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
+  SectionLabel,
   Tool,
   ToolContent,
-  ToolErrorDetails,
   ToolHeader,
   ToolInput,
   ToolOutput,
@@ -36,6 +36,7 @@ import {
   getHumanRulingDisplay,
   getToolErrorText,
   getToolHeaderState,
+  hasToolRequest,
   withParsedArguments,
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -64,7 +65,6 @@ import {
   getOpenAppaSaveResult,
   isOpenAppaPolicyChange,
   isOpenAppaPreview,
-  OpenAppaPolicyArguments,
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
   OpenAppaValidationCompletion,
@@ -179,25 +179,39 @@ function CompactCircle({
   // A call that detached into a background task reads as running, but is worth
   // distinguishing: it is no longer bounded by the usual wait, and it can be
   // cancelled from the expanded card.
-  const { task } = useMcpTaskFor(toolCallId);
-  const isBackground = task?.status === "working" && state === "running";
+  const { task, isQueued: waitsForItsTurn } = useMcpTaskFor(toolCallId);
+  // A call a background task still runs outlives its turn, so the turn's end
+  // does not make it a stopped call.
+  const isWorkingTask =
+    task?.status === "working" &&
+    (state === "running" || state === "cancelled");
   // A cancelled task still reports a tool result, so the underlying state
   // reads as completed. It wasn't — the user stopped it.
-  const isCancelled = task?.status === "cancelled";
+  const isCancelled =
+    task?.status === "cancelled" || (state === "cancelled" && !isWorkingTask);
+  // A server runs a few calls at a time. The rest of a batch waits, and must
+  // not read as running while it does. A waiting call can become a background
+  // task before it starts (the task's clock covers the wait): it still waits.
+  const isQueued = waitsForItsTurn && state === "running";
+  const isBackground = isWorkingTask && !isQueued;
   const elapsed = useElapsedSince(task?.startedAt ?? 0, Boolean(isBackground));
-  const stateSuffix = isBackground
-    ? " (running in the background)"
-    : stateLabel
-      ? ` (${stateLabel.toLowerCase()})`
-      : state === "approval-requested"
-        ? " (approval required)"
-        : state === "running"
-          ? " (running)"
-          : state === "error"
-            ? " (error)"
-            : state === "denied"
-              ? " (denied)"
-              : "";
+  const stateSuffix = isCancelled
+    ? " (cancelled)"
+    : isBackground
+      ? " (running in the background)"
+      : isQueued
+        ? " (queued)"
+        : stateLabel
+          ? ` (${stateLabel.toLowerCase()})`
+          : state === "approval-requested"
+            ? " (approval required)"
+            : state === "running"
+              ? " (running)"
+              : state === "error"
+                ? " (error)"
+                : state === "denied"
+                  ? " (denied)"
+                  : "";
   const label =
     title ??
     getToolCardTitle(toolName) ??
@@ -237,13 +251,15 @@ function CompactCircle({
                 !isCancelled &&
                   state === "approval-requested" &&
                   "bg-amber-500 animate-pulse",
+                !isCancelled && isBackground && "bg-amber-500 animate-pulse",
+                !isCancelled && isQueued && "bg-blue-500/40",
                 !isCancelled &&
+                  !isBackground &&
+                  !isQueued &&
                   state === "running" &&
-                  (isBackground
-                    ? "bg-amber-500 animate-pulse"
-                    : "bg-blue-500 animate-pulse"),
-                state === "error" && "bg-destructive",
-                state === "denied" && "bg-orange-500",
+                  "bg-blue-500 animate-pulse",
+                !isCancelled && state === "error" && "bg-destructive",
+                !isCancelled && state === "denied" && "bg-orange-500",
               )}
             />
           </UnstyledButton>
@@ -254,6 +270,8 @@ function CompactCircle({
             <span>{" (cancelled)"}</span>
           ) : isBackground ? (
             <span>{` (running in the background · ${formatElapsed(elapsed)})`}</span>
+          ) : isQueued ? (
+            <span>{" (queued)"}</span>
           ) : stateLabel ? (
             <span>{` (${stateLabel.toLowerCase()})`}</span>
           ) : state === "approval-requested" ? (
@@ -664,6 +682,7 @@ export function CompactToolGroup({
           const state = getCompactToolState({
             part: entry.part,
             toolResultPart: entry.toolResultPart,
+            turnActive,
           });
           if (entry.kind === "app") {
             const render = appRenders.get(entry.key);
@@ -972,6 +991,7 @@ function EntryToolCard({
     return (
       <ExpandedToolCard
         tool={entry}
+        turnActive={turnActive}
         onToolApprovalResponse={onToolApprovalResponse}
       />
     );
@@ -1002,6 +1022,7 @@ function EntryToolCard({
           </>
         ),
       }}
+      turnActive={turnActive}
       onToolApprovalResponse={onToolApprovalResponse}
     />
   );
@@ -1009,9 +1030,12 @@ function EntryToolCard({
 
 function ExpandedToolCard({
   tool,
+  turnActive,
   onToolApprovalResponse,
 }: {
   tool: CompactToolEntry | CompactAppEntry;
+  /** The call's turn is still running. */
+  turnActive: boolean;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -1025,6 +1049,7 @@ function ExpandedToolCard({
     task,
     cancel: cancelTask,
     isCancelling: isCancellingTask,
+    isQueued,
   } = useMcpTaskFor(part.toolCallId);
   const isApprovalRequested = part.state === "approval-requested";
   const approvalDisplay = getApprovalToolDisplay({
@@ -1072,7 +1097,6 @@ function ExpandedToolCard({
           ? approvalDisplay.input
           : part.input,
   });
-  const hasInput = input && Object.keys(input).length > 0;
   // Whose credential the gateway used against the upstream server.
   const executedAs = extractMcpExecutedAs(
     toolResultPart ? toolResultPart.output : part.output,
@@ -1082,7 +1106,7 @@ function ExpandedToolCard({
     <ToolErrorLogsButton toolName={displayToolName} />
   ) : null;
   const humanRuling = getHumanRulingDisplay({ part, toolResultPart });
-  const headerState =
+  const settledHeaderState =
     task?.status === "cancelled"
       ? ("output-cancelled" as const)
       : humanRuling?.ruling === "deny"
@@ -1091,7 +1115,15 @@ function ExpandedToolCard({
             state: part.state || "input-available",
             toolResultPart,
             errorText,
+            output: toolResultPart?.output ?? part.output,
+            // A call a background task still runs outlives its turn.
+            turnActive: turnActive || task?.status === "working",
           });
+  // Waiting for a free place on its server: the call has not started.
+  const headerState =
+    isQueued && settledHeaderState === "input-available"
+      ? ("input-queued" as const)
+      : settledHeaderState;
 
   return (
     <Tool open className="mb-0">
@@ -1122,9 +1154,7 @@ function ExpandedToolCard({
             isCancelling={isCancellingTask}
           />
         ) : null}
-        {hasInput && !policyChange && !saveResult && !previewedChange ? (
-          <ToolInput input={input} defaultOpen />
-        ) : null}
+        {hasToolRequest(input) ? <ToolInput input={input} defaultOpen /> : null}
         {previewedChange ? (
           <PreviewedChangeReview previewed={previewedChange} input={input} />
         ) : null}
@@ -1167,7 +1197,12 @@ function ExpandedToolCard({
               ]}
             />
           )}
-        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
+        {/* A policy change's result reads as its diff, a save's as one line. */}
+        {policyChange || saveResult ? (
+          <div className="px-3 pt-2">
+            <SectionLabel accent="bg-emerald-400">Result</SectionLabel>
+          </div>
+        ) : null}
         {policyChange && (
           <OpenAppaPolicyChange
             output={policyOutput}
@@ -1180,26 +1215,17 @@ function ExpandedToolCard({
         ) : saveResult === "policy" ? (
           <OpenAppaPolicyCompletion output={policyOutput} />
         ) : null}
-        {toolResultPart && !policyChange && !saveResult && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={toolResultPart.output}
-            errorText={errorText}
-          />
-        )}
-        {!toolResultPart &&
-          !policyChange &&
+        {/* One section for the outcome. A failed call shows its error here
+            once, with or without a result beside it. */}
+        {!policyChange &&
           !saveResult &&
-          Boolean(part.output) && (
+          (toolResultPart || Boolean(part.output) || errorText) && (
             <ToolOutput
               label={errorText ? "Error" : "Result"}
-              output={part.output}
+              output={toolResultPart ? toolResultPart.output : part.output}
               errorText={errorText}
             />
           )}
-        {hasInput && (policyChange || saveResult) ? (
-          <OpenAppaPolicyArguments input={input} />
-        ) : null}
       </ToolContent>
     </Tool>
   );

@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { ModelModel } from "@/models";
+import { quotedPrices } from "@/services/billable-usage";
 import type { Model } from "@/types";
 import type { AutoRouter, RouterDocument } from "@/types/auto-routing";
 
@@ -10,7 +11,7 @@ export type Trio = readonly [Model, Model, Model];
 
 export const NORMAL_TIER: TierIndex = 1;
 
-/** router-core `TierSet` JSON. */
+/** The trio's prices; the fit blends the two cache-write rates into router-core's `TierSet`. */
 export type RouterTierSet = {
   tiers: {
     model_id: string;
@@ -78,7 +79,7 @@ export class TierThresholdMismatchError extends Error {
 }
 
 /**
- * router-core `TierSet` for the trio at its current prices: what a plan is
+ * The trio at its current prices: what a plan is
  * fitted for and must still match to be served. Throws
  * `TierThresholdMismatchError` when the tiers do not share a threshold.
  * @public — the plan fit builds its tiers with this; exported for testability
@@ -114,7 +115,9 @@ export function fingerprintMatches(
 export type RouterTokenPrices = {
   input: number;
   cache_read: number;
+  /** Cache writes with the default TTL; `cache_write_1h` prices the 1h ones. */
   cache_write: number;
+  cache_write_1h: number;
   output: number;
 };
 
@@ -126,12 +129,19 @@ export function prices(model: Model, promptTokens?: number): RouterTokenPrices {
     undefined,
     promptTokens,
   );
+  const quote = quotedPrices({
+    model: model.modelId,
+    provider: model.provider,
+    pricing,
+    instancePriced: false,
+  });
   // An unpriced cache direction is not charged by the cost path either.
   const usd = (value: string | null) => Number(value ?? 0);
   return {
     input: usd(pricing.pricePerMillionInput),
     cache_read: usd(pricing.pricePerMillionCacheRead),
     cache_write: usd(pricing.pricePerMillionCacheWrite),
+    cache_write_1h: usd(quote.prices.cacheWrite1h),
     output: usd(pricing.pricePerMillionOutput),
   };
 }

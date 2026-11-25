@@ -88,6 +88,12 @@ interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData, index: number) => string;
   /** Render a sub-component below a row when it is expanded. */
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode;
+  /**
+   * With `renderSubComponent` or `renderExpandedRows`: a click anywhere on a
+   * row opens or closes it. Controls in a cell that do something else stop
+   * their click, as row actions do.
+   */
+  expandOnRowClick?: boolean;
   /** Render expanded TableRow elements in the same columns as their parent. */
   renderExpandedRows?: (props: { row: Row<TData> }) => React.ReactNode;
   /** Return an optional class name for each rendered row. */
@@ -159,6 +165,7 @@ export function DataTable<TData, TValue>({
   hideSelectedCount,
   getRowId,
   renderSubComponent,
+  expandOnRowClick = false,
   renderExpandedRows,
   getRowClassName,
   getRowTooltip,
@@ -468,10 +475,17 @@ export function DataTable<TData, TValue>({
                       <TableRow
                         data-state={row.getIsSelected() && "selected"}
                         className={cn(
-                          onRowClick ? "cursor-pointer hover:bg-muted/50" : "",
+                          onRowClick || expandOnRowClick
+                            ? "cursor-pointer hover:bg-muted/50"
+                            : "",
                           getRowClassName?.(row.original),
                         )}
-                        onClick={(e) => onRowClick?.(row.original, e)}
+                        onClick={(e) => {
+                          onRowClick?.(row.original, e);
+                          if (expandOnRowClick && row.getCanExpand()) {
+                            row.toggleExpanded();
+                          }
+                        }}
                       >
                         {row.getVisibleCells().map((cell, index, cells) => (
                           <TableCell
@@ -513,7 +527,9 @@ export function DataTable<TData, TValue>({
                       row.getIsExpanded() &&
                       renderExpandedRows({ row })}
                     {renderSubComponent && row.getIsExpanded() && (
-                      <TableRow>
+                      // The open area is not one row to hover: what it
+                      // holds sets its own hover.
+                      <TableRow className="hover:bg-transparent">
                         <TableCell
                           colSpan={row.getVisibleCells().length}
                           className="p-0"

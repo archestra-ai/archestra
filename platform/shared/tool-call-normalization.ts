@@ -1,3 +1,5 @@
+import type { McpToolError } from "./mcp-tool-error";
+
 type ToolPartLike = {
   state?: unknown;
   toolCallId?: unknown;
@@ -57,6 +59,77 @@ function collectCompletedToolCallIds<
   }
 
   return completedToolCallIds;
+}
+
+/**
+ * Gives the tool calls a stopped run left in flight the result they had: they
+ * were stopped before they finished.
+ *
+ * Without a result such a call is a dangling one, which
+ * {@link stripDanglingToolCalls} removes: after a reload the call is gone,
+ * and a turn that held nothing else is gone with it. With this result the
+ * call stays in the transcript, its card reads Cancelled, and the model's
+ * next turn sees that the call did not finish. A call still receiving its
+ * arguments, or still waiting for its approval, is left alone: it never ran.
+ *
+ * Only the last message is touched, and only when it is the assistant's: that
+ * is the turn the run was writing. The backend applies this before it stores
+ * a stopped turn and the chat applies it to its own copy, so the open chat
+ * and a reloaded one hold the same turn.
+ */
+export function settleStoppedToolCalls<
+  TMessage extends { role: string; parts?: readonly unknown[] },
+>(messages: TMessage[]): TMessage[] {
+  const last = messages.at(-1);
+  if (last?.role !== "assistant" || !last.parts?.some(isRunningToolPart)) {
+    return messages;
+  }
+  const parts = last.parts.map((part) =>
+    isRunningToolPart(part)
+      ? { ...part, state: "output-available", output: stoppedToolOutput() }
+      : part,
+  );
+  return [...messages.slice(0, -1), { ...last, parts }];
+}
+
+/**
+ * Type of the part that records that the user stopped the turn it is in. A
+ * `data-*` part: stored with the turn and never sent to the model. The chat
+ * reads it to tell work the stop interrupted from work that had ended by
+ * itself, where no call was in flight to carry the stop: a call Guardrails
+ * was still negotiating reads as cancelled, not as blocked.
+ */
+export const TURN_STOPPED_PART_TYPE = "data-turn-stopped";
+
+/**
+ * Records on the turn the run was writing that the user stopped it. The
+ * backend applies this to the turn it stores and the chat to its own copy,
+ * like {@link settleStoppedToolCalls}.
+ */
+export function markTurnStopped<
+  TMessage extends { role: string; parts?: readonly unknown[] },
+>(messages: TMessage[]): TMessage[] {
+  const last = messages.at(-1);
+  if (
+    last?.role !== "assistant" ||
+    !last.parts?.length ||
+    last.parts.some(isTurnStoppedPart)
+  ) {
+    return messages;
+  }
+  return [
+    ...messages.slice(0, -1),
+    { ...last, parts: [...last.parts, { type: TURN_STOPPED_PART_TYPE }] },
+  ];
+}
+
+/** Whether a message part is the mark {@link markTurnStopped} leaves. */
+export function isTurnStoppedPart(part: unknown): boolean {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    (part as { type?: unknown }).type === TURN_STOPPED_PART_TYPE
+  );
 }
 
 // Anthropic (and other providers) require every `tool_use` block's `input` to be
@@ -139,5 +212,44 @@ function isPendingToolPart(part: ToolPartLike) {
     part.state === "input-streaming" ||
     part.state === "input-available" ||
     part.type === "tool-call"
+  );
+}
+
+const STOPPED_TOOL_CALL_MESSAGE =
+  "The run was stopped before this call finished. The tool may have completed part of its work before the stop reached it.";
+
+/** The same envelope a platform error has, so the card reads it as Cancelled. */
+function stoppedToolOutput(): {
+  content: string;
+  _meta: { archestraError: McpToolError };
+} {
+  return {
+    content: STOPPED_TOOL_CALL_MESSAGE,
+    _meta: {
+      archestraError: { type: "cancelled", message: STOPPED_TOOL_CALL_MESSAGE },
+    },
+  };
+}
+
+/**
+ * A tool call that was running: it has its arguments and no result yet, or
+ * the user approved it and it had started. A call still waiting for its
+ * approval, or one the user declined, never ran.
+ */
+function isRunningToolPart(part: unknown): part is { type: string } {
+  if (typeof part !== "object" || part === null) return false;
+  const { type, state, approval } = part as {
+    type?: unknown;
+    state?: unknown;
+    approval?: { approved?: unknown };
+  };
+  const running =
+    state === "input-available" ||
+    (state === "approval-responded" && approval?.approved === true);
+  return (
+    running &&
+    typeof type === "string" &&
+    (type === "dynamic-tool" ||
+      (type.startsWith("tool-") && type !== "tool-result"))
   );
 }

@@ -628,6 +628,7 @@ const layerTable = [
       "src/git-hosts/git-access.ts",
       "src/openappa/archestra-audience.ts",
       "src/openappa/batteries.ts",
+      "src/openappa/battery-root-change.ts",
       "src/openappa/battery-target.ts",
       "src/openappa/bound-github-api-url.ts",
       "src/openappa/composition-view.ts",

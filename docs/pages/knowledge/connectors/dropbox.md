@@ -5,6 +5,8 @@ order: 11
 lastUpdated: 2026-10-05
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from the files in a Dropbox account or team folder. The connector syncs text and source files.
 
 **Indexed:** text, source files, PDFs, and Office documents, including all sheets of an Excel workbook. Images are indexed when the embedding model accepts image input. Unsupported files are reported as skipped in the run.

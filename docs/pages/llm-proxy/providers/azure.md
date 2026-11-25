@@ -6,6 +6,7 @@ lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Use the models you deployed in Azure, with an API key or with no key at all through Microsoft Entra ID. Each deployment name becomes a model ID, so `gpt-5-prod` in Azure is `gpt-5-prod` in your requests.
 

@@ -608,10 +608,10 @@ export function CopilotOrganizationConnectDialog({
           <AccessNote>
             {`The App can only make Copilot requests, billed to ${organization}. Set a spending cap in `}
             <Link
-              href="/llm/limits"
+              href="/llm/costs"
               className="underline underline-offset-4 hover:text-foreground"
             >
-              Cost Controls
+              Costs & Limits
             </Link>
             .
           </AccessNote>

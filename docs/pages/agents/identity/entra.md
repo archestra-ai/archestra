@@ -6,6 +6,7 @@ lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give every agent its own identity in Microsoft Entra, so Entra can tell your agents apart. Revoke one agent's access to an API in Entra, and only that agent stops; the others keep working. Each downstream token names the person and the agent that acted for them.
 

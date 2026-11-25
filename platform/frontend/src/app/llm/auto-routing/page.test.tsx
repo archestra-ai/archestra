@@ -186,6 +186,70 @@ describe("AutoRoutersPage", () => {
     );
   });
 
+  it("explains auto routing on a page with no routers, and creates the first from there", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
+        HttpResponse.json([]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      await screen.findByText("Send each session to the right model"),
+    ).toBeVisible();
+    // The header keeps its description and button.
+    expect(
+      screen.getByRole("button", { name: /Create auto router/ }),
+    ).toBeEnabled();
+    expect(screen.getByText("Read more in the docs")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Create an auto router" }),
+    );
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Create auto router",
+    );
+  });
+
+  it("links to the setting that turns auto routing on before the first router exists", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
+        HttpResponse.json([]),
+      ),
+      http.get(`${API_ORIGIN}/api/auto-routing/state`, () =>
+        HttpResponse.json({ ...state, enabled: false }),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByRole("link", { name: "Settings" }),
+    ).toHaveAttribute("href", "/settings/llm");
+  });
+
+  it("tells a reader without permission who creates auto routers", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
+        HttpResponse.json([]),
+      ),
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "Your admins haven't created an auto router yet.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Create an auto router" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("deletes the router the admin confirms", async () => {
     const user = userEvent.setup();
     renderPage();

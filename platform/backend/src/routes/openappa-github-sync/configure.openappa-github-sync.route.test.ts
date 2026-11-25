@@ -2421,16 +2421,17 @@ describe("APPA GitHub sync", () => {
     expect(tasks).toHaveLength(1);
   });
 
-  test("auto-merge takes self-service, is off by default, is saved by the action and audited, and the environment variable locks it", async () => {
+  test("auto-merge takes a GitHub App source, not self-service, is off by default, is saved by the action and audited, and the environment variable locks it", async () => {
     const status = () =>
       app.inject({ method: "GET", url: "/api/openappa/github-sync" });
-    // A source without self-service: auto-merge has nothing to merge, and a
-    // save that asks for it alone keeps it off.
+    // A source without a GitHub App: nothing posts the check or merges, and
+    // a save that asks for it alone keeps it off.
     expect(
       (await configure({ ...source, selfServiceAutoMerge: true })).statusCode,
     ).toBe(200);
-    expect((await status()).json().selfService).toMatchObject({
-      autoMerge: { enabled: false, setting: false },
+    expect((await status()).json().autoMerge).toEqual({
+      enabled: false,
+      setting: false,
     });
     const refused = await action({
       action: "self_service_auto_merge",
@@ -2438,7 +2439,7 @@ describe("APPA GitHub sync", () => {
     });
     expect(refused.statusCode).toBe(409);
     expect(refused.json().error.message).toMatch(
-      /needs MCP Guardrails Self-Service/,
+      /connected through a GitHub App that syncs/,
     );
 
     const { privateKey } = generateKeyPairSync("rsa", {
@@ -2458,10 +2459,11 @@ describe("APPA GitHub sync", () => {
       installationId: randomUUID(),
       secretId: secret.id,
     });
+    // Self-service stays off: auto-merge is the repository's setting.
     await OpenAppaGithubSyncModel.save(organizationId, {
       ...source,
       githubAppConfigId: githubApp.id,
-      selfService: true,
+      selfService: false,
     });
     await db
       .delete(schema.tasksTable)
@@ -2478,7 +2480,7 @@ describe("APPA GitHub sync", () => {
         .from(schema.tasksTable)
         .where(eq(schema.tasksTable.taskType, "openappa_github_sync")),
     ).toHaveLength(1);
-    expect(on.json().selfService.autoMerge).toEqual({
+    expect(on.json().autoMerge).toEqual({
       enabled: true,
       setting: true,
     });
@@ -2511,7 +2513,7 @@ describe("APPA GitHub sync", () => {
       expect(locked.json().error.message).toBe(
         "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE sets auto-merge for this deployment. Unset it to edit this setting.",
       );
-      expect((await status()).json().selfService.autoMerge).toEqual({
+      expect((await status()).json().autoMerge).toEqual({
         enabled: false,
         setting: true,
         environment: {
@@ -2526,7 +2528,7 @@ describe("APPA GitHub sync", () => {
       action: "self_service_auto_merge",
       enabled: false,
     });
-    expect(off.json().selfService.autoMerge).toEqual({
+    expect(off.json().autoMerge).toEqual({
       enabled: false,
       setting: false,
     });

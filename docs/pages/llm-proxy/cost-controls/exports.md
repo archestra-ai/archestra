@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-11-21
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Put Archestra's LLM spend next to the rest of your cloud bill. Finance gets the same numbers as the Costs page, split by team, agent, model, and person, without anyone copying them by hand.
 
 There are three ways, from quickest to most automated:

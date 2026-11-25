@@ -15,18 +15,49 @@ export const DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION = "0.1.2";
 export function programAppliesDesktopMcpArguments(
   version: string | null | undefined,
 ): boolean {
+  return isAtLeast(version, DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION);
+}
+
+/**
+ * The first version of the `archestra` program whose MCP bridge updates by
+ * itself on macOS and Linux. On Windows each version does. Keep it equal to
+ * the `version` of `platform/archestra-cli/Cargo.toml` that first has it.
+ */
+export const MCP_BRIDGE_AUTO_UPDATE_MIN_PROGRAM_VERSION = "0.1.9";
+
+/**
+ * Whether the MCP bridge of a device can update by itself, from the system
+ * of the device and the version its MCP bridge reported. A macOS or Linux
+ * device that reported no version does not: it runs a program from before
+ * the versions were reported.
+ */
+export function programUpdatesByItself(device: {
+  platform: string;
+  version: string | null | undefined;
+}): boolean {
+  return (
+    device.platform === "windows" ||
+    isAtLeast(device.version, MCP_BRIDGE_AUTO_UPDATE_MIN_PROGRAM_VERSION)
+  );
+}
+
+// === Internal helpers
+
+/**
+ * Whether a version is `first` or a later one. A text that is not a version
+ * is not.
+ */
+function isAtLeast(version: string | null | undefined, first: string): boolean {
   const reported = parseProgramVersion(version);
-  const first = parseProgramVersion(DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION);
-  if (!reported || !first) return false;
-  const length = Math.max(reported.length, first.length);
+  const firstNumbers = parseProgramVersion(first);
+  if (!reported || !firstNumbers) return false;
+  const length = Math.max(reported.length, firstNumbers.length);
   for (let index = 0; index < length; index++) {
-    const difference = (reported[index] ?? 0) - (first[index] ?? 0);
+    const difference = (reported[index] ?? 0) - (firstNumbers[index] ?? 0);
     if (difference !== 0) return difference > 0;
   }
   return true;
 }
-
-// === Internal helpers
 
 /**
  * The numbers of a dotted version, or null for a text that is not one. What

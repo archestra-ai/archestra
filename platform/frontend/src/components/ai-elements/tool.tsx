@@ -58,7 +58,7 @@ export const Tool = ({
 export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart["type"];
-  state: ToolUIPart["state"] | "output-denied" | "output-cancelled";
+  state: ToolHeaderState;
   className?: string;
   icon?: React.ReactNode;
   isCollapsible?: boolean;
@@ -70,12 +70,21 @@ export type ToolHeaderProps = {
   statusLabel?: string;
 };
 
-const getStatusBadge = (
-  status: ToolUIPart["state"] | "output-denied" | "output-cancelled",
-  label?: string,
-) => {
+/**
+ * A tool call's state as its header shows it: the SDK's states, plus the ones
+ * only the platform knows.
+ */
+type ToolHeaderState =
+  | ToolUIPart["state"]
+  | "output-denied"
+  | "output-cancelled"
+  | "input-queued";
+
+const getStatusBadge = (status: ToolHeaderState, label?: string) => {
   const labels = {
     "input-streaming": "Pending",
+    // The call waits for a free place on its server: it has not started.
+    "input-queued": "Queued",
     "input-available": "Running",
     "approval-requested": "Approval requested",
     "approval-responded": "Approval responded",
@@ -89,6 +98,7 @@ const getStatusBadge = (
 
   const dotClass = {
     "input-streaming": "bg-muted-foreground/50",
+    "input-queued": "bg-blue-500/40",
     "input-available": "bg-blue-500 animate-pulse",
     "approval-requested": "bg-amber-500",
     "approval-responded": "bg-blue-500",
@@ -327,19 +337,10 @@ const TruncatedCodeBlock = ({
   );
 };
 
-export type ToolErrorDetailsProps = ComponentProps<"div"> & {
-  errorText: string;
-};
-
-export const ToolErrorDetails = ({
-  className,
-  errorText,
-  ...props
-}: ToolErrorDetailsProps) => (
-  <div className={cn("overflow-hidden px-3 py-2", className)} {...props}>
-    <div className="rounded-md bg-destructive/10 p-3 text-destructive text-xs whitespace-pre-wrap break-words select-text">
-      {errorText}
-    </div>
+/** An error's text, in the one place a card shows it. */
+const ToolErrorText = ({ text }: { text: string }) => (
+  <div className="rounded-md bg-destructive/10 p-3 text-destructive text-xs whitespace-pre-wrap break-words select-text">
+    {text}
   </div>
 );
 
@@ -359,14 +360,44 @@ export const ToolOutput = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const labelText = label ?? (errorText ? "Error" : "Response");
 
-  if (!(output || errorText)) {
+  const hasOutput = output !== undefined && output !== null;
+  if (!hasOutput && !errorText) {
     return null;
   }
 
-  let Output: ReactNode;
-  const displayOutput = normalizeToolOutput(output);
+  const displayOutput = hasOutput ? normalizeToolOutput(output) : undefined;
+  const images = hasOutput ? getDisplayableImages(output) : [];
+  // An error is shown once. Its text is usually the result's own text, so
+  // the two are one block; a result that says more than the error, or
+  // something else, follows it.
+  const error = splitErrorFromOutput(errorText, displayOutput);
+  // A result with no text and no image: say so, never show the wrapper the
+  // platform stores the result in.
+  const isEmpty =
+    !error &&
+    images.length === 0 &&
+    (displayOutput === undefined ||
+      displayOutput === null ||
+      displayOutput === "");
 
-  if (typeof displayOutput === "object" || typeof displayOutput === "string") {
+  let Output: ReactNode;
+  if (isEmpty) {
+    Output = (
+      <p className="py-1 text-muted-foreground">
+        The tool returned no content.
+      </p>
+    );
+  } else if (
+    error?.coversOutput ||
+    displayOutput === "" ||
+    displayOutput == null
+  ) {
+    // The error text says it all, or only images follow: they render below.
+    Output = null;
+  } else if (
+    typeof displayOutput === "object" ||
+    typeof displayOutput === "string"
+  ) {
     // If output is a string, try to parse it as JSON for proper formatting
     let formattedOutput = displayOutput;
     if (typeof displayOutput === "string") {
@@ -401,17 +432,55 @@ export const ToolOutput = ({
       {...props}
     >
       <SectionLabel accent={accent}>{labelText}</SectionLabel>
-      <div
-        className={cn(
-          "overflow-x-auto rounded-md text-xs [&_table]:w-full",
-          errorText ? "bg-destructive/10 text-destructive" : "text-foreground",
-        )}
-      >
-        {Output}
-      </div>
+      {error ? <ToolErrorText text={error.text} /> : null}
+      {Output ? (
+        <div className="overflow-x-auto rounded-md text-xs text-foreground [&_table]:w-full">
+          {Output}
+        </div>
+      ) : null}
+      {images.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {images.map((image, index) => (
+            // An inline data URI from the tool result, not a served asset.
+            <img
+              key={image.key}
+              src={image.src}
+              alt={`Returned by the tool, ${index + 1} of ${images.length}`}
+              className="max-h-80 max-w-full rounded-md border object-contain"
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 };
+
+/**
+ * What an error section shows for an error and the result that came with it.
+ * `coversOutput` means the text already holds everything the result says, so
+ * the result is not printed a second time.
+ */
+function splitErrorFromOutput(
+  errorText: string | undefined,
+  displayOutput: unknown,
+): { text: string; coversOutput: boolean } | null {
+  if (!errorText) return null;
+  if (displayOutput === undefined || displayOutput === null) {
+    return { text: errorText, coversOutput: true };
+  }
+  if (typeof displayOutput !== "string") {
+    return { text: errorText, coversOutput: false };
+  }
+  const outputText = displayOutput.trim();
+  if (errorText.includes(outputText)) {
+    return { text: errorText, coversOutput: true };
+  }
+  // The result repeats the error and adds to it: show the longer text.
+  if (outputText.includes(errorText.trim())) {
+    return { text: outputText, coversOutput: true };
+  }
+  return { text: errorText, coversOutput: false };
+}
 
 /**
  * Entries of a plain-object input when at least one value is a multi-line
@@ -435,15 +504,74 @@ function normalizeToolOutput(output: ToolUIPart["output"]): unknown {
     return output;
   }
 
-  if (output.content) {
-    return output.content;
+  // An empty text is a result too. Falling through to the wrapper would show
+  // the platform's own fields (`_meta`, `rawContent`) as if the tool sent them.
+  if (output.content || output.structuredContent === undefined) {
+    return withImageMarkers(output.content);
   }
 
-  if (output.structuredContent !== undefined) {
-    return output.structuredContent;
-  }
+  return output.structuredContent;
+}
 
-  return output;
+const DISPLAYABLE_IMAGE_MIME_TYPE = /^image\/(png|jpe?g|webp|gif)$/;
+const BASE64_PAYLOAD = /^[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * The images of an MCP result, from its `rawContent` blocks. A block whose
+ * payload was stripped for context, or whose type is not an image format the
+ * browser shows, is left out rather than rendered broken.
+ */
+function getDisplayableImages(
+  output: ToolUIPart["output"],
+): { key: string; src: string }[] {
+  if (!isMcpToolOutput(output) || !Array.isArray(output.rawContent)) {
+    return [];
+  }
+  const images: { key: string; src: string }[] = [];
+  output.rawContent.forEach((block: unknown, index: number) => {
+    if (typeof block !== "object" || block === null) return;
+    const { type, data, mimeType } = block as Record<string, unknown>;
+    if (
+      type === "image" &&
+      typeof data === "string" &&
+      typeof mimeType === "string" &&
+      DISPLAYABLE_IMAGE_MIME_TYPE.test(mimeType) &&
+      BASE64_PAYLOAD.test(data)
+    ) {
+      images.push({
+        key: String(index),
+        src: `data:${mimeType};base64,${data}`,
+      });
+    }
+  });
+  return images;
+}
+
+/**
+ * Results stored before images had a text marker hold each image block as one
+ * line of JSON with its base64 payload. Show the marker in its place.
+ */
+function withImageMarkers(content: string): string {
+  if (!content.includes('"type":"image"')) return content;
+  return content
+    .split("\n")
+    .map((line) => (isSerializedImageBlock(line) ? "[image]" : line))
+    .join("\n");
+}
+
+function isSerializedImageBlock(line: string): boolean {
+  if (!line.startsWith("{") || !line.includes('"type":"image"')) return false;
+  try {
+    const block: unknown = JSON.parse(line);
+    return (
+      typeof block === "object" &&
+      block !== null &&
+      (block as { type?: unknown }).type === "image" &&
+      typeof (block as { data?: unknown }).data === "string"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isMcpToolOutput(value: unknown): value is {

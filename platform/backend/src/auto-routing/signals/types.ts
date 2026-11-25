@@ -15,6 +15,8 @@ export interface SignalSourceContext {
   apiKeyId?: string | null;
   /** Overrides the live-routing scorer timeout, for callers no request waits on. */
   timeoutMs?: number;
+  /** Enables the process-local circuit breaker for live request-path scoring. */
+  useCircuitBreaker?: boolean;
 }
 
 /**
@@ -33,20 +35,23 @@ type SignalSourceErrorReason =
   | "http"
   | "invalid_response"
   | "input_too_large"
-  | "no_credentials";
+  | "no_credentials"
+  | "circuit_open";
 
 export class SignalSourceError extends Error {
   readonly reason: SignalSourceErrorReason;
   readonly status: number | undefined;
+  readonly retryAfterMs: number | undefined;
 
   constructor(
     reason: SignalSourceErrorReason,
     message: string,
-    options?: { status?: number; cause?: unknown },
+    options?: { status?: number; retryAfterMs?: number; cause?: unknown },
   ) {
     super(message, { cause: options?.cause });
     this.name = "SignalSourceError";
     this.reason = reason;
     this.status = options?.status;
+    this.retryAfterMs = options?.retryAfterMs;
   }
 }

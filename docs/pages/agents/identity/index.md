@@ -6,6 +6,7 @@ lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 An agent always acts for someone, and every tool call signs in as a real account. Ask an agent to file a Jira ticket, and Jira shows your name, while the logs show which agent filed it. Nobody shares one bot key that can do everything.
 

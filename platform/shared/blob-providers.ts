@@ -93,7 +93,3 @@ export type CostExportSchedule = z.infer<typeof CostExportScheduleSchema>;
 /** File format of a cost export. */
 export const CostExportFormatSchema = z.enum(["focus_csv"]);
 export type CostExportFormat = z.infer<typeof CostExportFormatSchema>;
-
-export const COST_EXPORT_FORMAT_LABELS: Record<CostExportFormat, string> = {
-  focus_csv: "FOCUS 1.2 (CSV)",
-};

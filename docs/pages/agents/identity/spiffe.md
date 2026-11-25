@@ -6,6 +6,7 @@ lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Every agent gets a [SPIFFE ID](https://spiffe.io/docs/latest/spiffe-about/spiffe-concepts/#spiffe-id) the moment it exists, such as `spiffe://archestra.example.com/agent/<agent ID>`, and your identity provider trusts all of them through one issuer. Downstream tokens then name the person and the agent, as with [Agent Actor Tokens](/docs/agents/identity/actor-tokens), but you register nothing per agent: no client, no key, no binding.
 

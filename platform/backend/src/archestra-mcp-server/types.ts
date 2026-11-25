@@ -125,6 +125,13 @@ export interface ArchestraContext {
    */
   taskBridge?: ChatTaskBridge;
   /**
+   * Told `true` when a call `run_tool` dispatched has to wait for a free place
+   * on its server, then `false` when it starts, so its circle in the chat
+   * reads "queued" in between. Separate from `taskBridge`: a call waits for
+   * its turn whether or not it may detach into a task.
+   */
+  onUpstreamQueueChange?: (queued: boolean) => void;
+  /**
    * MRTR context for multi-round tool requests (human-in-the-loop elicitation).
    */
   mrtr?: {

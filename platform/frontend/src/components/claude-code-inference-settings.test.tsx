@@ -122,7 +122,7 @@ describe("Claude Code authentication", () => {
     expect(companyKey()).toBeChecked();
     expect(
       screen.getByText(
-        "Each person chooses between their own subscription and a company API key.",
+        "Each person who runs this agent chooses their own subscription or a company API key on the agent's page.",
       ),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();

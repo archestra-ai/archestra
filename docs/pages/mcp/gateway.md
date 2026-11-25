@@ -6,6 +6,7 @@ lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give each client the right tools from one URL, and never hand out a server credential. Point Claude Code, Cursor, or your own app at a gateway. It gets tools from every server behind it:
 

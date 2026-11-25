@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useLimits } from "@/lib/limits.query";
@@ -120,6 +121,83 @@ describe("BudgetFields billing team choices", () => {
   });
 });
 
+describe("BudgetFields spend cap input", () => {
+  it("rounds an amount with cents up to whole dollars", async () => {
+    const user = userEvent.setup();
+    render(<SpendCapHarness />);
+    const input = screen.getByLabelText("Spend cap in dollars");
+
+    await user.type(input, "0.50");
+    expect(input).toHaveValue("0.50");
+    expect(screen.getByLabelText("Saved cap")).toHaveTextContent("1");
+    await user.tab();
+
+    expect(input).toHaveValue("1");
+  });
+
+  it("keeps the saved cap when the text is not an amount", async () => {
+    const user = userEvent.setup();
+    render(
+      <SpendCapHarness
+        saved={{ limitValue: 250, cleanupInterval: "calendar_month" }}
+      />,
+    );
+    const input = screen.getByLabelText("Spend cap in dollars");
+
+    await user.type(input, "-1");
+    await user.tab();
+
+    expect(screen.getByLabelText("Saved cap")).toHaveTextContent("250");
+    expect(input).toHaveValue("250");
+  });
+
+  it.each([
+    ["$1,000", "1000"],
+    ["$1 000", "1000"],
+    ["1,50", "2"],
+  ])("reads a pasted %s as %s dollars", async (pasted, saved) => {
+    const user = userEvent.setup();
+    render(<SpendCapHarness />);
+    const input = screen.getByLabelText("Spend cap in dollars");
+
+    await user.click(input);
+    await user.paste(pasted);
+    await user.tab();
+
+    expect(screen.getByLabelText("Saved cap")).toHaveTextContent(saved);
+    expect(input).toHaveValue(saved);
+  });
+
+  it("keeps the saved cap when a typed replacement ends out of range", async () => {
+    const user = userEvent.setup();
+    render(
+      <SpendCapHarness
+        saved={{ limitValue: 500, cleanupInterval: "calendar_month" }}
+      />,
+    );
+    const input = screen.getByLabelText("Spend cap in dollars");
+
+    await user.clear(input);
+    await user.type(input, "2147483648");
+    await user.tab();
+
+    expect(screen.getByLabelText("Saved cap")).toHaveTextContent("500");
+  });
+
+  it("removes the cap when the field is cleared", async () => {
+    const user = userEvent.setup();
+    render(<SpendCapHarness />);
+    const input = screen.getByLabelText("Spend cap in dollars");
+
+    await user.type(input, "250");
+    await user.clear(input);
+    await user.tab();
+
+    expect(screen.getByLabelText("Saved cap")).toHaveTextContent("none");
+    expect(input).toHaveValue("");
+  });
+});
+
 function legend(label: string) {
   // biome-ignore lint/style/noNonNullAssertion: the legend item must exist
   return screen.getByText(label).closest("div")!;
@@ -135,5 +213,22 @@ function renderBudget(spendCap: SpendCapValue) {
       spendCap={spendCap}
       onSpendCapChange={vi.fn()}
     />,
+  );
+}
+
+function SpendCapHarness({ saved = null }: { saved?: SpendCapValue }) {
+  const [spendCap, setSpendCap] = useState<SpendCapValue>(saved);
+  return (
+    <>
+      <BudgetFields
+        subject="key"
+        idPrefix="test"
+        billingTeamId={null}
+        onBillingTeamIdChange={vi.fn()}
+        spendCap={spendCap}
+        onSpendCapChange={setSpendCap}
+      />
+      <output aria-label="Saved cap">{spendCap?.limitValue ?? "none"}</output>
+    </>
   );
 }

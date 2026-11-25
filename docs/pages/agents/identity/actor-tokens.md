@@ -6,6 +6,7 @@ lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give each agent its own client at your identity provider, and every downstream token names the person and the agent. The person stays the subject (`sub`), and the agent is the actor (`act`), as [RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693#section-4.1) defines. Use it with Keycloak, PingOne, ZITADEL, Auth0 Custom Token Exchange, or any provider whose token exchange accepts an actor token.
 

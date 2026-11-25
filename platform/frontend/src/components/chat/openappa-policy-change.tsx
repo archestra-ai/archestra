@@ -1,19 +1,13 @@
 "use client";
 
-import { ArrowUpRight, ChevronDown, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ToolInput, type ToolInputProps } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
-import { validationPolicyHref } from "@/lib/openappa-policy-views";
+import { validationHref } from "@/lib/openappa-policy-views";
 import { cn } from "@/lib/utils/tailwind";
 import {
   isPolicyPreviewTool,
@@ -44,28 +38,6 @@ export function isOpenAppaPreview({
   return (
     shortName === "preview_guardrails_validation_change" &&
     parsePolicyOutput(output) !== null
-  );
-}
-
-/**
- * What the model sent, under a diff or a save result and closed until asked
- * for: the card above it is what the reader came for.
- */
-export function OpenAppaPolicyArguments({
-  input,
-}: Pick<ToolInputProps, "input">) {
-  return (
-    <Collapsible className="border-t">
-      <CollapsibleTrigger asChild>
-        <Button variant="ghost" size="sm" className="group m-3">
-          <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
-          <span>Arguments</span>
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <ToolInput input={input} />
-      </CollapsibleContent>
-    </Collapsible>
   );
 }
 
@@ -356,7 +328,7 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
     detail: run.detail,
     action: {
       label: "View Validations",
-      href: validationPolicyHref(run.targetPath),
+      href: validationHref(run.targetPath),
       external: false,
     },
     local: true,

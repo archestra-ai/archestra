@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import {
   makeLlmProviderApiKey,
   makeVirtualKey,
@@ -304,6 +304,16 @@ test.describe("Model pool Connect tab", () => {
   });
 });
 
+async function chooseOauthAuthentication(endpoint: Locator) {
+  await endpoint
+    .getByRole("combobox", { name: "Authentication", exact: true })
+    .click();
+  await endpoint
+    .page()
+    .getByRole("option", { name: "OAuth client", exact: true })
+    .click();
+}
+
 test.describe("LLM Proxy pool discovery", () => {
   test("defaults a pool-only app OAuth client to its pool rather than the viewer catalog", async ({
     page,
@@ -329,7 +339,11 @@ test.describe("LLM Proxy pool discovery", () => {
       },
     ]);
     await page.goto("/llm/proxy");
-    await page.getByText("OAuth client", { exact: true }).click();
+    const endpoint = page.getByRole("region", {
+      name: "Endpoint",
+      exact: true,
+    });
+    await chooseOauthAuthentication(endpoint);
     await page
       .getByRole("combobox", { name: "OAuth client", exact: true })
       .click();
@@ -338,7 +352,9 @@ test.describe("LLM Proxy pool discovery", () => {
       .filter({ hasText: "Granted the pool" })
       .click();
     await expect(page.getByText('"model": "fast-chat"')).toBeVisible();
-    await page.getByRole("combobox", { name: "Model", exact: true }).click();
+    await endpoint
+      .getByRole("combobox", { name: "Model", exact: true })
+      .click();
     await expect(
       page.getByRole("option").filter({ hasText: POOL_NAME }),
     ).toBeVisible();
@@ -406,7 +422,11 @@ test.describe("LLM Proxy pool discovery", () => {
       },
     ]);
     await page.goto("/llm/proxy");
-    await page.getByText("OAuth client", { exact: true }).click();
+    const endpoint = page.getByRole("region", {
+      name: "Endpoint",
+      exact: true,
+    });
+    await chooseOauthAuthentication(endpoint);
     await page
       .getByRole("combobox", { name: "OAuth client", exact: true })
       .click();
@@ -414,33 +434,30 @@ test.describe("LLM Proxy pool discovery", () => {
       .getByRole("option")
       .filter({ hasText: "Granted the pool" })
       .click();
-    await expect(page.getByText('"model": "openai:gpt-4.1"')).toBeVisible();
-    await page.getByRole("combobox", { name: "Model", exact: true }).click();
+    await endpoint
+      .getByRole("combobox", { name: "Model", exact: true })
+      .click();
     await expect(
       page.getByRole("option").filter({ hasText: POOL_NAME }),
     ).toBeVisible();
     await expect(
       // Rows sit under their provider heading and show only the model id.
-      page.getByRole("option", { name: "gpt-4.1", exact: true }),
-    ).toBeVisible();
-    await expect(
-      // Rows sit under their provider heading and show only the model id.
       page.getByRole("option", { name: "gpt-4o", exact: true }),
     ).toHaveCount(0);
+    await page.getByRole("option", { name: "gpt-4.1", exact: true }).click();
+    await expect(page.getByText('"model": "openai:gpt-4.1"')).toBeVisible();
   });
 
-  for (const { label, granted, ungranted, noun } of [
+  for (const { label, granted, ungranted } of [
     {
       label: "Virtual key",
       granted: "Listed by the pool",
       ungranted: "Maps a member key",
-      noun: "key",
     },
     {
       label: "OAuth client",
       granted: "Granted the pool",
       ungranted: "CI pipeline",
-      noun: "client",
     },
   ]) {
     test(`does not count a disabled pool as provider access for a ${label}`, async ({
@@ -462,15 +479,23 @@ test.describe("LLM Proxy pool discovery", () => {
         body: [],
       });
       await page.goto("/llm/proxy");
+      const endpoint = page.getByRole("region", {
+        name: "Endpoint",
+        exact: true,
+      });
       if (label === "OAuth client") {
-        await page.getByText(label, { exact: true }).click();
+        await chooseOauthAuthentication(endpoint);
       }
+      await endpoint
+        .getByRole("combobox", { name: label, exact: true })
+        .click();
+      await page.getByRole("option").filter({ hasText: granted }).click();
       await expect(
-        page.getByRole("button", { name: "Add provider key" }),
+        endpoint.getByRole("button", { name: "Add provider key" }),
       ).toBeVisible();
       await expect(
-        page.getByRole("combobox", { name: label, exact: true }),
-      ).toHaveCount(0);
+        endpoint.getByRole("combobox", { name: "Model", exact: true }),
+      ).toBeDisabled();
       await expect(page.getByText('"model": "fast-chat"')).toHaveCount(0);
     });
 
@@ -488,19 +513,20 @@ test.describe("LLM Proxy pool discovery", () => {
           });
         }
         await page.goto("/llm/proxy");
+        const endpoint = page.getByRole("region", {
+          name: "Endpoint",
+          exact: true,
+        });
         if (label === "OAuth client") {
-          await page.getByText(label, { exact: true }).click();
+          await chooseOauthAuthentication(endpoint);
         }
-        const picker = page.getByRole("combobox", { name: label, exact: true });
+        const picker = endpoint.getByRole("combobox", {
+          name: label,
+          exact: true,
+        });
         await picker.click();
         await page.getByRole("option").filter({ hasText: granted }).click();
-        await page
-          .getByRole("button", { name: `1 pool on this ${noun}` })
-          .click();
-        await expect(
-          page.getByRole("listitem").filter({ hasText: /^fast-chat$/ }),
-        ).toBeVisible();
-        await page
+        await endpoint
           .getByRole("combobox", { name: "Model", exact: true })
           .click();
         await page.getByRole("option").filter({ hasText: POOL_NAME }).click();
@@ -511,13 +537,12 @@ test.describe("LLM Proxy pool discovery", () => {
           ).toBeVisible();
           await expect(
             page.getByText(
-              "$ARCHESTRA_LLM_ACCESS_TOKEN is the access_token from the token request above.",
+              "$ARCHESTRA_LLM_ACCESS_TOKEN is the access_token this request returns:",
             ),
           ).toBeVisible();
         }
         await picker.click();
         await page.getByRole("option").filter({ hasText: ungranted }).click();
-        await expect(page.getByText(`No pools on this ${noun}`)).toBeVisible();
         // These credentials have no matching models in the catalog fixture;
         // switching away from the grant must also remove the pool request.
         await expect(page.getByText('"model": "fast-chat"')).toHaveCount(0);

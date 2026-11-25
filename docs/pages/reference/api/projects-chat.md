@@ -5,4 +5,6 @@ order: 8
 lastUpdated: 2026-11-04
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Manage project conversations and the channels that bring messages into Archestra.

@@ -63589,6 +63589,9 @@
                                     "nullable": true,
                                     "type": "string"
                                   },
+                                  "resolvedLlmPersonalSubscription": {
+                                    "type": "boolean"
+                                  },
                                   "llmProviderRequiresPerUserCredential": {
                                     "type": "boolean"
                                   },
@@ -65446,6 +65449,9 @@
                           "resolvedLlmModelName": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "resolvedLlmPersonalSubscription": {
+                            "type": "boolean"
                           },
                           "llmProviderRequiresPerUserCredential": {
                             "type": "boolean"
@@ -67600,6 +67606,9 @@
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
                     },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
@@ -73111,6 +73120,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
+                    },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
                     },
@@ -74658,6 +74670,9 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "resolvedLlmPersonalSubscription": {
+                          "type": "boolean"
+                        },
                         "llmProviderRequiresPerUserCredential": {
                           "type": "boolean"
                         },
@@ -75877,6 +75892,9 @@
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
                     },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
@@ -77671,6 +77689,9 @@
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
                     },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
@@ -81207,6 +81228,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
+                    },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
                     },
@@ -82570,6 +82594,9 @@
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
                     },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
@@ -90719,6 +90746,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "resolvedLlmPersonalSubscription": {
+                      "type": "boolean"
+                    },
                     "llmProviderRequiresPerUserCredential": {
                       "type": "boolean"
                     },
@@ -96316,6 +96346,1191 @@
             "required": true
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "disconnected",
+                        "starting",
+                        "awaiting_code",
+                        "connecting",
+                        "connected",
+                        "failed",
+                        "expired"
+                      ]
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "flowId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "authorizationUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
+      }
+    },
+    "/api/agent-runtime/claude-code/account": {
+      "get": {
+        "operationId": "getMyClaudeCodeAccount",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "disconnected",
+                        "starting",
+                        "awaiting_code",
+                        "connecting",
+                        "connected",
+                        "failed",
+                        "expired"
+                      ]
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "flowId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "authorizationUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
+      },
+      "post": {
+        "operationId": "startMyClaudeCodeSignIn",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "disconnected",
+                        "starting",
+                        "awaiting_code",
+                        "connecting",
+                        "connected",
+                        "failed",
+                        "expired"
+                      ]
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "flowId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "authorizationUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
+      },
+      "delete": {
+        "operationId": "disconnectMyClaudeCodeAccount",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "disconnected",
+                        "starting",
+                        "awaiting_code",
+                        "connecting",
+                        "connected",
+                        "failed",
+                        "expired"
+                      ]
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "flowId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "authorizationUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
+      }
+    },
+    "/api/agent-runtime/claude-code/account/complete": {
+      "post": {
+        "operationId": "completeMyClaudeCodeSignIn",
+        "tags": [
+          "Agents"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "flowId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "flowId"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Default Response",
@@ -126745,6 +127960,44 @@
                 }
               }
             }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/archestra-cli/install.sh": {
+      "get": {
+        "operationId": "getArchestraCliInstallScript",
+        "tags": [
+          "Archestra CLI"
+        ],
+        "description": "The shell script that sets up the MCP bridge on macOS and Linux: it downloads the archestra program and runs archestra bridge start with its arguments.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/archestra-cli/install.ps1": {
+      "get": {
+        "operationId": "getArchestraCliPowershellInstallScript",
+        "tags": [
+          "Archestra CLI"
+        ],
+        "description": "The PowerShell script that sets up the MCP bridge on Windows: it downloads the archestra program and runs archestra bridge start with ARCHESTRA_URL and ARCHESTRA_SETUP_CODE.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response"
           }
         },
         "x-required-permissions": {
@@ -170077,6 +171330,14 @@
                           "type": "string",
                           "format": "date-time"
                         },
+                        "firstRunSetupCompletedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "telemetryEnabled": {
+                          "type": "boolean"
+                        },
                         "theme": {
                           "type": "string",
                           "enum": [
@@ -170815,6 +172076,8 @@
                         "metadata",
                         "onboardingComplete",
                         "onboardingSurveyCompletedAt",
+                        "firstRunSetupCompletedAt",
+                        "telemetryEnabled",
                         "theme",
                         "customFont",
                         "onlineMcpCatalogEnabled",
@@ -173772,6 +175035,9 @@
                             "resolvedLlmModelName": {
                               "nullable": true,
                               "type": "string"
+                            },
+                            "resolvedLlmPersonalSubscription": {
+                              "type": "boolean"
                             },
                             "llmProviderRequiresPerUserCredential": {
                               "type": "boolean"
@@ -177231,6 +178497,9 @@
                                 "resolvedLlmModelName": {
                                   "nullable": true,
                                   "type": "string"
+                                },
+                                "resolvedLlmPersonalSubscription": {
+                                  "type": "boolean"
                                 },
                                 "llmProviderRequiresPerUserCredential": {
                                   "type": "boolean"
@@ -219354,6 +220623,14 @@
                             "name": {
                               "type": "string"
                             },
+                            "icon": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "iconUrl": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "state": {
                               "nullable": true,
                               "type": "string",
@@ -219389,6 +220666,8 @@
                           "required": [
                             "catalogId",
                             "name",
+                            "icon",
+                            "iconUrl",
                             "state",
                             "lastError",
                             "command",
@@ -220050,6 +221329,14 @@
                           "name": {
                             "type": "string"
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "iconUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "state": {
                             "nullable": true,
                             "type": "string",
@@ -220085,6 +221372,8 @@
                         "required": [
                           "catalogId",
                           "name",
+                          "icon",
+                          "iconUrl",
                           "state",
                           "lastError",
                           "command",
@@ -370607,6 +371896,9 @@
                           "client_secret": {
                             "type": "string"
                           },
+                          "requires_client_credentials": {
+                            "type": "boolean"
+                          },
                           "audience": {
                             "type": "string"
                           },
@@ -371722,6 +373014,9 @@
                       "client_secret": {
                         "type": "string"
                       },
+                      "requires_client_credentials": {
+                        "type": "boolean"
+                      },
                       "audience": {
                         "type": "string"
                       },
@@ -372515,6 +373810,9 @@
                         },
                         "client_secret": {
                           "type": "string"
+                        },
+                        "requires_client_credentials": {
+                          "type": "boolean"
                         },
                         "audience": {
                           "type": "string"
@@ -376364,6 +377662,9 @@
                         "client_secret": {
                           "type": "string"
                         },
+                        "requires_client_credentials": {
+                          "type": "boolean"
+                        },
                         "audience": {
                           "type": "string"
                         },
@@ -377416,6 +378717,9 @@
                       "client_secret": {
                         "type": "string"
                       },
+                      "requires_client_credentials": {
+                        "type": "boolean"
+                      },
                       "audience": {
                         "type": "string"
                       },
@@ -378064,6 +379368,9 @@
                         },
                         "client_secret": {
                           "type": "string"
+                        },
+                        "requires_client_credentials": {
+                          "type": "boolean"
                         },
                         "audience": {
                           "type": "string"
@@ -380916,6 +382223,9 @@
                           "client_secret": {
                             "type": "string"
                           },
+                          "requires_client_credentials": {
+                            "type": "boolean"
+                          },
                           "audience": {
                             "type": "string"
                           },
@@ -381961,6 +383271,9 @@
                         },
                         "client_secret": {
                           "type": "string"
+                        },
+                        "requires_client_credentials": {
+                          "type": "boolean"
                         },
                         "audience": {
                           "type": "string"
@@ -478874,13 +480187,13 @@
         }
       }
     },
-    "/api/onboarding/survey-eligibility": {
+    "/api/onboarding/first-run-setup": {
       "get": {
-        "operationId": "getOnboardingSurveyEligibility",
+        "operationId": "getFirstRunSetup",
         "tags": [
           "Onboarding"
         ],
-        "description": "Whether the first-login onboarding survey should be shown: unlicensed instance, no LLM/MCP activity yet, not already submitted for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Whether the first-run setup dialog (mailing-list signup and telemetry choice) should be shown: unlicensed instance, telemetry not turned off for the deployment, not already finished for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -478889,12 +480202,12 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "eligible": {
+                    "show": {
                       "type": "boolean"
                     }
                   },
                   "required": [
-                    "eligible"
+                    "show"
                   ],
                   "additionalProperties": false
                 }
@@ -479140,15 +480453,13 @@
             "organizationSettings:update"
           ]
         }
-      }
-    },
-    "/api/onboarding/survey": {
+      },
       "post": {
-        "operationId": "submitOnboardingSurvey",
+        "operationId": "completeFirstRunSetup",
         "tags": [
           "Onboarding"
         ],
-        "description": "Submit the first-login onboarding survey; forwarded to the website and recorded once per organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Finish the first-run setup dialog: store the telemetry choice. Recorded once per organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -479156,32 +480467,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "role": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "workEnvironment": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "referralSource": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "workEmail": {
-                    "type": "string",
-                    "maxLength": 320,
-                    "format": "email",
-                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  "telemetryEnabled": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
-                  "role",
-                  "workEnvironment",
-                  "referralSource"
+                  "telemetryEnabled"
                 ]
               }
             }
@@ -488672,6 +489963,303 @@
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read): View Guardrails policy, batteries, and coverage"
       }
     },
+    "/api/openappa/batteries/{name}/source": {
+      "get": {
+        "operationId": "getOpenappaBatterySource",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entry": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "battery",
+                        "repository"
+                      ]
+                    },
+                    "content": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "entry",
+                    "name",
+                    "kind",
+                    "content"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "guardrailsPolicy:read"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read): View Guardrails policy, batteries, and coverage"
+      }
+    },
     "/api/openappa/effective-policy": {
       "get": {
         "operationId": "getOpenappaEffectivePolicy",
@@ -496759,49 +498347,48 @@
                             "url"
                           ],
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting",
+                        "directory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "autoMerge": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         },
-                        "autoMerge": {
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
                           "type": "object",
                           "properties": {
-                            "enabled": {
-                              "type": "boolean"
+                            "variable": {
+                              "type": "string"
                             },
-                            "setting": {
-                              "type": "boolean"
-                            },
-                            "environment": {
-                              "type": "object",
-                              "properties": {
-                                "variable": {
-                                  "type": "string"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "enum": [
-                                    "enabled",
-                                    "disabled"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "variable",
-                                "value"
-                              ],
-                              "additionalProperties": false
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
                             }
                           },
                           "required": [
-                            "enabled",
-                            "setting"
+                            "variable",
+                            "value"
                           ],
                           "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
-                        "setting",
-                        "directory",
-                        "autoMerge"
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -496911,6 +498498,7 @@
                     "enabled",
                     "source",
                     "selfService",
+                    "autoMerge",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -497434,49 +499022,48 @@
                             "url"
                           ],
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting",
+                        "directory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "autoMerge": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         },
-                        "autoMerge": {
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
                           "type": "object",
                           "properties": {
-                            "enabled": {
-                              "type": "boolean"
+                            "variable": {
+                              "type": "string"
                             },
-                            "setting": {
-                              "type": "boolean"
-                            },
-                            "environment": {
-                              "type": "object",
-                              "properties": {
-                                "variable": {
-                                  "type": "string"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "enum": [
-                                    "enabled",
-                                    "disabled"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "variable",
-                                "value"
-                              ],
-                              "additionalProperties": false
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
                             }
                           },
                           "required": [
-                            "enabled",
-                            "setting"
+                            "variable",
+                            "value"
                           ],
                           "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
-                        "setting",
-                        "directory",
-                        "autoMerge"
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -497586,6 +499173,7 @@
                     "enabled",
                     "source",
                     "selfService",
+                    "autoMerge",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -498137,49 +499725,48 @@
                             "url"
                           ],
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting",
+                        "directory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "autoMerge": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         },
-                        "autoMerge": {
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
                           "type": "object",
                           "properties": {
-                            "enabled": {
-                              "type": "boolean"
+                            "variable": {
+                              "type": "string"
                             },
-                            "setting": {
-                              "type": "boolean"
-                            },
-                            "environment": {
-                              "type": "object",
-                              "properties": {
-                                "variable": {
-                                  "type": "string"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "enum": [
-                                    "enabled",
-                                    "disabled"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "variable",
-                                "value"
-                              ],
-                              "additionalProperties": false
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
                             }
                           },
                           "required": [
-                            "enabled",
-                            "setting"
+                            "variable",
+                            "value"
                           ],
                           "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
-                        "setting",
-                        "directory",
-                        "autoMerge"
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -498289,6 +499876,7 @@
                     "enabled",
                     "source",
                     "selfService",
+                    "autoMerge",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -500482,49 +502070,48 @@
                             "url"
                           ],
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting",
+                        "directory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "autoMerge": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
                         },
-                        "autoMerge": {
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
                           "type": "object",
                           "properties": {
-                            "enabled": {
-                              "type": "boolean"
+                            "variable": {
+                              "type": "string"
                             },
-                            "setting": {
-                              "type": "boolean"
-                            },
-                            "environment": {
-                              "type": "object",
-                              "properties": {
-                                "variable": {
-                                  "type": "string"
-                                },
-                                "value": {
-                                  "type": "string",
-                                  "enum": [
-                                    "enabled",
-                                    "disabled"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "variable",
-                                "value"
-                              ],
-                              "additionalProperties": false
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
                             }
                           },
                           "required": [
-                            "enabled",
-                            "setting"
+                            "variable",
+                            "value"
                           ],
                           "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
-                        "setting",
-                        "directory",
-                        "autoMerge"
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -500634,6 +502221,7 @@
                     "enabled",
                     "source",
                     "selfService",
+                    "autoMerge",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -512072,6 +513660,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -512810,6 +514406,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -513858,6 +515456,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -514596,6 +516202,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -515389,6 +516997,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -516127,6 +517743,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -516528,6 +518146,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -517266,6 +518892,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -517664,6 +519292,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -518402,6 +520038,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -520284,6 +521922,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -521022,6 +522668,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -521555,6 +523203,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -522293,6 +523949,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -522886,6 +524544,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -523624,6 +525290,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -524092,6 +525760,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -524830,6 +526506,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -525242,6 +526920,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -525980,6 +527666,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -526423,6 +528111,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -527161,6 +528857,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -527541,6 +529239,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -528279,6 +529985,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
@@ -529863,6 +531571,14 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "firstRunSetupCompletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "telemetryEnabled": {
+                      "type": "boolean"
+                    },
                     "theme": {
                       "type": "string",
                       "enum": [
@@ -530601,6 +532317,8 @@
                     "metadata",
                     "onboardingComplete",
                     "onboardingSurveyCompletedAt",
+                    "firstRunSetupCompletedAt",
+                    "telemetryEnabled",
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",

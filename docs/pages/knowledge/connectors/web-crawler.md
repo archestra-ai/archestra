@@ -5,6 +5,8 @@ order: 15
 lastUpdated: 2026-10-05
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from public websites, such as your product docs or a vendor's status page. The crawler fetches HTML pages. Static fetching is the default.
 
 **Indexed:** HTML pages discovered from the configured seed URLs and allowed origins. The crawler extracts page text, removes common navigation and layout elements, and stores each page with its canonical URL when one is present.

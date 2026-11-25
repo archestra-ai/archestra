@@ -128,7 +128,9 @@ export function CustomRuntimeDialog({
   const name = useWatch({ control: form.control, name: "name" });
   const icon = useWatch({ control: form.control, name: "icon" });
   const isDirty = form.formState.isDirty;
-  const title = template ? `Edit ${template.name}` : "Add custom runtime";
+  const title = template
+    ? runtimeEditTitle(template.name)
+    : "Add custom runtime";
   const claudeRuntime = isClaudeCodeRuntimeConfig(runtime);
   const accounts = useWatch({ control: form.control, name: "accounts" });
   // Whether the runtime's rule can name one kind of account: its agents
@@ -227,7 +229,7 @@ export function CustomRuntimeDialog({
           label: "Runtime settings",
           status: runtimeState.error
             ? "Needs an image"
-            : containerSummary(runtime),
+            : "Container, accounts and limits",
         },
       ]}
       wrapForm={(children) => <Form {...form}>{children}</Form>}
@@ -394,7 +396,7 @@ export function CustomRuntimeDialog({
             anchor={existingAgents}
             runtimeId={savedScope}
             name={template?.name ?? "this runtime"}
-            settings="container, inference API, follow-up messages and limits"
+            builtIn={false}
             blockedReason={
               savedScope === null
                 ? "Once you add this runtime, you can update agents that use it."
@@ -511,7 +513,7 @@ export function BuiltInRuntimeDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={`Edit ${name}`}
+      title={runtimeEditTitle(name)}
       description={`Defaults for new ${name} agents.`}
       headerExtra={<RuntimeKindLabel builtIn />}
       sidebarLabel={name}
@@ -525,7 +527,7 @@ export function BuiltInRuntimeDialog({
         {
           id: "runtime",
           label: "Runtime settings",
-          status: containerSummary(runtime),
+          status: "Accounts and limits",
         },
       ]}
       onSubmit={(event) => {
@@ -551,20 +553,15 @@ export function BuiltInRuntimeDialog({
         <SettingsSectionGroup>
           <SettingsSection
             title="Details"
-            description="Maintained runtimes keep their name and icon."
+            description="Built-in runtimes have a fixed name and icon."
           >
             <div className="flex items-center gap-3">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted">
                 <CatalogAgentIcon id={id} size={20} />
               </div>
-              <div className="min-w-0 space-y-1">
-                <span className="block truncate text-sm font-medium">
-                  {name}
-                </span>
-                <p className="text-sm text-muted-foreground">
-                  Updated with each release.
-                </p>
-              </div>
+              <span className="min-w-0 truncate text-sm font-medium">
+                {name}
+              </span>
             </div>
           </SettingsSection>
           <AccessSection scope={scope} />
@@ -575,7 +572,7 @@ export function BuiltInRuntimeDialog({
         <SettingsSectionGroup>
           <SettingsSection
             title="Container"
-            description="The maintained image and client."
+            description="The built-in image and client."
           >
             <div className="space-y-1.5">
               <code className="block break-all rounded-md border bg-muted/50 px-3 py-2 font-mono text-xs">
@@ -604,7 +601,7 @@ export function BuiltInRuntimeDialog({
             anchor={existingAgents}
             runtimeId={id}
             name={name}
-            settings="limits"
+            builtIn
             blockedReason={
               isDirty
                 ? "Updates use the saved settings. Save this runtime first."
@@ -651,12 +648,13 @@ function AccessSection({ scope }: { scope: string | null }) {
 /**
  * A runtime's account rule holds for every agent on it as soon as it is
  * saved. Its other settings only change agents created afterwards: this
- * brings the agents created before up to date with those, on request.
+ * brings the agents created before up to date with those, on request. The
+ * section says which settings that is, and what happens to the image.
  */
 function ExistingAgentsSection({
   runtimeId,
   name,
-  settings,
+  builtIn,
   blockedReason,
   anchor,
 }: {
@@ -664,8 +662,12 @@ function ExistingAgentsSection({
   anchor?: React.RefObject<HTMLDivElement | null>;
   runtimeId: string | null;
   name: string;
-  /** The settings an update replaces, as a phrase. */
-  settings: string;
+  /**
+   * A built-in runtime's image follows each release by itself: an update
+   * gives agents its limits only. A custom runtime's update also gives them
+   * its image, launch command, inference API and follow-up delivery.
+   */
+  builtIn: boolean;
   blockedReason: string | null;
 }) {
   const apply = useApplyAgentRuntimeToAgents();
@@ -675,7 +677,7 @@ function ExistingAgentsSection({
   return (
     <SettingsSection
       title="Existing agents"
-      description="Accounts apply to every agent as soon as you save. Other changes only apply to agents created afterwards."
+      description={`Allowed accounts apply to every agent on this runtime as soon as you save. Other changes apply to new agents, and to existing agents once you update them here.${builtIn ? " The container image updates with each release, for every agent." : ""}`}
     >
       <div ref={anchor}>
         {blockedReason ? (
@@ -698,8 +700,9 @@ function ExistingAgentsSection({
                 {agents(count ?? 0)} on {name} still use older settings
               </p>
               <p className="text-sm text-muted-foreground">
-                Updating gives them the saved {settings}. Their own environment
-                variables, credentials and ports stay as they are.
+                {builtIn
+                  ? "Updating gives them the saved limits: idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier. It does not change the container image."
+                  : "Updating gives them the saved container image, launch command, inference API, follow-up delivery and limits (idle timeout, maximum duration, metered LLM budget, default tier and scaleup tier). Their own environment variables, credentials and ports stay as they are."}
               </p>
             </div>
             <Button
@@ -739,7 +742,7 @@ function RuntimeAccountsSection(
   return (
     <SettingsSection
       title="Accounts that can run it"
-      description="The accounts every agent on this runtime can use."
+      description="Which accounts agents on this runtime may allow. Each agent's settings pick from these."
     >
       <RuntimeAccountsField {...props} />
     </SettingsSection>
@@ -809,10 +812,15 @@ export function RuntimeKindLabel({ builtIn }: { builtIn: boolean }) {
   );
 }
 
-function containerSummary(value: AgentRuntimeConfig): string {
-  const image = value.image.trim().split("/").slice(-2).join("/");
-  if (!image) return "No image set";
-  return value.command?.length ? `${image}, ${value.command[0]}` : image;
+/**
+ * The edit dialog's title, which names the runtime as one: "Edit Codex
+ * runtime". A custom name that already ends in "runtime" is not given a
+ * second one.
+ */
+function runtimeEditTitle(name: string): string {
+  return /\bruntime$/i.test(name.trim())
+    ? `Edit ${name}`
+    : `Edit ${name} runtime`;
 }
 
 /**

@@ -5,6 +5,8 @@ order: 7
 lastUpdated: 2026-10-05
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from your Notion pages and databases.
 
 **Indexed:** pages from a Notion workspace.

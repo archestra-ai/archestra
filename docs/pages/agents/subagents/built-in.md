@@ -6,6 +6,7 @@ lastUpdated: 2026-10-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Archestra ships built-in subagents for its own background jobs, such as chat titles and long-chat summaries. Most run on their own. You can change each one's model and instructions, but you cannot delete them.
 

@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-10-06
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from your Confluence wiki, with a link to each page. Runbooks, design docs, and team pages become searchable, and private spaces can stay private.
 
 **Indexed:** pages from Confluence Cloud or Server.

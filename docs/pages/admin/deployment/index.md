@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-10-27
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Run Archestra locally to try it, or install it on Kubernetes for a shared instance.
 
 

@@ -13,7 +13,6 @@ import {
 import {
   accountAlternative,
   agentRuntimeAccountSummary,
-  alternativeLabels,
   companyAccountInUse,
   companyAccountWordsOf,
   subscriptionInUse,
@@ -42,7 +41,6 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { type LlmModel, useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { cn } from "@/lib/utils/tailwind";
 
 /**
  * A strip under "Give it work" on the agent's page: what the viewer's runs
@@ -262,22 +260,7 @@ export function AgentRuntimeAccountRow({
               )
             }
           >
-            {/* Both labels share one cell, so the button keeps the width of
-                the longer one and does not move under the pointer. */}
-            <span className="grid">
-              {alternativeLabels(account.data).map((label) => (
-                <span
-                  key={label}
-                  aria-hidden={label !== alternative.label}
-                  className={cn(
-                    "col-start-1 row-start-1",
-                    label !== alternative.label && "invisible",
-                  )}
-                >
-                  {label}
-                </span>
-              ))}
-            </span>
+            <span>{alternative.label}</span>
           </Button>
         )}
       </div>

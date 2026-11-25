@@ -6,6 +6,7 @@ lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 A Microsoft Foundry agent can use Archestra's MCP Gateway as a remote tool server. Foundry continues to host the model; this setup routes tool calls through Archestra, not model inference.
 

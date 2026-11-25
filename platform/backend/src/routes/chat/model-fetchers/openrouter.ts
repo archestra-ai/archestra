@@ -71,6 +71,8 @@ export async function fetchOpenrouterModels(
   // Embedding models override generation models on id collision (last write wins).
   const modelsById = new Map<string, ModelInfo>();
   for (const model of generationResult.value.data) {
+    // `:batch` variants are priced for OpenRouter's batch API, not real-time calls.
+    if (model.id.endsWith(":batch")) continue;
     modelsById.set(model.id, toModelInfo(model));
   }
 

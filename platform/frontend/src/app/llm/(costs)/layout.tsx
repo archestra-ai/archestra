@@ -11,11 +11,10 @@ import { usePermissionMap } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 
-// Costs is its own page under Insights; Limits and Exports share the Cost
-// Controls tab bar.
 const TABS = [
+  { label: "Costs", href: "/llm/costs" },
   { label: "Limits", href: "/llm/limits" },
-  { label: "Exports", href: "/llm/cost-exports" },
+  { label: "FinOps Export", href: "/llm/cost-exports" },
 ];
 
 const PAGE_CONFIG: Record<
@@ -36,7 +35,7 @@ const PAGE_CONFIG: Record<
     description: "Set spend and rate limits for LLM traffic.",
   },
   "/llm/cost-exports": {
-    title: "Exports",
+    title: "FinOps Export",
     description: <CostExportsDescription />,
   },
 };
@@ -63,15 +62,7 @@ function TeamCostsDescription({ canReadModels }: { canReadModels: boolean }) {
 function CostExportsDescription() {
   return (
     <>
-      Send cost and usage to your own object storage on a schedule, in the
-      FinOps FOCUS format. Exports write to a{" "}
-      <Link
-        href="/settings/blob-providers"
-        className="text-primary hover:underline"
-      >
-        blob provider
-      </Link>
-      .{" "}
+      Export LLM cost and usage data.{" "}
       <ExternalDocsLink
         href={getDocsUrl(
           DocsPage.PlatformCostExports,
@@ -140,8 +131,8 @@ export default function CostsLayout({
     pageMap?.["/llm/costs"] === false &&
     limitsAccess.isTeamAdmin;
   const config = PAGE_CONFIG[pathname] ?? {
-    title: "Cost Controls",
-    description: "Set spend and rate limits, and export cost data.",
+    title: "Costs & Limits",
+    description: "Monitor and manage AI model usage costs.",
   };
   const description = teamScopedCosts ? (
     <TeamCostsDescription canReadModels={pageMap?.["/llm/models"] === true} />
@@ -173,7 +164,7 @@ export default function CostsLayout({
             description
           )
         }
-        tabs={pathname !== "/llm/costs" && tabs.length > 1 ? tabs : []}
+        tabs={tabs.length > 1 ? tabs : []}
         actionButton={actionButton}
       >
         {children}

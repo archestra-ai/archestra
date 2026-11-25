@@ -115,8 +115,8 @@ beforeEach(() => {
       enabled: false,
       setting: false,
       directory: "mcp",
-      autoMerge: { enabled: false, setting: false },
     },
+    autoMerge: { enabled: false, setting: false },
   };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
@@ -204,7 +204,7 @@ test("the dashboard summarizes the latest run time and validation count with a d
   expect(screen.getByText("Failed", statusBadge)).toBeVisible();
   expect(
     screen.getByRole("link", { name: "View Validations" }),
-  ).toHaveAttribute("href", "/openappa/policy");
+  ).toHaveAttribute("href", "/openappa/validation");
 });
 
 test.each([

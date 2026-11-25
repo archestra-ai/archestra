@@ -46,6 +46,8 @@ ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092/gemini
 
 `platform/.env.example` lists the same block for every stubbed provider (vllm, ollama, cerebras, zhipuai, cohere, mistral, ...) — copy from there rather than guessing a prefix.
 
+Model ids in mappings must be real ones from `shared/model-constants.ts` (`PROVIDER_MODEL_TIERS`). `requiresOpenAiResponsesApi` sends GPT-5.6+ and GPT-6 ids to `/v1/responses`, so a Chat Completions mapping uses `gpt-5.5`.
+
 ## Local and CI setup
 
 - Local e2e dependencies deploy through `dev/Tiltfile.test`, which installs the `helm/e2e-tests` chart (`helm upgrade --install e2e-tests`) and port-forwards WireMock to `9092`.

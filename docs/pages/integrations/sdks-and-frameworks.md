@@ -5,6 +5,8 @@ order: 5
 lastUpdated: 2026-10-21
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Keep your SDK's model calls and route them through Archestra for usage logs, spending limits, and Guardrails. The examples below use OpenAI Chat Completions.
 
 ## Requirements

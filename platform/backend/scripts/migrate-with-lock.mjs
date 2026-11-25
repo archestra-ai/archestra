@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import pg from "pg";
 import { dropInvalidConcurrentIndexes } from "./concurrent-index-leftovers.mjs";
 import { buildPgConnectionConfig } from "./rds-iam.mjs";
+import { forwardWithoutSpinner } from "./spinner-free-output.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const DRIZZLE_KIT = path.join(scriptDir, "..", "node_modules", "drizzle-kit", "bin.cjs");
@@ -102,8 +103,11 @@ try {
     child = spawn(process.execPath, [DRIZZLE_KIT, "migrate"], {
       cwd: process.cwd(),
       env: process.env,
-      stdio: "inherit",
+      // drizzle-kit draws a spinner. A log keeps every frame of it, so only a
+      // terminal gets the output as it is.
+      stdio: process.stdout.isTTY ? "inherit" : ["inherit", "pipe", "inherit"],
     });
+    if (child.stdout) forwardWithoutSpinner(child.stdout, process.stdout);
     await waitForChild(child);
   } catch (error) {
     migrationError = error;

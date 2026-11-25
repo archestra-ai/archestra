@@ -6,6 +6,7 @@ lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Mention the bot in Microsoft Teams, and an Archestra agent answers in the thread. Each channel, group chat, and direct message has its own agent. People can ask a different agent for one message.
 

@@ -285,3 +285,20 @@ describe("sidebar segmented toggle", () => {
     expect(fillStep >= 1.1 || outline >= 1.3).toBe(true);
   });
 });
+
+describe("sidebar New chat button", () => {
+  it.each(
+    themeTokens().filter(([name]) => name.endsWith("dark")),
+  )("keeps the %s outline visible on the sidebar", (_name, tokens) => {
+    const sidebar = parse(tokens["--sidebar"]);
+    const edge = mix(
+      parse(tokens["--sidebar-foreground"]),
+      sidebar,
+      mixPercent("--sidebar-raised-edge"),
+    );
+    // In dark mode the button has the sidebar's own fill, so its edge is all
+    // that sets it apart from the sidebar and from the filled row of the
+    // current page.
+    expect(contrast(edge, sidebar)).toBeGreaterThanOrEqual(1.3);
+  });
+});

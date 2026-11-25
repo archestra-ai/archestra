@@ -1,10 +1,8 @@
 "use client";
 
-import {
-  COST_EXPORT_FORMAT_LABELS,
-  type CostExportSchedule,
-} from "@archestra/shared";
+import type { CostExportSchedule } from "@archestra/shared";
 import { AlertTriangle, Plus } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 import {
   BlobProviderLogo,
@@ -24,17 +22,19 @@ import {
 } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { CostExport } from "@/lib/cost-export.query";
 import { CostExportStartFrom } from "./cost-export-start-from";
-import { exampleObjectKey, useCostExportForm } from "./use-cost-export-form";
+import { useCostExportForm } from "./use-cost-export-form";
 
 /**
- * Schedule a cost export, or edit one: name, destination, how often (with
- * each option's file name), where a new export starts (now, or a backfill),
- * and the folder. Edit mode keeps the Enabled switch in the footer.
+ * Schedule a cost export, or edit one: name, destination, how often, whether
+ * a new export includes past usage (a backfill), and the folder. Edit mode
+ * keeps the Enabled switch in the footer.
  */
 export function CostExportDialog({
   open,
@@ -69,17 +69,16 @@ export function CostExportDialog({
   }, [failure]);
 
   const noProviders = !form.providersLoading && providers.length === 0;
-  const fileName = (schedule: CostExportSchedule) =>
-    exampleObjectKey({ ...values, schedule })
-      .split("/")
-      .pop();
+  // The Blob Providers settings page is open to settings readers.
+  const { data: canManageProviders } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
 
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title={isEdit ? "Edit cost export" : "Schedule cost export"}
-      description={`Writes ${COST_EXPORT_FORMAT_LABELS.focus_csv} files of LLM cost and usage to a blob provider.`}
       size="small"
     >
       <DialogForm
@@ -105,21 +104,34 @@ export function CostExportDialog({
             id={`${id}-provider`}
             label="Destination"
             error={form.errorFor("blobProviderId")}
+            labelAction={
+              canManageProviders && (
+                // Adding a second provider, renaming or deleting one happens
+                // on the settings page; its rows lead back here.
+                <Link
+                  href="/settings/blob-providers"
+                  className="text-xs text-primary hover:underline"
+                >
+                  Manage blob providers
+                </Link>
+              )
+            }
           >
             {noProviders ? (
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm text-muted-foreground">
                   No blob providers yet.
                 </p>
-                <Button
+                <PermissionButton
                   type="button"
                   size="sm"
                   variant="outline"
+                  permissions={{ organizationSettings: ["update"] }}
                   onClick={onAddProvider}
                 >
                   <Plus />
                   Add blob provider
-                </Button>
+                </PermissionButton>
               </div>
             ) : (
               <SearchableSelect
@@ -182,16 +194,11 @@ export function CostExportDialog({
                     value={option.value}
                     className="mt-0.5"
                   />
-                  <span className="min-w-0 space-y-0.5">
-                    <span className="block text-sm">
-                      <span className="font-medium">{option.label}</span>
-                      <span className="text-muted-foreground">
-                        {" "}
-                        — {option.hint}
-                      </span>
-                    </span>
-                    <span className="block truncate font-mono text-xs text-muted-foreground">
-                      {fileName(option.value)}
+                  <span className="min-w-0 text-sm">
+                    <span className="font-medium">{option.label}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      — {option.hint}
                     </span>
                   </span>
                 </Label>
@@ -287,17 +294,23 @@ function Field({
   label,
   hint,
   error,
+  labelAction,
   children,
 }: {
   id: string;
   label: string;
   hint?: string;
   error?: string;
+  /** A small link on the label's row, at its right end. */
+  labelAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-baseline justify-between gap-3">
+        <Label htmlFor={id}>{label}</Label>
+        {labelAction}
+      </div>
       {children}
       {error ? (
         <p className="text-sm text-destructive">{error}</p>

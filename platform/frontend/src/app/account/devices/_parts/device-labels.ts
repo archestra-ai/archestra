@@ -1,4 +1,8 @@
 import type { DesktopDevice } from "@/lib/desktop-device.query";
+import {
+  desktopServerErrorSentence,
+  deviceServerStateLabel,
+} from "@/lib/mcp/desktop-mcp";
 import { programUpdateInstruction } from "@/lib/mcp/mcp-bridge-command";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
@@ -24,6 +28,54 @@ export function deviceStatusLabel(
   };
 }
 
+/**
+ * The MCP Servers column of a device: how many of its MCP servers run, and
+ * how many failed when any did. Null for an offline device: its MCP bridge
+ * reports no states, so none are known.
+ */
+export function deviceServersLabel(
+  device: Pick<DesktopDevice, "online" | "servers">,
+): { running: string; failed: string | null } | null {
+  if (!device.online) return null;
+  const count = (state: DesktopServer["state"]) =>
+    device.servers.filter((server) => server.state === state).length;
+  const failed = count("failed");
+  return {
+    running: `${count("running")} running`,
+    failed: failed > 0 ? `${failed} failed` : null,
+  };
+}
+
+/**
+ * The MCP servers of an online device, as its open row lists them: failed
+ * ones first, then the others in the order the device has them. A failed
+ * server has its error as one plain sentence, as the MCP Registry shows it.
+ */
+export function deviceServerRows(servers: DesktopServer[]): DeviceServerRow[] {
+  const failed = servers.filter((server) => server.state === "failed");
+  const others = servers.filter((server) => server.state !== "failed");
+  return [...failed, ...others].map((server) => {
+    const error =
+      server.state === "failed"
+        ? desktopServerErrorSentence({
+            error: server.lastError,
+            name: server.name,
+            command: server.command,
+            url: server.url,
+          })
+        : null;
+    return {
+      catalogId: server.catalogId,
+      name: server.name,
+      icon: server.iconUrl ?? server.icon,
+      state: deviceServerStateLabel(server.state),
+      failed: server.state === "failed",
+      running: server.state === "running",
+      error,
+    };
+  });
+}
+
 /** The Platform column of a device. */
 export function devicePlatformLabel(
   platform: DesktopDevice["platform"],
@@ -46,10 +98,7 @@ export function deviceProgramVersionLabel(
  * See {@link programUpdateInstruction} for who runs the command.
  */
 export function deviceProgramUpdateNotice(
-  device: Pick<
-    DesktopDevice,
-    "platform" | "programUpdate" | "programAutoUpdate"
-  >,
+  device: Pick<DesktopDevice, "programUpdate" | "programAutoUpdate">,
 ): DeviceProgramUpdateNotice | null {
   if (!device.programUpdate) return null;
   const { version } = device.programUpdate;
@@ -62,6 +111,21 @@ export function deviceProgramUpdateNotice(
 }
 
 // ===
+
+type DesktopServer = DesktopDevice["servers"][number];
+
+interface DeviceServerRow {
+  catalogId: string;
+  name: string;
+  /** An emoji, or the link to the image of the catalog item; null with none. */
+  icon: string | null;
+  /** "Running", "Failed" and so on; null when the MCP bridge reported none. */
+  state: string | null;
+  failed: boolean;
+  running: boolean;
+  /** Why it failed, as one plain sentence. */
+  error: string | null;
+}
 
 /** For a value the MCP bridge did not send yet. */
 const NOT_REPORTED = "Not reported";

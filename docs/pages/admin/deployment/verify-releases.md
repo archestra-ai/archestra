@@ -5,6 +5,8 @@ order: 10
 lastUpdated: 2026-11-20
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Prove that the Archestra image you run is the one Archestra released, and see every package inside it, without trusting the registry. Each release image carries signed attestations next to it in its registry: where it was built, its SBOM, scans for live credentials and malware, and how it is configured against the CIS Docker Benchmark. `gh`, cosign, and admission controllers such as Kyverno read them.
 
 ## What Each Image Carries

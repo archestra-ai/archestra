@@ -5,6 +5,8 @@ order: 5
 lastUpdated: 2026-10-28
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Track Knowledge Base ingestion and retrieval, including connector failures and permission sync gaps.
 
 ## Metrics

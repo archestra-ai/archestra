@@ -6,6 +6,7 @@ lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Delegate to agents that run outside Archestra. Connect any agent that speaks [A2A](https://a2a-protocol.org/), and your agents can hand it work like any other subagent. Its owner keeps control of its tools and data. Archestra checks and records every call.
 

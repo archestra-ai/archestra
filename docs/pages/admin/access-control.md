@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-11-17
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can edit** when they need to change it.
 
 <span id="actions-and-scopes"></span>

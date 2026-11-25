@@ -26,6 +26,13 @@ import { fixedRoleGroups } from "@archestra/shared/fixed-roles";
 import logger from "@/logging";
 import { assertPortsBound } from "@/models/ports";
 
+/**
+ * The pointer every docs page carries under its frontmatter. Generated pages
+ * carry it too: CI checks that codegen reproduces the committed pages exactly.
+ */
+const DOCS_WRITER_SKILL_COMMENT =
+  "<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->";
+
 // The composition module, imported first, bound the ports of the layers
 // below; stop here if one is unbound.
 assertPortsBound();
@@ -194,6 +201,9 @@ lastUpdated: ${lastUpdated}
  */
 function generateMarkdownBody(): string {
   return `
+
+${DOCS_WRITER_SKILL_COMMENT}
+
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
 Run \`pnpm codegen:access-control-docs\` to regenerate.

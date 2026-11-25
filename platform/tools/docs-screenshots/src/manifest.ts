@@ -124,29 +124,6 @@ export const SHOTS: Shot[] = [
     route: () => "/connection?clientId=codex",
   },
   {
-    asset: "automated_screenshots/platform-connection_browser-approval",
-    route: () => "/connection",
-    // An installer would start this request; a pending one expires in ten minutes.
-    prepare: async (page) => {
-      const response = await page.request.post("/api/client-connections", {
-        data: { clientId: "codex", platform: "macos" },
-      });
-      const { verificationPath } = await response.json();
-      await page.goto(verificationPath);
-      await page.waitForLoadState("networkidle");
-      // Setup generation can start after networkidle and light the sidebar spinner.
-      await expect(page.getByTestId("connect-command-status")).toHaveText(
-        "Setup command ready",
-      );
-      const code = page.getByText(/^[A-F0-9]{4}-[A-F0-9]{4}$/);
-      await code.waitFor();
-      await code.evaluate((element) => {
-        element.textContent = "0123-4567";
-      });
-    },
-    viewport: { width: 1100, height: 480 },
-  },
-  {
     asset: "automated_screenshots/chat_composer",
     route: (seed) => `/chat?agentId=${seed.agents["Support Triage"]}`,
     beforeNavigate: async (page) => {
@@ -464,8 +441,8 @@ export const SHOTS: Shot[] = [
     viewport: { width: 1440, height: 920 },
     prepare: async (page) => {
       await page
-        .getByRole("button", { name: "Create new virtual key" })
-        .first()
+        .getByRole("region", { name: "Endpoint", exact: true })
+        .getByRole("combobox", { name: "API format" })
         .waitFor();
     },
   },
@@ -695,7 +672,8 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/platform-openappa_policy",
-    route: () => "/openappa/policy",
+    // The file workspace, which the Policy tab does not open yet.
+    route: () => "/openappa/policy/workspace",
     prepare: async (page) => {
       // The docs' rules are at the end of the file: jump there, then drop focus
       // so no cursor shows.
@@ -716,7 +694,8 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/platform-openappa_validations",
-    route: () => "/openappa/policy",
+    // The file workspace, which the Policy tab does not open yet.
+    route: () => "/openappa/policy/workspace",
     prepare: async (page) => {
       // The first validation, open in the editor with its last run's result.
       await page
@@ -732,7 +711,7 @@ export const SHOTS: Shot[] = [
     // The seeded calls fall in the same thirty days as Costs.
     route: () => {
       const [start, end] = USAGE_TIMEFRAME.replace("custom:", "").split("_");
-      return `/adoption?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`;
+      return `/connections/logs?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`;
     },
     viewport: { width: 1440, height: 900 },
     prepare: async (page) => {

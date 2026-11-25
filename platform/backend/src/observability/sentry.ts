@@ -15,6 +15,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { classifyErrorForTracking } from "./error-tracking-policy";
 import { rememberErrorTrackingServerSpan } from "./request-context";
+import { telemetryPreference } from "./telemetry-preference";
 import { ATTR_MCP_METHOD_NAME } from "./tracing/attributes";
 import {
   isLongLivedMcpStream,
@@ -177,6 +178,18 @@ const getProfilingIntegration = async (): Promise<Integration | null> => {
   }
 };
 
+/**
+ * {@link filterErrorEvent} for reports that go to Archestra's project: drops
+ * the event when an admin turned telemetry off in the first-run setup dialog.
+ */
+async function filterErrorEventWithTelemetryChoice(
+  event: ErrorEvent,
+  hint: EventHint,
+): Promise<ErrorEvent | null> {
+  if (!(await telemetryPreference.isOptedIn())) return null;
+  return filterErrorEvent(event, hint);
+}
+
 let sentryClient: Sentry.NodeClient | undefined;
 
 /**
@@ -306,7 +319,11 @@ function getBaseOptions(): Sentry.NodeOptions {
      * https://docs.sentry.io/platforms/javascript/guides/express/opentelemetry/custom-setup/
      */
     skipOpenTelemetrySetup: true,
-    beforeSend: filterErrorEvent,
+    // Reports to Archestra's project also follow the admin's telemetry
+    // choice; the deployment's own project always gets its reports.
+    beforeSend: errorsOnly
+      ? filterErrorEventWithTelemetryChoice
+      : filterErrorEvent,
     beforeBreadcrumb: (breadcrumb) => scrubErrorReportBreadcrumb(breadcrumb),
   };
 }

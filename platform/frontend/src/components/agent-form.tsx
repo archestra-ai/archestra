@@ -127,6 +127,7 @@ import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
+import { noCompanyConnection } from "@/components/claude-connection-pickers.utils";
 import {
   type CompanyAccountChange,
   CompanyAccountFields,
@@ -530,6 +531,11 @@ interface SubagentsEditorProps {
   disabledAgentIds: string[];
   onDisabledSelectionChange: (ids: string[]) => void;
   emptyDescription?: string;
+  /**
+   * What the picked agents are called: subagents of an agent, or plain
+   * agents on a gateway, whose clients call them.
+   */
+  noun?: "subagent" | "agent";
 }
 
 function SubagentsEditor({
@@ -542,6 +548,7 @@ function SubagentsEditor({
   disabledAgentIds,
   onDisabledSelectionChange,
   emptyDescription = "Every task is handled here, with nothing handed on.",
+  noun = "subagent",
 }: SubagentsEditorProps) {
   const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
   const visibleIds = selectedIds.slice(0, 20);
@@ -602,7 +609,7 @@ function SubagentsEditor({
         </div>
       ) : !hasSelectedTargets ? (
         <div className="flex flex-col items-center rounded-md border border-dashed px-4 py-6 text-center">
-          <p className="text-sm font-medium">No subagents assigned</p>
+          <p className="text-sm font-medium">{`No ${noun}s assigned`}</p>
           <p className="text-xs text-muted-foreground">{emptyDescription}</p>
         </div>
       ) : null}
@@ -643,7 +650,7 @@ function SubagentsEditor({
           // In All mode every local agent is already a subagent, so the only
           // change the picker can make is to leave one out. Its label says so.
           triggerLabel={
-            localMode === "all" ? "Exclude a local agent" : "Add subagent"
+            localMode === "all" ? "Exclude a local agent" : `Add ${noun}`
           }
           searchPlaceholder={
             localMode === "all"
@@ -1327,10 +1334,11 @@ export function AgentForm({
   const knowledgeBases = mergeById(knowledgeBasesData, savedKnowledgeBases);
   const connectors = mergeById(connectorsData, savedConnectors);
   const agentLlmApiKeyId = agent?.llmApiKeyId;
-  const { data: availableApiKeys = [] } = useAvailableLlmProviderApiKeys({
-    includeKeyId: agentLlmApiKeyId ?? undefined,
-    enabled: shouldLoadLlmConfiguration && !!canReadLlmProviderApiKeys,
-  });
+  const { data: availableApiKeys = [], isFetched: availableApiKeysFetched } =
+    useAvailableLlmProviderApiKeys({
+      includeKeyId: agentLlmApiKeyId ?? undefined,
+      enabled: shouldLoadLlmConfiguration && !!canReadLlmProviderApiKeys,
+    });
   const llmModelsQuery = useLlmModelsByProvider({
     enabled: shouldLoadLlmConfiguration && !!canReadLlmModels,
   });
@@ -2744,15 +2752,49 @@ export function AgentForm({
   // one moved, both go.
   // Under a connection the runtime fixes, only the model is the agent's to
   // set or clear, where the runtime fixes none.
-  const llmSelectionChanged =
+  // A Claude agent drops its connection as soon as it is locked to
+  // subscriptions (`setAccountLock`); any other keeps it in the form until
+  // the save, for the company card ticked again. Saved under that lock, a
+  // company connection with no model or with a model the runtime's
+  // subscription does not serve would be nobody's: clear it only once the
+  // key list and model catalog positively confirm that, so an unloaded or
+  // unreadable personal subscription is never wiped and a model the
+  // subscription serves stays intact (runs keep it via
+  // `keptSubscriptionModel`, while the API cannot store a model without its
+  // connection).
+  const selectedKeyIsConfirmedCompany =
+    availableApiKeysFetched &&
+    selectedApiKey !== undefined &&
+    !isPersonalSubscription(selectedApiKey);
+  const selectedModelUnusedBySubscription =
+    !llmModel ||
+    (modelCatalogLoaded &&
+      selectedLlmModelRow !== null &&
+      (!offeredSubscription ||
+        selectedLlmModelRow.provider !== offeredSubscription.provider));
+  const companyPairUnused =
+    !!runtime &&
+    agentRuntimeEnabled &&
+    !isClaudeCodeRuntime &&
+    !connectionLockedByRuntime &&
+    !accountPairLockedForViewer &&
+    accountLock === "subscription" &&
+    selectedKeyIsConfirmedCompany &&
+    selectedModelUnusedBySubscription;
+  const clearsUnusedCompanyPair =
+    companyPairUnused &&
     !!persistedAgent &&
-    ((connectionLockedByRuntime
-      ? !runtimeFixedModelId &&
-        (llmModel ?? null) !== (persistedAgent.modelId ?? null)
-      : (llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
-        (llmModel ?? null) !== (persistedAgent.modelId ?? null)) ||
-      agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
-      agentAutoRouterId !== (persistedAgent.autoRouterId ?? null));
+    (!!persistedAgent.llmApiKeyId || !!persistedAgent.modelId);
+  const llmSelectionChanged =
+    clearsUnusedCompanyPair ||
+    (!!persistedAgent &&
+      ((connectionLockedByRuntime
+        ? !runtimeFixedModelId &&
+          (llmModel ?? null) !== (persistedAgent.modelId ?? null)
+        : (llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
+          (llmModel ?? null) !== (persistedAgent.modelId ?? null)) ||
+        agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
+        agentAutoRouterId !== (persistedAgent.autoRouterId ?? null)));
   // An agent the platform runs itself names a key and a model together. On
   // a runtime's cards each is optional: what is left empty is each person's
   // to pick.
@@ -2842,6 +2884,7 @@ export function AgentForm({
       fixed: connectionLockedByRuntime
         ? { modelId: runtimeFixedModelId }
         : null,
+      companyPairUnused,
     });
 
     setIsSaving(true);
@@ -3366,6 +3409,7 @@ export function AgentForm({
     connectionLockedByRuntime,
     companyModelId,
     runtimeFixedModelId,
+    companyPairUnused,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -3734,18 +3778,33 @@ export function AgentForm({
   // card alone. Otherwise a Claude agent starts on the Claude account its
   // runtime comes with, as that card alone: each person's subscription, which
   // is how the maintained runtime comes, or a company API key, which is what
-  // a custom image ran every agent on. Any other runtime with two accounts
-  // starts with neither ticked, and its creator chooses. The company card's
-  // fields start empty in every case: nothing is picked for the creator.
+  // a custom image ran every agent on. Any other runtime with a personal
+  // subscription of its own starts ticked too, so a new agent can be created
+  // at once and the cards say what its runs use: on that subscription, like
+  // Claude Code, unless the subscription alone would hold Create back. Codex
+  // on subscriptions alone takes its model from its creator's own ChatGPT:
+  // a creator without one starts with both ways open, which needs none.
+  // The company card's fields start empty in every case: nothing is picked
+  // for the creator.
   const startingClaude = runtime
     ? startingClaudeAuthentication({ runtime, ruleKind: null })
     : undefined;
-  const runtimeStartKind: AgentAccountLock | null = runtimeRuleKind
+  const creatorSubscriptionKnown =
+    availableApiKeysFetched || canReadLlmProviderApiKeys === false;
+  const runtimeStartKind: AgentAccountLock | "both" | null = runtimeRuleKind
     ? null
     : connectionLockedByRuntime
       ? "key"
       : !isClaudeCodeRuntime
-        ? null
+        ? !offeredSubscription
+          ? null
+          : !requiredSubscriptionKind
+            ? "subscription"
+            : !creatorSubscriptionKnown
+              ? null
+              : requiredSubscriptionKey
+                ? "subscription"
+                : "both"
         : startingClaude === "subscription"
           ? "subscription"
           : startingClaude === "provider"
@@ -3757,7 +3816,11 @@ export function AgentForm({
       : null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: applied once per new agent, when its runtime says so
   useEffect(() => {
-    if (startsOnRuntimeKind) setAccountLock(startsOnRuntimeKind);
+    if (startsOnRuntimeKind) {
+      setAccountLock(
+        startsOnRuntimeKind === "both" ? null : startsOnRuntimeKind,
+      );
+    }
   }, [startsOnRuntimeKind]);
   // What the company card's two fields show. A connection the runtime fixes
   // shows by the name the rule gives: the reader may not be able to read the
@@ -3841,12 +3904,21 @@ export function AgentForm({
   // organization's default, not what the API resolves for each person, so it
   // holds no save back for it: a save the API refuses is shown by the write,
   // and has its reason beside the fields.
+  // Only where it is news: beside each person's own subscription their runs
+  // need no connection, and with no company connection to pick the fields
+  // already say so.
   const defaultModelCannotRun =
     !!runtime &&
     runtimeCards &&
     companyWayOpen &&
+    !subscriptionWayOpen &&
     !connectionLockedByRuntime &&
     !companyConnectionId &&
+    !noCompanyConnection({
+      keys: availableApiKeys,
+      apiKeyId: null,
+      runsOn: companyProviderFilter,
+    }) &&
     !usesClaudeSubscription &&
     !!organizationDefaultModel.model &&
     !getAgentRuntimeModelCompatibility({
@@ -3908,18 +3980,15 @@ export function AgentForm({
         onChange={changeCompanyAccount}
       />
       {defaultModelCannotRun && (
-        <output
-          aria-live="polite"
-          className="flex items-start gap-1.5 text-xs text-muted-foreground"
-        >
-          <InfoIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
-          <span>
+        <InlineNotice role="status" aria-live="polite" variant="warning" plain>
+          <InfoIcon className="mt-0.5" aria-hidden="true" />
+          <InlineNoticeText>
             The organization&apos;s default model,{" "}
             {organizationDefaultModel.model?.displayName}, cannot run on this
             runtime. Each person must pick a connection, unless you set one
             here.
-          </span>
-        </output>
+          </InlineNoticeText>
+        </InlineNotice>
       )}
       {createApiKeyDialog}
     </>
@@ -4225,9 +4294,11 @@ export function AgentForm({
     ? "Each person's Claude subscription"
     : requiredSubscription
       ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
-      : // The subscription the runtime's rule names, whatever the agent
-        // stores.
-        runtimeRuleKind === "subscription" && offeredSubscriptionKind
+      : // The subscription the runtime's rule or agent lock names, whatever
+        // the agent stores.
+        (runtimeRuleKind === "subscription" ||
+            accountLock === "subscription") &&
+          offeredSubscriptionKind
         ? personalSubscriptionCard(offeredSubscriptionKind).title
         : agentAutoRouterId
           ? (agentAutoRouter?.label ?? "Auto")
@@ -4288,7 +4359,9 @@ export function AgentForm({
               </Alert>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {selectedApiKey && selectedApiKey.scope !== "org" ? (
+                {selectedApiKey &&
+                selectedApiKey.scope !== "org" &&
+                (!runtimeCards || companyWayOpen) ? (
                   <span>
                     Selected key will be available to everyone who has access to
                     this agent.
@@ -4316,27 +4389,41 @@ export function AgentForm({
             <div className="space-y-2">
               {runtime && agentRuntimeEnabled ? (
                 // A runtime's accounts, as the same cards whatever it runs.
-                <AgentAccountOptions
-                  label="Accounts that can run it"
-                  // Under the runtime's rule there is one kind, and nothing
-                  // to say about a choice between two.
-                  meaning={
-                    runtimeRuleKind
-                      ? undefined
-                      : accountWaysMeaning(
-                          {
-                            subscription: subscriptionWayOpen,
-                            provider: companyWayOpen,
-                          },
-                          companyAccountName(runtime.command?.[0]),
-                        )
-                  }
-                  options={runtimeAccountOptions}
-                  // The plans a rule leaves open are still the agent's to
-                  // tick.
-                  readOnly={!canLockAccount && !runtimeRuleKind}
-                  problem={accountLockProblem}
-                />
+                <>
+                  {/* Three levels decide an account: the runtime's settings
+                      say what agents on it may allow, this form what this
+                      agent allows, and each person picks for their own
+                      runs where both are allowed. */}
+                  {!runtimeRuleKind &&
+                    choosesAmongAccounts &&
+                    canLockAccount && (
+                      <FieldDescription>
+                        Choose which accounts this agent allows, from those its
+                        runtime allows.
+                      </FieldDescription>
+                    )}
+                  <AgentAccountOptions
+                    label="Accounts that can run it"
+                    // Under the runtime's rule there is one kind, and nothing
+                    // to say about a choice between two.
+                    meaning={
+                      runtimeRuleKind
+                        ? undefined
+                        : accountWaysMeaning(
+                            {
+                              subscription: subscriptionWayOpen,
+                              provider: companyWayOpen,
+                            },
+                            companyAccountName(runtime.command?.[0]),
+                          )
+                    }
+                    options={runtimeAccountOptions}
+                    // The plans a rule leaves open are still the agent's to
+                    // tick.
+                    readOnly={!canLockAccount && !runtimeRuleKind}
+                    problem={accountLockProblem}
+                  />
+                </>
               ) : (
                 <fieldset
                   disabled={accountLockedForViewer}
@@ -4937,25 +5024,35 @@ export function AgentForm({
               {/* Section 4: Subagents */}
               {showSubagents && (
                 <SettingsSection
-                  title="Subagents"
+                  // A gateway's are agents its clients call, not agents
+                  // under another one.
+                  title={isInternalAgent ? "Subagents" : "Agents"}
                   // An agent hands the task over itself. A gateway does not
-                  // run anything — it advertises each subagent as a delegation
+                  // run anything — it advertises each agent as a delegation
                   // tool and its client decides when to call one — so saying it
                   // "hands a task over" would describe the wrong actor.
                   description={
                     isInternalAgent
                       ? "Agents this one may delegate work to, locally or over A2A."
-                      : `Agents this ${agentTypeDisplayName[agentType] || "agent"} offers its clients as delegation tools.`
+                      : agentType === "mcp_gateway"
+                        ? "Clients connected to this MCP gateway can call the agents assigned here as tools. Assign an Agent Runtime agent here so a coding agent on a laptop can hand work over to it."
+                        : `Agents this ${agentTypeDisplayName[agentType] || "agent"} offers its clients as delegation tools.`
                   }
                 >
                   {!subagentSetsLoaded ? (
                     <p className="text-sm text-muted-foreground">
-                      <span>Loading subagents…</span>
+                      <span>
+                        {isInternalAgent
+                          ? "Loading subagents…"
+                          : "Loading agents…"}
+                      </span>
                     </p>
                   ) : (
                     <div className="space-y-3">
                       <AccessModeCards
-                        label="Subagent access"
+                        label={
+                          isInternalAgent ? "Subagent access" : "Agent access"
+                        }
                         mode={accessAllSubagents ? "all" : "manual"}
                         onModeChange={(mode) =>
                           setAccessAllSubagents(mode === "all")
@@ -4991,6 +5088,7 @@ export function AgentForm({
                             ? undefined
                             : "No delegation tools appear in this gateway's tool list."
                         }
+                        noun={isInternalAgent ? "subagent" : "agent"}
                       />
                       {supportsSubagents && (
                         <SubagentLoadBalancingSection
@@ -5073,8 +5171,14 @@ export function AgentForm({
                 <fieldset disabled={canConfigureRuntime !== true}>
                   <AgentRuntimeFields
                     value={runtime}
-                    onChange={setAgentRuntime}
+                    // A saved agent with a dedicated runtime keeps it: one
+                    // without would be another kind of agent under its name.
+                    onChange={(next) => {
+                      if (next === null && agent?.runtime) return;
+                      setAgentRuntime(next);
+                    }}
                     locked={!!runtimeSettingsReadOnlyBy}
+                    keepsRuntime={!!agent?.runtime}
                   />
                 </fieldset>
               </div>

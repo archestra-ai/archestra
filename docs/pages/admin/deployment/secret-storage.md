@@ -5,6 +5,8 @@ order: 6
 lastUpdated: 2026-11-09
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Archestra encrypts saved credentials in PostgreSQL by default. Use HashiCorp Vault to keep their values outside the database. This storage protects [credentials](/docs/admin/credentials); [content encryption](/docs/admin/content-encryption) protects messages and tool results separately.
 
 <span id="secrets-management"></span>

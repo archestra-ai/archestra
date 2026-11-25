@@ -5,6 +5,8 @@ order: 9
 lastUpdated: 2026-11-03
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Monitor your instance in your existing stack. For individual requests and conversations inside Archestra, use [Logs](/docs/insights/logs).
 
 | Need | Set up |

@@ -2,12 +2,24 @@ import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
-  render,
+  render as renderComponent,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Like the app shell, provide the query cache used by navigation icons.
+function render(ui: Parameters<typeof renderComponent>[0]) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return renderComponent(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 // Mock ResizeObserver which is used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -977,6 +989,29 @@ describe("ConversationSearchPalette", () => {
 
     expect(screen.getByText("MCP Registry")).toBeInTheDocument();
     expect(screen.queryByText("Agents")).not.toBeInTheDocument();
+  });
+
+  it("opens Models from search for a Models-only reader", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    vi.mocked(usePermissionMap).mockReturnValue(
+      Object.fromEntries(
+        Object.keys(requiredPagePermissionsMap).map((url) => [
+          url,
+          url !== "/llm/model-providers",
+        ]),
+      ),
+    );
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "models" },
+    });
+    fireEvent.click(screen.getByText("Model Providers"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/llm/models");
   });
 
   it("leaves out a page the reader may not open", () => {

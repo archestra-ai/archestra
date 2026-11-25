@@ -16,7 +16,7 @@ How Archestra handles each change from Entra:
 
 - **Assigned in Entra:** Archestra creates the user with the status **Pending (auto-provisioned)** and the **Default Roles for New Users** from **Settings → Auth**.
 - **First sign-in:** Single Sign-On signs the person in as the provisioned user, with any roles and teams assigned to it.
-- **Unassigned in Entra:** Archestra deactivates the user, and **Settings → Users** shows them as **Deactivated**. They can't sign in, and their API keys, gateway tokens, and chat integrations stop working. Their chats, agents, and team memberships are kept. Anything they shared with others gets a new owner, the longest-standing active admin (see [When an owner leaves](/docs/admin/access-control#when-an-owner-leaves)). Assigning them in Entra again reactivates the user.
+- **Unassigned in Entra:** Archestra deactivates the user, and **Settings → Users** shows them as **Deactivated**. They can't sign in, and their API keys, gateway tokens, and chat integrations stop working. Their chats, agents, and team memberships are kept. Assigning them in Entra again reactivates the user.
 
 Archestra never deletes a user through SCIM. To delete a user, use **Remove user** in **Settings → Users**. Deactivated users are excluded from the 30-user free tier count.
 

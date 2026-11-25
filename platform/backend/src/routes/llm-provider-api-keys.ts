@@ -914,30 +914,23 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       assertSystemKeyCredentialsUnchanged({ apiKey: apiKeyFromDB, body });
 
-      // A key for a provider the admins switched off is frozen: it can be
-      // deleted, but not renamed, rescoped, or rotated back into service.
-      // The same holds for a key whose plan is turned off (API keys, a
-      // personal subscription, or a GitHub Copilot enterprise plan), and for
-      // a new secret of a plan that is turned off.
+      // A key for a provider or plan the admins switched off is frozen for
+      // metadata edits: it can be deleted, but not renamed or rescoped. When
+      // the caller supplies a new secret, judge by the plan that new secret
+      // moves the key into so a frozen subscription key can be rotated in
+      // place onto an enabled API-key plan without losing its mappings.
       const currentPlan = await LlmProviderApiKeyModel.findPlan(apiKeyFromDB);
-      await assertProviderPlanAllowed({
-        organizationId,
-        provider: apiKeyFromDB.provider,
-        plan: currentPlan,
-      });
-      const newPlan = body.apiKey
+      const targetPlan = body.apiKey
         ? credentialPlan({
             provider: apiKeyFromDB.provider,
             apiKey: body.apiKey,
           })
         : currentPlan;
-      if (newPlan !== currentPlan) {
-        await assertProviderPlanAllowed({
-          organizationId,
-          provider: apiKeyFromDB.provider,
-          plan: newPlan,
-        });
-      }
+      await assertProviderPlanAllowed({
+        organizationId,
+        provider: apiKeyFromDB.provider,
+        plan: targetPlan,
+      });
 
       // Who can reach the key is not editable here: access lives in the key's
       // permission policy, which the permissions API writes on its own. The

@@ -242,6 +242,62 @@ describe("ensureConnectionVirtualKey", () => {
     ]);
   });
 
+  test("Anthropic credit-probe fallback skips disabled OAuth subscription keys", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const exhaustedApiSecret = await makeSecret({
+      secret: { apiKey: "sk-ant-api03-exhausted" },
+    });
+    const exhaustedApiKey = await makeLlmProviderApiKey(
+      org.id,
+      exhaustedApiSecret.id,
+      { provider: "anthropic", isPrimary: true },
+    );
+    const oauthSecret = await makeSecret({
+      secret: { apiKey: "sk-ant-oat01-disabled-fallback" },
+    });
+    await makeLlmProviderApiKey(org.id, oauthSecret.id, {
+      provider: "anthropic",
+    });
+
+    await OrganizationModel.patch(org.id, {
+      modelProviderOverrides: {
+        anthropic: { plans: { personal: { hidden: true } } },
+      },
+    });
+    probeMock.mockImplementation(async (apiKey) =>
+      apiKey === "sk-ant-api03-exhausted" ? "exhausted" : "usable",
+    );
+
+    const { virtualApiKeyId, creditWarning } = await ensureConnectionVirtualKey(
+      {
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "anthropic",
+      },
+    );
+
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
+    ).toEqual([
+      expect.objectContaining({
+        provider: "anthropic",
+        providerApiKeyId: exhaustedApiKey.id,
+      }),
+    ]);
+    expect(creditWarning?.kind).toBe("insufficient_balance");
+    expect(probeMock).toHaveBeenCalledTimes(1);
+  });
+
   test("per-user provider: provisions a personal key mapped to the connecting user's own key", async ({
     makeOrganization,
     makeUser,

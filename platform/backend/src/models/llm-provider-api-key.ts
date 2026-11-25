@@ -1450,9 +1450,17 @@ class LlmProviderApiKeyModel {
           ? apiKey.secretId
           : (await LlmProviderApiKeyModel.findById(apiKey.id))?.secretId;
       if (secretId) {
-        const secretValue = await getSecretValueForLlmProviderApiKey(secretId);
-        if (isAnthropicOAuthToken(secretValue)) {
-          return "personal";
+        try {
+          const secretValue =
+            await getSecretValueForLlmProviderApiKey(secretId);
+          if (isAnthropicOAuthToken(secretValue)) {
+            return "personal";
+          }
+        } catch (err) {
+          logger.warn(
+            { apiKeyId: apiKey.id, err },
+            "findPlan: failed to read Anthropic secret; falling back to stored plan",
+          );
         }
       }
     }

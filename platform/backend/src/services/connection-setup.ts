@@ -519,6 +519,7 @@ async function selectAnthropicKeyByCredit(params: {
   );
   const enabledFallbacks: CreditProbeCandidate[] = [];
   for (const key of available) {
+    if (enabledFallbacks.length >= MAX_CREDIT_PROBE_CANDIDATES - 1) break;
     if (key.id === resolvedKey.id) continue;
     const plan = await LlmProviderApiKeyModel.findPlan(key);
     if (!isProviderPlanHidden(modelProviderOverrides, "anthropic", plan)) {
@@ -527,10 +528,7 @@ async function selectAnthropicKeyByCredit(params: {
   }
   // Resolved key first (preserves the admin/precedence choice when it works),
   // then the rest — bounded so a pathological key set can't fan out probes.
-  const candidates: CreditProbeCandidate[] = [
-    resolvedKey,
-    ...enabledFallbacks,
-  ].slice(0, MAX_CREDIT_PROBE_CANDIDATES);
+  const candidates: CreditProbeCandidate[] = [resolvedKey, ...enabledFallbacks];
 
   // A definitive "balance too low" beats a transient one; `unverified` is the
   // fallback if we only saw inconclusive probes. Remember which key produced

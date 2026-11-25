@@ -2549,20 +2549,29 @@ describe("LLM Provider API Keys — API keys and personal subscriptions the orga
     );
   });
 
-  test("freezes an existing Anthropic OAuth token once Claude Code is off, but keeps it deletable", async () => {
+  test("freezes an existing Anthropic OAuth token once Claude Code is off, allows rotating it to an enabled API key, and keeps it deletable", async () => {
     const created = await createKey("anthropic", "sk-ant-oat01-existing");
     expect(created.statusCode, created.body).toBe(200);
     const keyId = created.json().id;
 
     await turnOff("anthropic", "personal");
 
-    const update = await app.inject({
+    const metadataUpdate = await app.inject({
       method: "PATCH",
       url: `/api/llm-provider-api-keys/${keyId}`,
       payload: { name: "Renamed" },
     });
-    expect(update.statusCode).toBe(400);
-    expect(update.json().error.message).toContain("Claude Code is turned off");
+    expect(metadataUpdate.statusCode).toBe(400);
+    expect(metadataUpdate.json().error.message).toContain(
+      "Claude Code is turned off",
+    );
+
+    const rotateToApiKey = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { apiKey: "sk-ant-api03-rotated-company-key" },
+    });
+    expect(rotateToApiKey.statusCode, rotateToApiKey.body).toBe(200);
 
     const removal = await app.inject({
       method: "DELETE",

@@ -1476,6 +1476,7 @@ export async function evaluateToolCalls(
           kind: "deny" as const,
           feedback: target.refusal,
           outcome: INTEGRITY,
+          proxyNotice: true as const,
         };
       const shortName = archestraMcpBranding.getToolShortName(
         target.toolCallName,

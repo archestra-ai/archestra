@@ -6,6 +6,7 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import * as database from "@/database";
 import logger from "@/logging";
@@ -1809,6 +1810,27 @@ describe("APPA feature boundary", () => {
       "call:empty",
     ]);
     expect(dispatched[1].arguments).toEqual({});
+  });
+
+  test("answers a preview that names no app with its correction, before any dispatch", async () => {
+    const [decision] = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "preview",
+          name: archestraMcpBranding.getToolName("preview_app_tool"),
+          arguments: { toolName: "list_items", args: {} },
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+    expect(decision).toMatchObject({
+      kind: "deny",
+      outcome: { kind: "integrity" },
+      proxyNotice: true,
+    });
+    expect(decision).not.toHaveProperty("recorded");
+    expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
   test("fails closed when a withheld admission cannot be settled", async () => {

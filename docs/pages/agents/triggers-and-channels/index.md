@@ -6,6 +6,7 @@ lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Run your agents where your team already works. An agent can answer messages in Slack, Microsoft Teams, Telegram, and Jira issues. It can also reply to email, and run when your code sends it a request. It keeps the same tools, skills, and [Guardrails](/docs/agents/guardrails) everywhere.
 

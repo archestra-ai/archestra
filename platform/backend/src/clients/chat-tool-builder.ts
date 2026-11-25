@@ -77,6 +77,7 @@ import { remedyCallNeedsHumanReview } from "@/openappa/a2a-hitl-review";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import type { Tool as CatalogTool } from "@/types";
 import { agentOwner } from "@/types";
 import type { A2AOAuthExecution } from "@/types/a2a-actor";
@@ -318,6 +319,13 @@ export function buildMcpGatewayTool(params: {
                   ctx.suppressContentLogging || (await isGuardrailsV2Active())
                     ? undefined
                     : ctx.taskBridge,
+                // A dispatched call that waits for a free place on its
+                // server says so, on the run_tool call the user sees.
+                onUpstreamQueueChange: (queued) =>
+                  ctx.taskBridge?.reportQueued({
+                    toolCallId: options.toolCallId,
+                    queued,
+                  }),
                 // Lets a task minted inside run_tool attach its card to the
                 // run_tool call the user sees, not the synthetic inner id.
                 currentToolCallId: options.toolCallId,
@@ -425,6 +433,11 @@ export function buildMcpGatewayTool(params: {
                 userId: ctx.userId,
               }),
             });
+            // The same flag a third-party result gets: the chat card must
+            // tell a failed built-in call from a finished one.
+            if (archestraResponse.isError && typeof toolResult === "object") {
+              toolResult = { ...toolResult, isError: true };
+            }
           } else {
             // Execute non-Archestra tools via shared helper with browser sync
             toolResult = await executeMcpTool({
@@ -441,6 +454,13 @@ export function buildMcpGatewayTool(params: {
               taskBridge: (await isGuardrailsV2Active())
                 ? undefined
                 : ctx.taskBridge,
+              // A call that waits for a free place on its server says so,
+              // whether or not it may detach into a task.
+              onQueueChange: (queued) =>
+                ctx.taskBridge?.reportQueued({
+                  toolCallId: options.toolCallId,
+                  queued,
+                }),
               toolCallId: options.toolCallId,
               llmSessionId: ctx.sessionId,
               isUiProvidingTool,
@@ -803,16 +823,19 @@ export async function buildArchestraToolOutput(params: {
   const executedAs =
     extractMcpExecutedAs(response) ?? platformExecutedAs(userId);
   const executedAsMeta = { [MCP_EXECUTED_AS_META_KEY]: executedAs };
-  // Never stringify an image block into the text summary — its base64 would
-  // bloat context and evade the history image-stripper. Images ride rawContent
-  // and reach the model as bounded media parts via toModelOutput instead.
+  // Never stringify an image or audio block into the text summary — its
+  // base64 would bloat context and evade the history image-stripper. Images
+  // ride rawContent and reach the model as bounded media parts via
+  // toModelOutput instead.
   const text = response.content
     .map((item) =>
       item.type === "text"
         ? item.text
         : item.type === "image"
           ? "[image]"
-          : JSON.stringify(item),
+          : item.type === "audio"
+            ? "[audio]"
+            : JSON.stringify(item),
     )
     .join("\n");
 
@@ -1180,6 +1203,12 @@ interface ToolExecutionContext {
   /** Detaches this call into a cancellable task if it runs long (chat only). */
   taskBridge?: ChatTaskBridge;
   /**
+   * Told `true` when the call has to wait for a free place on its server,
+   * then `false` when it starts. Separate from `taskBridge`: a call waits for
+   * its turn whether or not it may detach into a task.
+   */
+  onQueueChange?: (queued: boolean) => void;
+  /**
    * The model's id for this call, linking a task card to the call it backs
    * and the persisted tool-call row to the model's call.
    */
@@ -1218,6 +1247,7 @@ interface ToolExecutionContext {
  */
 async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   content: string;
+  isError?: true;
   _meta?: Record<string, unknown>;
   structuredContent?: Record<string, unknown>;
   rawContent?: ContentBlock[];
@@ -1234,6 +1264,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     abortSignal,
     elicitation,
     taskBridge,
+    onQueueChange,
     toolCallId,
     llmSessionId,
     isUiProvidingTool,
@@ -1241,6 +1272,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     encryptedChatAudit,
   } = ctx;
   throwIfAborted(abortSignal);
+  // A turn outlives the request that started it. A user the identity provider
+  // deactivated since then (SCIM) runs no more tools.
+  if (userId && (await softDeletedUsers.isSoftDeleted(userId)))
+    throw new Error("Your account was deactivated in your identity provider");
   const startTime = Date.now();
 
   // For browser tools, ensure the correct conversation tab is selected first
@@ -1351,6 +1386,8 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
               }),
             }
           : {}),
+        // The call's circle reads "queued" until the call starts.
+        ...(onQueueChange ? { onQueueChange } : {}),
         // EncryptedChat: the persisted mcp_tool_calls row is encrypted under the
         // conversation key, or redacted when there is no escrow record.
         ...(suppressContentLogging
@@ -1406,11 +1443,12 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   // parse structured errors (e.g. auth-required with action URL) and render
   // actionable UI instead of showing a generic stream error.
   if (result.isError) {
-    const extractedError = mcpContent
-      ?.map((item) => (item.type === "text" ? item.text : JSON.stringify(item)))
-      .join("\n");
+    const extractedError = mcpContent?.map(contentBlockText).join("\n");
     return {
       content: extractedError || result.error || "Tool execution failed",
+      // The chat card reads this flag: a result the tool marked as an error
+      // carries no structured platform error to tell it from a success.
+      isError: true,
       ...(result._meta && Object.keys(result._meta).length > 0
         ? { _meta: result._meta }
         : {}),
@@ -1467,18 +1505,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     // verbose LLM responses that describe or explain the already-visible UI.
     textContent = "OK";
   } else {
-    textContent = mcpContent
-      .map((item) => {
-        if (item.type === "text") {
-          return item.text;
-        }
-        if (item.type === "resource") {
-          if ("text" in item.resource) return item.resource.text;
-          return `[Resource: ${item.resource.uri}]`;
-        }
-        return JSON.stringify(item);
-      })
-      .join("\n");
+    textContent = mcpContent.map(contentBlockText).join("\n");
   }
 
   // The _meta block from tool definitions, containing the ui sub-object (SEP-1865).
@@ -1577,6 +1604,24 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     structuredContent: result.structuredContent,
     rawContent: mcpContent,
   };
+}
+
+/**
+ * One MCP content block as text for the model's summary. An image or audio
+ * block becomes a marker, never its base64: the payload would bloat the
+ * context and evade the history image-stripper. Images ride `rawContent` and
+ * reach the model as bounded media parts through `toModelOutput`.
+ */
+function contentBlockText(item: ContentBlock): string {
+  if (item.type === "text") return item.text;
+  if (item.type === "image") return "[image]";
+  if (item.type === "audio") return "[audio]";
+  if (item.type === "resource") {
+    return "text" in item.resource
+      ? item.resource.text
+      : `[Resource: ${item.resource.uri}]`;
+  }
+  return JSON.stringify(item);
 }
 
 /**

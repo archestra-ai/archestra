@@ -22,6 +22,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   makeInteraction,
@@ -39,6 +40,15 @@ vi.mock("@/lib/config/config.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
   useFeature: vi.fn(),
 }));
+// Signed out, every permission check fails; a test that turns OpenAPPA on
+// also grants what Guardrails recorded (`guardrailsLog:read`).
+vi.mock("@/lib/auth/auth.query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth/auth.query")>();
+  return { ...actual, useHasPermissions: vi.fn(actual.useHasPermissions) };
+});
+const { useHasPermissions: realUseHasPermissions } = await vi.importActual<
+  typeof import("@/lib/auth/auth.query")
+>("@/lib/auth/auth.query");
 
 const origin = "http://localhost:9000";
 const sessionsUrl = `${origin}/api/llm-proxy-logs/sessions`;
@@ -56,6 +66,7 @@ beforeEach(() => {
   );
   vi.mocked(usePathname).mockReturnValue("/llm/logs/test-session");
   vi.mocked(useFeature).mockReturnValue(undefined);
+  vi.mocked(useHasPermissions).mockImplementation(realUseHasPermissions);
   push.mockReset();
   vi.mocked(useRouter).mockReturnValue({ push } as unknown as ReturnType<
     typeof useRouter
@@ -1461,6 +1472,13 @@ function serveOffPageCause() {
   );
   vi.mocked(useFeature).mockImplementation(((flag: string) =>
     flag === "openappaEnabled" ? true : undefined) as typeof useFeature);
+  vi.mocked(useHasPermissions).mockImplementation((permissions, scope) =>
+    permissions.guardrailsLog
+      ? ({ data: true, isPending: false } as ReturnType<
+          typeof useHasPermissions
+        >)
+      : realUseHasPermissions(permissions, scope),
+  );
 }
 
 /** A session of `requests` half-second requests, one a second, and a linked tool call. */

@@ -186,6 +186,7 @@ export function PoolDialog({
             form={form}
             options={options}
             disabled={disabled}
+            savedMembers={live?.members ?? []}
           />
         </div>
         {activeSection === "connect" && (

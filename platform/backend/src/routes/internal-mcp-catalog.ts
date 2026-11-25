@@ -2306,6 +2306,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await assertImageApprover({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       return reply.send(
         await InternalMcpCatalogModel.listPendingImageApproval(
           request.organizationId,
@@ -2320,13 +2324,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ApproveCatalogItemImage,
         description:
-          "Approve a local catalog item's image so its installs proceed. Requires mcpServerInstallation:admin.",
+          "Approve a local catalog item's image so its installs proceed. Requires update on every MCP registry entry.",
         tags: ["MCP Catalog"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
     async (request, reply) => {
+      await assertImageApprover({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
       const catalogItem = await assertImageApprovable(
         request.params.id,
         request.organizationId,
@@ -3244,10 +3252,26 @@ function isK8sApiThrottlingError(reason: unknown): boolean {
 }
 
 /**
+ * Image approval takes the same grant that exempts an author's own images from
+ * the trusted image registries check: `update` on every registry entry.
+ */
+async function assertImageApprover(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<void> {
+  if (!(await isMcpInstallationAdmin(params))) {
+    throw new ApiError(
+      403,
+      "Approving an image requires permission to update every server in the MCP Registry.",
+    );
+  }
+}
+
+/**
  * Resolve a catalog item that is subject to image approval — a local item with a
- * custom image — in the caller's org, or throw. The approve endpoint is
- * admin-gated by the route permission map; this adds the org-scope and "actually
- * gateable" guards.
+ * custom image — in the caller's org, or throw. The caller is checked first by
+ * {@link assertImageApprover}; this adds the org-scope and "actually gateable"
+ * guards.
  */
 async function assertImageApprovable(
   id: string,

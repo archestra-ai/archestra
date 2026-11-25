@@ -5,6 +5,8 @@ order: 5
 lastUpdated: 2026-10-05
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from your Asana projects: "What is blocking the Q3 launch?" finds the tasks and their comments. The connector syncs tasks and discussions.
 
 **Indexed:** tasks and their user comments from selected Asana projects.

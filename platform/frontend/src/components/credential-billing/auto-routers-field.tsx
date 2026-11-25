@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAvailableAutoRouters } from "@/lib/auto-routing.query";
+import {
+  type AutoRouter,
+  useAutoRouters,
+  useAvailableAutoRouters,
+} from "@/lib/auto-routing.query";
 
 /**
  * Whether a virtual key or OAuth client form shows {@link AutoRoutersField}:
@@ -36,6 +40,13 @@ export function AutoRoutersField({
   const listed = routers.filter((router) => value.includes(router.id));
   const addable = routers.filter((router) => !value.includes(router.id));
   const listedIds = listed.map((router) => router.id);
+  const { data: details = [] } = useAutoRouters();
+  const notRouting = new Map(
+    details.flatMap((router) => {
+      const note = notRoutingNote(router);
+      return note ? [[router.id, note] as const] : [];
+    }),
+  );
 
   return (
     <div className="space-y-2">
@@ -60,6 +71,11 @@ export function AutoRoutersField({
               <span className="min-w-0 flex-1 truncate font-mono text-sm">
                 {router.name}
               </span>
+              {notRouting.has(router.id) && (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {notRouting.get(router.id)}
+                </span>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -96,4 +112,11 @@ export function AutoRoutersField({
       />
     </div>
   );
+}
+
+function notRoutingNote(router: AutoRouter): string | null {
+  if (!router.enabled) return "Auto routing is off";
+  if (Object.values(router.tiers).some((tier) => tier === null))
+    return "Tiers not set";
+  return null;
 }

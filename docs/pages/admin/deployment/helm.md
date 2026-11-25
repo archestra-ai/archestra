@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-11-20
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Install Archestra's web and worker pods, database, and workload permissions with the Helm chart. You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Check [Production](/docs/admin/deployment/production) before exposing a shared instance.
 
 Web pods serve the UI, API, LLM Proxy, and MCP Gateway. Workers process background jobs such as connector syncs and embeddings. Both use PostgreSQL; self-hosted MCP servers and agent runtimes run in separate pods.
@@ -28,7 +30,7 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
 1. Choose an exact version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases) and download its chart defaults. Tags ending in `-rc.N` are release candidates:
 
    ```bash
-   export ARCHESTRA_VERSION="1.5.0-rc.42" # x-release-please-version
+   export ARCHESTRA_VERSION="1.5.0-rc.44" # x-release-please-version
    helm show values \
      oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml

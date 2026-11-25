@@ -10,7 +10,9 @@ import UserModel from "@/models/user";
 import VerificationModel from "@/models/verification";
 import { ApiError } from "@/types";
 
-const LINKED_IDP_INTENT_TTL_MS = 10 * 60 * 1000;
+export const LINKED_IDP_INTENT_TTL_SECONDS = 10 * 60;
+
+const LINKED_IDP_INTENT_TTL_MS = LINKED_IDP_INTENT_TTL_SECONDS * 1000;
 const LINKED_IDP_INTENT_PREFIX = LINKED_IDP_SSO_MODE;
 
 const LinkedIdentityProviderIntentSchema = z.object({

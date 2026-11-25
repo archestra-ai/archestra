@@ -3,6 +3,7 @@ description: |
   Scans a Docker image for CVEs using Docker Scout.
   Log in to Docker Hub first (Docker Hub OIDC); Scout reads that login.
   Fails if critical or high severity CVEs with available fixes are found.
+  Findings our VEX document says do not affect the scanned image are left out.
 
 inputs:
   image:
@@ -32,6 +33,10 @@ inputs:
     description: "Exit with non-zero code if vulnerabilities are found"
     required: false
     default: "true"
+  vex-document:
+    description: "Our OpenVEX document; Scout leaves out the findings its statements about the scanned image cover. Skipped when the file is missing."
+    required: false
+    default: "vex/openvex.json"
   findings-file:
     description: "With exit-code, append each image whose scan found vulnerabilities (Scout's exit 2, not an outage or other error) to this file"
     required: false
@@ -84,6 +89,7 @@ runs:
         SCOUT_ONLY_FIXED: ${{ inputs.only-fixed }}
         SCOUT_EXIT_CODE: ${{ inputs.exit-code }}
         SCOUT_FINDINGS_FILE: ${{ inputs.findings-file }}
+        SCOUT_VEX_DOCUMENT: ${{ inputs.vex-document }}
       run: |
         set -euo pipefail
 
@@ -109,11 +115,21 @@ runs:
             cp "$source_config" "${docker_config}/config.json"
           fi
 
+          # Only the statements about this image, in the form Scout applies.
+          vex_args=()
+          if [ -n "${SCOUT_VEX_DOCUMENT:-}" ] && [ -f "${SCOUT_VEX_DOCUMENT}" ]; then
+            python3 .github/scripts/scout-vex.py --document "${SCOUT_VEX_DOCUMENT}" --image "$image" --output "${scan_dir}/vex"
+            if [ -f "${scan_dir}/vex/openvex.json" ]; then
+              vex_args=(--vex-location "${scan_dir}/vex" --vex-author '^Archestra')
+            fi
+          fi
+
           scan_image() {
             scout_args=(
               cves
               "$image"
               --only-severity "${SCOUT_ONLY_SEVERITIES}"
+              ${vex_args[@]+"${vex_args[@]}"}
             )
             if [ -n "${SCOUT_PLATFORM}" ]; then
               scout_args+=(--platform "$SCOUT_PLATFORM")

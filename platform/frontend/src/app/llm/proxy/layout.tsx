@@ -3,15 +3,11 @@
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import { LlmProxyLayoutContext } from "@/app/llm/proxy/_parts/llm-proxy-action-context";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
-const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
+const PAGE_CONFIG: Record<string, { title: string; description?: string }> = {
   "/llm/proxy": {
     title: "LLM Proxy",
-    description:
-      "One endpoint for your LLM API calls, with security, observability, and cost management.",
   },
   "/llm/proxy/virtual-keys": {
     title: "Virtual Keys",
@@ -27,7 +23,6 @@ export default function LlmProxyLayout({
 }) {
   const pathname = usePathname();
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
-  const docsUrl = getFrontendDocsUrl("llm-proxy");
 
   const config = PAGE_CONFIG[pathname] ?? PAGE_CONFIG["/llm/proxy"];
 
@@ -36,28 +31,8 @@ export default function LlmProxyLayout({
   return (
     <LlmProxyLayoutContext.Provider value={contextValue}>
       <PageLayout
-        // The proxy's own page is connection instructions, the same shape as a
-        // gateway's Connect section, so it takes the same column. Its
-        // table-bearing children keep the wide one they need.
-        maxWidth={pathname === "/llm/proxy" ? "wizard" : "wide"}
         title={config.title}
-        description={
-          pathname === "/llm/proxy" && docsUrl ? (
-            <>
-              {config.description}{" "}
-              <ExternalDocsLink
-                href={docsUrl}
-                className="hover:underline"
-                showIcon={false}
-              >
-                Read more in the docs
-              </ExternalDocsLink>
-              <span>.</span>
-            </>
-          ) : (
-            config.description
-          )
-        }
+        description={config.description}
         actionButton={actionButton}
       >
         {children}

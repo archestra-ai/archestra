@@ -165,10 +165,14 @@ import { ConnectionLimiter } from "./connection-limiter";
 import { DesktopTunnelTransport } from "./desktop-tunnel-transport";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 import {
-  configureMcpElicitation,
   type McpElicitationHandler,
+  McpElicitationRouter,
   withMcpElicitationCapability,
 } from "./mcp-elicitation";
+import {
+  describeToolCallFailure,
+  withReadableHttpFailures,
+} from "./mcp-http-failure";
 import { mcpParamHeadersForCall } from "./mcp-param-headers";
 import {
   captureServerExtensions,
@@ -265,7 +269,9 @@ function describeMcpDiscoveryHttpFailure(
   const guidance =
     failure.status === 401 || failure.status === 403
       ? " Check the MCP server's credentials and provider configuration."
-      : " Check the MCP server URL and configuration.";
+      : failure.status === 429
+        ? " The MCP server is limiting requests. Try again in a minute."
+        : " Check the MCP server URL and configuration.";
   return `Upstream MCP server returned HTTP ${failure.status}${detail} while ${operation}.${guidance}`;
 }
 
@@ -323,6 +329,12 @@ const RESOURCE_READ_RETRY_DEADLINE_MS = 10_000;
 const TRANSIENT_RESOURCE_HTTP_STATUSES = new Set([
   408, 425, 429, 502, 503, 504,
 ]);
+// Tool discovery on a remote server: tried again only after a status above,
+// waiting 1 s, 2 s, then 4 s.
+const REMOTE_DISCOVERY_MAX_ATTEMPTS = 4;
+const REMOTE_DISCOVERY_RETRY_BASE_DELAY_MS = 1_000;
+const LOCAL_DISCOVERY_MAX_ATTEMPTS = 6;
+const LOCAL_DISCOVERY_RETRY_DELAY_MS = 5_000;
 
 /**
  * Resource reads are idempotent, so transport failures that occur around a
@@ -506,6 +518,12 @@ interface ExecuteToolCallForOwnerOptions {
   identityProviderRedirectPath?: string;
   elicitationHandler?: McpElicitationHandler;
   /**
+   * Told `true` when the call has to wait for a free place on its connection
+   * (a server runs a few calls at a time, a stdio server one), then `false`
+   * when it starts. Never called for a call that starts at once.
+   */
+  onQueueChange?: (queued: boolean) => void;
+  /**
    * Cancels the in-flight upstream request (callTool / listTools /
    * readResource) when the caller's chat run is stopped. Without it a slow
    * tool call runs to completion after Stop; see executeToolCall's catch,
@@ -585,6 +603,7 @@ class McpClient {
   private clientsClosingWhenIdle = new Set<Client>();
   private connectionInitializationLocks = new Map<string, Promise<Client>>();
   private connectionLimiter = new ConnectionLimiter();
+  private elicitationRouter = new McpElicitationRouter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
     maxSize: McpClient.TOOL_NAME_CACHE_MAX_ENTRIES,
@@ -1239,14 +1258,26 @@ class McpClient {
             }
           }
 
+          // The server's questions during this call go to this call's handler,
+          // whatever else runs on the connection. Every request the call makes
+          // for itself runs under it: a resource read can ask a question as a
+          // tool call can.
+          const elicitationHandler = options?.elicitationHandler;
+          const askingThisCall = <T>(request: () => Promise<T>): Promise<T> =>
+            elicitationHandler
+              ? this.elicitationRouter.run(client, elicitationHandler, request)
+              : request();
+
           const resourceUri = getSyntheticResourceToolUri(tool.meta);
           if (resourceUri) {
-            const result = await client.readResource(
-              { uri: resourceUri },
-              {
-                signal: options?.abortSignal,
-                timeout: config.mcpGateway.toolCallTimeoutMs,
-              },
+            const result = await askingThisCall(() =>
+              client.readResource(
+                { uri: resourceUri },
+                {
+                  signal: options?.abortSignal,
+                  timeout: config.mcpGateway.toolCallTimeoutMs,
+                },
+              ),
             );
             await clearStaleOAuthRefreshError();
             return await this.createSuccessResult({
@@ -1273,11 +1304,13 @@ class McpClient {
           // Resolve the actual tool name from the server (preserving original casing).
           // Tool names in the DB are lowercased by slugifyName(), but remote MCP servers
           // may use camelCase or mixed-case names (e.g., "atlassianUserInfo" vs "atlassianuserinfo").
-          targetToolName = await this.resolveActualToolName(
-            client,
-            connectionKey,
-            targetToolName,
-            options?.abortSignal,
+          targetToolName = await askingThisCall(() =>
+            this.resolveActualToolName(
+              client,
+              connectionKey,
+              targetToolName,
+              options?.abortSignal,
+            ),
           );
 
           // A detached task answers its client immediately, so the
@@ -1292,13 +1325,15 @@ class McpClient {
               timeoutMs: upstreamTimeoutMs,
               signal: options?.abortSignal,
               request: (signal) =>
-                client.callTool(
-                  {
-                    name: targetToolName,
-                    arguments: toolCall.arguments,
-                  },
-                  undefined,
-                  { signal, timeout: upstreamTimeoutMs },
+                askingThisCall(() =>
+                  client.callTool(
+                    {
+                      name: targetToolName,
+                      arguments: toolCall.arguments,
+                    },
+                    undefined,
+                    { signal, timeout: upstreamTimeoutMs },
+                  ),
                 ),
             }),
           );
@@ -1408,7 +1443,7 @@ class McpClient {
           }
 
           const stopped =
-            asMcpServerStoppedError(error) ??
+            asMcpServerStoppedError(error, attemptClient) ??
             // No client yet: the server never finished the handshake, as when
             // a call queued behind a wedged server reconnects to it.
             (!attemptClient &&
@@ -1690,7 +1725,7 @@ class McpClient {
           return await this.createErrorResult({
             toolCall,
             owner,
-            error: errorMessage,
+            error: describeToolCallFailure(error),
             mcpServerName,
             authInfo,
             encryptedChatContent,
@@ -1724,12 +1759,18 @@ class McpClient {
         catalogItem,
         targetMcpServerId,
       );
-      // The MCP SDK stores request handlers on the client by method. Serialize
-      // elicitation-capable calls so a cached client's elicitation handler is
-      // not replaced while another tool call on the same connection is active.
-      const concurrencyLimit = options?.elicitationHandler
-        ? 1
-        : this.getConcurrencyLimit(transportKind);
+      // Calls that can be asked a question share the connection only when
+      // one conversation owns it. A question the server sends outside its
+      // call's response stream cannot be tied to a call, so it goes to the
+      // oldest call in flight (see McpElicitationRouter). Inside one
+      // conversation that puts the question under a sibling call. A
+      // connection with no conversation is shared by every caller of the
+      // install, as on the MCP gateway, where it would hand one caller's
+      // question to another: those calls keep taking turns.
+      const concurrencyLimit =
+        options?.elicitationHandler && !options.conversationId
+          ? 1
+          : this.getConcurrencyLimit(transportKind);
 
       return this.connectionLimiter.runWithLimit(
         connectionKey,
@@ -1765,6 +1806,7 @@ class McpClient {
               awsIamIdentity,
             );
           }, secrets),
+        options?.onQueueChange,
       );
     };
 
@@ -1913,7 +1955,7 @@ class McpClient {
         // the session-terminating DELETE, so a stored session id is safe.
         this.closeDiscardedTransport(connectionKey, transport);
         if (elicitationHandler) {
-          configureMcpElicitation(reusableClient, elicitationHandler);
+          this.elicitationRouter.attach(reusableClient);
         }
         this.activeConnections.set(connectionKey, reusableClient);
         this.activeConnectionServerState.set(connectionKey, callerServerState);
@@ -1957,7 +1999,7 @@ class McpClient {
       capabilities,
     });
     if (elicitationHandler) {
-      configureMcpElicitation(client, elicitationHandler);
+      this.elicitationRouter.attach(client);
     }
     // The server announced a different tool list: re-sync its catalog's tool
     // snapshot (coalesced per catalog, never wakes a hibernated server). The
@@ -3074,6 +3116,7 @@ class McpClient {
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
           requestInit: { headers: new Headers(localHeaders) },
+          fetch: withReadableHttpFailures(),
         });
       }
 
@@ -3128,13 +3171,14 @@ class McpClient {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        const baseFetch = catalogItem.awsIamConfig
+        const signingFetch = catalogItem.awsIamConfig
           ? awsIamMcpSigner.signingFetch({
               config: catalogItem.awsIamConfig,
               agentId: requireAwsIamIdentity(awsIamIdentity),
             })
           : undefined;
         // SPDX-SnippetEnd
+        const baseFetch = withReadableHttpFailures(signingFetch);
         return new StreamableHTTPClientTransport(
           new URL(catalogItem.serverUrl),
           {
@@ -3143,7 +3187,7 @@ class McpClient {
             // known Bearer error code. Never retain an upstream body or header.
             fetch: onHttpFailure
               ? async (url, init) => {
-                  const response = await (baseFetch ?? fetch)(url, init);
+                  const response = await baseFetch(url, init);
                   if (!response.ok) {
                     onHttpFailure({
                       status: response.status,
@@ -3469,6 +3513,10 @@ class McpClient {
       try {
         const toolsResult = await client.listTools(undefined, {
           signal: abortSignal,
+          // The same patience as the call itself: a server that cannot list
+          // its tools in that time is not going to answer the call either,
+          // and the call's own liveness check takes over from here.
+          timeout: config.mcpGateway.toolCallTimeoutMs,
         });
         nameMap = new Map<string, string>();
         for (const tool of toolsResult.tools) {
@@ -4516,8 +4564,13 @@ class McpClient {
     }
     // Local stdio servers can report a ready pod before the MCP process accepts
     // JSON-RPC, especially while the runtime is still pulling or starting Node.
-    const maxRetries = catalogItem.serverType === "local" ? 6 : 1;
-    const retryDelayMs = 5000; // 5 seconds between retries
+    // A remote server is tried again only when its answer means "not now" (a
+    // rate limit, a gateway that is restarting): one refused request must not
+    // fail an install the person has just signed in for.
+    const isLocal = catalogItem.serverType === "local";
+    const maxRetries = isLocal
+      ? LOCAL_DISCOVERY_MAX_ATTEMPTS
+      : REMOTE_DISCOVERY_MAX_ATTEMPTS;
 
     let lastError: Error | undefined;
 
@@ -4569,9 +4622,17 @@ class McpClient {
           tools = await this.discoverToolsOrResourceTools(client);
         } catch (error) {
           // A Skills-only server may intentionally expose neither tools/list
-          // nor resources/list. Its declared extension is enough to keep the
-          // installation; the companion metadata pass will call skills/list.
-          if (Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)) {
+          // nor resources/list, and such servers refuse the two methods in
+          // more ways than method-not-found. A refusal with the declared
+          // extension is enough to keep the installation; the companion
+          // metadata pass will call skills/list. A rate limit, an outage, a
+          // timeout or a dropped connection is different: it says nothing
+          // about what the server offers, so it is a failed discovery, not a
+          // server without tools.
+          if (
+            isServerRefusal(error) &&
+            Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)
+          ) {
             tools = [];
           } else {
             throw error;
@@ -4618,8 +4679,16 @@ class McpClient {
           }
         }
 
+        const retryable =
+          isLocal ||
+          (httpStatus !== undefined &&
+            TRANSIENT_RESOURCE_HTTP_STATUSES.has(httpStatus));
+        const retryDelayMs = isLocal
+          ? LOCAL_DISCOVERY_RETRY_DELAY_MS
+          : REMOTE_DISCOVERY_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+
         // If this is not the last attempt, log and retry
-        if (attempt < maxRetries) {
+        if (retryable && attempt < maxRetries) {
           logger.warn(
             { attempt, maxRetries, err: error },
             `Failed to connect to MCP server ${catalogItem.name} (attempt ${attempt}/${maxRetries}). Retrying in ${retryDelayMs}ms...`,
@@ -6510,7 +6579,7 @@ async function callWhileServerAnswers<T>(params: {
     } catch (error) {
       // An error reply (a server that does not implement ping) still proves
       // the server answers; only silence or a lost connection ends the call.
-      if (!pings.signal.aborted && !isErrorReply(error)) {
+      if (!pings.signal.aborted && !isErrorReply(error, client)) {
         serverStopped.abort(new McpServerStoppedError("not_answering"));
         return;
       }
@@ -6537,11 +6606,11 @@ async function callWhileServerAnswers<T>(params: {
 }
 
 /** A JSON-RPC error the server sent back, as opposed to one the SDK raised. */
-function isErrorReply(error: unknown): boolean {
+function isErrorReply(error: unknown, client: Client): boolean {
   return (
     error instanceof McpError &&
     error.code !== ErrorCode.RequestTimeout &&
-    error.code !== ErrorCode.ConnectionClosed
+    !isSdkConnectionClosedError(error, client)
   );
 }
 
@@ -6551,10 +6620,11 @@ function isErrorReply(error: unknown): boolean {
  */
 function asMcpServerStoppedError(
   error: unknown,
+  client: Client | undefined,
 ): McpServerStoppedError | undefined {
   if (error instanceof McpServerStoppedError) return error;
   if (
-    (error instanceof McpError && error.code === ErrorCode.ConnectionClosed) ||
+    isSdkConnectionClosedError(error, client) ||
     // The SDK's Protocol.request() raises this plain Error when the transport
     // is already gone; recheck the text after an SDK upgrade.
     (error instanceof Error && error.message === "Not connected")
@@ -6563,6 +6633,30 @@ function asMcpServerStoppedError(
   }
   return undefined;
 }
+
+/**
+ * Whether the SDK raised this error because the transport closed. The SDK
+ * uses -32000 for that, and -32000 is also the first code of the range
+ * JSON-RPC leaves to servers, so a server's own error reply can carry it. The
+ * code alone therefore says nothing. The SDK drops the client's transport
+ * before it raises its error, and gives the error a fixed text. Recheck the
+ * text after an SDK upgrade.
+ */
+function isSdkConnectionClosedError(
+  error: unknown,
+  client: Client | undefined,
+): boolean {
+  if (!(error instanceof McpError)) return false;
+  if (error.code !== ErrorCode.ConnectionClosed) return false;
+  // With the client at hand its transport decides: a server can send these
+  // exact words in its own error reply. The text is for a caller that has no
+  // client to look at.
+  return client !== undefined
+    ? !client.transport
+    : error.message === SDK_CONNECTION_CLOSED_MESSAGE;
+}
+
+const SDK_CONNECTION_CLOSED_MESSAGE = `MCP error ${ErrorCode.ConnectionClosed}: Connection closed`;
 
 /** Race `work` against the tool call's abort signal, if there is one. */
 async function raceWithAbort<T>(
@@ -6617,6 +6711,44 @@ function deploymentFailureCause(message: string): string {
   return message.replace(/^Deployment \S+ failed: /, "");
 }
 // SPDX-SnippetEnd
+
+/**
+ * Whether the server answered a request and said it does not serve it, as
+ * opposed to the request failing on its way or being turned away: a JSON-RPC
+ * error reply, or an HTTP status that turns the method down. A timeout, a lost
+ * connection and a status that means "not now" are failures, not answers. A
+ * refused credential is not an answer about the method either: the server
+ * never looked at the request.
+ */
+function isServerRefusal(error: unknown): boolean {
+  if (error instanceof Error && isAuthRelatedError(error.message)) return false;
+  if (error instanceof StreamableHTTPError) {
+    const status = error.code;
+    return (
+      status !== undefined &&
+      ((status >= 400 && status < 500) || status === 501) &&
+      !TRANSIENT_RESOURCE_HTTP_STATUSES.has(status) &&
+      !CREDENTIAL_HTTP_STATUSES.has(status)
+    );
+  }
+  if (isMethodNotFoundError(error)) return true;
+  // A JSON-RPC error carries a negative integer code. The two the SDK raises
+  // by itself are not the server's answer.
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  const { code } = error;
+  return (
+    typeof code === "number" &&
+    Number.isInteger(code) &&
+    code < 0 &&
+    code !== ErrorCode.RequestTimeout &&
+    code !== ErrorCode.ConnectionClosed
+  );
+}
+
+/** HTTP statuses that turn down who is asking, not what is asked. */
+const CREDENTIAL_HTTP_STATUSES = new Set([401, 403, 407]);
 
 function isMethodNotFoundError(error: unknown): boolean {
   if (error instanceof Error && error.message.includes("Method not found")) {

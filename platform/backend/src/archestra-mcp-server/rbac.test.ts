@@ -133,7 +133,7 @@ describe("checkToolPermission", () => {
   }) => {
     const org = await makeOrganization();
     const role = await makeCustomRole(org.id, {
-      permission: { guardrailsYell: ["read"] },
+      permission: { guardrailsLog: ["read"] },
     });
     const user = await makeUser();
     await makeMember(user.id, org.id, {

@@ -6,6 +6,7 @@ lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Send model requests, tool calls, and backend logs to your OpenTelemetry collector.
 
@@ -94,7 +95,7 @@ LLM spans use `{operation} {model}`; Knowledge Base embeddings use `embedding {m
 | `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens` | Prompt-cache reads and writes, part of the input tokens |
 | `archestra.usage.cache_creation.1h_input_tokens` | Cache writes at the one-hour TTL (Anthropic and Bedrock) |
 | `gen_ai.usage.reasoning.output_tokens` | Reasoning tokens, part of the output tokens (OpenAI and Gemini) |
-| `archestra.cost` | Estimated cost in USD. Needs [model pricing](/docs/llm-proxy/costs-and-limits#model-pricing). |
+| `archestra.cost` | Estimated cost in USD. Needs [model pricing](/docs/llm-proxy/cost-controls#model-pricing). |
 | `archestra.billing.mode` | `metered` or `subscription` |
 | `archestra.trigger.source` | Where the call came from, for example `api`, `chat`, `chatops:slack`, or `knowledge:embedding` |
 | `archestra.auth.method` | How the request authenticated, for example `virtual_key` or `oauth_user` |

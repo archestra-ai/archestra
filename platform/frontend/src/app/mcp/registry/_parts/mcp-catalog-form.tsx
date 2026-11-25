@@ -5,6 +5,7 @@ import {
   DocsPage,
   findMcpRuntimeTier,
   getDefaultMcpImagePullPolicy,
+  getRequiredOAuthAppCredentialState,
   isBuiltInCatalogId,
   summarizeAgentRuntimeTier,
 } from "@archestra/shared";
@@ -29,9 +30,6 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
-import type { Components } from "react-markdown";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -118,6 +116,7 @@ import {
   type CascadeSnapshot,
   computeCascadeOutcome,
 } from "./cascade-decision";
+import { CatalogInstructions } from "./catalog-instructions";
 import {
   compileValidationRegex,
   validateFieldAgainstRegex,
@@ -138,50 +137,6 @@ const AwsIamAuthFields = dynamic(() =>
     default: m.AwsIamAuthFields,
   })),
 );
-
-// Markdown renderer for catalog-supplied setup instructions shown atop the form.
-const INSTRUCTIONS_MARKDOWN_COMPONENTS: Components = {
-  p: ({ node, ...props }) => (
-    <p className="mb-2 text-muted-foreground" {...props} />
-  ),
-  strong: ({ node, ...props }) => (
-    <strong className="font-semibold text-foreground" {...props} />
-  ),
-  ol: ({ node, ...props }) => (
-    <ol
-      className="mb-2 list-decimal space-y-1 pl-5 text-muted-foreground"
-      {...props}
-    />
-  ),
-  ul: ({ node, ...props }) => (
-    <ul
-      className="mb-2 list-disc space-y-1 pl-5 text-muted-foreground"
-      {...props}
-    />
-  ),
-  a: ({ node, children, ...props }) => (
-    <a
-      className="text-primary underline"
-      target="_blank"
-      rel="noreferrer"
-      {...props}
-    >
-      {children}
-    </a>
-  ),
-  pre: ({ node, ...props }) => (
-    <pre
-      className="my-2 overflow-x-auto rounded-md bg-muted p-3 text-xs"
-      {...props}
-    />
-  ),
-  code: ({ node, ...props }) => (
-    <code
-      className="rounded bg-muted px-1 py-0.5 font-mono text-xs"
-      {...props}
-    />
-  ),
-};
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";
@@ -288,9 +243,41 @@ export function McpCatalogForm({
   const defaultIdentityProviderId =
     oidcIdentityProviders.length === 1 ? oidcIdentityProviders[0]?.id : null;
 
+  const hasSavedClientSecret = Boolean(
+    initialValues?.clientSecretId ||
+      initialValues?.oauthConfig?.client_secret?.trim(),
+  );
+  const schema = useMemo(
+    () =>
+      formSchema.superRefine((values, ctx) => {
+        if (detailsOnly || values.authMethod !== "oauth") return;
+
+        const { missingClientId, missingClientSecret } =
+          getRequiredOAuthAppCredentialState({
+            serverType: values.serverType,
+            oauthConfig: values.oauthConfig,
+            hasSavedSecret: hasSavedClientSecret,
+          });
+        if (missingClientId) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["oauthConfig", "client_id"],
+            message: "Enter the Client ID.",
+          });
+        }
+        if (missingClientSecret) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["oauthConfig", "client_secret"],
+            message: "Enter the Client Secret.",
+          });
+        }
+      }),
+    [detailsOnly, hasSavedClientSecret],
+  );
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
-    resolver: zodResolver(formSchema as any),
+    resolver: zodResolver(schema as any),
     defaultValues: withCreationAccess(
       initialValues
         ? transformCatalogItemToFormValues(initialValues)
@@ -360,6 +347,16 @@ export function McpCatalogForm({
 
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
+  const requiresOAuthClientCredentials =
+    authMethod === "oauth" &&
+    getRequiredOAuthAppCredentialState({
+      serverType: currentServerType,
+      oauthConfig: {
+        requires_client_credentials: form.watch(
+          "oauthConfig.requires_client_credentials",
+        ),
+      },
+    }).required;
   // A desktop MCP server runs on each user's own computer: none of the
   // connection, deployment or authentication sections apply to it.
   const isDesktopMcp = currentServerType === "desktop_mcp";
@@ -970,14 +967,7 @@ export function McpCatalogForm({
           >
             {notice}
             {instructions ? (
-              <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={INSTRUCTIONS_MARKDOWN_COMPONENTS}
-                >
-                  {instructions}
-                </ReactMarkdown>
-              </div>
+              <CatalogInstructions markdown={instructions} />
             ) : null}
             {catalogButton}
 
@@ -1783,14 +1773,29 @@ export function McpCatalogForm({
                                     name="oauthConfig.client_id"
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel>Client ID</FormLabel>
+                                        <FormLabel>
+                                          Client ID
+                                          {requiresOAuthClientCredentials && (
+                                            <span className="text-destructive">
+                                              {" "}
+                                              *
+                                            </span>
+                                          )}
+                                        </FormLabel>
                                         <FormDescription>
-                                          Leave empty if the server supports
-                                          dynamic client registration
+                                          <span>
+                                            {requiresOAuthClientCredentials
+                                              ? "Use the Client ID from the OAuth app you registered."
+                                              : "Leave empty if the server supports dynamic client registration"}
+                                          </span>
                                         </FormDescription>
                                         <FormControl>
                                           <Input
-                                            placeholder="your-client-id (optional for dynamic registration)"
+                                            placeholder={
+                                              requiresOAuthClientCredentials
+                                                ? "your-client-id"
+                                                : "your-client-id (optional for dynamic registration)"
+                                            }
                                             className="font-mono"
                                             {...field}
                                           />
@@ -1805,10 +1810,24 @@ export function McpCatalogForm({
                                       name="oauthConfig.client_secret"
                                       render={({ field }) => (
                                         <FormItem>
-                                          <FormLabel>Client Secret</FormLabel>
+                                          <FormLabel>
+                                            Client Secret
+                                            {requiresOAuthClientCredentials && (
+                                              <span className="text-destructive">
+                                                {" "}
+                                                *
+                                              </span>
+                                            )}
+                                          </FormLabel>
                                           <FormControl>
                                             <SecretInput
-                                              placeholder="your-client-secret (optional)"
+                                              placeholder={
+                                                requiresOAuthClientCredentials
+                                                  ? hasSavedClientSecret
+                                                    ? "Saved; enter a new secret to replace it"
+                                                    : "your-client-secret"
+                                                  : "your-client-secret (optional)"
+                                              }
                                               className="font-mono"
                                               {...field}
                                             />

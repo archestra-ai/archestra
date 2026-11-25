@@ -136,9 +136,8 @@ Brings the program on this device to the one that your Archestra serves:
 - Replaces the program in ~/.archestra/bin and starts the MCP bridge again.
 
 With the same program on this device already, it does nothing.
-On Windows the MCP bridge also does this by itself, when no tool call is
-running and Archestra allows it. On macOS and Linux this command is the
-update.
+The MCP bridge in the background also does this by itself, when no tool
+call is running and Archestra allows it. This command does it at once.
 
 Options:
   -h, --help        Show this text.";

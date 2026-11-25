@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { UserModel } from "@/models";
 import DesktopDeviceModel from "@/models/desktop-device";
 import DesktopMcpRequestModel from "@/models/desktop-mcp-request";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { describe, expect, test } from "@/test";
 import { connectTestDevice } from "@/test/desktop-mcp";
 import { desktopTunnelService } from "./desktop-tunnel";
@@ -71,6 +73,36 @@ describe("desktopTunnelService", () => {
         deviceKey: second.deviceKey,
       }),
     ).resolves.toMatchObject({ id: second.device.id });
+  });
+
+  test("a device key stops working while the identity provider has its user deactivated", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const userId = (await makeUser()).id;
+    const { device, tunnelId, deviceKey } = await connectTestDevice({
+      organizationId: (await makeOrganization()).id,
+      userId,
+    });
+
+    await expect(
+      desktopTunnelService.authenticate({ tunnelId, deviceKey }),
+    ).resolves.toMatchObject({ id: device.id });
+
+    await UserModel.setSoftDeleted({ userId, softDeleted: new Date() });
+    softDeletedUsers.invalidate(userId);
+    await expect(
+      desktopTunnelService.authenticate({ tunnelId, deviceKey }),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: expect.stringContaining("deactivated"),
+    });
+
+    await UserModel.setSoftDeleted({ userId, softDeleted: null });
+    softDeletedUsers.invalidate(userId);
+    await expect(
+      desktopTunnelService.authenticate({ tunnelId, deviceKey }),
+    ).resolves.toMatchObject({ id: device.id });
   });
 
   test("a device is online only while its last poll is recent", () => {

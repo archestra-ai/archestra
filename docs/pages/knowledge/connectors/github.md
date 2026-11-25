@@ -5,6 +5,8 @@ order: 3
 lastUpdated: 2026-11-11
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds the pull request where you decided it. The connector syncs issues, pull request discussions, and repository files.
 
 **Indexed:** issues, pull requests, comments, and selected text files and PDFs from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.

@@ -6,6 +6,7 @@ lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Sign people in with their Microsoft accounts, then let MCP tools call Microsoft Graph and your own APIs as each person. Ask an agent to read your calendar, and Graph sees you, with your permissions, not a shared service account. On every tool call, Archestra uses Entra's [On-Behalf-Of](https://learn.microsoft.com/entra/identity-platform/v2-oauth2-on-behalf-of-flow) exchange to trade the person's sign-in token for a token to the API, so nobody pastes a token.
 
@@ -82,7 +83,7 @@ People who signed in before you added the scope must sign in again, so their tok
 
 Pick **IdP token exchange** on the server, and set **Managed Resource Identifier** to the API: `https://graph.microsoft.com` for Graph, or `api://<api-client-id>` for your own. See [IdP Token Exchange](/docs/mcp/authentication/idp-token-exchange#set-up-a-server).
 
-To check it works, call one of the server's tools, then open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Identity provider's client**.
+To check it works, call one of the server's tools, then open the call in the [MCP Gateway logs](/docs/insights/logs): **Token issued to** shows **Identity provider's client**.
 
 Every agent's calls reach the API as that one app. To have Entra tell your agents apart, give each one its own identity with [Microsoft Entra Agent ID](/docs/agents/identity/entra). To give one server its own app, see [Give a Server Its Own Exchange Client](/docs/mcp/authentication/idp-token-exchange#give-a-server-its-own-exchange-client).
 

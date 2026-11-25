@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.5.0-rc.44](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.43...platform-v1.5.0-rc.44) (2026-11-22)
+
+
+### Documentation
+
+* **release:** a release PR needs a platform/ commit on any branch, not only after a stable cut ([#11120](https://github.com/archestra-ai/archestra/issues/11120)) ([373ec2a](https://github.com/archestra-ai/archestra/commit/373ec2a708c41e2de90c3fa12c356ffed1166788))
+
+## [1.5.0-rc.43](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.42...platform-v1.5.0-rc.43) (2026-11-22)
+
+
+### Features
+
+* **agent:** move catalog runtime to hardened Node ([#11112](https://github.com/archestra-ai/archestra/issues/11112)) ([ab06a5c](https://github.com/archestra-ai/archestra/commit/ab06a5c5135462c1e84f3f6efb5831ab3c47ba0d))
+* **frontend:** unify Logs into one timeline and add an Insights sidebar section ([#11083](https://github.com/archestra-ai/archestra/issues/11083)) ([2a07d72](https://github.com/archestra-ai/archestra/commit/2a07d727c7cc2e166877cf3afc1e4df1e07e4969))
+* **helm:** run the platform pods with a read-only root filesystem ([#11088](https://github.com/archestra-ai/archestra/issues/11088)) ([fe3c47b](https://github.com/archestra-ai/archestra/commit/fe3c47b3021cf70ee1013af28b492a2e0b69e020))
+* **images:** use DHI for p4, MCP and sandbox ([#11108](https://github.com/archestra-ai/archestra/issues/11108)) ([13df1ed](https://github.com/archestra-ai/archestra/commit/13df1edb0b1d7bbb5a04364965351d2ff7c0b3c4))
+* **mcp:** run MCP server pods under the runtime's default seccomp profile ([#11103](https://github.com/archestra-ai/archestra/issues/11103)) ([e4a5d70](https://github.com/archestra-ai/archestra/commit/e4a5d7005ff7c3d6c018c9c859d7ac5f086db044))
+* **platform:** build the Kubernetes image on Docker's distroless hardened Node image ([#11101](https://github.com/archestra-ai/archestra/issues/11101)) ([7f84229](https://github.com/archestra-ai/archestra/commit/7f8422929d0d778a2b9cec89f8631391a41bb8ca))
+* **platform:** publish a slim Kubernetes image and run it from the Helm chart ([#11091](https://github.com/archestra-ai/archestra/issues/11091)) ([92792f5](https://github.com/archestra-ai/archestra/commit/92792f55aa571d53201dce7b145f6b61c15cfcf4))
+* **platform:** run the platform image on a Docker hardened base with a Node supervisor ([#11095](https://github.com/archestra-ai/archestra/issues/11095)) ([d58277c](https://github.com/archestra-ai/archestra/commit/d58277c7ad5f7b2e37c42eea8b9acd856cd4e893))
+* **platform:** use DHI packages for bundled PostgreSQL ([#11105](https://github.com/archestra-ai/archestra/issues/11105)) ([af3cd40](https://github.com/archestra-ai/archestra/commit/af3cd4030fe9a8e673c1b2b5b0cb2e0ce5feb38b))
+* **scim:** provision users from an identity provider before they sign in ([#10946](https://github.com/archestra-ai/archestra/issues/10946)) ([46f69ee](https://github.com/archestra-ai/archestra/commit/46f69ee225560d1c2f5cbc96f81350145b13ec53))
+
+
+### Bug Fixes
+
+* **images:** clear sandbox-base's glibc highs and apply our VEX in the CVE gate ([#11109](https://github.com/archestra-ai/archestra/issues/11109)) ([f36329e](https://github.com/archestra-ai/archestra/commit/f36329e125117f55a46eb20be3e2eda8cf86bdfa))
+* **images:** move the DHI node Debian 13 bases to Docker's glibc fix ([#11115](https://github.com/archestra-ai/archestra/issues/11115)) ([9bdf2f4](https://github.com/archestra-ai/archestra/commit/9bdf2f47c30e47c144f18533ced578fae3b7cc53))
+* **sandbox:** upgrade glibc in the runtime-built sandbox base too ([#11110](https://github.com/archestra-ai/archestra/issues/11110)) ([b0c16b0](https://github.com/archestra-ai/archestra/commit/b0c16b0e6fa1ed2c4195b0eac332386e86489e2f))
+
+
+### Performance Improvements
+
+* **adoption:** read LLM traffic from the usage rollup and page the members list ([#11114](https://github.com/archestra-ai/archestra/issues/11114)) ([5b8d79f](https://github.com/archestra-ai/archestra/commit/5b8d79f62c89f55fee9ee5057b55ca35c18dca81))
+* **proxy:** cut per-request database work and name the release in the MCP benchmark table ([#11106](https://github.com/archestra-ai/archestra/issues/11106)) ([e37ba95](https://github.com/archestra-ai/archestra/commit/e37ba95551ad75351b875af6b534978ce463c4c6))
+
+
+### Miscellaneous Chores
+
+* **platform:** verify the hardened Node base instead of exempting it ([#11100](https://github.com/archestra-ai/archestra/issues/11100)) ([3751d6b](https://github.com/archestra-ai/archestra/commit/3751d6b3d498d911e86cdafd442bbc0697f512ca))
+
 ## [1.5.0-rc.42](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.41...platform-v1.5.0-rc.42) (2026-11-21)
 
 

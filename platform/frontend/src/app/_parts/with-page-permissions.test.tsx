@@ -3,14 +3,20 @@ import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPagePermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import {
+  useHasAnyPagePermissions,
+  useHasPagePermissions,
+  usePermissionMap,
+} from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
+import { useFeature } from "@/lib/config/config.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
 import { WithPagePermissions } from "./with-page-permissions";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/limits-access");
 vi.mock("@/lib/openappa-github-sync.query");
 // Read only when a grant on one credential might open Settings.
@@ -40,6 +46,21 @@ function signInAs(userPermissions: Permissions | null) {
         isPending: userPermissions === null,
       }) as ReturnType<typeof useHasPagePermissions>,
   );
+  vi.mocked(useHasAnyPagePermissions).mockImplementation(
+    (options) =>
+      ({
+        data: userPermissions
+          ? options.some((required) =>
+              hasPagePermissions({
+                userPermissions,
+                required,
+                capabilities: [],
+              }),
+            )
+          : false,
+        isPending: userPermissions === null,
+      }) as ReturnType<typeof useHasAnyPagePermissions>,
+  );
 }
 
 function renderAt(pathname: string) {
@@ -54,6 +75,7 @@ function renderAt(pathname: string) {
 describe("WithPagePermissions", () => {
   beforeEach(() => {
     replace.mockClear();
+    vi.mocked(useFeature).mockReturnValue(false as never);
     vi.mocked(useServerRulesAccess).mockReturnValue({
       scoped: false,
       files: [],
@@ -124,16 +146,22 @@ describe("WithPagePermissions", () => {
   });
 
   it.each([
-    [{ log: ["read"] }, "/consults/logs", true],
-    [{ guardrailsYell: ["read"] }, "/consults/logs", true],
-    [{ guardrailsYell: ["read"] }, "/consults/logs/yells/yell-1", true],
+    [{ log: ["read"] }, "/logs", true],
+    [{ guardrailsLog: ["read"] }, "/logs", true],
+    [{ clientConnection: ["read"] }, "/logs", true],
+    [{ auditLog: ["read"] }, "/logs", true],
+    [{ guardrailsLog: ["read"] }, "/consults/logs/yells/yell-1", true],
     [{ log: ["read", "admin"] }, "/consults/logs/yells/yell-1", false],
-    [{ guardrailsPolicy: ["read"] }, "/consults/logs", false],
+    [{ guardrailsPolicy: ["read"] }, "/logs", false],
+    [{ clientConnection: ["admin"] }, "/connections/logs", true],
+    [{ clientConnection: ["read"] }, "/connections/logs", false],
+    [{ guardrailsLog: ["read"] }, "/consults/logs", true],
+    [{ log: ["read"] }, "/consults/logs", false],
   ] as [
     Permissions,
     string,
     boolean,
-  ][])("opens the Guardrails log with log or yell access (%o at %s: %s)", (permissions, pathname, opens) => {
+  ][])("opens Logs with any log type's read access (%o at %s: %s)", (permissions, pathname, opens) => {
     signInAs(permissions);
     renderAt(pathname);
     if (opens) expect(screen.getByText("Page content")).toBeVisible();
@@ -209,6 +237,37 @@ describe("WithPagePermissions", () => {
     expect(screen.getByText("Page content")).toBeVisible();
     policy.unmount();
     renderAt("/openappa/batteries");
+    expect(screen.queryByText("Page content")).not.toBeInTheDocument();
+  });
+
+  it("opens Model Providers to a runtime-only custom role without key-read grants only when Agent Runtime is enabled", () => {
+    signInAs({ agent: ["read"] } as Permissions);
+
+    // Feature flag not loaded yet: neither the page nor a refusal.
+    vi.mocked(useFeature).mockReturnValue(undefined as never);
+    const pending = renderAt("/llm/model-providers");
+    expect(pending.container).toBeEmptyDOMElement();
+    pending.unmount();
+
+    // Agent Runtime off: keep refusing without llmProviderApiKey:read.
+    vi.mocked(useFeature).mockReturnValue(false as never);
+    const refused = renderAt("/llm/model-providers");
+    expect(screen.queryByText("Page content")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("You don't have permission to access this page."),
+    ).toBeVisible();
+    refused.unmount();
+
+    // Agent Runtime on: allow self-service personal subscription management,
+    // without opening sibling pages like /llm/models.
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+    const allowed = renderAt("/llm/model-providers");
+    expect(screen.getByText("Page content")).toBeVisible();
+    allowed.unmount();
+
+    renderAt("/llm/models");
     expect(screen.queryByText("Page content")).not.toBeInTheDocument();
   });
 });

@@ -101,7 +101,7 @@ pub(crate) async fn sign_in(
 fn approval_text(user_code: &str, approval_url: &str, approve_in_archestra: bool) -> String {
     if approve_in_archestra {
         format!(
-            "Approve this device in Archestra, in the window where you copied this command.\n\
+            "\nGo back to Archestra to approve this device, in the window where you copied this command.\n\
              Make sure the code there is {user_code}.\n\
              \n\
              Waiting for approval..."
@@ -164,7 +164,7 @@ mod tests {
         let in_archestra = approval_text("ABCD-1234", url, true);
         assert_eq!(
             in_archestra,
-            "Approve this device in Archestra, in the window where you copied this command.\n\
+            "\nGo back to Archestra to approve this device, in the window where you copied this command.\n\
              Make sure the code there is ABCD-1234.\n\
              \n\
              Waiting for approval..."

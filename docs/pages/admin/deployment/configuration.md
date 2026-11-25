@@ -2,10 +2,11 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-16
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Helm](/docs/admin/deployment/helm) for Kubernetes installation.
 
@@ -152,6 +153,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_ANALYTICS`** - Sends usage analytics and telemetry to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
   - Default: on in production builds, including the released Docker images. Off in development, and off when [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`](/docs/admin/deployment/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED) is `true`.
   - Values: `disabled` turns it off. Any other value turns it on.
+  - On a new installation without a license, the first admin to sign in can also turn telemetry off. That choice keeps it off even when this variable turns it on.
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key for analytics.
   - Default: Archestra's PostHog project
@@ -572,7 +574,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`** - How long the session scorer may take before the router falls back to the normal model.
   - Default: `2000`
 
-- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions needed before auto routing publishes a plan instead of using the normal model. Scored past sessions count toward it.
+- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions needed before auto routing publishes a plan instead of using the normal model. Scored past sessions count toward it. A router with 200 finished sessions of its own gets a plan regardless, so only a lower value changes when that router starts routing.
   - Default: `1000`
 
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL of your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
@@ -645,7 +647,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Records traffic sent with a subscription credential, such as a Claude Pro or Max login, as subscription usage with $0 billed spend.
   - Default: `true`
   - Values: `true`, `false` (all traffic is metered)
-  - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
+  - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/cost-controls#subscription-vs-metered-cost).
 
 ## Chat
 
@@ -800,7 +802,6 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
 
 - **`ARCHESTRA_MCP_BRIDGE_AUTO_UPDATE_ENABLED`** - Lets the MCP bridge on a user's computer update by itself when Archestra serves another version. Set it to `false` to make each user run `archestra update`.
   - Default: `true`
-  - On macOS and Linux the MCP bridge does not update by itself. The user runs `archestra update`.
 
 - **`ARCHESTRA_CLI_DIR`** - Folder that holds the `archestra` programs that the Device tab of Personal Settings offers for download. Users run `archestra bridge start` to start the MCP bridge.
   - Default: `/app/archestra-cli`, where the platform image keeps the programs. If the folder does not exist, the download answers "not found".

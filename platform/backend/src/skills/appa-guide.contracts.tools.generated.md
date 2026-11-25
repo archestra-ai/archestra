@@ -303,7 +303,7 @@ OpenAPPA evaluates root declarations before included files, processing included 
 - Included files cannot include other files.
 - Included files cannot override deployment-wide settings. The sole exception is `confined_results` under `[policy.deployment]`: included files may append tools they declare. Included files must not set `[policy.deployment] hint`.
 - Root declarations for `[[policy.annotator]]` or `[[policy.sanitizer]]` replace included components sharing the same name. Omitted fields in the replacement are not inherited.
-- Multiple included files cannot declare the same annotator name.
+- Two included files cannot declare the same annotator name. They also cannot both declare an annotator or sanitizer that the root declares. OpenAPPA refuses such a configuration at load.
 - Multiple files cannot configure the same external component name within the same category (e.g. two `[externals.sanitizers.clean]` blocks).
 
 See Batteries for pre-packaged policy bundles.

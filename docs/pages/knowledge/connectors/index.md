@@ -7,6 +7,7 @@ lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 A knowledge connector copies one source, such as Confluence or Google Drive, and keeps the copy current. Agents and MCP clients then search it, and cite the document each answer came from.
 

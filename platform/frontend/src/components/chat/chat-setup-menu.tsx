@@ -28,6 +28,7 @@ import {
   LayersIcon,
   LogInIcon,
   type LucideIcon,
+  PlusIcon,
   RotateCcwIcon,
   SearchIcon,
   SettingsIcon,
@@ -122,6 +123,25 @@ export interface ChatSetupMenuProps {
   onModelPoolChange?: (modelPoolId: string | null) => void;
   toolsUnavailable: boolean;
   notRecommendedForAgents: boolean;
+  /**
+   * The one setting this menu changes, for a caller that gives each setting
+   * its own field: the list alone, without tabs. Picking a key then closes
+   * the menu, as there is no model list to move on to.
+   */
+  only?: "key" | "model";
+  /**
+   * Only keys that pass are listed, and no sign-in is offered: the caller
+   * names what it can use.
+   */
+  keyFilter?: (key: LlmProviderApiKey) => boolean;
+  /** Only models that pass are listed. */
+  modelFilter?: (model: LlmModel) => boolean;
+  /** The models to list in place of the catalog's. */
+  models?: LlmModel[];
+  /** Offered under the keys, for a caller that can add one in place. */
+  onAddKey?: () => void;
+  /** Shown under the keys, such as why some are missing. */
+  keyNote?: ReactNode;
 }
 
 /**
@@ -135,7 +155,7 @@ export interface ChatSetupMenuProps {
  */
 export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
   const [query, setQuery] = useState("");
-  const [scopeState, setScopeState] = useState<Scope>("model");
+  const [scopeState, setScopeState] = useState<Scope>(ctx.only ?? "model");
   const data = useChatSetupOptions({
     ...ctx,
     agentSearch: scopeState === "agent" ? query : "",
@@ -143,9 +163,10 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
   const organizationDefaultNote = useOrganizationDefaultNote(data.activeAgent);
   const router = useRouter();
   const catalog = useModelProviderCatalog();
+  const offersSignIn = !ctx.keyFilter;
   const subscriptions = useMemo(
     () =>
-      SUBSCRIPTION_CREDENTIAL_KINDS.flatMap<{
+      (offersSignIn ? SUBSCRIPTION_CREDENTIAL_KINDS : []).flatMap<{
         kind: SubscriptionCredentialKind;
         key: LlmProviderApiKey | undefined;
       }>((kind) => {
@@ -164,7 +185,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
           ? [{ kind, key: undefined }]
           : [];
       }),
-    [data.keys, catalog],
+    [data.keys, catalog, offersSignIn],
   );
   const apiKeySections = useMemo(
     () =>
@@ -223,19 +244,25 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     // Broadest choice first: the agent, then the key that decides which
     // models exist, then the model. The menu still opens on Model.
     const list: Scope[] = [];
-    if (ctx.onAgentChange && allAgents.length > 0) list.push("agent");
+    if (!ctx.only && ctx.onAgentChange && allAgents.length > 0)
+      list.push("agent");
     if (
+      ctx.only !== "model" &&
       showProvider &&
       ctx.canChangeCredential &&
       (data.keys.length > 0 ||
         subscriptions.length > 0 ||
         pools.length > 0 ||
-        autoRouters.length > 0)
+        autoRouters.length > 0 ||
+        // With no key yet, the list is still where one is added.
+        !!ctx.onAddKey)
     )
       list.push("key");
-    if (showModels || showSignIn) list.push("model");
+    if (ctx.only !== "key" && (showModels || showSignIn)) list.push("model");
     return list;
   }, [
+    ctx.only,
+    ctx.onAddKey,
     showModels,
     showSignIn,
     ctx.onAgentChange,
@@ -453,6 +480,10 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
   };
   const pickKey = (k: LlmProviderApiKey) => {
     data.selectKey(k);
+    if (ctx.only === "key") {
+      ctx.close();
+      return;
+    }
     setQuery("");
     switchScope("model");
   };
@@ -465,9 +496,11 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
   const placeholder =
     scope === "key" && pools.length > 0
       ? "Search pools & keys…"
-      : scope
-        ? PLACEHOLDER[scope]
-        : "Search…";
+      : scope === "key" && !offersSignIn
+        ? "Search keys…"
+        : scope
+          ? PLACEHOLDER[scope]
+          : "Search…";
 
   if (!scope) {
     return (
@@ -799,6 +832,11 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
             </CommandGroup>
           ))}
       </CommandList>
+      {scope === "key" && ctx.keyNote && (
+        <div className="shrink-0 border-t px-3 py-2 text-xs text-muted-foreground">
+          {ctx.keyNote}
+        </div>
+      )}
       {(scope === "key" || scope === "agent") && (
         <div className="flex shrink-0 items-center justify-between border-t px-1.5 py-1.5">
           <Button
@@ -821,6 +859,20 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
             </span>
             <ExternalLinkIcon />
           </Button>
+          {scope === "key" && ctx.onAddKey && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onKeyDown={keepKeysFromCmdk}
+              onClick={() => {
+                ctx.close();
+                ctx.onAddKey?.();
+              }}
+            >
+              <PlusIcon />
+              <span>Add a key</span>
+            </Button>
+          )}
         </div>
       )}
     </Command>

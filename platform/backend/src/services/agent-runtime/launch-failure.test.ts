@@ -68,6 +68,7 @@ test.for([
   });
   const runtime: ResolvedAgentRuntime = {
     agentId: agent.id,
+    accountLock: null,
     organizationId: org.id,
     environmentId: null,
     secretId: null,
@@ -239,6 +240,7 @@ test("a throttled launch settles the task as failed before its workspace cleanup
     runTaskInAgentRuntime({
       runtime: {
         agentId: agent.id,
+        accountLock: null,
         organizationId: org.id,
         environmentId: null,
         secretId: null,

@@ -7,6 +7,7 @@ beta: "Preview. Okta for AI Agents is in early access at Okta, and your Okta pla
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give every agent its own AI agent in Okta, so Okta can tell your agents apart. Okta then decides which people each agent may act for and which resources it may reach, and its System Log names the agent on every token. Deactivate one AI agent in Okta, and only that agent stops.
 
@@ -55,7 +56,7 @@ The stored key stays hidden. Leave it blank to keep it.
 1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
 2. Under **Identity**, pick Okta under **Identity Provider**, paste the AI agent's client ID into **Okta AI agent client ID**, and click **Save changes**.
 
-To check it works, call a tool on an MCP server that uses [IdP token exchange](/docs/mcp/authentication/idp-token-exchange) with Okta. Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Okta AI agent** and its client ID.
+To check it works, call a tool on an MCP server that uses [IdP token exchange](/docs/mcp/authentication/idp-token-exchange) with Okta. Open the call in the [MCP Gateway logs](/docs/insights/logs): **Token issued to** shows **Okta AI agent** and its client ID.
 
 ## Require an Agent Identity
 

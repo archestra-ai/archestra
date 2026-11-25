@@ -1,6 +1,10 @@
 "use client";
 
-import { MESSAGING_CHANNEL_LABELS, slackHandleFor } from "@archestra/shared";
+import {
+  CHAT_APP_CHANNEL_IDS,
+  MESSAGING_CHANNEL_LABELS,
+  slackHandleFor,
+} from "@archestra/shared";
 import {
   Hash,
   MessageSquare,
@@ -12,6 +16,7 @@ import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { channelDisplayName } from "@/app/settings/messaging-channels/_parts/channel-details-dialog";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { ChannelIcon } from "@/components/channel-icon";
 import { SettingsLink } from "@/components/settings-link";
 import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
@@ -43,6 +48,8 @@ export function AgentWorkSources({
   runtimeAvailable,
   chatHref,
   onShowA2a,
+  account,
+  runBlock,
 }: {
   agentId: string;
   hasRuntime: boolean;
@@ -51,15 +58,19 @@ export function AgentWorkSources({
   chatHref: string | null;
   /** Opens the A2A connection details; unset when the reader may not see them. */
   onShowA2a?: () => void;
+  /** What the reader's own runs are paid with, shown first under the heading. */
+  account?: ReactNode;
+  /** Why the reader's runs cannot start now: chat says it instead of opening. */
+  runBlock?: string | null;
 }) {
   const appName = useAppName();
   const { data: canReadChannels } = useHasPermissions({
     organizationSettings: ["read"],
   });
-  // The setup section above says what is missing. Every route here still
-  // works before then (setting up a channel or a laptop is preparation, and
-  // chat explains what is missing), so they stay at full strength and only
-  // the caption says runs wait.
+  // The setup section above, and the account card here, say what is missing.
+  // Setting up a channel or a laptop is preparation, so those routes stay at
+  // full strength before then. Chat waits: its button says why instead of
+  // opening (`runBlock`), and the caption says runs wait.
   const preflight = useAgentRuntimePreflight(agentId, hasRuntime);
   const awaitingSetup = hasRuntime && preflight.data?.ready === false;
   return (
@@ -70,11 +81,12 @@ export function AgentWorkSources({
             {hasRuntime ? "Give it work" : "Where people use it"}
           </h2>
           {awaitingSetup && (
-            <span className="text-[13px] text-muted-foreground">
-              Runs start once setup above is done.
+            <span className="fade-in animate-in text-[13px] text-muted-foreground duration-200 motion-reduce:animate-none">
+              Runs start once setup is done.
             </span>
           )}
         </div>
+        {account}
         {/* The ways that are a click away are equal cards; handoff needs a
             one-time setup and a sample to explain it, so it gets a strip of
             its own rather than stretching one card beside half-empty ones. */}
@@ -84,9 +96,15 @@ export function AgentWorkSources({
             title={`In ${appName} chat`}
             action={
               chatHref ? (
-                <Button size="sm" asChild>
-                  <Link href={chatHref}>Open in chat</Link>
-                </Button>
+                runBlock ? (
+                  <ButtonWithTooltip size="sm" disabled disabledText={runBlock}>
+                    <span>Open in chat</span>
+                  </ButtonWithTooltip>
+                ) : (
+                  <Button size="sm" asChild>
+                    <Link href={chatHref}>Open in chat</Link>
+                  </Button>
+                )
               ) : null
             }
           >
@@ -119,11 +137,22 @@ export function AgentWorkSources({
             >
               <Monitor className="size-4" />
             </span>
-            <div className="min-w-0 flex-[1_1_18rem] space-y-1">
+            <div className="min-w-0 flex-[1_1_18rem] space-y-1.5">
               <h3 className="text-sm font-semibold">From your laptop</h3>
-              <p className="text-sm text-muted-foreground">
-                {`Add the ${appName} MCP gateway to Claude Code or Codex once. Your changes, files and credentials move into a run here; "bring it back" returns a patch.`}
-              </p>
+              <ol className="list-decimal space-y-1 pl-4 text-sm text-muted-foreground">
+                <li>
+                  Click Connect your local agent to connect your local coding
+                  agent (such as Claude Code or Codex) to an MCP gateway.
+                </li>
+                <li>
+                  Open MCP Gateways &rarr; your gateway &rarr; Settings &rarr;
+                  Agents, then select Agent access &rarr; Manual &rarr; Add
+                  agent (or Agent access &rarr; All agents).
+                </li>
+                <li>
+                  {`In your local agent, type "hand this over to ${appName}" to start a run with your changes, files, and credentials. Type "bring it back" to get a patch.`}
+                </li>
+              </ol>
             </div>
             <span
               role="img"
@@ -181,7 +210,7 @@ function AgentChannelsCard({
   const { data: config } = useConfig();
   // The chat apps this deployment offers, and of those the ones the
   // organization has connected: the card offers only what can work.
-  const offeredApps = CHAT_APPS.filter(
+  const offeredApps = CHAT_APP_CHANNEL_IDS.filter(
     (provider) =>
       !catalog.isHidden(provider) &&
       (provider !== "telegram" ||
@@ -352,12 +381,7 @@ function AgentChannelsCard({
   );
 }
 
-const CHAT_APPS = [
-  "slack",
-  "ms-teams",
-  "telegram",
-] as const satisfies readonly (keyof typeof MESSAGING_CHANNEL_LABELS)[];
-type ChatApp = (typeof CHAT_APPS)[number];
+type ChatApp = (typeof CHAT_APP_CHANNEL_IDS)[number];
 
 /**
  * One way in per connected chat app. A per-agent Slack bot is set up on the

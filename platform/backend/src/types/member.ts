@@ -18,6 +18,11 @@ export const MemberListItemSchema = z.object({
   createdAt: z.date(),
   /** Whether the account has two-factor authentication enrolled. */
   twoFactorEnabled: z.boolean(),
+  /**
+   * When the identity provider deactivated or deleted the user through SCIM;
+   * null while active. A soft-deleted user cannot sign in.
+   */
+  softDeleted: z.date().nullable(),
 });
 
 const UpdateMemberSchema = createUpdateSchema(schema.membersTable);

@@ -16,17 +16,19 @@
 //!    which copies it over the installed one and starts the MCP bridge again.
 //!    That is the same path as a start by the user, on each OS.
 //!
-//! `archestra update` ([`crate::update`]) does the two in a terminal, on each
-//! OS. [`auto_update_loop`] does them in the MCP bridge that the OS runs,
-//! when Archestra allows it and no command is in work: on Windows only, for
-//! now.
+//! `archestra update` ([`crate::update`]) does the two in a terminal.
+//! [`auto_update_loop`] does them in the MCP bridge that the OS runs, on each
+//! OS, when Archestra allows it and no command is in work. How the MCP
+//! bridge starts the downloaded program is the part of each OS:
+//! [`super::autostart::start_downloaded_program`].
 //!
-//! - macOS does not get the loop while the program is not signed: each build
-//!   is a new application to the privacy settings of macOS, so a silent
-//!   update would take the permissions of the MCP servers away.
-//! - Linux does not get it while the downloaded program starts inside the
-//!   systemd unit of the MCP bridge: systemd would end it with the MCP bridge
-//!   that it stops.
+//! - macOS: a release is signed, so each build is the same application to
+//!   the privacy settings of macOS, and an update keeps the permissions that
+//!   the MCP servers got.
+//! - The MCP bridge tries one program two times at most, and the second
+//!   time only after a new start ([`MAX_TRIES`]). So an install that ended
+//!   midway gets one more try at the next login, and a program that cannot
+//!   install itself does not start the MCP bridge again at each sync.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -148,21 +150,38 @@ pub fn remove_downloaded_program(home: &Path) {
     }
 }
 
-/// The checksum of the last program that the MCP bridge tried to install by
-/// itself. A program that Archestra still serves after a try is not tried
-/// again: without this, a program that cannot install itself would start the
-/// MCP bridge again at each sync.
+/// How many times the MCP bridge tries one program by itself. The second try
+/// is for an install that ended midway: it comes only after a new start of
+/// the MCP bridge, for example at the next login.
+const MAX_TRIES: u32 = 2;
+
+/// The last program that the MCP bridge tried to install by itself, as
+/// `<SHA-256> <number of tries>`. A program that Archestra still serves
+/// after [`MAX_TRIES`] tries is not tried again: without this, a program that
+/// cannot install itself would start the MCP bridge again at each sync.
 fn tried_path(home: &Path) -> PathBuf {
     layout::bridge_dir(home).join("update-tried")
 }
 
-fn was_tried(home: &Path, sha256: &str) -> bool {
-    std::fs::read_to_string(tried_path(home))
-        .is_ok_and(|tried| tried.trim().eq_ignore_ascii_case(sha256))
+/// How many times the MCP bridge tried to install this program. The file of
+/// a program before version 0.1.9 has the SHA-256 only: that is one try.
+fn tries_of(home: &Path, sha256: &str) -> u32 {
+    let Ok(text) = std::fs::read_to_string(tried_path(home)) else {
+        return 0;
+    };
+    let mut words = text.split_whitespace();
+    match words.next() {
+        Some(tried) if tried.eq_ignore_ascii_case(sha256) => words
+            .next()
+            .and_then(|tries| tries.parse().ok())
+            .unwrap_or(1),
+        _ => 0,
+    }
 }
 
 fn record_try(home: &Path, sha256: &str) -> io::Result<()> {
-    std::fs::write(tried_path(home), format!("{sha256}\n"))
+    let tries = tries_of(home, sha256).saturating_add(1);
+    std::fs::write(tried_path(home), format!("{sha256} {tries}\n"))
 }
 
 /// Installs each update that the state shows, when Archestra allows it. It
@@ -179,12 +198,18 @@ pub(crate) async fn auto_update_loop(
         return std::future::pending().await;
     };
     let home = auto_update.home.as_path();
+    // The program that this run of the MCP bridge tried already: the next
+    // try of the same program is for a new start.
+    let mut tried_in_this_run: Option<String> = None;
     loop {
         let wanted = |state: &BridgeState| {
-            state
-                .update
-                .as_ref()
-                .is_some_and(|update| update.auto && !was_tried(home, &update.sha256))
+            state.update.as_ref().is_some_and(|update| {
+                update.auto
+                    && !tried_in_this_run
+                        .as_deref()
+                        .is_some_and(|tried| tried.eq_ignore_ascii_case(&update.sha256))
+                    && tries_of(home, &update.sha256) < MAX_TRIES
+            })
         };
         // The borrow of the state ends with this statement: it is not held
         // over a wait.
@@ -202,12 +227,18 @@ pub(crate) async fn auto_update_loop(
         };
 
         wait_until_idle(in_flight).await;
-        match install_update(auto_update, base_url, config_path, &update).await {
-            Ok(()) => {
-                info!(
-                    version = update.version.as_deref().unwrap_or("unknown"),
-                    "the new program installs itself; this MCP bridge ends soon"
-                );
+        // A download that fails is tried again later: it is not a try of
+        // the program.
+        match download(base_url, &update, home).await {
+            Ok(downloaded) => {
+                tried_in_this_run = Some(update.sha256.clone());
+                match install(auto_update, config_path, &update, &downloaded) {
+                    Ok(()) => info!(
+                        version = update.version.as_deref().unwrap_or("unknown"),
+                        "the new program installs itself; this MCP bridge ends soon"
+                    ),
+                    Err(error) => warn!(%error, "the update of the program failed"),
+                }
             }
             Err(error) => warn!(%error, "the update of the program failed"),
         }
@@ -236,23 +267,30 @@ enum AutoUpdateError {
     Start { path: PathBuf, source: io::Error },
 }
 
-async fn install_update(
-    auto_update: &AutoUpdate,
+async fn download(
     base_url: &str,
+    update: &Update,
+    home: &Path,
+) -> Result<PathBuf, AutoUpdateError> {
+    let http = control_plane::http_client().map_err(AutoUpdateError::HttpClient)?;
+    Ok(download_verified(&http, base_url, &update.sha256, home).await?)
+}
+
+/// Records the try, then starts the downloaded program. The try is recorded
+/// first: the start of the program can end this MCP bridge at once.
+fn install(
+    auto_update: &AutoUpdate,
     config_path: &Path,
     update: &Update,
+    downloaded: &Path,
 ) -> Result<(), AutoUpdateError> {
     let home = auto_update.home.as_path();
-    let http = control_plane::http_client().map_err(AutoUpdateError::HttpClient)?;
-    // A download that fails is tried again later: the try is recorded only
-    // when the program is here and right.
-    let downloaded = download_verified(&http, base_url, &update.sha256, home).await?;
     record_try(home, &update.sha256).map_err(|source| AutoUpdateError::RecordTry {
         path: tried_path(home),
         source,
     })?;
-    (auto_update.install)(&downloaded, config_path).map_err(|source| AutoUpdateError::Start {
-        path: downloaded,
+    (auto_update.install)(downloaded, config_path).map_err(|source| AutoUpdateError::Start {
+        path: downloaded.to_owned(),
         source,
     })
 }
@@ -293,14 +331,32 @@ mod tests {
     }
 
     #[test]
-    fn a_tried_program_is_remembered() {
+    fn the_tries_of_a_program_are_counted() {
         let home = tempfile::tempdir().expect("temp home");
         std::fs::create_dir_all(layout::bridge_dir(home.path())).expect("mkdir");
-        assert!(!was_tried(home.path(), "aa"));
+        assert_eq!(tries_of(home.path(), "aa"), 0);
         record_try(home.path(), "aa").expect("record");
-        assert!(was_tried(home.path(), "aa"));
-        assert!(was_tried(home.path(), "AA"));
-        assert!(!was_tried(home.path(), "bb"));
+        assert_eq!(tries_of(home.path(), "aa"), 1);
+        assert_eq!(tries_of(home.path(), "AA"), 1);
+        record_try(home.path(), "aa").expect("record");
+        assert_eq!(tries_of(home.path(), "aa"), MAX_TRIES);
+        // Another program starts at no tries, and takes the place of the
+        // one before.
+        assert_eq!(tries_of(home.path(), "bb"), 0);
+        record_try(home.path(), "bb").expect("record");
+        assert_eq!(tries_of(home.path(), "bb"), 1);
+        assert_eq!(tries_of(home.path(), "aa"), 0);
+    }
+
+    #[test]
+    fn the_file_of_an_older_program_is_one_try() {
+        let home = tempfile::tempdir().expect("temp home");
+        std::fs::create_dir_all(layout::bridge_dir(home.path())).expect("mkdir");
+        // A program before version 0.1.9 wrote the SHA-256 only.
+        std::fs::write(tried_path(home.path()), "aa\n").expect("write");
+        assert_eq!(tries_of(home.path(), "aa"), 1);
+        record_try(home.path(), "aa").expect("record");
+        assert_eq!(tries_of(home.path(), "aa"), 2);
     }
 
     #[test]

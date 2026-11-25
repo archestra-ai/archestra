@@ -1,5 +1,6 @@
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { AgentRunModel, AgentWorkspaceModel } from "@/models";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { ApiError } from "@/types";
 import {
   type AgentWorkspaceFileRequest,
@@ -38,6 +39,14 @@ export async function authorizeAgentWorkspaceAccess(params: {
     session.organizationId !== params.actor.organizationId ||
     session.actorKind !== params.actor.kind ||
     session.actorId !== params.actor.id
+  ) {
+    throw new ApiError(404, "Saved run not found");
+  }
+  // A transfer ticket outlives the request that issued it, so the owner is
+  // checked again: deactivated in the identity provider (SCIM) since then?
+  if (
+    params.actor.kind === "user" &&
+    (await softDeletedUsers.isSoftDeleted(params.actor.id))
   ) {
     throw new ApiError(404, "Saved run not found");
   }

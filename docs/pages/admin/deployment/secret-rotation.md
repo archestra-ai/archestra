@@ -5,6 +5,8 @@ order: 7
 lastUpdated: 2026-11-11
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Every secret Archestra holds can be changed, and this page says how, or links the page that does. Most change with one restart or one click, and nobody notices. Two need care: the encryption keys make stored credentials or chat history unreadable if you change them out of order, and the session secret signs every user out.
 
 Archestra's secrets fall into four groups:
@@ -63,7 +65,7 @@ API keys and MCP gateway OAuth tokens keep working. Archestra replaces its token
 
    ```bash
    kubectl -n archestra exec deploy/archestra-platform -- \
-     sh -c 'cd /app/backend && node dist/standalone-scripts/reencrypt-secrets.mjs'
+     node /app/backend/dist/standalone-scripts/reencrypt-secrets.mjs
    ```
 
    Go on only when it prints `unreadable=0` or `nothing to re-encrypt`.

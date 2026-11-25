@@ -9,7 +9,7 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
-import { withRequester } from "@/openappa/policy-text";
+import { policyChangeBranch, withRequester } from "@/openappa/policy-text";
 import {
   guardrailsPolicyService,
   requireGrantPermission,
@@ -23,6 +23,11 @@ import {
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
 } from "@/services/openappa-github-access";
+import {
+  autoMergeActive,
+  checkAppaPullRequestsSoon,
+  POLICY_CHECK_NAME,
+} from "@/services/openappa-github-sync";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
@@ -243,7 +248,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     const commitSha = checkedSha(commitResult.sha);
     await assertPublishSource({ params, source });
     await assertBranchUnchanged({ base, branch, baseSha, token });
-    head = `archestra/openappa-${randomUUID()}`;
+    head = policyChangeBranch(randomUUID());
     await githubJson({
       method: "POST",
       url: `${base}/git/refs`,
@@ -264,7 +269,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     await assertPublishSource({ params, source });
     await assertBranchUnchanged({ base, branch, baseSha, token });
 
-    head = `archestra/openappa-${randomUUID()}`;
+    head = policyChangeBranch(randomUUID());
     await githubJson({
       method: "POST",
       url: `${base}/git/refs`,
@@ -303,6 +308,10 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     repo: source.repo,
     number: pull.number,
   });
+  // Under auto-merge it is checked and merged now, not at the next minute's
+  // round of checks.
+  const autoMerge = autoMergeActive(source);
+  if (autoMerge) void checkAppaPullRequestsSoon(params.organizationId);
   return {
     delivery: "pull_request" as const,
     number: pull.number,
@@ -312,6 +321,10 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     warnings: validation.warnings,
     before: before.content,
     after: content,
+    autoMerge,
+    instruction: autoMerge
+      ? `Give the user the link. The pull request merges by itself once its ${POLICY_CHECK_NAME} check and the repository's other checks pass; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_policy_change_status with this number and wait=true; on each later call also pass the phase the last call returned as since. Tell the user each change in one short sentence, and keep calling until done is true. Then say whether the change is in force, or what went wrong and what to do.`
+      : "Give the user the link. The change applies once someone with write access merges it on GitHub and Git sync pulls it.",
   };
 }
 

@@ -263,28 +263,46 @@ export const fixedRoleGroups: FixedRoleGroup[] = [
     role(
       "logs:reader",
       "Log Reader",
-      "View your own LLM, MCP, and Guardrails logs and yells",
-      // Yells left `log` for their own resource; the bundle keeps them so
-      // members already holding it see what they saw before.
-      { log: ["read"], guardrailsYell: ["read"] },
+      "View your own LLM, MCP, and Guardrails logs and client connections",
+      // Guardrails records and client connections left `log` for their own
+      // resources; the bundle keeps them so holders see what they saw before.
+      { log: ["read"], guardrailsLog: ["read"], clientConnection: ["read"] },
     ),
     role(
       "logs:admin",
       "Log Admin",
-      "View every LLM, MCP, and Guardrails log and yell in the organization",
-      { log: ["read", "admin"], guardrailsYell: ["read", "admin"] },
+      "View every LLM, MCP, and Guardrails log and client connection in the organization",
+      {
+        log: ["read", "admin"],
+        guardrailsLog: ["read", "admin"],
+        clientConnection: ["read", "admin"],
+      },
     ),
+    // The identifiers predate the rename from yells to the Guardrails log and
+    // stay, since members and service accounts hold roles by identifier.
     role(
       "yells:reader",
-      "Yell Reader",
-      "View and resolve the Guardrails yells of your own sessions",
-      { guardrailsYell: ["read"] },
+      "Guardrails Log Reader",
+      "View the Guardrails consults and yells of your own sessions, and resolve those yells",
+      { guardrailsLog: ["read"] },
     ),
     role(
       "yells:admin",
-      "Yell Admin",
-      "View and resolve every Guardrails yell in the organization",
-      { guardrailsYell: ["read", "admin"] },
+      "Guardrails Log Admin",
+      "View and resolve every Guardrails consult and yell in the organization",
+      { guardrailsLog: ["read", "admin"] },
+    ),
+    role(
+      "client-connections:reader",
+      "Client Connection Reader",
+      "View the connection events of your own coding clients and agents",
+      { clientConnection: ["read"] },
+    ),
+    role(
+      "client-connections:admin",
+      "Client Connection Admin",
+      "View every member's connection events and Adoption",
+      { clientConnection: ["read", "admin"] },
     ),
     role(
       "audit-log:reader",

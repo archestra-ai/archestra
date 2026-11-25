@@ -2,11 +2,12 @@
 
 import { DocsPage } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Plus, Route, Trash2 } from "lucide-react";
+import { Pencil, Plus, Route, Shuffle, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
@@ -24,12 +25,15 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type AutoRouter,
   useAutoRouters,
+  useAutoRoutingState,
   useDeleteAutoRouter,
 } from "@/lib/auto-routing.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -129,7 +133,30 @@ export default function AutoRoutersPage() {
     },
   ];
 
-  const organizationOff = routers.length > 0 && !routers[0].enabled;
+  const listedNone = query.isSuccess && routers.length === 0;
+  const { data: autoRoutingState } = useAutoRoutingState({
+    enabled: listedNone,
+  });
+  const organizationOff = listedNone
+    ? autoRoutingState?.enabled === false
+    : routers.length > 0 && !routers[0].enabled;
+  const offNotice = organizationOff && (
+    <InlineNotice variant="neutral">
+      <span className="font-medium">Auto routing is off</span>
+      <InlineNoticeText>
+        No router is offered or answers requests until it is turned on in{" "}
+        <Link href="/settings/llm" className="underline">
+          Settings
+        </Link>
+        .
+      </InlineNoticeText>
+    </InlineNotice>
+  );
+  const { data: canCreate, isPending: resolvingCreatePermission } =
+    useHasPermissions({ llmProxy: ["update"] });
+  // Nothing to list and nothing searched: the page explains auto routing
+  // instead of showing an empty table.
+  const isFirstUse = query.isSuccess && routers.length === 0 && !search;
 
   return (
     <PageLayout
@@ -167,21 +194,35 @@ export default function AutoRoutersPage() {
           error={query.error}
           onRetry={() => query.refetch()}
         />
+      ) : isFirstUse ? (
+        <div className="space-y-4">
+          {offNotice}
+          <EmptyState
+            variant="firstUse"
+            icon={Shuffle}
+            title="Send each session to the right model"
+            description="An auto router sends easy work to a cheap model and hard work to a smart one, within a daily budget."
+            canAct={resolvingCreatePermission ? undefined : canCreate}
+            readerMessage="Your admins haven't created an auto router yet."
+            action={
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <Plus />
+                <span>Create an auto router</span>
+              </Button>
+            }
+            secondaryAction={
+              <ExternalDocsLink
+                href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyAutoRouting)}
+                className="text-sm"
+              >
+                How auto routing works
+              </ExternalDocsLink>
+            }
+          />
+        </div>
       ) : (
         <div className="space-y-4">
-          {organizationOff && (
-            <InlineNotice variant="neutral">
-              <span className="font-medium">Auto routing is off</span>
-              <InlineNoticeText>
-                No router is offered or answers requests until it is turned on
-                in{" "}
-                <Link href="/settings/llm" className="underline">
-                  Settings
-                </Link>
-                .
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
+          {offNotice}
           <TableCardView storageKey="archestra-llm-auto-routers-view">
             <CollectionFilters>
               <FilterBar

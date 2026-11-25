@@ -1,10 +1,15 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
+import { eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel } from "@/models";
+import { llmUsageRollup } from "@/services/llm-usage-rollup";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  authenticatedRouteApp,
+  USER_HEADER,
+} from "@/test/authenticated-route-app";
 import type { Agent, ConnectionSetupClientId, User } from "@/types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -49,27 +54,85 @@ describe("GET /api/connected-clients/adoption", () => {
     return response.json() as {
       since: string;
       until: string;
-      members: {
-        userId: string;
-        status: string;
-        gatewayUses: { agent: { clientId: string | null; name: string } }[];
-        llmUses: { agent: { clientId: string | null; name: string } }[];
-        gatewayLastSeenAt: string | null;
-        llmLastSeenAt: string | null;
-        agents: {
-          clientId: string | null;
-          name: string;
-          status: string;
-          setupAt: string | null;
-          signedIn: boolean;
-          viaToken: boolean;
-        }[];
-      }[];
+      memberCount: number;
+      members: Member[];
     };
   };
 
-  const memberById = async (userId: string) =>
-    (await getAdoption()).members.find((m) => m.userId === userId);
+  type Member = {
+    userId: string;
+    status: string;
+    gatewayUses: {
+      agent: { clientId: string | null; name: string };
+      calls: number;
+    }[];
+    llmUses: {
+      agent: { clientId: string | null; name: string };
+      calls: number;
+    }[];
+    gatewayLastSeenAt: string | null;
+    llmLastSeenAt: string | null;
+    agents: {
+      clientId: string | null;
+      name: string;
+      status: string;
+      setupAt: string | null;
+      signedIn: boolean;
+      viaToken: boolean;
+    }[];
+  };
+
+  /** The members list: every member, `search` its query string. */
+  const listMembers = async (search = "") => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/connected-clients/adoption/members${search}`,
+    });
+    expect(response.statusCode).toBe(200);
+    return response.json() as {
+      data: Member[];
+      pagination: { total: number; hasNext: boolean };
+    };
+  };
+
+  /** A member as the members list shows them, over `window` (a query). */
+  const memberById = async (userId: string, window = "") =>
+    (
+      await listMembers(`?limit=1000${window ? `&${window.slice(1)}` : ""}`)
+    ).data.find((m) => m.userId === userId);
+
+  test.for([
+    [ADMIN_ROLE_NAME, 200],
+    // clientConnection:read shows an editor their own events, not everyone's.
+    [EDITOR_ROLE_NAME, 403],
+  ] as const)("needs clientConnection:admin: %s gets %i", async ([
+    role,
+    statusCode,
+  ], { makeUser, makeMember }) => {
+    const caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role });
+    const { default: routes } = await import("./connected-client.routes");
+    const gated = await authenticatedRouteApp({
+      organizationId,
+      routes: [routes],
+    });
+    try {
+      for (const url of [
+        "/api/connected-clients/adoption",
+        "/api/connected-clients/adoption/usage",
+        "/api/connected-clients/adoption/members",
+      ]) {
+        const response = await gated.inject({
+          method: "GET",
+          url,
+          headers: { [USER_HEADER]: caller.id },
+        });
+        expect(response.statusCode).toBe(statusCode);
+      }
+    } finally {
+      await gated.close();
+    }
+  });
 
   test("a member with no setup and no traffic is not connected", async ({
     makeUser,
@@ -84,10 +147,14 @@ describe("GET /api/connected-clients/adoption", () => {
     const since = new Date(body.since).getTime();
     const until = new Date(body.until).getTime();
     expect(Math.round((until - since) / DAY_MS)).toBe(30);
-    expect(body.members.find((m) => m.userId === ada.id)).toMatchObject({
+    // The summary counts her but leaves her out: she has nothing to show.
+    expect(body.memberCount).toBe(2);
+    expect(body.members.find((m) => m.userId === ada.id)).toBeUndefined();
+    expect(await memberById(ada.id)).toMatchObject({
       status: "notConnected",
       gatewayLastSeenAt: null,
       llmLastSeenAt: null,
+      agents: [],
     });
   });
 
@@ -130,8 +197,7 @@ describe("GET /api/connected-clients/adoption", () => {
 
     const iso = (daysAgo: number) =>
       new Date(Date.now() - daysAgo * DAY_MS).toISOString();
-    const member = async (search: string) =>
-      (await getAdoption(search)).members.find((m) => m.userId === ada.id);
+    const member = async (search: string) => memberById(ada.id, search);
 
     for (const search of [
       "",
@@ -389,7 +455,8 @@ describe("GET /api/connected-clients/adoption", () => {
         },
       ],
     });
-    expect(members.find((m) => m.userId === caller.id)).toMatchObject({
+    expect(members.find((m) => m.userId === caller.id)).toBeUndefined();
+    expect(await memberById(caller.id)).toMatchObject({
       status: "notConnected",
       llmUses: [],
       llmLastSeenAt: null,
@@ -765,6 +832,131 @@ describe("GET /api/connected-clients/adoption", () => {
       llm: sum(members.flatMap((member) => member.llmUses)),
     }).toEqual(total(everyone));
   });
+
+  test("the members list filters, searches, sorts and pages every member", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada", email: "ada@example.com" });
+    const bob = await makeUser({ name: "Bob", email: "bob@example.com" });
+    const cy = await makeUser({ name: "Cy", email: "cy@example.com" });
+    for (const user of [ada, bob, cy]) {
+      await makeMember(user.id, organizationId);
+    }
+    await redeem(ada.id, "codex");
+    await gatewayCall(ada.id, { authMethod: "oauth", daysAgo: 1 });
+    await redeem(cy.id, "cursor");
+    const ids = (page: { data: Member[] }) => page.data.map((m) => m.userId);
+
+    // Members without an agent first, then by name.
+    expect(ids(await listMembers())).toEqual([admin.id, bob.id, cy.id, ada.id]);
+    expect(ids(await listMembers("?state=notConnected"))).toEqual([
+      admin.id,
+      bob.id,
+      cy.id,
+    ]);
+    expect(ids(await listMembers("?state=active"))).toEqual([ada.id]);
+    // Names, emails and agent names.
+    expect(ids(await listMembers("?search=BOB@"))).toEqual([bob.id]);
+    expect(ids(await listMembers("?search=cursor"))).toEqual([cy.id]);
+    expect(ids(await listMembers("?search=%25"))).toEqual([]);
+    // Newest last call first; members with none after.
+    expect(
+      ids(await listMembers("?sortBy=gateway&sortDirection=desc")),
+    ).toEqual([ada.id, admin.id, bob.id, cy.id]);
+    expect(ids(await listMembers("?sortBy=user&sortDirection=desc"))).toEqual([
+      cy.id,
+      bob.id,
+      admin.id,
+      ada.id,
+    ]);
+
+    const page = await listMembers("?limit=2&offset=2");
+    expect(ids(page)).toEqual([cy.id, ada.id]);
+    expect(page.pagination).toMatchObject({ total: 4, hasNext: false });
+    const tooMany = await app.inject({
+      method: "GET",
+      url: "/api/connected-clients/adoption/members?limit=1001",
+    });
+    expect(tooMany.statusCode).toBe(400);
+  });
+
+  test("LLM proxy traffic reads the usage rollup, agent runs left out", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    const at = new Date(Date.now() - 6 * 60 * 60 * 1000);
+    for (const runId of [null, null, "task-1"]) {
+      const interaction = await makeInteraction(gateway.id, {
+        userId: ada.id,
+        source: "api",
+        externalAgentId: "openai_codex",
+        createdAt: at,
+      });
+      if (runId) {
+        await db
+          .update(schema.interactionsTable)
+          .set({ runId })
+          .where(eq(schema.interactionsTable.id, interaction.id));
+      }
+    }
+    await drainRollup();
+    const hourly = schema.llmUsageHourlyTable;
+    expect(
+      (await db.select({ run: hourly.run }).from(hourly)).map((r) => r.run),
+    ).toEqual(expect.arrayContaining([false, true]));
+
+    // Each read names its own window, so none reuses a cached report.
+    const read = async (window: string) => {
+      const member = await memberById(ada.id, window);
+      const usage = await app.inject({
+        method: "GET",
+        url: `/api/connected-clients/adoption/usage${window}`,
+      });
+      const days = usage.json().days as { llmCalls: number }[];
+      return {
+        calls: member?.llmUses.map((use) => use.calls),
+        status: member?.status,
+        llmCalls: days.reduce((sum, day) => sum + day.llmCalls, 0),
+      };
+    };
+    const iso = (daysAgo: number) =>
+      new Date(Date.now() - daysAgo * DAY_MS).toISOString();
+    const expected = { calls: [2], status: "active", llmCalls: 2 };
+    expect(await read(`?startDate=${iso(20)}`)).toEqual(expected);
+
+    // Hours rolled before the rollup kept `run` are read from raw rows...
+    await db.update(hourly).set({ run: null });
+    expect(await read(`?startDate=${iso(21)}`)).toEqual(expected);
+    // ...until the rollup refreshes them.
+    const { refreshed } = await llmUsageRollup.run({
+      timeBudgetMs: 30_000,
+      throttleRatio: 0,
+    });
+    expect(refreshed).toBeGreaterThan(0);
+    expect(
+      await db
+        .select({ run: hourly.run })
+        .from(hourly)
+        .where(isNull(hourly.run)),
+    ).toEqual([]);
+    expect(await read(`?startDate=${iso(22)}`)).toEqual(expected);
+  });
+
+  /** Run the rollup until nothing is left to roll, recompute or settle. */
+  async function drainRollup() {
+    for (let run = 0; run < 20; run++) {
+      const result = await llmUsageRollup.run({
+        timeBudgetMs: 30_000,
+        throttleRatio: 0,
+      });
+      if (result.recomputed + result.rolled + result.refreshed === 0) return;
+    }
+    throw new Error("rollup did not drain");
+  }
 
   async function redeem(userId: string, clientId: ConnectionSetupClientId) {
     const { setup, rawToken } = await ConnectionSetupModel.create({

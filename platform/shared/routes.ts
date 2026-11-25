@@ -640,10 +640,17 @@ export const RouteId = {
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",
+  GetAgentRuntimeAccount: "getAgentRuntimeAccount",
+  UpdateAgentRuntimeAccount: "updateAgentRuntimeAccount",
+  ClearAgentRuntimeAccount: "clearAgentRuntimeAccount",
   GetClaudeCodeAccount: "getClaudeCodeAccount",
   StartClaudeCodeSignIn: "startClaudeCodeSignIn",
   CompleteClaudeCodeSignIn: "completeClaudeCodeSignIn",
   DisconnectClaudeCodeAccount: "disconnectClaudeCodeAccount",
+  GetMyClaudeCodeAccount: "getMyClaudeCodeAccount",
+  StartMyClaudeCodeSignIn: "startMyClaudeCodeSignIn",
+  CompleteMyClaudeCodeSignIn: "completeMyClaudeCodeSignIn",
+  DisconnectMyClaudeCodeAccount: "disconnectMyClaudeCodeAccount",
   GetClaudeCodeModels: "getClaudeCodeModels",
   SetAgentRuntimeCredential: "setAgentRuntimeCredential",
   DeleteAgentRuntimeCredential: "deleteAgentRuntimeCredential",
@@ -744,8 +751,8 @@ export const RouteId = {
   // Onboarding Routes
   GetOnboardingSeenNavItems: "getOnboardingSeenNavItems",
   MarkOnboardingNavItemsSeen: "markOnboardingNavItemsSeen",
-  GetOnboardingSurveyEligibility: "getOnboardingSurveyEligibility",
-  SubmitOnboardingSurvey: "submitOnboardingSurvey",
+  GetFirstRunSetup: "getFirstRunSetup",
+  CompleteFirstRunSetup: "completeFirstRunSetup",
 
   // Organization Routes
   GetOrganization: "getOrganization",
@@ -755,6 +762,13 @@ export const RouteId = {
   GetOrganizationMemberOptions: "getOrganizationMemberOptions",
   GetOrganizationMember: "getOrganizationMember",
   DeletePendingSignupMember: "deletePendingSignupMember",
+  ScimGetServiceProviderConfig: "scimGetServiceProviderConfig",
+  ScimListUsers: "scimListUsers",
+  ScimGetUser: "scimGetUser",
+  ScimCreateUser: "scimCreateUser",
+  ScimReplaceUser: "scimReplaceUser",
+  ScimPatchUser: "scimPatchUser",
+  ScimDeleteUser: "scimDeleteUser",
   CompleteOnboarding: "completeOnboarding",
 
   // Appearance Settings Routes
@@ -1064,6 +1078,7 @@ export const RouteId = {
   UpdateAppaGithubSync: "updateAppaGithubSync",
   GetOpenappaBatteries: "getOpenappaBatteries",
   GetOpenappaBatteryPolicySource: "getOpenappaBatteryPolicySource",
+  GetOpenappaBatterySource: "getOpenappaBatterySource",
   GetOpenappaEffectivePolicy: "getOpenappaEffectivePolicy",
   GetOpenappaBatteryMatches: "getOpenappaBatteryMatches",
   GetOpenappaBatteryInstall: "getOpenappaBatteryInstall",
@@ -1154,6 +1169,10 @@ export const RouteId = {
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
   UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
 
+  // Unified Logs
+  GetLogEvents: "getLogEvents",
+  GetLogStats: "getLogStats",
+
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
   GetAuditLog: "getAuditLog",
@@ -1189,6 +1208,11 @@ export const RouteId = {
   GetDesktopDeviceServerLog: "getDesktopDeviceServerLog",
   // white-label-ok: wire identifier of the `archestra` program's download, not copy
   DownloadArchestraCli: "downloadArchestraCli",
+  // white-label-ok: wire identifier of the `archestra` program's install script, not copy
+  GetArchestraCliInstallScript: "getArchestraCliInstallScript",
+  // white-label-ok: wire identifier of the `archestra` program's install script, not copy
+  GetArchestraCliPowershellInstallScript:
+    "getArchestraCliPowershellInstallScript",
   StartDesktopDeviceSignIn: "startDesktopDeviceSignIn",
   PollDesktopDeviceSignIn: "pollDesktopDeviceSignIn",
   GetDesktopDeviceSignIn: "getDesktopDeviceSignIn",
@@ -1218,6 +1242,7 @@ export const RouteId = {
   GetConnectedClientLog: "getConnectedClientLog",
   GetAgentAdoption: "getAgentAdoption",
   GetAgentAdoptionUsage: "getAgentAdoptionUsage",
+  GetAgentAdoptionMembers: "getAgentAdoptionMembers",
 
   // MCP App Routes
   GetApps: "getApps",

@@ -8,14 +8,12 @@ import {
   CircleDashed,
   CircleSlash,
   FileSpreadsheet,
-  HardDrive,
   ListFilter,
   Loader2,
   type LucideIcon,
   Pause,
   Pencil,
   Play,
-  Plus,
   RotateCw,
   Trash2,
   TriangleAlert,
@@ -67,13 +65,19 @@ export function CostExportsTable(props: {
   /** Every blob provider, for each export's destination type and URI. */
   providers: BlobProvider[];
   isLoading: boolean;
+  /**
+   * Shown in place of the table once the list has loaded with no export in it
+   * and no filter applied: the page then explains exports instead of listing
+   * none.
+   */
+  firstUse: React.ReactNode;
+  /** The export list has loaded; false while loading and after a failure. */
+  isLoaded: boolean;
   onEdit: (costExport: CostExport) => void;
   onDelete: (costExport: CostExport) => void;
   onRun: (costExport: CostExport) => void;
   /** Export whose Run now request is in flight, if any. */
   runningId: string | null;
-  /** Opens the add-blob-provider dialog on this page. */
-  onAddProvider: () => void;
   /** Opens a destination's edit dialog on this page, to fix a failing one. */
   onEditProvider: (provider: BlobProvider) => void;
   /** Resolves once the batch is done; the selection clears on full success. */
@@ -90,11 +94,12 @@ export function CostExportsTable(props: {
     exports,
     providers,
     isLoading,
+    firstUse,
+    isLoaded,
     onEdit,
     onDelete,
     onRun,
     runningId,
-    onAddProvider,
     onEditProvider,
     onBulkSetEnabled,
     onBulkDelete,
@@ -218,7 +223,9 @@ export function CostExportsTable(props: {
           return (
             <AgentNameCell
               name={costExport.name}
-              description={`${costExport.schedule === "hourly" ? "Hourly" : "Daily"} · FOCUS 1.2 CSV`}
+              description={
+                costExport.schedule === "hourly" ? "Hourly" : "Daily"
+              }
               onClick={() => onEdit(costExport)}
             />
           );
@@ -317,8 +324,11 @@ export function CostExportsTable(props: {
     [now, runningId, onEdit, onDelete, onRun, onEditProvider],
   );
 
-  const noProviders = !isLoading && providers.length === 0;
   const showFilters = exports.length > 0 || hasActiveFilters;
+
+  if (isLoaded && exports.length === 0 && !hasActiveFilters) {
+    return firstUse;
+  }
 
   return (
     <BulkActionsScope>
@@ -464,28 +474,8 @@ export function CostExportsTable(props: {
         onRowClick={(row, event) =>
           openRowOnPlainClick(event, () => onEdit(row.costExport))
         }
-        {...(noProviders
-          ? {
-              emptyIcon: HardDrive,
-              emptyMessage: "Add a destination first",
-              emptyDescription:
-                "A cost export needs a blob provider to write its FOCUS files to: an S3, GCS or Azure Blob bucket you own.",
-              emptyAction: (
-                <PermissionButton
-                  permissions={{ organizationSettings: ["update"] }}
-                  onClick={onAddProvider}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add blob provider
-                </PermissionButton>
-              ),
-            }
-          : {
-              emptyIcon: FileSpreadsheet,
-              emptyMessage: "No cost exports scheduled",
-              emptyDescription:
-                "Schedule one to send hourly or daily FOCUS cost files to your bucket.",
-            })}
+        emptyIcon={FileSpreadsheet}
+        emptyMessage="No cost exports scheduled"
         hasActiveFilters={hasActiveFilters}
         filteredEmptyMessage="No cost exports match your filters"
         onClearFilters={clearFilters}
@@ -697,17 +687,13 @@ function DestinationCell({ row }: { row: Row }) {
   const root = provider ? blobProviderLocation(provider).uri : "";
   const path = `${root}${costExport.pathPrefix ? `${costExport.pathPrefix}/` : ""}`;
   return (
-    <div className="min-w-0">
-      <div className="flex min-w-0 items-center gap-1.5 text-sm leading-5">
-        {provider && <BlobProviderLogo type={provider.type} size={14} />}
-        <span className="truncate">{costExport.blobProviderName}</span>
-      </div>
-      <div
-        className="mt-0.5 truncate font-mono text-xs text-muted-foreground"
-        title={path}
-      >
-        {path || costExport.pathPrefix || "/"}
-      </div>
+    // The bucket address stays out of the row; hovering the name shows it.
+    <div
+      className="flex min-w-0 items-center gap-1.5 text-sm leading-5"
+      title={path || undefined}
+    >
+      {provider && <BlobProviderLogo type={provider.type} size={14} />}
+      <span className="truncate">{costExport.blobProviderName}</span>
     </div>
   );
 }

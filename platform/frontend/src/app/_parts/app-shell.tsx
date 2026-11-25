@@ -41,6 +41,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useSidebarOpenState } from "@/lib/hooks/use-sidebar-open";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
+import { POLICY_WORKSPACE_PATH } from "@/lib/openappa-policy-views";
 import { useOrganization } from "@/lib/organization.query";
 import { useIsShellSeeded, useShellReady } from "@/lib/shell-deferral";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
@@ -86,7 +87,20 @@ function useTwoFactorEnrollmentRedirect(enabled: boolean): boolean {
   return shouldRedirect;
 }
 
-export function AppShell({
+export function AppShell(props: AppShellProps) {
+  return (
+    <>
+      <AppShellSurface {...props} />
+      {/* One toaster for every surface. Each surface used to render its own,
+          so a toast raised on one (the sign-in callback page) was dropped
+          when the app moved to the next (the page the person came from). */}
+      <Toaster />
+      <ImpersonationExpiry />
+    </>
+  );
+}
+
+function AppShellSurface({
   children,
   initialSidebarOpen = null,
 }: AppShellProps) {
@@ -110,8 +124,8 @@ export function AppShell({
   // scroll, so we only bound the chain for these to avoid clipping content.
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
-  // The policy source fills the viewport like an editor, with no version line.
-  const isPolicySource = pathname === "/openappa/policy";
+  // The policy workspace fills the viewport like an editor, with no version line.
+  const isPolicySource = pathname === POLICY_WORKSPACE_PATH;
   const isViewportLocked = isChat || isProjectDetail || isPolicySource;
   const [sidebarOpen, setSidebarOpen] = useSidebarOpenState(initialSidebarOpen);
   const sidebarWidth = useSidebarWidthState();
@@ -143,8 +157,6 @@ export function AppShell({
       <>
         <MaintenanceModeOverlay />
         {children}
-        <Toaster />
-        <ImpersonationExpiry />
       </>
     );
   }
@@ -157,8 +169,6 @@ export function AppShell({
       <>
         <MaintenanceModeOverlay />
         <AuthSurfaceFrame>{children}</AuthSurfaceFrame>
-        <Toaster />
-        <ImpersonationExpiry />
       </>
     );
   }
@@ -273,11 +283,9 @@ export function AppShell({
                 !isPolicySource && <Version />}
             </div>
           </main>
-          <Toaster />
-          <ImpersonationExpiry />
           <ConversationSearchProvider />
           <AfterIdle>
-            <OnboardingSurveyDialog />
+            <FirstRunSetupDialog />
           </AfterIdle>
         </SidebarProvider>
       </NavigationStatusProvider>
@@ -322,9 +330,9 @@ function AfterIdle({ children }: { children: React.ReactNode }) {
   return ready ? <>{children}</> : null;
 }
 
-const OnboardingSurveyDialog = lazyComponent(() =>
-  import("@/components/onboarding-survey-dialog").then(
-    (m) => m.OnboardingSurveyDialog,
+const FirstRunSetupDialog = lazyComponent(() =>
+  import("@/components/first-run-setup-dialog").then(
+    (m) => m.FirstRunSetupDialog,
   ),
 );
 

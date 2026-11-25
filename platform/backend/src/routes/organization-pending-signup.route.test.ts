@@ -66,6 +66,12 @@ describe("GET /api/organization/members/signup-status", () => {
     });
     const noInvitation = await makeUser();
     await makeMember(noInvitation.id, ctx.organizationId);
+    const fromScim = await UserModel.createWithoutAccount({
+      name: "From SCIM",
+      email: "from-scim@example.com",
+      scimProvisioned: true,
+    });
+    await makeMember(fromScim.id, ctx.organizationId);
 
     const query = vi.spyOn(PGlite.prototype, "query");
     let response: Awaited<ReturnType<typeof ctx.app.inject>>;
@@ -84,18 +90,28 @@ describe("GET /api/organization/members/signup-status", () => {
       userId: string;
       provider: string | null;
       invitationId: string | null;
+      scimProvisioned: boolean;
     }>;
     expect(pending.map((member) => member.userId).sort()).toEqual(
-      [provisioned.id, noInvitation.id].sort(),
+      [provisioned.id, noInvitation.id, fromScim.id].sort(),
     );
     // The newest auto-provisioned invitation wins.
     expect(pending.find((m) => m.userId === provisioned.id)).toMatchObject({
       provider: "slack",
       invitationId: invited.id,
+      scimProvisioned: false,
     });
     expect(pending.find((m) => m.userId === noInvitation.id)).toMatchObject({
       provider: null,
       invitationId: null,
+      scimProvisioned: false,
+    });
+    // SCIM gives the user no invitation: the marker on the user says where
+    // they came from.
+    expect(pending.find((m) => m.userId === fromScim.id)).toMatchObject({
+      provider: null,
+      invitationId: null,
+      scimProvisioned: true,
     });
   });
 

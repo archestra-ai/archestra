@@ -101,7 +101,12 @@ size-weighted adequacy per (USD per token × daily tokens). The shadow price of 
 dV/dB = λ* / T
 ```
 
-This is the value gained per extra USD/day of budget, reported as `summary.value_per_usd`.
+This is the value gained per extra USD/day of budget at `B` only. `V(B)` is concave and
+piecewise linear, so a finite budget change buys at most `λ*/T` per USD and usually less. The
+plan reports the whole curve as `summary.frontier`: the walk `solve` stops at `B`, run to the
+last upgrade, kept to the vertices a chord cannot skip without falling more than 0.05 quality
+points below it (between kept points the curve sits under both end tangents, so the chord's
+gap is at most `(s_left − s_right) · ΔB / 4`), plus the exact point at `B`.
 The same rule written per session is `argmax_k (a_ik − λ · π_ik)`: a bid-price control with
 one price.
 
@@ -126,7 +131,7 @@ A `Plan` is self-contained JSON with these fields:
   normal as `plan_stale` and requests a re-plan.
 - `size_model` (tagged enum), `long_share`, `token_mix`: the fitted estimators.
 - `policy`: the plan's anchor `{ lam_star, q }`.
-- `summary` (expected spend, value, tier shares, `value_per_usd`) and `diagnostics` (a size
+- `summary` (expected spend, value, tier shares, `frontier`) and `diagnostics` (a size
   model holdout on the last 10 days).
 
 The rules:

@@ -143,6 +143,16 @@ describe("AgentWorkSources", () => {
     expect(
       screen.getByRole("link", { name: "Connect your local agent" }),
     ).toHaveAttribute("href", "/connection");
+    const laptopSteps = screen
+      .getByRole("heading", { level: 3, name: "From your laptop" })
+      .parentElement?.querySelectorAll("ol > li");
+    expect(laptopSteps).toHaveLength(3);
+    expect(laptopSteps?.[1]).toHaveTextContent(
+      "Open MCP Gateways → your gateway → Settings → Agents, then select Agent access → Manual → Add agent (or Agent access → All agents).",
+    );
+    expect(laptopSteps?.[2]).toHaveTextContent(
+      'In your local agent, type "hand this over to Archestra" to start a run with your changes, files, and credentials. Type "bring it back" to get a patch.',
+    );
     // Only this agent's channels, not every channel in the workspace.
     const channels = screen
       .getByRole("heading", { level: 3, name: "In your channels" })
@@ -199,9 +209,7 @@ describe("AgentWorkSources", () => {
         onShowA2a={vi.fn()}
       />,
     );
-    expect(
-      screen.getByText("Runs start once setup above is done."),
-    ).toBeVisible();
+    expect(screen.getByText("Runs start once setup is done.")).toBeVisible();
 
     mockSetupReady(true);
     rerender(
@@ -213,9 +221,35 @@ describe("AgentWorkSources", () => {
         onShowA2a={vi.fn()}
       />,
     );
+    expect(screen.queryByText("Runs start once setup is done.")).toBeNull();
+  });
+
+  it("shows the reader's account under the heading, before the ways to give it work", () => {
+    mockSetupReady(true);
+    render(
+      <AgentWorkSources
+        agentId="a1"
+        hasRuntime
+        runtimeAvailable
+        chatHref="/chat?agentId=a1"
+        onShowA2a={vi.fn()}
+        account={<p>Account</p>}
+      />,
+    );
+    const section = screen.getByRole("region", { name: "Give it work" });
+    const account = within(section).getByText("Account");
+    const heading = within(section).getByRole("heading", {
+      name: "Give it work",
+    });
+    const chat = within(section).getByRole("link", { name: "Open in chat" });
+    // Document order: heading, then the account, then the cards.
     expect(
-      screen.queryByText("Runs start once setup above is done."),
-    ).toBeNull();
+      heading.compareDocumentPosition(account) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      account.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("hides channels from a reader who cannot see them", () => {

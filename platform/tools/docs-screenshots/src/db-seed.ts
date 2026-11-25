@@ -1,8 +1,10 @@
 import { execSync } from "node:child_process";
 import {
   AGENT_PLACEMENT,
+  AUTO_ROUTER,
   CHANNEL_BINDINGS,
   COLLEAGUES,
+  CONNECTIONS,
   DESKTOP_DEVICE,
   KNOWLEDGE_BASE_AGENTS,
   KNOWLEDGE_BASES,
@@ -58,6 +60,8 @@ ON CONFLICT DO NOTHING;`);
   seedYells(state);
   seedLogSession(state);
   seedDesktopDevice(state);
+  seedConnections(state);
+  seedAutoRoutingHistory(state);
 }
 
 /** Rebuild only reserved fixture records so session-head triggers and ownership stay current. */
@@ -169,7 +173,7 @@ INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES (${sq
   );
 }
 
-/** Agent reports on Guardrails → Yells, filed by the colleagues. Agents file them through a tool call; no API creates one. */
+/** Agent reports on Guardrails → Yells, filed by the colleagues. Agents file them through a tool call; no API creates one. Dated from now, since the Logs page reads the last three days. */
 /**
  * The persona's device, linked and online. A device is online while its MCP
  * bridge polls; no bridge runs here, so the last poll is set far ahead and the
@@ -181,19 +185,44 @@ VALUES (${sql(DESKTOP_DEVICE.id)}, ${sql(state.organization.id)}, ${sql(state.us
 ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name, platform = EXCLUDED.platform, last_polled_at = EXCLUDED.last_polled_at, client_version = EXCLUDED.client_version, created_at = EXCLUDED.created_at;`);
 }
 
+/**
+ * Redeemed Connect-page setups: what Adoption counts as connected and what
+ * the Client connections log lists. Coding clients reach the model through the
+ * organization's LLM Proxy, so each setup points at it. Dated from now, since
+ * the Logs page reads the last three days. A rerun resets them.
+ */
+function seedConnections(state: SeedState): void {
+  const organizationId = sql(state.organization.id);
+  runSql(
+    CONNECTIONS.map((connection) => {
+      const disconnected =
+        "disconnectedHoursAgo" in connection
+          ? `now() - make_interval(hours => ${connection.disconnectedHoursAgo})`
+          : "NULL";
+      const redeemedAt = `now() - make_interval(hours => ${connection.hoursAgo})`;
+      return `INSERT INTO connection_setups (id, organization_id, user_id, client_id, platform, base_url, llm_proxy_id, proxy_auth, token_hash, token_start, expires_at, consumed_at, revoked_at, revoked_by_user_id, device_name, created_at)
+VALUES (${sql(connection.id)}, ${organizationId}, ${sql(state.users[connection.user])}, ${sql(connection.client)}, ${sql(connection.platform)}, 'http://localhost:9000/v1',
+  (SELECT id FROM agents WHERE agent_type = 'llm_proxy' AND organization_id = ${organizationId} LIMIT 1), 'provider-key',
+  encode(sha256(${sql(`docs-connection-${connection.id}`)}::bytea), 'hex'), ${sql(`docs-${connection.id.slice(-6)}`)},
+  ${redeemedAt} + interval '10 minutes', ${redeemedAt}, ${disconnected}, ${disconnected === "NULL" ? "NULL" : sql(state.users[connection.user])}, ${sql(connection.device)}, ${redeemedAt} - interval '1 minute')
+ON CONFLICT (id) DO UPDATE SET consumed_at = EXCLUDED.consumed_at, revoked_at = EXCLUDED.revoked_at, revoked_by_user_id = EXCLUDED.revoked_by_user_id, device_name = EXCLUDED.device_name, created_at = EXCLUDED.created_at;`;
+    }).join("\n"),
+  );
+}
+
 function seedYells(state: SeedState): void {
   const organizationId = state.organization.id;
   runSql(
     YELLS.map(
       (yell) => `INSERT INTO openappa_yells (id, organization_id, caller_id, session_id, tool_call_id, message, with_trajectory, superyell, created_at)
-VALUES (${sql(yell.id)}, ${sql(organizationId)}, ${sql(`user:${state.users[yell.user]}`)}, ${sql(`docs-yell-session-${yell.id}`)}, ${sql(`docs-yell-call-${yell.id}`)}, ${sql(yell.message)}, false, ${yell.superyell}, ${FIXTURE_TIME_SQL} - make_interval(mins => ${yell.minutesAgo}))
-ON CONFLICT (id) DO UPDATE SET caller_id = EXCLUDED.caller_id, message = EXCLUDED.message;`,
+VALUES (${sql(yell.id)}, ${sql(organizationId)}, ${sql(`user:${state.users[yell.user]}`)}, ${sql(`docs-yell-session-${yell.id}`)}, ${sql(`docs-yell-call-${yell.id}`)}, ${sql(yell.message)}, false, ${yell.superyell}, now() - make_interval(mins => ${yell.minutesAgo}))
+ON CONFLICT (id) DO UPDATE SET caller_id = EXCLUDED.caller_id, message = EXCLUDED.message, created_at = EXCLUDED.created_at;`,
     ).join("\n"),
   );
 }
 
 /**
- * Thirty fixed calendar days of model requests give Costs & Limits and My Usage
+ * Thirty fixed calendar days of model requests give Costs and My Usage
  * numbers to show. Each stream belongs to one person and one agent or coding client.
  * The rows are tagged with a session prefix, and a rerun replaces them.
  */
@@ -328,9 +357,68 @@ WHERE l.limit_type = 'token_cost' AND (
 GROUP BY l.id, i.model;`);
 }
 
+/**
+ * The sessions the auto router learned from, as the proxy records them before
+ * a first plan: Jev's reading of each session, routed to the normal tier, and
+ * the usage of its requests. Only live traffic and a live Jev create them.
+ * Dated from now, since a fit reads sessions idle for a day within the last
+ * 35 days. A rerun replaces them.
+ */
+function seedAutoRoutingHistory(state: SeedState): void {
+  const { history } = AUTO_ROUTER;
+  if (!state.autoRouters?.[AUTO_ROUTER.name]) return;
+  const routerId = sql(state.autoRouters[AUTO_ROUTER.name]);
+  const scorerVersionId = sql(state.autoRouterScorers[AUTO_ROUTER.name]);
+  let lower = 0;
+  const kinds = history.kinds
+    .map((kind) => {
+      const row = [lower, lower + kind.share, ...kind.tierNeeded, ...kind.requests];
+      lower += kind.share;
+      return `(${row.join(", ")})`;
+    })
+    .join(",\n    ");
+  const between = ([min, max]: readonly [number, number]) => `(${min} + random() * ${max - min})::int`;
+  const { request } = history;
+  const total = "(k.p0 * s.a + k.p1 * s.b + k.p2 * s.c)";
+  runSql(`BEGIN;
+DELETE FROM routing_usage WHERE decision_id IN (SELECT id FROM routing_decisions WHERE router_id = ${routerId} AND session_key LIKE '${ROUTING_SESSION_PREFIX}%');
+DELETE FROM routing_decisions WHERE router_id = ${routerId} AND session_key LIKE '${ROUTING_SESSION_PREFIX}%';
+SELECT setseed(0.17);
+CREATE TEMP TABLE docs_routing_sessions ON COMMIT DROP AS
+SELECT '${ROUTING_SESSION_PREFIX}' || s.n AS session_key, s.created_at,
+  (ARRAY[${history.clients.map(sql).join(", ")}])[1 + s.n % ${history.clients.length}] AS client,
+  k.p0 * s.a / ${total} AS q0, k.p1 * s.b / ${total} AS q1, k.p2 * s.c / ${total} AS q2,
+  (k.min_requests + random() * (k.max_requests - k.min_requests))::int AS requests
+FROM (
+  SELECT n, now() - make_interval(days => 2 + n % ${history.days - 1}, mins => (random() * 1300)::int) AS created_at,
+    random() AS pick, 0.75 + random() * 0.5 AS a, 0.75 + random() * 0.5 AS b, 0.75 + random() * 0.5 AS c
+  FROM generate_series(1, ${history.sessions}) AS n
+) AS s
+JOIN (VALUES
+    ${kinds}
+  ) AS k(lower, upper, p0, p1, p2, min_requests, max_requests) ON s.pick >= k.lower AND s.pick < k.upper;
+INSERT INTO routing_decisions
+  (organization_id, router_id, session_key, tier_index, model_id, propensity, u, reason, scorer_version_id, features, features_schema_version, core_version, created_at)
+SELECT ${sql(state.organization.id)}, ${routerId}, s.session_key, 1,
+  (SELECT model_id FROM auto_routing_tiers WHERE router_id = ${routerId} AND tier = 'normal'), 1, random(), 'cold_start', ${scorerVersionId},
+  jsonb_build_object('client', s.client, 'signals', jsonb_build_object('jev-session',
+    jsonb_build_object('version', ${scorerVersionId}, 'tier_needed', jsonb_build_array(s.q0, s.q1, s.q2), 'p_long', 0.02))),
+  1, (SELECT core_version FROM routing_plans WHERE router_id = ${routerId} ORDER BY created_at DESC LIMIT 1), s.created_at
+FROM docs_routing_sessions AS s;
+INSERT INTO routing_usage (interaction_id, decision_id, created_at, input, cache_read, cache_write, cache_write_1h, output, estimated)
+SELECT gen_random_uuid(), d.id, d.created_at + make_interval(mins => r * 3),
+  ${between(request.input)}, ${between(request.cacheRead)}, 0, 0, ${between(request.output)}, false
+FROM docs_routing_sessions AS s
+JOIN routing_decisions AS d ON d.router_id = ${routerId} AND d.session_key = s.session_key
+CROSS JOIN LATERAL generate_series(1, s.requests) AS r;
+COMMIT;`);
+}
+
 const FIXTURE_TIME_SQL = `TIMESTAMPTZ '${FIXTURE_TIME}'`;
 
 const USAGE_SESSION_PREFIX = "docs-usage-";
+
+const ROUTING_SESSION_PREFIX = "docs-routing-";
 
 // ===
 

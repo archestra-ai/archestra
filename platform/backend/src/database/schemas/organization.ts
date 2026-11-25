@@ -54,6 +54,20 @@ const organizationsTable = pgTable("organization", {
    * admins of an empty, unlicensed instance until submitted once.
    */
   onboardingSurveyCompletedAt: timestamp("onboarding_survey_completed_at"),
+  /**
+   * When an admin finished (or skipped through) the first-run setup dialog:
+   * mailing-list signup and the telemetry choice. Null = not yet, so the
+   * dialog keeps opening for admins of an unlicensed instance. Organizations
+   * that existed before the dialog shipped were backfilled, so only new
+   * installations see it.
+   */
+  firstRunSetupCompletedAt: timestamp("first_run_setup_completed_at"),
+  /**
+   * The admin's telemetry choice. Telemetry leaves the instance only while
+   * this is true and the deployment has not turned it off with
+   * ARCHESTRA_ANALYTICS (see observability/telemetry-preference.ts).
+   */
+  telemetryEnabled: boolean("telemetry_enabled").notNull().default(true),
   theme: text("theme").$type<OrganizationTheme>().notNull().default("caffeine"),
   customFont: text("custom_font")
     .$type<OrganizationCustomFont>()

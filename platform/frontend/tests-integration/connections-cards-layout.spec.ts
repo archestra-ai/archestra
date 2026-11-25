@@ -9,7 +9,27 @@ test.describe("Agent connections layout", () => {
       {
         method: "get",
         url: "/api/connected-clients/adoption",
-        body: { since: now, until: now, members: MEMBERS },
+        body: {
+          since: now,
+          until: now,
+          memberCount: MEMBERS.length,
+          members: MEMBERS,
+        },
+      },
+      {
+        method: "get",
+        url: "/api/connected-clients/adoption/members",
+        body: {
+          data: MEMBERS,
+          pagination: {
+            currentPage: 1,
+            limit: 25,
+            total: MEMBERS.length,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false,
+          },
+        },
       },
       {
         method: "get",

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
+  accountPairToSave,
   excludedSourcesSummary,
   excludedSubagentsSummary,
   getDescriptionPlaceholder,
@@ -163,5 +164,63 @@ describe("All-mode subagent summary", () => {
     expect(excludedSubagentsSummary(2)).toBe(
       "All local agents are subagents, except 2 excluded.",
     );
+  });
+});
+
+describe("accountPairToSave", () => {
+  it("sends the form's own connection and model where the runtime fixes nothing", () => {
+    expect(
+      accountPairToSave({ llmApiKeyId: "key-1", modelId: "m-1", fixed: null }),
+    ).toEqual({ llmApiKeyId: "key-1", modelId: "m-1" });
+    expect(
+      accountPairToSave({ llmApiKeyId: null, modelId: null, fixed: null }),
+    ).toEqual({ llmApiKeyId: null, modelId: null });
+  });
+
+  it("clears a company connection and its model no run uses any more", () => {
+    expect(
+      accountPairToSave({
+        llmApiKeyId: "key-1",
+        modelId: "m-1",
+        fixed: null,
+        companyPairUnused: true,
+      }),
+    ).toEqual({ llmApiKeyId: null, modelId: null });
+  });
+
+  it("sends nothing where the runtime fixes the connection and its model", () => {
+    // Whatever the agent itself holds: its own connection stays stored.
+    expect(
+      accountPairToSave({
+        llmApiKeyId: "key-1",
+        modelId: "m-1",
+        fixed: { modelId: "runtime-model" },
+      }),
+    ).toEqual({});
+    expect(
+      accountPairToSave({
+        llmApiKeyId: null,
+        modelId: null,
+        fixed: { modelId: "runtime-model" },
+      }),
+    ).toEqual({});
+  });
+
+  it("sends only the agent's model on a connection the runtime fixes, set or cleared", () => {
+    expect(
+      accountPairToSave({
+        llmApiKeyId: "key-1",
+        modelId: "picked-model",
+        fixed: { modelId: null },
+      }),
+    ).toEqual({ modelId: "picked-model" });
+    // Left empty, it is each person's to pick.
+    expect(
+      accountPairToSave({
+        llmApiKeyId: "key-1",
+        modelId: null,
+        fixed: { modelId: null },
+      }),
+    ).toEqual({ modelId: null });
   });
 });

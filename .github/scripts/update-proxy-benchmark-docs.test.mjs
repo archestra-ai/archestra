@@ -373,6 +373,27 @@ test("runner resources refresh from each measured host", () => {
   assert.doesNotMatch(updated, /4 vCPU|16 GiB/);
 });
 
+test("a limited run states the backend's own resources instead of the runner's", () => {
+  const f = fixture();
+  f.summary.logicalCpus = 16;
+  f.summary.memoryGiB = 62.8;
+  f.summary.backendCpus = 4;
+  f.summary.backendMemoryGiB = 8;
+  const updated = updateBenchmarkTable(markdown, f.summary, {
+    version: "1.5.0-rc.43",
+  });
+  assert.match(
+    updated,
+    /\nArchestra 1\.5\.0-rc\.43 on 4 logical CPUs, 8 GiB RAM; one worker/,
+  );
+  assert.doesNotMatch(
+    updated.slice(updated.indexOf("mcp-gateway-benchmark-results:start")),
+    /16 vCPU|63 GiB/,
+  );
+  f.summary.backendMemoryGiB = 0;
+  assert.throws(() => updateBenchmarkTable(markdown, f.summary), /Only complete/);
+});
+
 test("diagnostic CPU profiles cannot replace release docs", async () => {
   const f = fixture();
   f.summary.diagnostic = "cpu-profile";
@@ -471,6 +492,46 @@ test("successful release measurement commits exactly one file on the measured pa
     sha: "e".repeat(40),
     force: false,
   });
+});
+
+test("the MCP table names the release version from the release PR title", async () => {
+  for (const [title, version] of [
+    ["chore(main): release platform 1.5.0-rc.42", "1.5.0-rc.42"],
+    ["chore(release/1.4): release platform 1.4.38", "1.4.38"],
+  ]) {
+    const f = fixture();
+    f.context.payload.pull_request.title = title;
+    assert.equal(await commitBenchmarkDocs(f), "updated");
+    assert.match(
+      f.writes[0][1].tree[0].content,
+      new RegExp(
+        `\\nArchestra ${version.replaceAll(".", "\\.")} on 4 vCPU / ~16 GiB RAM; one worker`,
+      ),
+    );
+  }
+
+  const f = validationFixture();
+  f.context.payload.pull_request.title =
+    "chore(main): release platform 1.5.0-rc.42";
+  assert.equal((await verifyBenchmarkDocs(f)).ready, false);
+  f.markdown = updateBenchmarkTable(markdown, f.summary, {
+    version: "1.5.0-rc.42",
+  });
+  assert.equal((await verifyBenchmarkDocs(f)).ready, true);
+
+  for (const title of [
+    undefined,
+    "chore(main): release platform 1.5.0-rc.42 <script>",
+    "chore: release main",
+  ]) {
+    const unnamed = fixture();
+    unnamed.context.payload.pull_request.title = title;
+    assert.equal(await commitBenchmarkDocs(unnamed), "updated");
+    assert.match(
+      unnamed.writes[0][1].tree[0].content,
+      /\n4 vCPU \/ ~16 GiB RAM; one worker/,
+    );
+  }
 });
 
 test("failure, partial data, wrong measured revision, forks, human and ordinary PRs never write", async () => {

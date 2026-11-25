@@ -14,6 +14,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
@@ -329,6 +330,11 @@ async function assertResourceUserAccess(
     throw new ApiError(
       403,
       "Resource user is no longer a member of this organization.",
+    );
+  if (await softDeletedUsers.isSoftDeleted(userId))
+    throw new ApiError(
+      403,
+      "Your account was deactivated in your identity provider",
     );
   await assertResourceAgentAccess(userId, agent);
 }

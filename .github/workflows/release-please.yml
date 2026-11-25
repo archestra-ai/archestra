@@ -423,18 +423,15 @@ jobs:
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
-      id-token: write # Required for Workload Identity Federation.
+      id-token: write # Passed to the image build: Docker Hub OIDC and the CI image attestations.
       attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-agent-catalog-images:
     name: Build and push Agent Catalog images
@@ -446,18 +443,15 @@ jobs:
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable Agent image workflow.
-      id-token: write # Required for Workload Identity Federation.
+      id-token: write # Passed to the image build: Docker Hub OIDC and the CI image attestations.
       attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-p4-shim-docker-image:
     name: Build and push p4 Shim Docker image
@@ -471,18 +465,15 @@ jobs:
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
-      id-token: write # Required for Workload Identity Federation.
+      id-token: write # Passed to the image build: Docker Hub OIDC and the CI image attestations.
       attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-sandbox-base-docker-image:
     name: Build and push Sandbox Base Docker image
@@ -496,18 +487,15 @@ jobs:
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
-      id-token: write # Required for Workload Identity Federation.
+      id-token: write # Passed to the image build: Docker Hub OIDC and the CI image attestations.
       attestations: write # Passed to the image build, which attests CI images.
     with:
       # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
-      push_to_gcr: true
+      push_image: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
       environment: release-publish
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-platform-docker-image:
     name: Build and stage ${{ matrix.image.name }} Docker image
@@ -757,7 +745,7 @@ jobs:
     permissions:
       id-token: write # Sign the build provenance attestation.
       attestations: write # Store the build provenance attestation.
-    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@6a057a74a0b093c79f29e74871de23f7b6712893 # v1.45.2
     with:
       subjects: ${{ needs.release-subjects.outputs.subjects }}
 
@@ -779,7 +767,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@93e1d8fdd1aba31ad2501f134220188ab3083f22 # v1.40.0
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@6a057a74a0b093c79f29e74871de23f7b6712893 # v1.45.2
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -797,10 +785,20 @@ jobs:
       # merge, read from main with the VEX document; each image's benchmark
       # is attested with the waivers it used.
       benchmark-waivers: .github/image-benchmark-waivers.json
+      # Docker signs VEX for each Docker Hardened Images base (dhi.io) these
+      # Dockerfiles pin, read at the release commit; its statements about
+      # package builds an image holds are attested with the image's own.
+      base-images-from: |
+        platform/Dockerfile
+        platform/docker_images/agent/Dockerfile
+        platform/docker_images/mcp_server/Dockerfile
+        platform/docker_images/p4_shim/Dockerfile
+        platform/docker_images/sandbox_base/Dockerfile
       wait: false
     secrets:
       APP_ID: ${{ secrets.APP_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+      DHI_TOKEN: ${{ secrets.DOCKERHUB_DHI_TOKEN }}
 
   publisher-smoke:
     name: Publisher dry run
@@ -825,6 +823,11 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+
+      # The runner's skopeo cannot copy an index whose image has zstd layers
+      # with its digest preserved.
+      - name: Set up skopeo
+        uses: archestra-ai/.github/actions/setup-skopeo@v1.45.0
 
       # Real release digests, already public, staged like a release stages them.
       - name: Stage the published images
@@ -885,7 +888,7 @@ jobs:
     permissions:
       id-token: write # Sign the build provenance attestation.
       attestations: write # Store the build provenance attestation.
-    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@f25ce262a4bbb0a43ee907bcd2b0769829972057 # v1.32.1
+    uses: archestra-ai/.github/.github/workflows/attest-provenance.yml@6a057a74a0b093c79f29e74871de23f7b6712893 # v1.45.2
     with:
       subjects: ${{ needs.publisher-smoke.outputs.subjects }}
 
@@ -898,7 +901,7 @@ jobs:
       id-token: write # sign the image contents attestations (release-publish.yml)
       attestations: write # store them
       packages: read # pull the staged images to scan them
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@93e1d8fdd1aba31ad2501f134220188ab3083f22 # v1.40.0
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@6a057a74a0b093c79f29e74871de23f7b6712893 # v1.45.2
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

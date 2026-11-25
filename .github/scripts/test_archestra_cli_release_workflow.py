@@ -552,6 +552,8 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertFalse("cargo" in sign)
         self.assertTrue("          pattern: archestra-darwin-*\n" in sign)
         self.assertTrue("        run: bash .github/scripts/archestra-cli-sign-macos.sh dist\n" in sign)
+        for name in ("APPLE_TEAM_ID", "APPLE_SIGNING_IDENTIFIER"):
+            self.assertIn(f"{name}: ${{{{ secrets.{name} }}}}", sign)
         for name in MACOS_FILES:
             with self.subTest(name=name):
                 self.assertTrue(f"          name: {name}\n          path: dist/{name}\n" in sign)
@@ -562,8 +564,12 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertEqual(len(windows), 2)
         self.assertTrue("    runs-on: windows-latest\n" in sign)
         self.assertFalse("cargo" in sign)
-        self.assertTrue("          certificate-profile-name: archestra-cli\n" in sign)
-        self.assertTrue("          endpoint: https://neu.codesigning.azure.net/\n" in sign)
+        # The account, profile, endpoint and publisher are secrets, not code.
+        for line in ("endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}",
+                     "signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}",
+                     "certificate-profile-name: ${{ secrets.AZURE_SIGNING_CERTIFICATE_PROFILE }}",
+                     "SIGNING_PUBLISHER: ${{ secrets.AZURE_SIGNING_PUBLISHER }}"):
+            self.assertIn(line, sign)
         self.assertTrue("          timestamp-rfc3161: http://timestamp.acs.microsoft.com\n" in sign)
         for name in windows:
             with self.subTest(name=name):
@@ -604,7 +610,10 @@ class WorkflowPolicyTests(unittest.TestCase):
                 self.assertEqual((Path(directory) / "target/served" / name).read_bytes(), content(name))
 
 SIGN_MACOS = ROOT / ".github/scripts/archestra-cli-sign-macos.sh"
-IDENTITY = "Developer ID Application: Archestra Limited (3WZ64G7AY2)"
+# Test values: the script holds no team ID or certificate name of its own.
+TEAM_ID = "TEAMID0001"
+IDENTIFIER = "test.example.cli"
+IDENTITY_HASH = "0123456789ABCDEF0123456789ABCDEF01234567"
 LOGIN_KEYCHAIN = "/Users/runner/Library/Keychains/login.keychain-db"
 
 
@@ -627,6 +636,7 @@ class SignMacosScriptTests(unittest.TestCase):
                 'printf "security %s\\n" "$*" >> "$CALLS"\n'
                 f'if [ "$*" = "list-keychains -d user" ]; then echo \'    "{LOGIN_KEYCHAIN}"\'; fi\n'
                 'if [ "$1" = import ] && [ "${2##*.}" = p12 ]; then cp "$2" "$CALLS.p12"; fi\n'
+                'if [ "$1" = find-identity ]; then printf "%s" "$FAKE_IDENTITIES"; fi\n'
             ),
             'codesign': 'printf "codesign %s\\n" "$*" >> "$CALLS"\nif [ "$1" = --verify ]; then exit "$FAKE_VERIFY_EXIT"; fi\n',
             "xcrun": (
@@ -649,7 +659,11 @@ class SignMacosScriptTests(unittest.TestCase):
                 "CALLS": str(self.calls), "FAKE_VERIFY_EXIT": "0", "FAKE_NOTARY_EXIT": "0",
                 "FAKE_NOTARY": '{"id": "sub-1", "status": "Accepted", "message": "Processing complete"}',
                 "SIGNING_CERTIFICATE_BASE64": "cDEyIGZpbGU=", "SIGNING_CERTIFICATE_PASSWORD": "p12-password",
-                "APPLE_ID": "dev@example.test", "APPLE_PASSWORD": "abcd-efgh-ijkl-mnop",
+                "APPLE_TEAM_ID": TEAM_ID, "APPLE_SIGNING_IDENTIFIER": IDENTIFIER, "APPLE_ID": "dev@example.test", "APPLE_PASSWORD": "abcd-efgh-ijkl-mnop",
+                "FAKE_IDENTITIES": (
+                    f'  1) {IDENTITY_HASH} "Developer ID Application: Example Ltd ({TEAM_ID})"\n'
+                    "     1 valid identities found\n"
+                ),
             } | env,
         )
         calls = self.calls.read_text().splitlines() if self.calls.exists() else []
@@ -676,13 +690,13 @@ class SignMacosScriptTests(unittest.TestCase):
                 path = f"{self.dist}/{name}"
                 signs = [index for index, call in enumerate(calls) if call.startswith("codesign --force ") and call.endswith(path)]
                 self.assertEqual(len(signs), 1)
-                for option in ("--options runtime", "--timestamp", "--identifier ai.archestra.cli",
-                               f"--keychain {keychain}", f"--sign {IDENTITY}"):
+                for option in ("--options runtime", "--timestamp", f"--identifier {IDENTIFIER}",
+                               f"--keychain {keychain}", f"--sign {IDENTITY_HASH}"):
                     self.assertIn(option, calls[signs[0]])
                 verify = next(call for call in calls if call.startswith("codesign --verify ") and call.endswith(path))
-                self.assertIn('certificate leaf[subject.OU] = "3WZ64G7AY2" and identifier "ai.archestra.cli"', verify)
+                self.assertIn(f'certificate leaf[subject.OU] = "{TEAM_ID}" and identifier "{IDENTIFIER}"', verify)
                 self.assertLess(signs[0], submit)
-        self.assertIn("--apple-id dev@example.test --password abcd-efgh-ijkl-mnop --team-id 3WZ64G7AY2 --wait", calls[submit])
+        self.assertIn(f"--apple-id dev@example.test --password abcd-efgh-ijkl-mnop --team-id {TEAM_ID} --wait", calls[submit])
         # Both files go in the one submission.
         self.assertEqual(Path(f"{self.calls}.zip").read_text().split(), list(MACOS_FILES))
         self.assertIn(f"Signed and notarized: {' '.join(MACOS_FILES)} (submission sub-1)", result.stdout)
@@ -695,6 +709,17 @@ class SignMacosScriptTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"::error::Expected {','.join(MACOS_FILES)}", result.stdout)
                 self.assertEqual(calls, [])
+
+    def test_signs_only_with_exactly_one_identity(self):
+        other = '  2) FEDCBA9876543210FEDCBA9876543210FEDCBA98 "Developer ID Application: Other Ltd (OTHER00001)"\n'
+        for identities in ("     0 valid identities found\n",
+                           f'  1) {IDENTITY_HASH} "Developer ID Application: Example Ltd ({TEAM_ID})"\n' + other):
+            with self.subTest(identities=identities):
+                result, calls = self.sign(FAKE_IDENTITIES=identities)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("::error::Expected one valid Developer ID Application identity", result.stdout)
+                self.assertFalse(any(call.startswith(("codesign ", "xcrun ")) for call in calls))
+                self.assert_cleaned_up(calls)
 
     def test_a_signature_that_fails_the_requirement_is_not_notarized(self):
         result, calls = self.sign(FAKE_VERIFY_EXIT="3")

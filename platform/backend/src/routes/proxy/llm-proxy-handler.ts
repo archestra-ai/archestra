@@ -160,6 +160,7 @@ import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deplo
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
 import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -550,6 +551,7 @@ export async function handleLLMProxy<
   request: FastifyRequest,
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
+  options?: { converseTranslation?: "native" | "unsupported" },
 ): Promise<FastifyReply> {
   const telemetry = getLlmProxyRequestTelemetry({
     request,
@@ -571,6 +573,7 @@ export async function handleLLMProxy<
         reply,
         provider,
         telemetry,
+        converseTranslation: options?.converseTranslation,
       }),
     );
   } catch (error) {
@@ -597,12 +600,14 @@ async function handleObservedLLMProxy<
   reply,
   provider,
   telemetry,
+  converseTranslation,
 }: {
   body: TRequest;
   request: FastifyRequest;
   reply: FastifyReply;
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>;
   telemetry: LlmProxyRequestTelemetry;
+  converseTranslation?: "native" | "unsupported";
 }): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
@@ -1303,6 +1308,18 @@ async function handleObservedLLMProxy<
     personalTokenUserId ??
     regularVirtualKeyUserId;
 
+  // A user the identity provider deactivated (SCIM) keeps their keys and
+  // tokens but cannot use them.
+  if (
+    authenticatedUserId &&
+    (await softDeletedUsers.isSoftDeleted(authenticatedUserId))
+  ) {
+    throw new ApiError(
+      403,
+      "Your account was deactivated in your identity provider",
+    );
+  }
+
   if (
     proof.serviceAccountId &&
     serviceAccountId &&
@@ -1756,8 +1773,12 @@ async function handleObservedLLMProxy<
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
             body: requestAdapter.getOriginalRequest(),
+            // Converse translation requires the pool's request-level
+            // compatibility checks. Keep auto-routing native to Bedrock.
             reachable: (tierProvider) =>
               isPoolableProvider(tierProvider) &&
+              (autoRouteWire !== "bedrock-converse" ||
+                tierProvider === "bedrock") &&
               canReachMember(autoRouteWire, tierProvider),
           })
         : null;
@@ -2660,10 +2681,20 @@ async function handleObservedLLMProxy<
     ) as TRequest;
 
     if (modelPoolPlan && poolWire) {
+      // Bedrock-only pools keep their existing parsed native request path.
+      if (
+        converseTranslation === "unsupported" &&
+        modelPoolPlan.members.some((member) => member.provider !== "bedrock")
+      )
+        throw new ApiError(
+          400,
+          "This model pool cannot serve a Converse request with unrecognized native options without dropping them.",
+        );
       modelPoolPlan.members = await compatiblePoolMembers({
         members: modelPoolPlan.members,
         wire: poolWire,
         request: finalRequest,
+        preserveNativeConverse: converseTranslation === "native",
       });
     }
 

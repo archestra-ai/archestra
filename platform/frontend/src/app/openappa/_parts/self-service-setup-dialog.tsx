@@ -17,7 +17,6 @@ import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
@@ -97,15 +96,6 @@ export function SelfServiceSetupDialog({
   const [folder, setFolder] = useState(directory || DEFAULT_FOLDER);
   const chosen = folder.trim().replace(/^\/+|\/+$/g, "");
   const folderValid = isSelfServiceFolder(chosen);
-  // Whether the App merges each server's rules pull request once its check
-  // passes: on unless unticked here, as in the Git sync setup. The
-  // environment variable, while set, decides instead.
-  const [chosenAutoMerge, setAutoMerge] = useState(true);
-  const autoMergeEnvironment =
-    useAppaGithubSync().data?.selfService?.autoMerge?.environment;
-  const autoMerge = autoMergeEnvironment
-    ? autoMergeEnvironment.value === "enabled"
-    : chosenAutoMerge;
   const grants = useAppaGithubAppGrants(open);
   const ready =
     !!grants.data && missingAppPermissions(grants.data).length === 0;
@@ -211,52 +201,20 @@ export function SelfServiceSetupDialog({
               </p>
             )}
           </div>
-          <div className="flex items-start gap-3">
-            <Checkbox
-              id="self-service-auto-merge"
-              className="mt-0.5"
-              checked={autoMerge}
-              disabled={!!autoMergeEnvironment}
-              onCheckedChange={(checked) => setAutoMerge(checked === true)}
-            />
-            <div className="space-y-1">
-              <Label htmlFor="self-service-auto-merge">
-                Auto-merge pull requests
-              </Label>
-              <FieldDescription>
-                MCP owners can manage their guardrails without GitHub access.
-              </FieldDescription>
-              {autoMergeEnvironment ? (
-                <FieldDescription>
-                  Set with{" "}
-                  <code className="font-mono">
-                    {autoMergeEnvironment.variable}={autoMergeEnvironment.value}
-                  </code>
-                  . Unset the environment variable to choose here.
-                </FieldDescription>
-              ) : null}
-            </div>
-          </div>
         </div>
       ) : null}
       {step === "enable" ? (
         <SetupChecklist
           selfService
-          run={async () => {
-            const turnedOn = await update.mutateAsync({
+          run={() =>
+            // Auto-merge is the repository's setting, chosen in Git sync's
+            // Repository step: turning self-service on leaves it as it is.
+            update.mutateAsync({
               action: "self_service",
               enabled: true,
               directory: alreadyOn ? directory : chosen,
-            });
-            // Auto-merge takes self-service in force, so it follows the
-            // switch. Already on, the saved choice stands: Edit changes it.
-            if (alreadyOn || autoMergeEnvironment || !chosenAutoMerge)
-              return turnedOn;
-            return update.mutateAsync({
-              action: "self_service_auto_merge",
-              enabled: true,
-            });
-          }}
+            })
+          }
           labels={{
             pending: "Turn MCP Guardrails Self-Service on",
             done: "MCP Guardrails Self-Service is on",
@@ -279,7 +237,7 @@ function headerFor(step: Step, appName: string, githubApp: string | null) {
   if (step === "folder")
     return {
       title: "MCP Guardrails Self-Service",
-      description: "Choose the folder and how pull requests merge.",
+      description: "Choose the folder for each MCP server's policy file.",
     };
   return {
     title: "Finish setup",

@@ -26,7 +26,9 @@ vi.mock("@/auth");
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth";
 import db, { schema } from "@/database";
+import { UserModel } from "@/models";
 import ProcessedEmailModel from "@/models/processed-email";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { beforeEach, describe, expect, test } from "@/test";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { AgentRuntime, IncomingEmail } from "@/types";
@@ -1990,6 +1992,71 @@ describe("processIncomingEmail security modes", () => {
       expect.objectContaining({
         message: "Public mode test",
       }),
+    );
+  });
+
+  test("rejects email from a sender the identity provider deactivated, even in public mode", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const user = await makeUser({ email: "deactivated@company.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const agent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "public",
+    });
+    const agentId = agent.id;
+
+    await db
+      .insert(schema.agentTeamsTable)
+      .values({ agentId, teamId: team.id });
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => agentId,
+    } as unknown as OutlookEmailProvider;
+
+    const email = (messageId: string): IncomingEmail => ({
+      messageId,
+      toAddress: `agents+agent-${agentId}@test.com`,
+      fromAddress: "Deactivated@Company.com",
+      subject: "Test",
+      body: "Deactivated sender test",
+      receivedAt: new Date(),
+    });
+
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(user.id);
+    await expect(
+      processIncomingEmail(email("test-deactivated-sender-1"), mockProvider),
+    ).rejects.toThrow(
+      "The sender's account was deactivated in the identity provider",
+    );
+    expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
+
+    await UserModel.setSoftDeleted({ userId: user.id, softDeleted: null });
+    softDeletedUsers.invalidate(user.id);
+    await processIncomingEmail(
+      email("test-deactivated-sender-2"),
+      mockProvider,
+    );
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Deactivated sender test" }),
     );
   });
 

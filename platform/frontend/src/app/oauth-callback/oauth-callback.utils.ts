@@ -112,3 +112,17 @@ export function getOAuthCallbackErrorState(params: {
       "The OAuth provider redirected back without a state value. Start the installation again and retry the sign-in flow.",
   };
 }
+
+/**
+ * The sign-in worked, and connecting the server afterwards did not. `reason`
+ * is the backend's own sentence (a rate limit, no tools, a refused token).
+ */
+export function getInstallFailureErrorState(params: {
+  serverName: string;
+  reason: string;
+}): OAuthCallbackErrorState {
+  return {
+    title: "MCP Server Not Connected",
+    description: `Your sign-in worked, but ${params.serverName} was not connected. ${params.reason}`,
+  };
+}

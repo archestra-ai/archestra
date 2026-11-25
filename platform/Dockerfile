@@ -10,12 +10,6 @@ ARG DAGGER_VERSION=v0.21.11
 ARG DAGGER_COMMIT=631cdb609aaddc0037c2ba713e7642cadf645ff4
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
-# The runtime stage's base: `hardened`, Docker's hardened Node image (the
-# published images; the runtime stage says why), or `public`, the public node
-# image of the same release, for CI jobs without registry credentials
-# (Dependabot pull requests' e2e builds; the merge queue builds the hardened one).
-ARG RUNTIME_BASE=hardened
-
 FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-builder-base
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
@@ -341,9 +335,19 @@ RUN set -eux; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
 # <----- Rust dependency cache ----->
+# Alpine's packaged rustc lags platform/rust-toolchain.toml; take that release from the official musl image.
+FROM rust:1.97.1-alpine3.23@sha256:c4a364ddbf684fe038e6fa6a4f25b30c8dc85247423e0e660676ece0d17be4a2 AS rust-toolchain
+
 FROM base AS rust-builder-base
 WORKDIR /app
-RUN apk add --no-cache build-base cargo rust openssl-dev pkgconf
+RUN apk add --no-cache build-base openssl-dev pkgconf
+COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
+COPY --from=rust-toolchain /usr/local/cargo/bin /usr/local/cargo/bin
+# Cargo's own home stays /root/.cargo, where the registry cache mounts. The
+# unknown-linux-musl targets link statically by default, which drops cdylibs.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    PATH=/usr/local/cargo/bin:$PATH \
+    RUSTFLAGS="-C target-feature=-crt-static"
 # Use the builder's installed OpenSSL for PostgreSQL TLS. Cross-builds outside
 # this image use the vendored musl dependency from openappa-rs instead.
 ENV OPENSSL_NO_VENDOR=1
@@ -372,12 +376,12 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     done && \
     cd archestra-rs && \
     case "${TARGETARCH}" in \
-      amd64) RUST_TARGET=x86_64-alpine-linux-musl ;; \
-      arm64) RUST_TARGET=aarch64-alpine-linux-musl ;; \
+      amd64) RUST_TARGET=x86_64-unknown-linux-musl ;; \
+      arm64) RUST_TARGET=aarch64-unknown-linux-musl ;; \
       *) echo "Unsupported Rust architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
     for package in app_runtime_rs image_rs sandbox_rs openappa_rs router_rs; do \
-      RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --locked \
+      cargo build --release --locked \
         --target "${RUST_TARGET}" -p "${package}"; \
     done
 
@@ -526,19 +530,20 @@ RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 #
 # The base is Docker's hardened Node image (https://docs.docker.com/dhi/),
 # built by Docker from Docker's package builds with its own provenance, SBOM
-# and VEX. Its -dev variant, because the platform needs a shell for its
-# entrypoint and apk for the packages below; each image removes apk at the end.
+# and VEX. Its -dev variant here, for apk and the packages below; the docker
+# run image also needs its shell. The Kubernetes image is the distroless
+# variant with this stage's files copied on (unified-slim).
 # Same Node release and Alpine branch as the builder stages above, so their
 # native addons load here. Pulling it needs a Docker login (`docker login
 # dhi.io`, any Docker account); CI logs in where it builds this file
-# (.github/actions/dhi-login).
-# supply-chain-policy: allow-unverified-image Docker signs its hardened images with a cosign key and
-# publishes their provenance, SBOM and VEX, but the base-image check can't log in to dhi.io or verify a
-# key-based signature yet; this stays until base-images.toml in archestra-ai/.github lists dhi.io.
-FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:abe5e2eb4166f422dea213c4181c1ab069f63bb5d4b4bb0878abba2039fefec6 AS runtime-base-hardened
-FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS runtime-base-public
-# Only the selected base is pulled.
-FROM runtime-base-${RUNTIME_BASE} AS runtime
+# (.github/actions/dhi-login). The organization's base-image check verifies
+# its signature with Docker's signing key (supply-chain-policy/base-images.toml
+# in archestra-ai/.github).
+# The same hardened Node release without the -dev tools: no shell, no apk, only
+# node and its libraries. The Kubernetes image is built on it (unified-slim).
+# Keep its digest on the same Node release as the -dev pin below.
+FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb4c1b88473096ec9c3660345cb54 AS runtime-base-distroless
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:abe5e2eb4166f422dea213c4181c1ab069f63bb5d4b4bb0878abba2039fefec6 AS runtime
 WORKDIR /app
 # The hardened image runs as UID 1000 by default. This stage installs packages,
 # and the full image starts as root (see the archestra user below).
@@ -617,13 +622,11 @@ RUN apk --no-cache upgrade && \
     # Nothing here uses npm, yarn or corepack (pnpm runs only in the builder
     # stages; DB migrations call drizzle-kit directly), and they bring extra
     # dependencies and vulnerabilities. The hardened base installs them as
-    # packages; the public node image (RUNTIME_BASE=public) as files.
+    # packages.
     for package in npm yarn corepack; do \
         if apk info --installed "$package" >/dev/null; then apk del --no-cache "$package"; fi; \
     done && \
-    rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
-           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
-           /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v* /root/.npm /root/.node-gyp && \
+    rm -rf /root/.npm /root/.node-gyp && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \
@@ -681,11 +684,10 @@ VOLUME /app/data
 # self-contained tree from the builder's `pnpm deploy` output (copied below),
 # and the frontend ships as Next's standalone server, so no package manifests
 # or `pnpm install` are needed in this stage.
-COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
-COPY docker/scripts/shutdown-budget.mjs /app/shutdown-budget.mjs
-COPY docker/scripts/start-backend.sh /app/start-backend.sh
-COPY docker/scripts/supervisor.mjs /app/supervisor.mjs
+COPY docker/scripts/docker-banner.mjs docker/scripts/entrypoint.mjs \
+     docker/scripts/shutdown-budget.mjs docker/scripts/start-backend.mjs \
+     docker/scripts/supervisor.mjs docker/scripts/with-vault-env.mjs /app/
 
 
 # Copy the fully-assembled backend from the builder's `pnpm deploy` output.
@@ -731,7 +733,6 @@ COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 COPY --from=builder /app/frontend/.next/static /static-assets-source/
 
 RUN chmod +x /docker-entrypoint.sh
-RUN chmod +x /app/docker-banner.sh /app/start-backend.sh
 
 # Expose ports
 EXPOSE 9000 9050 3000
@@ -746,40 +747,74 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 
 # Nothing at runtime uses apk itself, and a package manager in a running
 # container only helps an intruder. `apk del` removes apk last and keeps its
-# database, so image scanners still list every OS package. Each image below
-# runs it as its last step, after any packages of its own.
+# database, so image scanners still list every OS package. The docker run
+# image below runs it as its last step, after its own packages; the Kubernetes
+# image has no apk to begin with.
 
 # <----- Kubernetes image (archestra/platform:<version>-slim) ----->
 # The Helm chart's default image. The database is external and the cluster is
-# real, so it carries no PostgreSQL and none of the quickstart's tooling; the
+# real, so it carries no PostgreSQL and none of the quickstart's tooling. It is
+# Docker's distroless hardened Node image plus the files the platform runs
+# (docker/scripts/build-slim-rootfs.sh): no shell and no package manager, so a
+# compromised process has neither to work with, and there are far fewer
+# packages to patch. Its entrypoint and scripts are Node (entrypoint.mjs); the
 # entrypoint says which image to use when started without a database URL or
 # with ARCHESTRA_QUICKSTART. CI's Kubernetes e2e jobs build this target.
-FROM runtime AS unified-slim
-RUN apk del --no-cache apk-tools && \
-    test -s /lib/apk/db/installed && \
-    ! test -e /usr/bin/curl && ! test -e /sbin/apk
-# Nothing in this image needs root (no bundled PostgreSQL, no Docker socket),
-# so it runs as the archestra user wherever it starts, not only under the
-# chart's securityContext. Numeric, so Kubernetes can verify runAsNonRoot.
+#
+# Operators run commands with node, which is on PATH:
+#   kubectl exec deploy/archestra-platform -- node /app/backend/dist/standalone-scripts/reset-user-password.mjs --email you@example.com
+FROM runtime AS slim-rootfs
+COPY --from=runtime-base-distroless /lib/apk/db/installed /tmp/base/installed
+COPY --from=runtime-base-distroless /etc/passwd /etc/group /tmp/base/
+COPY docker/scripts/build-slim-rootfs.sh /tmp/build-slim-rootfs.sh
+# scanelf (pax-utils) lists the shared libraries each binary loads.
+RUN apk add --no-cache pax-utils && \
+    ROOTFS=/rootfs BASE=/tmp/base sh /tmp/build-slim-rootfs.sh
+
+FROM runtime-base-distroless AS unified-slim
+ARG VERSION=dev
+COPY --from=slim-rootfs /rootfs/ /
+# The runtime stage's environment, which a new base does not inherit. Keep the
+# two lists equal (.github/scripts/test_platform_dockerfile.py checks it).
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV ARCHESTRA_VERSION=${VERSION}
+ENV ARCHESTRA_INTERNAL_API_BASE_URL="http://127.0.0.1:9000"
+ENV ARCHESTRA_API_BASE_URL=""
+ENV ARCHESTRA_ANALYTICS=""
+ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
+ENV ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING="false"
+ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
+ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
+ENV ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS="620000"
+ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
+ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
+WORKDIR /app
+VOLUME /app/data
+EXPOSE 9000 9050 3000
+# Same probe as the docker run image, without wget.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD ["node", "-e", "fetch('http://127.0.0.1:3000/default-favicon.ico', { signal: AbortSignal.timeout(8000) }).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+# Nothing in this image needs root, so it runs as the archestra user wherever
+# it starts, not only under the chart's securityContext. Numeric, so
+# Kubernetes can verify runAsNonRoot.
 USER 10001
+ENTRYPOINT ["node", "/app/entrypoint.mjs"]
 
 # <----- docker run image (archestra/platform:<version>, default target) ----->
 # The runtime plus the bundled PostgreSQL and the quickstart. This MUST remain
 # the last stage: builds without --target (releases, quickstart CI, fork PRs,
 # local docker build) get the full image.
 FROM runtime AS unified
-# PostgreSQL 18 because postgresql-pgvector is built for it. Contrib carries
-# pg_trgm, which migrations 0116/0378 use for the conversation and user
-# search indexes (they skip the indexes when the extension is missing).
-# su-exec runs it as its own system user.
-#
-# 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
-# CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
-# CVE-2026-6471, CVE-2026-6464) are fixed in 18.5-r0. Same stale-layer hazard as the libcurl
-# floor: a bare `apk upgrade` cannot help a Docker-cached layer, so the explicit floors
-# guarantee the fixed versions.
-RUN apk add --no-cache --upgrade "postgresql18>=18.5-r0" "postgresql18-contrib>=18.5-r0" \
-        postgresql-pgvector su-exec && \
+# Install PostgreSQL 18, pg_trgm (contrib), and pgvector from the hardened
+# Alpine repository used by the Node base. Keep the major version and data
+# directory unchanged so existing quickstart volumes remain readable. Restrict
+# this install to DHI: the public Alpine community pgvector package is older.
+RUN printf '%s\n' 'https://dhi.io/apk/alpine/v3.23/main' > /tmp/dhi-postgres-repositories && \
+    apk --repositories-file /tmp/dhi-postgres-repositories add --no-cache \
+        postgresql18=18.7-r0 postgresql18-contrib=18.7-r0 \
+        pgvector-0-pg18=0.8.7-r1 su-exec=0.3-r0 && \
+    rm /tmp/dhi-postgres-repositories && \
     # The postgres user comes with the package.
     mkdir -p /var/lib/postgresql/data /run/postgresql && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql

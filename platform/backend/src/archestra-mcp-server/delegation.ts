@@ -651,7 +651,7 @@ function reviseHeldReturn(reason: string): string {
 }
 
 const WITHHELD_SUBAGENT_RETURN =
-  "The subagent ended without a final answer that may cross to this session, so its output was withheld. Delegate again with a task it can answer within the declared return.";
+  "The subagent finished without an answer this conversation can use, so nothing was passed on. Delegate again with a narrower task whose answer fits the return you asked for.";
 
 // Shown to the person in the conversation; the caller's model reads the
 // runtime's notice in its place.
@@ -662,7 +662,7 @@ const DEFERRED_SUBAGENT_BRIEF =
   "Guardrails notices you clear while working are not part of your answer: leave them out. Mention a notice only when what it blocked stayed blocked.";
 
 const DEFERRED_RETURN_TARGET_MISMATCH =
-  "This subagent now runs in the background, where this delegation's return cannot be decided. No task was delivered. Delegate again.";
+  "This subagent now runs in the background, so its answer can't be reviewed in this conversation. The task was not sent. Delegate again.";
 
 type ResolvedTarget = { id: string; name: string } | { error: CallToolResult };
 

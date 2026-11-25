@@ -1,3 +1,5 @@
+import { GoogleGenAI } from "@google/genai";
+import { delay, HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/clients/gemini-client", () => ({
@@ -9,12 +11,19 @@ vi.mock("@/clients/gemini-vertex-ai", () => ({
 
 import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
-import { callGeminiEmbedding, GeminiEmbeddingError } from "./gemini";
+import { useMswServer } from "@/test/msw";
+import {
+  callGeminiEmbedding,
+  GeminiEmbeddingError,
+  GeminiPartialEmbeddingError,
+} from "./gemini";
 
 const mockCreateGoogleGenAIClient = vi.mocked(createGoogleGenAIClient);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 
 describe("callGeminiEmbedding", () => {
+  const server = useMswServer();
+
   test("uses Gemini API model IDs outside Vertex AI", async () => {
     mockIsVertexAiEnabled.mockReturnValue(false);
 
@@ -41,29 +50,114 @@ describe("callGeminiEmbedding", () => {
     });
   });
 
-  test("uses Vertex-compatible model IDs in Vertex AI mode", async () => {
+  test("sends separate Vertex embedContent requests for text and image and keeps input order", async () => {
     mockIsVertexAiEnabled.mockReturnValue(true);
+    mockCreateGoogleGenAIClient.mockReturnValue(
+      new GoogleGenAI({
+        vertexai: true,
+        apiKey: "test-key",
+        httpOptions: {
+          baseUrl: "https://vertex.example.test",
+          apiVersion: "v1",
+        },
+      }),
+    );
 
-    const embedContent = vi.fn().mockResolvedValue({
-      embeddings: [{ values: [0.1, 0.2, 0.3] }],
+    const image = { mimeType: "image/png", data: "aW1hZ2U=" };
+    const requests: unknown[] = [];
+    server.use(
+      http.post(
+        "https://vertex.example.test/v1/publishers/google/models/gemini-embedding-2:embedContent",
+        async ({ request }) => {
+          const payload = (await request.json()) as {
+            content: { parts: Array<{ text?: string }> };
+          };
+          requests.push(payload);
+          if (payload.content.parts[0].text === "first") {
+            await delay(40);
+            return HttpResponse.json({ embedding: { values: [0.1, 0.2] } });
+          }
+          return HttpResponse.json({ embedding: { values: [0.3, 0.4] } });
+        },
+      ),
+    );
+
+    const response = await callGeminiEmbedding({
+      inputs: ["first", image],
+      model: "models/gemini-embedding-2",
+      apiKey: "unused",
+      dimensions: 2,
     });
 
+    expect(requests).toHaveLength(2);
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: expect.objectContaining({ parts: [{ text: "first" }] }),
+          outputDimensionality: 2,
+        }),
+        expect.objectContaining({
+          content: expect.objectContaining({ parts: [{ inlineData: image }] }),
+          outputDimensionality: 2,
+        }),
+      ]),
+    );
+    expect(response.data).toEqual([
+      { object: "embedding", embedding: [0.1, 0.2], index: 0 },
+      { object: "embedding", embedding: [0.3, 0.4], index: 1 },
+    ]);
+  });
+
+  test("retains successful vectors and marks bad Vertex embeddings by input index", async () => {
+    mockIsVertexAiEnabled.mockReturnValue(true);
+    const embedContent = vi
+      .fn()
+      .mockResolvedValueOnce({ embeddings: [{ values: [0.1, 0.2] }] })
+      .mockResolvedValueOnce({ embeddings: [{ values: [0.3] }] })
+      .mockRejectedValueOnce({ status: 429, message: "Rate limited" });
+    mockCreateGoogleGenAIClient.mockReturnValue({
+      models: { embedContent },
+    } as never);
+
+    await expect(
+      callGeminiEmbedding({
+        inputs: ["first", "wrong dimension", "rate limited"],
+        model: "gemini-embedding-2",
+        apiKey: "unused",
+        dimensions: 2,
+      }),
+    ).rejects.toMatchObject({
+      name: GeminiPartialEmbeddingError.name,
+      successes: [{ index: 0, embedding: [0.1, 0.2] }],
+      failures: [
+        { index: 1, reason: expect.objectContaining({ status: 500 }) },
+        { index: 2, reason: expect.objectContaining({ status: 429 }) },
+      ],
+    });
+  });
+
+  test("rejects a malformed Vertex vector when retrying only one input", async () => {
+    mockIsVertexAiEnabled.mockReturnValue(true);
     mockCreateGoogleGenAIClient.mockReturnValue({
       models: {
-        embedContent,
+        embedContent: vi
+          .fn()
+          .mockResolvedValue({ embeddings: [{ values: [0.1] }] }),
       },
     } as never);
 
-    await callGeminiEmbedding({
-      inputs: ["first"],
-      model: "models/gemini-embedding-2",
-      apiKey: "test-key",
-    });
-
-    expect(embedContent).toHaveBeenCalledWith({
-      model: "gemini-embedding-2",
-      contents: ["first"],
-      config: undefined,
+    await expect(
+      callGeminiEmbedding({
+        inputs: ["retry"],
+        model: "gemini-embedding-2",
+        apiKey: "unused",
+        dimensions: 2,
+      }),
+    ).rejects.toMatchObject({
+      name: GeminiEmbeddingError.name,
+      status: 500,
+      message:
+        "Gemini embedding response did not include one valid vector for the input",
     });
   });
 

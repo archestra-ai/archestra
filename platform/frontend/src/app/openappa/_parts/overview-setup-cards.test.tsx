@@ -91,8 +91,8 @@ beforeEach(() => {
       enabled: false,
       setting: false,
       directory: "mcp",
-      autoMerge: { enabled: false, setting: false },
     },
+    autoMerge: { enabled: false, setting: false },
   };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>

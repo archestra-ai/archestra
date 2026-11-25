@@ -1,11 +1,11 @@
 "use client";
 
 import {
+  agentCatalogIdForCommand,
   buildCustomAgentRuntime,
   findAgentRuntimeTier,
   getAgentRuntimeAllowedProtocols,
-  isClaudeCodeRuntimeCommand,
-  resolveAgentCatalogId,
+  runtimeSupportsClaudeSubscription,
   summarizeAgentRuntimeTier,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
@@ -86,6 +86,16 @@ export type AgentRuntimeConfig = {
     authentication: "provider" | "subscription";
     model?: string;
   };
+  /**
+   * The model set for each company connection the agent leaves to each
+   * person, by connection id.
+   */
+  connectionModels?: Record<string, string>;
+  /**
+   * The one account every person's runs use: each person's subscription, or
+   * the agent's own key and model. Null leaves each person the choice.
+   */
+  accountLock?: "subscription" | "key" | null;
   ttlHours: number | null;
   maxCostUsd: number | null;
   idleTimeoutMinutes: number | null;
@@ -95,12 +105,22 @@ export function defaultAgentRuntime(): AgentRuntimeConfig {
   return buildCustomAgentRuntime({ image: "" });
 }
 
+/**
+ * Whether people can run this runtime on their own Claude subscription: what
+ * the runtime supports (the shared rule the backend applies), or a custom
+ * image on the Anthropic protocol, which declares Claude Code settings once
+ * someone chooses the subscription for it.
+ */
 export function supportsClaudeCodeSubscription(
-  runtime: Pick<AgentRuntimeConfig, "command"> | null | undefined,
+  runtime:
+    | Pick<AgentRuntimeConfig, "command" | "claudeCode" | "inferenceProtocol">
+    | null
+    | undefined,
 ): boolean {
-  return isClaudeCodeRuntimeCommand(runtime?.command?.[0]);
+  return isClaudeCodeRuntimeConfig(runtime);
 }
 
+/** Whether a runtime runs Claude Code, or is a custom image that may declare it. */
 export function isClaudeCodeRuntimeConfig(
   runtime:
     | Pick<AgentRuntimeConfig, "command" | "claudeCode" | "inferenceProtocol">
@@ -108,11 +128,10 @@ export function isClaudeCodeRuntimeConfig(
     | undefined,
 ): boolean {
   if (!runtime) return false;
-  const catalogId = resolveAgentCatalogId(runtime);
-  if (catalogId === "claude-code") return true;
-  if (catalogId !== null) return false;
+  if (runtimeSupportsClaudeSubscription(runtime)) return true;
   return (
-    Boolean(runtime.claudeCode) || runtime.inferenceProtocol === "anthropic"
+    !agentCatalogIdForCommand(runtime.command?.[0]) &&
+    runtime.inferenceProtocol === "anthropic"
   );
 }
 
@@ -120,11 +139,17 @@ export function AgentRuntimeFields({
   value,
   onChange,
   locked = false,
+  keepsRuntime = false,
 }: {
   value: AgentRuntimeConfig | null;
   onChange: (value: AgentRuntimeConfig | null) => void;
   /** Its Agent Runtime sets the container and limits: shown read-only. */
   locked?: boolean;
+  /**
+   * The agent was saved with a dedicated runtime and keeps it: the switch
+   * cannot turn it into a regular chat agent.
+   */
+  keepsRuntime?: boolean;
 }) {
   const enabledId = useId();
   const credentialsHref = useCredentialsPageHref();
@@ -144,7 +169,10 @@ export function AgentRuntimeFields({
               aria-label="Dedicated Agent runtime"
               className="mt-0.5 shrink-0"
               checked={value !== null}
-              disabled={runtimeEnabled !== true && value === null}
+              disabled={
+                (runtimeEnabled !== true && value === null) ||
+                (keepsRuntime && value !== null)
+              }
               onCheckedChange={(checked) =>
                 onChange(checked ? defaultAgentRuntime() : null)
               }
@@ -157,8 +185,12 @@ export function AgentRuntimeFields({
                 {runtimeEnabled === false
                   ? value === null
                     ? "Unavailable: this cluster does not have the Agent Sandbox controller installed."
-                    : "Agent Runtime is off on this deployment, so runs fail. Turn this off to answer in regular conversations instead."
-                  : "Selecting this agent in Chat starts a run in the container instead of a foreground conversation."}
+                    : keepsRuntime
+                      ? "Agent Runtime is off on this deployment, so runs fail until it is on again."
+                      : "Agent Runtime is off on this deployment, so runs fail. Turn this off to answer in regular conversations instead."
+                  : keepsRuntime && value !== null
+                    ? "Selecting this agent in Chat starts a run in its container. It keeps its runtime: to answer in regular conversations, create another agent."
+                    : "Selecting this agent in Chat starts a run in the container instead of a foreground conversation."}
               </FieldDescription>
             </div>
           </div>
@@ -234,20 +266,55 @@ export function AgentRuntimeFields({
  * Says which Agent Runtime sets the settings shown read-only: the reader may
  * use it but not configure it.
  */
-export function RuntimeSettingsNotice({ name }: { name: string }) {
+export function RuntimeSettingsNotice({
+  name,
+  accountsLeftToAgent = false,
+  fixes = null,
+}: {
+  name: string;
+  /**
+   * The runtime names no account, so the agent's accounts are its own to
+   * choose and need no `configure` on the runtime.
+   */
+  accountsLeftToAgent?: boolean;
+  /** What the runtime fixes of the agent's company account, if anything. */
+  fixes?: "connection" | "connection-and-model" | null;
+}) {
+  // Only what this runtime sets is named as its to change.
+  const set = [
+    "launch command",
+    "protocol",
+    "follow-up delivery",
+    "limits",
+    "tiers",
+    ...(accountsLeftToAgent ? [] : ["accounts"]),
+    ...(fixes ? ["connection"] : []),
+    ...(fixes === "connection-and-model" ? ["model"] : []),
+  ];
+  const own = [
+    "Environment",
+    "credentials",
+    "ports",
+    ...(accountsLeftToAgent ? ["accounts"] : []),
+  ];
   return (
     <InlineNotice variant="info">
       <LockKeyhole className="size-4 shrink-0" />
       <InlineNoticeBody>
         <span className="font-medium">Set by the {name} runtime</span>
         <InlineNoticeText>
-          Changing its launch command, protocol, follow-up delivery, limits,
-          tiers or Claude account needs <code>agentRuntime:configure</code> on
-          it. Environment, credentials and ports stay this agent's own.
+          <span>{`Changing its ${listed(set, "or")} needs `}</span>
+          <code>agentRuntime:configure</code>
+          <span>{` on it. ${listed(own, "and")} stay this agent's own.`}</span>
         </InlineNoticeText>
       </InlineNoticeBody>
     </InlineNotice>
   );
+}
+
+/** "a, b and c", with the last two joined by `word`. */
+function listed(items: string[], word: "and" | "or"): string {
+  return `${items.slice(0, -1).join(", ")} ${word} ${items.at(-1)}`;
 }
 
 type RuntimeSectionProps = {

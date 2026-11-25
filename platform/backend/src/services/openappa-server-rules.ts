@@ -5,6 +5,7 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -22,6 +23,7 @@ import {
   includedFileErrors,
   includesServerRules,
   includesServerRulesFolder,
+  isPolicyChangeBranch,
   isServerRulesBranch,
   parsePolicyToml,
   repositoryIncludePaths,
@@ -48,12 +50,14 @@ import {
   resolveOpenAppaGithubAccess,
 } from "@/services/openappa-github-access";
 import {
+  autoMergeActive,
   checkAppaPullRequestsSoon,
   checkIntegrationId,
   getAppaSelfService,
   heldMergeReason,
   listedNames,
   mergeReadiness,
+  mergeReadyPullRequestsSoon,
   mergeRefusalOf,
   ownersAsNamedFor,
   ownersNotEditable,
@@ -62,7 +66,6 @@ import {
   rulesFileRefusal,
   rulesFileServers,
   selfServiceActive,
-  selfServiceAutoMergeActive,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { withOpenAppaLease } from "@/services/openappa-leases";
@@ -221,7 +224,7 @@ export async function previewServerRulesChange(
   },
 ) {
   const change = await checkedChange(params);
-  const autoMerge = selfServiceAutoMergeActive(change.source);
+  const autoMerge = autoMergeActive(change.source);
   return {
     stage: "preview" as const,
     // A server's rules always change through a pull request.
@@ -285,7 +288,7 @@ export async function proposeServerRulesChange(
   });
   // Under auto-merge it is checked and merged now, not at the next minute's
   // round of checks.
-  if (selfServiceAutoMergeActive(change.source))
+  if (autoMergeActive(change.source))
     void checkAppaPullRequestsSoon(params.organizationId);
   return {
     stage: "proposed" as const,
@@ -293,10 +296,216 @@ export async function proposeServerRulesChange(
     ...opened,
     repo: change.source.repo,
     ...change.view,
-    autoMerge: selfServiceAutoMergeActive(change.source),
-    instruction: selfServiceAutoMergeActive(change.source)
-      ? `Give the user the link. The pull request merges by itself once its ${POLICY_CHECK_NAME} check and the repository's other checks pass; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_server_rules_change_status with this number, wait=true and the last phase as since, tell the user each change in one short sentence, and keep calling until done is true. Then say whether the rules are active, or what went wrong and what to do.`
+    autoMerge: autoMergeActive(change.source),
+    instruction: autoMergeActive(change.source)
+      ? `Give the user the link. The pull request merges by itself once its ${POLICY_CHECK_NAME} check and the repository's other checks pass; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_server_rules_change_status with this number and wait=true; on each later call also pass the phase the last call returned as since. Tell the user each change in one short sentence, and keep calling until done is true. Then say whether the rules are active, or what went wrong and what to do.`
       : `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
+  };
+}
+
+/**
+ * Check attaching or detaching one bundled battery for one MCP server, and
+ * for more servers in the same change when `others` names them: the policy
+ * file's diff, validated as Git sync will compose it after the merge. It
+ * takes edit access in the MCP registry to every server named, as their
+ * rules do, not a Guardrails permission. This saves and opens nothing.
+ */
+export async function previewServerBatteryChange(
+  params: Caller & ServerBatteryChange,
+) {
+  const change = await checkedBatteryChange(params);
+  const autoMerge = autoMergeActive(change.source);
+  return {
+    stage: "preview" as const,
+    delivery: "pull_request" as const,
+    ...change.view,
+    autoMerge,
+    instruction: !change.view.valid
+      ? "The change does not validate; tell the user why, from errors, and stop."
+      : `If this is the change the user asked for, say in one sentence what it does to agents, then call propose_guardrails_server_rules_change now with the same battery and expectedCommit and a plain summary. The user is shown this preview's diff and asked to approve that call before it runs, so do not ask them in text as well. ${autoMerge ? "Auto-merge is on: once approved, the pull request merges by itself when its checks pass." : "Once approved, the pull request opens for the user to merge."}`,
+  };
+}
+
+/**
+ * Open one pull request that attaches or detaches one battery for one MCP
+ * server, and for the other servers the change names.
+ */
+export async function proposeServerBatteryChange(
+  params: Caller & ServerBatteryChange & { summary: string },
+) {
+  const change = await checkedBatteryChange(params);
+  if (!change.view.valid)
+    throw new ApiError(400, change.view.errors.join("\n"));
+  const requester = await UserModel.getById(params.userId);
+  const [first] = change.servers;
+  const names = listedNames(change.servers.map(({ server }) => server.name));
+  const title =
+    change.servers.length > 1
+      ? `Change which servers the ${params.battery} battery governs`
+      : `${first.change === "attach" ? "Attach" : "Detach"} the ${params.battery} battery ${first.change === "attach" ? "to" : "from"} ${first.server.name}`;
+  // Each owning server once, however many of the named servers share it.
+  const owners = [
+    ...new Map(
+      change.servers
+        .flatMap(({ server }) => server.owners)
+        .map((owner) => [owner.id, owner] as const),
+    ).values(),
+  ];
+  const body = [
+    params.summary.trim(),
+    "",
+    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit ${await ownersAsNamedFor({ organizationId: params.organizationId, userId: params.userId, servers: owners })} in the MCP registry.`,
+    `This changes \`${change.source.path}\` only in which batteries govern the tools of ${names}. It applies once merged and pulled by Git sync.`,
+  ].join("\n");
+  // A server's branch: the policy check holds the change to the servers the
+  // requester may edit, every one it touches, and auto-merge takes it as it
+  // takes their rules.
+  const head = serverRulesBranch(first.server.prefix, randomUUID().slice(0, 8));
+  const opened = await openGithubPull({
+    source: change.source,
+    title,
+    message: requester ? withRequester(title, requester.email) : title,
+    body,
+    files: [{ path: change.source.path, content: change.after }],
+    head,
+  });
+  const autoMerge = autoMergeActive(change.source);
+  if (autoMerge) void checkAppaPullRequestsSoon(params.organizationId);
+  return {
+    stage: "proposed" as const,
+    delivery: "pull_request" as const,
+    ...opened,
+    repo: change.source.repo,
+    ...change.view,
+    autoMerge,
+    instruction: autoMerge
+      ? `Give the user the link. The pull request merges by itself once its ${POLICY_CHECK_NAME} check and the repository's other checks pass; nobody needs to merge it, and Git sync then applies it. Follow it now: call get_guardrails_server_rules_change_status with this server's mcpServerId, this number and wait=true; on each later call also pass the phase the last call returned as since. Tell the user each change in one short sentence, and keep calling until done is true. Then say whether the battery is in force, or what went wrong and what to do.`
+      : `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
+  };
+}
+
+type BatteryStep = "attach" | "detach";
+
+type ServerBatteryChange = {
+  catalogId: string;
+  battery: string;
+  change: BatteryStep;
+  /** More servers the same pull request attaches the battery to, or detaches it from. */
+  others?: { catalogId: string; change: BatteryStep }[];
+  expectedCommit: string;
+};
+
+/** The servers, the policy file before and after the battery change, and its check. */
+async function checkedBatteryChange(params: Caller & ServerBatteryChange) {
+  const source = await requireSource(params.organizationId);
+  const steps = [
+    { catalogId: params.catalogId, change: params.change },
+    ...(params.others ?? []),
+  ];
+  if (new Set(steps.map((step) => step.catalogId)).size !== steps.length)
+    throw new ApiError(400, "Name each MCP server once in a battery change.");
+  const folder = serverRulesFolderOf(source);
+  const servers: {
+    server: Awaited<ReturnType<typeof serverFor>>;
+    change: BatteryStep;
+  }[] = [];
+  for (const step of steps) {
+    const server = await serverFor(
+      { ...params, catalogId: step.catalogId },
+      folder,
+    );
+    if (!server.canEdit)
+      throw new ApiError(
+        403,
+        `You may change ${server.name}'s batteries only if you may edit ${server.needs(unseenServers("you"))} in the MCP registry`,
+      );
+    servers.push({ server, change: step.change });
+  }
+  if (source.sourceCommit !== params.expectedCommit)
+    throw new ApiError(
+      409,
+      "The policy repository moved on since it was read. Read the server's rules again.",
+    );
+  const root = await guardrailsPolicyService.get(params.organizationId);
+  // Each step edits what the one before left, so the pull request carries
+  // them all as one change to the file.
+  let after = root.content;
+  for (const { server, change } of servers)
+    after = await openappaBatteriesService.serverChangeContent({
+      organizationId: params.organizationId,
+      content: after,
+      batteryName: params.battery,
+      catalogId: server.id,
+      change,
+    });
+  const validation = await guardrailsPolicyService.validate(after, {
+    organizationId: params.organizationId,
+    previous: root.content,
+  });
+  const [first, ...others] = servers;
+  const diff = policyDiff({ before: root.content, after, path: source.path });
+  // A server's editor needs no permission to read the organization's policy:
+  // without it they see only the lines the change touches, with their
+  // context, and the rest of the file stays blank.
+  const shown = (await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "guardrailsPolicy",
+    "read",
+  ))
+    ? { before: root.content, after }
+    : changedLinesOnly({ before: root.content, after, diff: diff.diff });
+  return {
+    servers: servers as [(typeof servers)[number], ...typeof servers],
+    source,
+    after,
+    view: {
+      mcpServer: { id: first.server.id, name: first.server.name },
+      battery: params.battery,
+      change: first.change,
+      ...(others.length > 0
+        ? {
+            others: others.map(({ server, change }) => ({
+              mcpServer: { id: server.id, name: server.name },
+              change,
+            })),
+          }
+        : {}),
+      path: source.path,
+      before: shown.before,
+      after: shown.after,
+      ...diff,
+      ...validation,
+    },
+  };
+}
+
+/**
+ * Both texts with every line outside the diff's hunks blanked: the change
+ * and its context keep their line numbers, and nothing else is shown.
+ */
+function changedLinesOnly(params: {
+  before: string;
+  after: string;
+  diff: string;
+}): { before: string; after: string } {
+  const kept = { before: new Set<number>(), after: new Set<number>() };
+  for (const [, oldStart, oldCount, newStart, newCount] of params.diff.matchAll(
+    /^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/gm,
+  )) {
+    for (let line = 0; line < Number(oldCount); line++)
+      kept.before.add(Number(oldStart) + line);
+    for (let line = 0; line < Number(newCount); line++)
+      kept.after.add(Number(newStart) + line);
+  }
+  const blank = (text: string, lines: Set<number>) =>
+    text
+      .split("\n")
+      .map((line, index) => (lines.has(index + 1) ? line : ""))
+      .join("\n");
+  return {
+    before: blank(params.before, kept.before),
+    after: blank(params.after, kept.after),
   };
 }
 
@@ -437,8 +646,87 @@ export async function getServerRulesChangeStatus(
     pollMs?: number;
   },
 ) {
-  let source = await requireSource(params.organizationId);
+  const source = await requireSource(params.organizationId);
   const server = await serverFor(params, serverRulesFolderOf(source));
+  return followChangeStatus({
+    ...params,
+    source,
+    ours: (ref) => isServerRulesBranch(ref, server.prefix),
+    notOurs: "No rules change for this server has that number",
+    reread: () => requireSource(params.organizationId),
+  });
+}
+
+/**
+ * Where a policy or validation pull request the APPA Keeper or Settings
+ * opened stands, phase by phase, as a server's rules change is followed; null
+ * when the source is not a GitHub App source that syncs, whose pull requests
+ * carry no policy check to follow, and for a pull request on another branch
+ * Archestra opens (setup, self-service, template files), which the plain
+ * status reports.
+ */
+export async function followPolicyChangeStatus(params: {
+  organizationId: string;
+  userId: string;
+  number: number;
+  wait?: boolean;
+  since?: ChangePhase;
+}) {
+  const source = await appSource(params.organizationId);
+  if (!source) return null;
+  // As the plain status: the pull request is read through the credential.
+  if (
+    !(await userHasPermission(
+      params.userId,
+      params.organizationId,
+      "credential",
+      "read",
+    ))
+  )
+    throw new ApiError(403, "GitHub credential read permission is required");
+  try {
+    return await followChangeStatus({
+      ...params,
+      source,
+      ours: isPolicyChangeBranch,
+      notOurs: NOT_A_POLICY_CHANGE,
+      reread: async () => (await appSource(params.organizationId)) ?? source,
+    });
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.statusCode === 404 &&
+      error.message === NOT_A_POLICY_CHANGE
+    )
+      return null;
+    throw error;
+  }
+}
+
+const NOT_A_POLICY_CHANGE = "OpenAPPA policy pull request not found";
+
+/**
+ * Where a pull request Archestra opened for a change stands, from opened to
+ * applied, for the APPA Keeper to follow: a server's rules (by its tool
+ * prefix) or a policy change. With `wait`, it returns as soon as the phase
+ * moves on from `since`, settles, or the wait is over.
+ */
+export async function followChangeStatus(params: {
+  organizationId: string;
+  number: number;
+  source: Source;
+  /** Whether the pull request's head branch is one this follow may read. */
+  ours: (ref: string) => boolean;
+  /** The refusal for a pull request on another branch. */
+  notOurs: string;
+  /** The source again, read anew on each look of a wait. */
+  reread: () => Promise<Source>;
+  wait?: boolean;
+  since?: ChangePhase;
+  waitMs?: number;
+  pollMs?: number;
+}) {
+  let source = params.source;
   // The check posted on the head is read too, which takes Checks.
   const { token, api } = await githubWriter(source, { checks: "read" });
   const base = `${api}/repos/${source.repo}`;
@@ -450,15 +738,17 @@ export async function getServerRulesChangeStatus(
   let last: Awaited<ReturnType<typeof readChangeStatus>> | undefined;
   for (let read = 0; ; read += 1) {
     // Git sync may have applied the merge since the last look.
-    if (read > 0) source = await requireSource(params.organizationId);
+    if (read > 0) source = await params.reread();
     // No look starts once the wait is over: the last one's answer stands.
     if (last && Date.now() >= deadline) return last;
     let status: Awaited<ReturnType<typeof readChangeStatus>>;
     try {
       status = await readChangeStatus({
-        ...params,
+        organizationId: params.organizationId,
+        number: params.number,
+        ours: params.ours,
+        notOurs: params.notOurs,
         source,
-        prefix: server.prefix,
         token,
         base,
         appId,
@@ -505,7 +795,8 @@ async function readChangeStatus(params: {
   organizationId: string;
   number: number;
   source: Source;
-  prefix: string;
+  ours: (ref: string) => boolean;
+  notOurs: string;
   token: string;
   base: string;
   appId: number | undefined;
@@ -530,10 +821,10 @@ async function readChangeStatus(params: {
     created_at?: string;
     head?: { ref?: string; sha?: string };
   }>({ token, url: `${base}/pulls/${params.number}`, signal });
-  if (!isServerRulesBranch(pull.head?.ref ?? "", params.prefix))
-    throw new ApiError(404, "No rules change for this server has that number");
+  if (!params.ours(pull.head?.ref ?? ""))
+    throw new ApiError(404, params.notOurs);
   const merged = pull.merged === true && !!pull.merge_commit_sha;
-  const autoMerge = selfServiceAutoMergeActive(source);
+  const autoMerge = autoMergeActive(source);
   const answer = (phase: ChangePhase, extra: StatusExtra = {}) => ({
     number: pull.number,
     url: pull.html_url,
@@ -696,7 +987,30 @@ async function readChangeStatus(params: {
         at: new Date().toISOString(),
       },
     });
+  // Every check passed and nothing holds it: the App merges it now rather
+  // than at the minute's round, and the next look finds it merged. The look
+  // waits for that round only as long as its own time allows: the round
+  // checks every pull request of the repository and can take longer.
+  await settledWithin(
+    mergeReadyPullRequestsSoon(params.organizationId),
+    Math.min(MERGE_ROUND_WAIT, (params.deadline ?? Infinity) - Date.now()),
+  );
   return answer("merge_pending", { check });
+}
+
+/** The longest a status look waits for the merge round it starts. */
+const MERGE_ROUND_WAIT = 10_000;
+
+/** Wait for the work, or for the time given, whichever ends first. */
+async function settledWithin(work: Promise<unknown>, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    work,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, Math.max(0, ms));
+    }),
+  ]);
+  clearTimeout(timer);
 }
 
 /** How long a first refused merge stands for the retry the next minute brings. */
@@ -1641,7 +1955,32 @@ async function requireSource(organizationId: string) {
   };
 }
 
-type Source = Awaited<ReturnType<typeof requireSource>>;
+/**
+ * A GitHub App source that syncs and has an accepted commit, with
+ * self-service or without: the one whose pull requests the App checks and
+ * merges. Null otherwise.
+ */
+async function appSource(organizationId: string): Promise<Source | null> {
+  const source = await OpenAppaGithubSyncModel.find(organizationId);
+  if (
+    !source?.interval ||
+    !source.repo ||
+    !source.path ||
+    !source.sourceCommit ||
+    !source.githubAppConfigId
+  )
+    return null;
+  return {
+    ...source,
+    repo: source.repo,
+    path: source.path,
+    sourceCommit: source.sourceCommit,
+  };
+}
+
+type Source = NonNullable<
+  Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
+> & { repo: string; path: string; sourceCommit: string };
 type ChangedFile = { path: string; content: string };
 
 /**

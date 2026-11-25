@@ -11,6 +11,7 @@ import {
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { RuntimeCredentialConnectionModel } from "@/models";
+import { makeKeyWithModel } from "@/routes/agent-runtime/agent-runtime-account.test-helpers";
 import {
   preflightAgentRuntimeCredentials,
   resolveAgentRuntimeCredentials,
@@ -446,6 +447,13 @@ test("a connection made with a replaced GitHub App withholds the stale token wit
       authorId: user.id,
       agentType: "agent",
       runtime: { ...baseRuntimeConfig, credentials: [requiredCredential] },
+    });
+    // A model connection for the runs themselves: only the credential
+    // decides whether they are ready.
+    await makeKeyWithModel({
+      organizationId,
+      provider: "openai",
+      modelId: "gpt-5.4",
     });
     const optionalHttpPreflight = await app.inject({
       method: "GET",

@@ -5,6 +5,7 @@ import {
   type AgentRuntimeCrossingRefusalReason,
   reportAgentRuntimeCrossingRefusal,
 } from "@/observability/metrics/agent-runtime";
+import { isOpenappaFailure } from "@/openappa/failure";
 import type { OpenAppaSession } from "@/openappa/service";
 import {
   addressRuntimeChild,
@@ -44,12 +45,19 @@ export type RuntimeCrossing = {
 /**
  * A refusal the caller is meant to read. Tool handlers surface it verbatim
  * through `crossingRefusal`; HTTP routes answer it as a conflict rather than
- * an internal error, because nothing on the server went wrong.
+ * an internal error, because nothing on the server went wrong. One that
+ * carries a classified OpenAPPA failure answers with that failure's status
+ * and retry headers instead.
  */
 class RuntimeCrossingRefusal extends ApiError {
-  constructor(message: string) {
-    super(409, message);
+  constructor(message: string, failure?: ApiError) {
+    super(failure?.statusCode ?? 409, message);
     this.name = "RuntimeCrossingRefusal";
+    if (failure) {
+      this.shouldRetry = failure.shouldRetry;
+      this.retryAfterSeconds = failure.retryAfterSeconds;
+      this.cause = failure;
+    }
   }
 }
 
@@ -164,6 +172,11 @@ export function crossingRefusal(error: unknown): string | undefined {
   return error instanceof RuntimeCrossingRefusal ? error.message : undefined;
 }
 
+/** A refusal whose OpenAPPA failure says a new attempt can succeed. */
+export function isTransientCrossingRefusal(error: unknown): boolean {
+  return error instanceof RuntimeCrossingRefusal && error.shouldRetry === true;
+}
+
 /** Binds a new same-family child. Refusal throws before any process starts. */
 export async function bindRuntimeChild(params: {
   crossing: RuntimeCrossing;
@@ -221,14 +234,19 @@ export async function bindRuntimeChild(params: {
       return undefined;
     if (error instanceof RuntimeCrossingRefusal) throw error;
     if (error instanceof ApiError) {
+      // A classified failure keeps its text, status and retry headers. It
+      // stays a crossing refusal, so a launch stops instead of binding again.
+      const classified = isOpenappaFailure(error) ? error : undefined;
       throw new RuntimeCrossingRefusal(
         reportCrossingRefusal({
           reason: "unbindable",
           message:
+            classified?.message ??
             "The protected runtime could not be bound. No input was delivered; inspect the guardrail decision before requesting a new launch.",
           workspaceId: params.workspaceId,
           parentSessionId: params.crossing.source.session_id,
         }),
+        classified,
       );
     }
     throw error;

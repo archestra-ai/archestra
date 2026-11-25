@@ -44,7 +44,8 @@ describe("AgentSetupBanner", () => {
         showReady
       />,
     );
-    expect(screen.getByText("Before it runs")).toBeVisible();
+    expect(screen.getByText("Connect your Claude account")).toBeVisible();
+    expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
   });
 

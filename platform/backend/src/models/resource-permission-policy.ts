@@ -852,6 +852,8 @@ export default class ResourcePermissionPolicyModel {
     userId: string;
     /** The caller's subjects, e.g. from `resolvePrincipal(s)`. */
     subjects: PermissionSubject[];
+    /** Intrinsically organization-visible rows, still subject to read authorization. */
+    intrinsicOrgAudience?: SQL;
     relations?: ResourceAccessRelation[];
     sharedWith?: PermissionSubject[];
     ownerIds?: string[];
@@ -1535,6 +1537,7 @@ function relationCondition(params: {
   ownerColumn: SQLWrapper;
   userId: string;
   subjects: PermissionSubject[];
+  intrinsicOrgAudience?: SQL;
   relations?: ResourceAccessRelation[];
 }): SQL<boolean> | undefined {
   const selected = new Set(params.relations ?? RESOURCE_ACCESS_RELATIONS);
@@ -1546,10 +1549,13 @@ function relationCondition(params: {
 
   const mine = sql<boolean>`coalesce(${params.ownerColumn}::text = ${params.userId}, false)`;
   const shared = sharedWithCallerCondition(params);
-  const org = ResourcePermissionPolicyModel.audienceIs({
+  const grantedOrg = ResourcePermissionPolicyModel.audienceIs({
     ...params,
     audience: "org",
   });
+  const org = params.intrinsicOrgAudience
+    ? sql<boolean>`(${grantedOrg} OR ${params.intrinsicOrgAudience})`
+    : grantedOrg;
   const byRelation: Record<ResourceAccessRelation, SQL<boolean>> = {
     mine,
     shared,

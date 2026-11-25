@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Github, KeyRound, Lock, Play, X } from "lucide-react";
+import { Check, Github, KeyRound, Lock, X } from "lucide-react";
 import {
   type ReactNode,
   type RefObject,
@@ -28,8 +28,7 @@ export interface AgentSetupItem {
 }
 
 /**
- * What a saved agent still needs before it can run: a segmented track (one
- * segment per requirement, ending at Run) over a compact grid of
+ * What a saved agent still needs before it can run: a compact grid of
  * requirements, each with the one action that settles it. Rows resolved while
  * the page is open stay, ticked, so the reader sees progress rather than rows
  * vanishing under them. Two grid rows show at most; the rest sit behind
@@ -140,47 +139,7 @@ export function AgentSetupBanner({
   const shown = collapsed ? ordered.slice(0, cap - 1) : ordered;
 
   return (
-    <output
-      aria-live="polite"
-      aria-label="Agent setup"
-      className="block space-y-2"
-    >
-      <div className="flex items-center gap-3">
-        <p className="shrink-0 text-xs font-medium text-muted-foreground">
-          <span>Before it runs</span>
-          <span className="ml-1.5 tabular-nums text-foreground">
-            {`${doneCount}/${visibleItems.length}`}
-          </span>
-        </p>
-        <div
-          role="progressbar"
-          aria-label="Setup done"
-          aria-valuemin={0}
-          aria-valuemax={visibleItems.length}
-          aria-valuenow={doneCount}
-          className="flex h-1 min-w-0 flex-1 items-center gap-0.5"
-        >
-          {ordered.map((item, index) => (
-            <span
-              key={item.id}
-              className={cn(
-                "h-full flex-1 rounded-full transition-colors",
-                index < doneCount ? "bg-foreground/70" : "bg-muted",
-              )}
-            />
-          ))}
-        </div>
-        <span
-          aria-hidden
-          className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
-        >
-          <span className="inline-flex size-4 items-center justify-center rounded-full border border-dashed border-muted-foreground/50">
-            <Play className="size-2 translate-x-px" strokeWidth={2.5} />
-          </span>
-          <span>Run</span>
-        </span>
-      </div>
-
+    <output aria-live="polite" aria-label="Agent setup" className="block">
       <ul
         ref={gridRef}
         className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-x-5 gap-y-1"

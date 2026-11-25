@@ -7,6 +7,7 @@ beta: "Model Pools are in Beta."
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Keep a model answering when one provider key hits its rate limit or goes down. A model pool serves one model name, such as `claude-sonnet-5-5`, from several provider keys: Anthropic first, and Bedrock when Anthropic fails. Clients keep asking for `claude-sonnet-5-5` with the key they already have, and Archestra moves to the next key before they see an error. To route sessions across fast, normal, and smart models within a daily budget instead, use [Auto Routing](/docs/llm-proxy/auto-routing).
 
@@ -135,13 +136,13 @@ Claude Code needs nothing for a pool named after a Claude model. For any other p
 
 ## See Which Member Answered
 
-Every attempt is a request in [Logs](/docs/admin/logs) under **Logs → LLM Proxy**, named by the member key it went to. An attempt that failed over shows its status and reason, such as **429 · rate limited**, and the attempt after it is marked **Retry**. Open a request to see, under **Model pool**, each member it tried in order with its outcome and time, and the members it did not need.
+Every attempt is a request in [Logs](/docs/insights/logs) under **Logs → LLM Proxy**, named by the member key it went to. An attempt that failed over shows its status and reason, such as **429 · rate limited**, and the attempt after it is marked **Retry**. Open a request to see, under **Model pool**, each member it tried in order with its outcome and time, and the members it did not need.
 
 Each attempt is priced as the member that made it, with that member's provider and model ID:
 
 - An attempt that was refused costs $0.
 - An attempt that was cut off for being silent carries an estimated input cost, because the provider read the prompt and bills it.
-- A member's model with no price in the catalog falls back to the default price. Set its price under **Models**, as for [custom models](/docs/llm-proxy/costs-and-limits#where-token-prices-come-from).
+- A member's model with no price in the catalog falls back to the default price. Set its price under **Models**, as for [custom models](/docs/llm-proxy/cost-controls#where-token-prices-come-from).
 
 ## Limits
 

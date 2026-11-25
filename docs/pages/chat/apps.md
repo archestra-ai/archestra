@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-10-12
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 An app is an interactive interface you build on demand by prompting an agent — such as a dashboard, intake form, or status tracker. Apps execute inside a secure browser sandbox, maintain persistent state, and invoke MCP tools using the credentials of the person running them.
 
 The **Apps** gallery also includes apps provided by installed MCP servers. For app implementation code, see the [Apps SDK Reference](/docs/reference/apps-sdk).

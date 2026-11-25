@@ -7,6 +7,8 @@ beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/doc
 lastUpdated: 2026-11-13
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
 
 You install three things:

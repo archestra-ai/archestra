@@ -93,6 +93,7 @@ function scorerFailure(error: unknown): unknown {
     case "timeout":
     case "http":
     case "invalid_response":
+    case "circuit_open":
       return new ApiError(500, `Session scorer failed: ${error.message}`);
   }
 }

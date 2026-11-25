@@ -1,6 +1,6 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -12,7 +12,6 @@ import {
   describe,
   expect,
   it,
-  vi,
 } from "vitest";
 import { ClaudeCodeAccount } from "./claude-code-account";
 
@@ -39,7 +38,7 @@ beforeEach(() => {
 
 describe("ClaudeCodeAccount setup", () => {
   it.each([
-    "card",
+    "row",
     "compact",
   ] as const)("takes an unconnected user from %s status straight to native sign-in", async (variant) => {
     const user = userEvent.setup();
@@ -61,7 +60,7 @@ describe("ClaudeCodeAccount setup", () => {
     );
     renderAccount(variant);
 
-    expect(await screen.findByText("Sign in to use this agent.")).toBeVisible();
+    expect(await screen.findByText(SIGN_IN_STATUS[variant])).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Sign in" }));
     expect(
       screen.getByRole("dialog", { name: "Connect Claude Code" }),
@@ -81,7 +80,7 @@ describe("ClaudeCodeAccount setup", () => {
   });
 
   it.each([
-    "card",
+    "row",
     "compact",
   ] as const)("lets an already-connected user manage their %s account without asking them to sign in again", async (variant) => {
     const user = userEvent.setup();
@@ -95,9 +94,7 @@ describe("ClaudeCodeAccount setup", () => {
       expect(screen.getByRole("status")).toHaveTextContent("Signed in for you");
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     }
-    expect(
-      screen.queryByText("Sign in to use this agent."),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(SIGN_IN_STATUS[variant])).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Manage" }));
     expect(
       screen.getByRole("dialog", { name: "Claude Code account" }),
@@ -110,7 +107,12 @@ describe("ClaudeCodeAccount setup", () => {
   });
 });
 
-function renderAccount(variant: "card" | "compact" = "card") {
+const SIGN_IN_STATUS = {
+  row: "Sign in once for all your Claude Code agents.",
+  compact: "Sign in to use this agent.",
+};
+
+function renderAccount(variant: "row" | "compact" = "row") {
   render(
     <QueryClientProvider client={queryClient}>
       <ClaudeCodeAccount agentId="agent-1" variant={variant} />
@@ -170,8 +172,8 @@ it("updates every Agent after connecting and disconnecting the shared account", 
   );
   render(
     <QueryClientProvider client={queryClient}>
-      <ClaudeCodeAccount agentId="agent-1" />
-      <ClaudeCodeAccount agentId="agent-2" />
+      <ClaudeCodeAccount agentId="agent-1" variant="row" />
+      <ClaudeCodeAccount agentId="agent-2" variant="row" />
     </QueryClientProvider>,
   );
   await user.click(
@@ -184,13 +186,13 @@ it("updates every Agent after connecting and disconnecting the shared account", 
   await user.click(screen.getByRole("button", { name: "Complete sign-in" }));
   expect(await screen.findAllByText("Signed in for you")).toHaveLength(2);
   expect(
-    screen.queryByText("Sign in to use this agent."),
+    screen.queryByText("Sign in once for all your Claude Code agents."),
   ).not.toBeInTheDocument();
   await user.click(screen.getAllByRole("button", { name: "Manage" })[1]);
   await user.click(screen.getByRole("button", { name: "Disconnect" }));
-  expect(await screen.findAllByText("Sign in to use this agent.")).toHaveLength(
-    2,
-  );
+  expect(
+    await screen.findAllByText("Sign in once for all your Claude Code agents."),
+  ).toHaveLength(2);
   expect(screen.queryByText("Signed in for you")).not.toBeInTheDocument();
 });
 
@@ -232,78 +234,55 @@ it("signs in where it sits when inline, without opening a second dialog", async 
   expect(await screen.findByText("Signed in for you")).toBeVisible();
 });
 
-it("leaves the disconnected notice to the page banner while retaining connected account controls", async () => {
+it("finishes an asynchronous token flow without resubmitting the authorization code", async () => {
+  const user = userEvent.setup();
+  const flowId = "00000000-0000-4000-8000-000000000001";
+  let connected = false;
+  let polls = 0;
   server.use(
-    http.get(accountUrl, () => HttpResponse.json({ state: "disconnected" })),
+    http.get(accountUrl, () =>
+      HttpResponse.json(
+        connected ? { state: "connected" } : { state: "connecting", flowId },
+      ),
+    ),
+    http.post(`${accountUrl}/complete`, async ({ request }) => {
+      expect(await request.json()).toEqual({ flowId });
+      polls++;
+      connected = true;
+      return HttpResponse.json({ state: "connected" });
+    }),
   );
-  const view = render(
-    <QueryClientProvider client={queryClient}>
-      <ClaudeCodeAccount
-        agentId="agent-1"
-        variant="compact"
-        showDisconnectedNotice={false}
-      />
-    </QueryClientProvider>,
+  renderAccount("compact");
+  await screen.findByText("Sign in to use this agent.");
+  await user.click(screen.getByRole("button", { name: "Sign in" }));
+  await screen.findByText("Signed in for you", {}, { timeout: 5000 });
+  expect(polls).toBe(1);
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
-  await queryClient.refetchQueries();
-  expect(
-    screen.queryByRole("button", { name: "Sign in" }),
-  ).not.toBeInTheDocument();
-  server.use(
-    http.get(accountUrl, () => HttpResponse.json({ state: "connected" })),
-  );
-  await queryClient.invalidateQueries();
-  expect(await screen.findByRole("button", { name: "Manage" })).toBeVisible();
-  view.unmount();
 });
 
-it.each([
-  [undefined, "Opus"],
-  ["default", "Claude account default"],
-  ["claude-sonnet-example", "Sonnet (example)"],
-] as const)("shows the effective model choice %s without overwriting saved configuration", async (model, label) => {
-  const onModelChange = vi.fn();
+it("says the account could not be checked instead of offering a sign-in that cannot start", async () => {
+  const user = userEvent.setup();
   server.use(
-    http.get(accountUrl, () => HttpResponse.json({ state: "connected" })),
-    http.get(`${origin}/api/agents/agent-1/runtime/claude-code/models`, () =>
-      HttpResponse.json({
-        models: [
-          {
-            value: "opus",
-            displayName: "Opus",
-            description: "Default for new runs",
-          },
-          {
-            value: "default",
-            displayName: "Claude account default",
-            description: "Selected by Claude",
-          },
-          {
-            value: "claude-sonnet-example",
-            displayName: "Sonnet (example)",
-            description: "Explicit selection",
-          },
-        ],
-      }),
+    http.get(accountUrl, () =>
+      HttpResponse.json(
+        { error: { message: "Runtime unavailable" } },
+        { status: 503 },
+      ),
+    ),
+    http.post(accountUrl, () =>
+      HttpResponse.json(
+        { error: { message: "Runtime unavailable" } },
+        { status: 503 },
+      ),
     ),
   );
-  render(
-    <QueryClientProvider client={queryClient}>
-      <ClaudeCodeAccount
-        agentId="agent-1"
-        model={model}
-        onModelChange={onModelChange}
-      />
-    </QueryClientProvider>,
-  );
+  renderAccount("compact");
+  await screen.findByText("Could not check connection");
+  await user.click(screen.getByRole("button", { name: "Sign in" }));
+  await screen.findByText("Could not check Claude Code");
   expect(
-    await screen.findByRole("button", {
-      name: (name) => name.endsWith(label),
-    }),
-  ).toBeVisible();
-  expect(onModelChange).not.toHaveBeenCalled();
-  if (model === "default")
-    expect(
-      screen.getByText(/Claude chooses the model from your account settings/),
-    ).toBeVisible();
+    screen.queryByRole("button", { name: "Sign in with Claude" }),
+  ).not.toBeInTheDocument();
 });

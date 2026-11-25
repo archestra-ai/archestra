@@ -124,9 +124,13 @@ class OpenAppaArchestraAnnotator {
     // whole result, so it skips the fast tier.
     const { annotatorModelId, annotatorLlmApiKeyId } =
       await GuardrailsDeploymentModel.get();
+    // Resolved for the person the session runs for: a per-user credential (a
+    // personal subscription set as the organization default) is released only
+    // to its owner, so a lookup with no user finds no key at all.
     const resolved = await resolveAgentLlmOrDefault({
       agent: { modelId: annotatorModelId, llmApiKeyId: annotatorLlmApiKeyId },
       organizationId: organization.id,
+      userId: ownerIdentity(owner).userId,
     });
     const selection =
       annotatorModelId || sanitizer ? resolved : await withFastModel(resolved);
@@ -391,6 +395,14 @@ const formatStrikes = new LRUCacheManager<number>({
 const STRIKES_TO_SKIP_FORMAT = 2;
 
 /**
+ * The AI SDK would resend a 429, a 5xx or a timeout the LLM proxy relays,
+ * after an inference that may already be billed. The proxy itself resends a
+ * call whose provider connection failed before any answer, and stops once
+ * this call is aborted.
+ */
+const MODEL_CALL_RETRIES = 0;
+
+/**
  * The answer under the provider's structured-output format, which carries the
  * schema beside the prompt. `refused`: the provider rejected the request.
  * `unparsed`: this answer fell outside the schema. `skipped`: the format has
@@ -415,6 +427,7 @@ async function structuredAnswer(
       output: Output.object({ schema: jsonSchema(call.request.schema) }),
       maxOutputTokens: call.maxOutputTokens,
       abortSignal: call.abortSignal,
+      maxRetries: MODEL_CALL_RETRIES,
       providerOptions: call.providerOptions,
     });
     if (!isPlainObject(output)) return { kind: "unparsed" };
@@ -444,6 +457,7 @@ async function taggedAnswer(
     maxOutputTokens: call.maxOutputTokens,
     maxOutputCeiling: call.maxOutputCeiling,
     abortSignal: call.abortSignal,
+    maxRetries: MODEL_CALL_RETRIES,
     providerOptions: call.providerOptions,
   });
   return text === null ? null : parseObject(text);

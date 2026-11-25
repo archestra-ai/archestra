@@ -6,6 +6,7 @@ lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Ask [Microsoft 365 Copilot](https://www.microsoft.com/en-us/microsoft-365/copilot) from Archestra, and get answers from your mail, SharePoint, Teams, and the web. Archestra connects to it through the [Microsoft 365 Copilot Chat API](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/overview) (Microsoft Graph, beta). Like GitHub Copilot, there are no static API keys: access is tied to an individual Microsoft work account with a Microsoft 365 Copilot license.
 

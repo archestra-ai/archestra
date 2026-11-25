@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
   DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION,
+  MCP_BRIDGE_AUTO_UPDATE_MIN_PROGRAM_VERSION,
   programAppliesDesktopMcpArguments,
+  programUpdatesByItself,
 } from "./desktop-mcp";
 
 describe("programAppliesDesktopMcpArguments", () => {
@@ -61,6 +63,39 @@ describe("programAppliesDesktopMcpArguments", () => {
       expect(programAppliesDesktopMcpArguments(version), String(version)).toBe(
         false,
       );
+    }
+  });
+});
+
+describe("programUpdatesByItself", () => {
+  test("a Windows device does, with each version and with none", () => {
+    for (const version of ["0.1.0", "0.1.8", "0.1.9", null, "dev"]) {
+      expect(
+        programUpdatesByItself({ platform: "windows", version }),
+        String(version),
+      ).toBe(true);
+    }
+  });
+
+  test("a macOS or Linux device does from the first version that has it", () => {
+    for (const platform of ["macos", "linux"]) {
+      for (const version of [
+        MCP_BRIDGE_AUTO_UPDATE_MIN_PROGRAM_VERSION,
+        "0.1.9-dev",
+        "0.1.10",
+        "0.2.0",
+      ]) {
+        expect(
+          programUpdatesByItself({ platform, version }),
+          `${platform} ${version}`,
+        ).toBe(true);
+      }
+      for (const version of ["0.1.8", "0.1.8-dev", "0.1.0", null, "dev"]) {
+        expect(
+          programUpdatesByItself({ platform, version }),
+          `${platform} ${version}`,
+        ).toBe(false);
+      }
     }
   });
 });

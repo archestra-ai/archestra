@@ -38,6 +38,9 @@ export function useMcpRegistryServersInfinite(
           offset: pageParam,
           sortBy: "stars", // Sort by GitHub stars (highest first)
           worksInArchestra: true,
+          // Desktop MCP servers run on each user's device through the MCP
+          // bridge; the catalog leaves them out unless asked for.
+          includeDesktop: true,
         },
       });
       throwOnApiError(error);

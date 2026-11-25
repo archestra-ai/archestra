@@ -9,6 +9,7 @@ import {
 import { ChevronRight } from "lucide-react";
 import { useWatch } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -31,6 +32,7 @@ import {
   type PoolForm,
   type PoolOptions,
   type RetryKey,
+  type SavedMember,
   withRetryValue,
 } from "./pool-form";
 
@@ -200,10 +202,12 @@ export function MemberRetryOverrides({
   form,
   options,
   disabled,
+  savedMembers,
 }: {
   form: PoolForm;
   options: PoolOptions;
   disabled: boolean;
+  savedMembers: SavedMember[];
 }) {
   const pool = useWatch({ control: form.control, name: "retrySettings" });
   const members = useWatch({ control: form.control, name: "members" });
@@ -232,6 +236,12 @@ export function MemberRetryOverrides({
         <ul className="divide-y">
           {members.map((member, index) => {
             const key = options.keysById.get(member.providerApiKeyId);
+            const saved = key
+              ? undefined
+              : savedMembers.find(
+                  (entry) => entry.providerApiKeyId === member.providerApiKeyId,
+                );
+            const provider = key?.provider ?? saved?.provider;
             // setValue, not a Controller: a registered field per row would
             // outlive a removed member and shift onto the next one.
             const setValue = (
@@ -252,8 +262,15 @@ export function MemberRetryOverrides({
                 className="grid gap-x-3 gap-y-2 px-3 py-2 @xl:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] @xl:items-center"
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm">
-                    {key?.name ?? "Choose a provider key"}
+                  <div className="flex min-w-0 items-center gap-2 text-sm">
+                    {provider ? (
+                      <ProviderIcon provider={provider} size={14} />
+                    ) : null}
+                    <span className="truncate">
+                      {key?.name ??
+                        saved?.providerApiKeyName ??
+                        "Choose a provider key"}
+                    </span>
                   </div>
                   <div className="truncate font-mono text-xs text-muted-foreground">
                     {member.modelId || "No model"} · order {member.priority}

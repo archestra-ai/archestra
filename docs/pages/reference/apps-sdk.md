@@ -6,6 +6,7 @@ lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 An [MCP App](/docs/chat/apps) calls MCP tools as the viewer, keeps private and shared state, and runs model completions through `window.archestra`, with no tokens, backend, or login code. This page lists the SDK, the injected styles, and the sandbox limits. Agents write apps with the built-in **Build App** skill, which follows the same rules.
 
@@ -101,7 +102,7 @@ An app can call only its assigned tools and its own storage, file, and LLM metho
 - `archestra.llm.prompt` - A tagged-template helper that builds a prompt string.
 
 - The completion uses the model of the [App Runtime LLM Agent](/docs/agents/subagents/built-in#app-runtime-llm-agent), or the organization default when it has none. The app cannot choose one.
-- It counts against the viewer's [usage limits](/docs/llm-proxy/costs-and-limits) and appears in the logs. `prompt` takes up to 100,000 characters, and `system` up to 10,000.
+- It counts against the viewer's [usage limits](/docs/llm-proxy/cost-controls) and appears in the logs. `prompt` takes up to 100,000 characters, and `system` up to 10,000.
 - With `jsonMode`, the model returns one JSON value, which the app still parses.
 
 ### Host UI

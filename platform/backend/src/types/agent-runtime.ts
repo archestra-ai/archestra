@@ -296,6 +296,11 @@ export type AgentRuntimeEnvironmentEntry = z.infer<
   typeof AgentRuntimeEnvironmentEntrySchema
 >;
 
+export const AgentRuntimeAccountLockSchema = z.enum(["subscription", "key"]);
+export type AgentRuntimeAccountLock = z.infer<
+  typeof AgentRuntimeAccountLockSchema
+>;
+
 /** Optional dedicated container runtime for delegated and long-running work. */
 export const AgentRuntimeSchema = z.object({
   image: z.string().trim().min(1).max(2_000),
@@ -336,6 +341,35 @@ export const AgentRuntimeSchema = z.object({
    * model's context belongs in Settings instead.
    */
   allowAgentSuppliedCredentialValues: z.boolean().optional(),
+  /**
+   * Whose account every person's runs of this Agent use: each person's own
+   * `subscription`, or a company API `key`. Set by someone who can configure
+   * its runtime, or use a runtime that leaves the account to each agent; a
+   * runtime whose account rule names a kind holds its agents to that kind
+   * instead. Null leaves each person the choice between the two.
+   * The connection and model of the company API key are a separate matter:
+   * what the agent's runtime and the agent leave unset of them is each
+   * person's to choose, under any lock that allows the company API key.
+   * Absent, on an agent stored without the field, means nobody chooses: the
+   * agent runs only the way its own settings say, each person's
+   * subscription or a company API key. On a write, absent keeps the stored
+   * value; a new agent without it is stored with null.
+   */
+  // A union, not `.nullable()`, so the generated client keeps the null.
+  accountLock: z.union([AgentRuntimeAccountLockSchema, z.null()]).optional(),
+  /**
+   * The model each company connection runs, by connection id, where the
+   * agent leaves the connection to each person. A person who picks one of
+   * these connections runs its model; a connection that is not listed leaves
+   * the model to the person too. Stored only while the agent sets no
+   * connection of its own.
+   */
+  connectionModels: z
+    .record(z.string().uuid(), z.string().uuid())
+    .refine((models) => Object.keys(models).length <= 50, {
+      message: "At most 50 connections can have a model set.",
+    })
+    .optional(),
   /** Native Claude account authentication and its CLI-published model alias. */
   claudeCode: z
     .object({
@@ -360,8 +394,20 @@ export const AgentRuntimeSchema = z.object({
 });
 export type AgentRuntime = z.infer<typeof AgentRuntimeSchema>;
 
+/**
+ * The account lock of a stored runtime that names none: the agent runs only
+ * the way its own settings say. `concreteAccountLock` turns it into the lock
+ * that way amounts to.
+ */
+export const OWN_ACCOUNT_ONLY = "own";
+
 /** Resolved runtime: Agent-owned config plus server-only associations. */
-export type ResolvedAgentRuntime = AgentRuntime & {
+export type ResolvedAgentRuntime = Omit<AgentRuntime, "accountLock"> & {
+  /**
+   * Always present once resolved, so no reader mistakes "not passed" for
+   * "unlocked". Read it through `concreteAccountLock` before enforcing it.
+   */
+  accountLock: AgentRuntimeAccountLock | null | typeof OWN_ACCOUNT_ONLY;
   agentId: string;
   organizationId: string;
   environmentId: string | null;

@@ -49,7 +49,7 @@ import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access
 import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentScheduleIndicator } from "@/components/agent-schedules-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
-import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
+import { AgentRuntimeBadge } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   DefaultAgentTag,
@@ -784,10 +784,9 @@ function Agents() {
             extraBadges={
               <>
                 {agent.runtime != null && (
-                  <RuntimeCapableIndicator
-                    variant="pill"
-                    runtime={agent.runtime}
-                  />
+                  // Named, and linked to its settings, for the people who
+                  // administer runtimes; the plain mark for everyone else.
+                  <AgentRuntimeBadge runtime={agent.runtime} fallback="pill" />
                 )}
                 {effectiveDefault?.agentId === agent.id ? (
                   <DefaultAgentTag source={effectiveDefault.source} />
@@ -860,7 +859,12 @@ function Agents() {
         ) : (
           <AgentProviderIndicator
             usesOrganizationDefault={
-              !row.original.value.llmApiKeyId && !row.original.value.modelId
+              !row.original.value.resolvedLlmPersonalSubscription &&
+              !row.original.value.llmApiKeyId &&
+              !row.original.value.modelId
+            }
+            personalSubscription={
+              row.original.value.resolvedLlmPersonalSubscription === true
             }
             provider={row.original.value.resolvedLlmProvider}
             keyName={row.original.value.resolvedLlmProviderKeyName}

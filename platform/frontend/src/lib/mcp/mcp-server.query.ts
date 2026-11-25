@@ -355,7 +355,9 @@ export function useInstallMcpServer() {
             ? "The MCP server rejected the connection (HTTP 401)."
             : errorMessage.includes("Upstream MCP server returned HTTP 403")
               ? "The MCP server denied access (HTTP 403)."
-              : "Check the server configuration and try again.",
+              : errorMessage.includes("Upstream MCP server returned HTTP 429")
+                ? "The MCP server is limiting requests. Try again in a minute."
+                : "Check the server configuration and try again.",
         });
         return {
           installedServer,

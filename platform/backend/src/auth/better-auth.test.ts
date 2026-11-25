@@ -584,6 +584,44 @@ describe("handleBeforeHook", () => {
     });
   });
 
+  test("refuses the sign-up of an auto-provisioned user the identity provider soft-deleted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInvitation,
+  }) => {
+    const org = await makeOrganization();
+    await makeUser();
+    const placeholder = await makeUser({
+      email: "deactivated-placeholder@example.com",
+    });
+    await makeMember(placeholder.id, org.id);
+    const invitation = await makeInvitation(org.id, placeholder.id, {
+      email: "deactivated-placeholder@example.com",
+      status: AUTO_PROVISIONED_INVITATION_STATUS,
+    });
+    await UserModel.setSoftDeleted({
+      userId: placeholder.id,
+      softDeleted: new Date(),
+    });
+
+    const ctx = createMockContext({
+      path: "/sign-up/email",
+      method: "POST",
+      body: {
+        email: "deactivated-placeholder@example.com",
+        callbackURL: "/chat",
+        invitationId: invitation.id,
+      },
+    });
+
+    await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+      body: { code: "ACCOUNT_DEACTIVATED" },
+    });
+    // The soft-deleted user is still there, not replaced by a new one.
+    expect(await UserModel.getSoftDeleted(placeholder.id)).toBeInstanceOf(Date);
+  });
+
   describe("impersonation permission gate", () => {
     const impersonateCtx = (
       user: { id: string; email: string },
@@ -1234,11 +1272,11 @@ describe("handleBeforeHook", () => {
       const assignment = handleBeforeHook(escalate);
       await expect(assignment).rejects.toThrow(APIError);
       // Platform administrators cannot grant access to other users' logs,
-      // yells, or audit records.
+      // Guardrails records, client connections, or audit records.
       await expect(assignment).rejects.toMatchObject({
         body: {
           message: expect.stringContaining(
-            "log:admin, guardrailsYell:admin, auditLog:admin",
+            "log:admin, guardrailsLog:admin, clientConnection:admin, auditLog:admin",
           ),
         },
       });
@@ -5169,6 +5207,257 @@ describe("SSO account linking onto existing password users", () => {
       .from(schema.usersTable)
       .where(eq(schema.usersTable.id, user.id));
     expect(userRow.emailVerified).toBe(true);
+  });
+
+  test("OIDC callback links onto a provisioned user with no account and keeps the teams added before sign-in", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeIdentityProvider,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    // What SCIM provisioning creates: a user and member, no account row.
+    const { createPendingSignupMember } = await import(
+      "@/services/pending-signup-member"
+    );
+    const { userId } = await createPendingSignupMember({
+      organizationId: org.id,
+      email: "provisioned-before-sign-in@example.com",
+      name: "Provisioned User",
+    });
+    const team = await makeTeam(org.id, admin.id);
+    await makeTeamMember(team.id, userId, { role: "member" });
+
+    const provider = await makeIdentityProvider(org.id, {
+      providerId: "oidc-provisioned-link",
+      issuer: IDP_ORIGIN,
+      domain: "",
+      oidcConfig: {
+        clientId: "test-client-id",
+        clientSecret: "test-client-secret",
+        authorizationEndpoint: `${IDP_ORIGIN}/authorize`,
+        tokenEndpoint: `${IDP_ORIGIN}/token`,
+        userInfoEndpoint: `${IDP_ORIGIN}/userinfo`,
+        jwksEndpoint: `${IDP_ORIGIN}/jwks`,
+        pkce: false,
+      },
+    });
+
+    const signInResponse = await auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/sso", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://localhost:3000",
+        },
+        body: JSON.stringify({
+          providerId: provider.providerId,
+          callbackURL: "http://localhost:3000/chat",
+        }),
+      }),
+    );
+    const { url: authorizationUrl } = (await signInResponse.json()) as {
+      url: string;
+    };
+    const state = new URL(authorizationUrl).searchParams.get("state");
+    const stateCookies = signInResponse.headers
+      .getSetCookie()
+      .map((cookie) => cookie.split(";")[0])
+      .join("; ");
+
+    mswServer.use(
+      http.post(`${IDP_ORIGIN}/token`, () =>
+        HttpResponse.json({
+          access_token: "sso-access-token",
+          token_type: "Bearer",
+        }),
+      ),
+      http.get(`${IDP_ORIGIN}/userinfo`, () =>
+        HttpResponse.json({
+          sub: "external-subject-provisioned",
+          email: "provisioned-before-sign-in@example.com",
+          email_verified: true,
+          name: "Provisioned User",
+        }),
+      ),
+    );
+
+    const callbackResponse = await auth.handler(
+      new Request(
+        `http://localhost:3000/api/auth/sso/callback/${provider.providerId}?code=fake-code&state=${state}`,
+        { headers: { cookie: stateCookies } },
+      ),
+    );
+
+    expect(callbackResponse.status).toBe(302);
+    expect(callbackResponse.headers.get("location") ?? "").not.toContain(
+      "error=",
+    );
+
+    // The IdP account is linked onto the provisioned user, not a new one...
+    const accounts = await db
+      .select()
+      .from(schema.accountsTable)
+      .where(eq(schema.accountsTable.userId, userId));
+    expect(accounts.map((account) => account.providerId)).toEqual([
+      provider.providerId,
+    ]);
+    const usersWithEmail = await db
+      .select()
+      .from(schema.usersTable)
+      .where(
+        eq(schema.usersTable.email, "provisioned-before-sign-in@example.com"),
+      );
+    expect(usersWithEmail.map((row) => row.id)).toEqual([userId]);
+
+    // ...and the team added before the first sign-in is still there.
+    const teamMemberships = await db
+      .select()
+      .from(schema.teamMembersTable)
+      .where(eq(schema.teamMembersTable.userId, userId));
+    expect(teamMemberships.map((row) => row.teamId)).toEqual([team.id]);
+  });
+
+  test("OIDC callback refuses a user the identity provider soft-deleted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "soft-deleted@example.com" });
+    await makeMember(user.id, org.id, { role: "member" });
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+
+    const provider = await makeIdentityProvider(org.id, {
+      providerId: "oidc-soft-deleted",
+      issuer: IDP_ORIGIN,
+      domain: "",
+      oidcConfig: {
+        clientId: "test-client-id",
+        clientSecret: "test-client-secret",
+        authorizationEndpoint: `${IDP_ORIGIN}/authorize`,
+        tokenEndpoint: `${IDP_ORIGIN}/token`,
+        userInfoEndpoint: `${IDP_ORIGIN}/userinfo`,
+        jwksEndpoint: `${IDP_ORIGIN}/jwks`,
+        pkce: false,
+      },
+    });
+
+    const signInResponse = await auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/sso", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://localhost:3000",
+        },
+        body: JSON.stringify({
+          providerId: provider.providerId,
+          callbackURL: "http://localhost:3000/chat",
+        }),
+      }),
+    );
+    const { url: authorizationUrl } = (await signInResponse.json()) as {
+      url: string;
+    };
+    const state = new URL(authorizationUrl).searchParams.get("state");
+    const stateCookies = signInResponse.headers
+      .getSetCookie()
+      .map((cookie) => cookie.split(";")[0])
+      .join("; ");
+
+    mswServer.use(
+      http.post(`${IDP_ORIGIN}/token`, () =>
+        HttpResponse.json({
+          access_token: "sso-access-token",
+          token_type: "Bearer",
+        }),
+      ),
+      http.get(`${IDP_ORIGIN}/userinfo`, () =>
+        HttpResponse.json({
+          sub: "external-subject-soft-deleted",
+          email: "soft-deleted@example.com",
+          email_verified: true,
+          name: "Soft Deleted",
+        }),
+      ),
+    );
+
+    const callbackResponse = await auth.handler(
+      new Request(
+        `http://localhost:3000/api/auth/sso/callback/${provider.providerId}?code=fake-code&state=${state}`,
+        { headers: { cookie: stateCookies } },
+      ),
+    );
+
+    // Back to the sign-in page with an error the page can show, and no
+    // session, so no way in.
+    expect(callbackResponse.status).toBe(302);
+    const location = new URL(callbackResponse.headers.get("location") ?? "");
+    expect(location.searchParams.get("error")).toBe("ACCOUNT_DEACTIVATED");
+    const sessions = await db
+      .select()
+      .from(schema.sessionsTable)
+      .where(eq(schema.sessionsTable.userId, user.id));
+    expect(sessions).toEqual([]);
+  });
+
+  test("a soft-deleted user's API key is refused on better-auth's own endpoints", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "deactivated-key@example.com" });
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const { key } = await auth.api.createApiKey({
+      body: { userId: user.id, name: "automation" },
+    });
+    const callWithKey = (path: string, init: RequestInit = {}) =>
+      auth.handler(
+        new Request(`http://localhost:3000/api/auth${path}`, {
+          ...init,
+          headers: {
+            authorization: key,
+            origin: "http://localhost:3000",
+            "content-type": "application/json",
+          },
+        }),
+      );
+
+    expect((await callWithKey("/get-session")).status).toBe(200);
+
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+
+    const session = await callWithKey("/get-session");
+    expect(session.status).toBe(403);
+    expect(await session.json()).toMatchObject({ code: "ACCOUNT_DEACTIVATED" });
+    // The way back in: inviting someone else as an administrator.
+    const invitation = await callWithKey("/organization/invite-member", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "new-admin@example.com",
+        role: ADMIN_ROLE_NAME,
+        organizationId: org.id,
+      }),
+    });
+    expect(invitation.status).toBe(403);
+    expect(
+      await db
+        .select()
+        .from(schema.invitationsTable)
+        .where(eq(schema.invitationsTable.email, "new-admin@example.com")),
+    ).toEqual([]);
   });
 
   test("OIDC callback links an existing account through a matching allowed domain without an email verification claim", async ({

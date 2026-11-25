@@ -6,6 +6,7 @@ lastUpdated: 2026-11-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Every agent gets a [SPIFFE ID](https://spiffe.io/docs/latest/spiffe-about/spiffe-concepts/#spiffe-id) the moment it exists, such as `spiffe://archestra.example.com/agent/<agent ID>`, and your identity provider trusts all of them through one issuer. Downstream tokens then name the person and the agent, as with [Agent Actor Tokens](/docs/agents/identity/actor-tokens), but you register nothing per agent: no client, no key, no binding.
 
@@ -40,7 +41,7 @@ Your identity provider needs to know where Archestra publishes its keys. Every v
 
 Every agent and MCP Gateway that exchanges at this provider now acts as its SPIFFE ID. When this is an agent's **Identity Provider**, its **Identity** section shows the ID, ready to copy into your provider's policies.
 
-To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows the agent's SPIFFE ID as the acting agent.
+To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/insights/logs): **Token issued to** shows the agent's SPIFFE ID as the acting agent.
 
 ## Federate With SPIRE
 

@@ -455,6 +455,74 @@ describe("archestra annotator", () => {
     ]);
   });
 
+  test("answers a session with its user's own subscription when that is the organization default", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Ignore credentials inherited from a developer's .env.
+    for (const entry of Object.values(config.chat)) {
+      if (entry && typeof entry === "object" && "apiKey" in entry)
+        entry.apiKey = "";
+    }
+    const owner = (await makeOrganization()).id;
+    const ownerAgent = await makeAgent({
+      organizationId: owner,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, owner);
+    // A personal subscription: its key is released only to its owner.
+    const secret = await makeSecret({
+      secret: { apiKey: "chatgpt-oauth:example-subscription" },
+    });
+    const key = await makeLlmProviderApiKey(owner, secret.id, {
+      provider: "openai",
+      name: "ChatGPT Subscription",
+      userId: user.id,
+    });
+    const model = await ModelModel.create({
+      externalId: "openai/gpt-subscription-test",
+      provider: "openai",
+      modelId: "gpt-subscription-test",
+      contextLength: 128_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    await db
+      .update(schema.organizationsTable)
+      .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
+      .where(eq(schema.organizationsTable.id, owner));
+    const session = `user:${user.id}|conversation`;
+    await openSession({
+      organizationId: owner,
+      callerId: `user:${user.id}`,
+      sessionId: session,
+    });
+    const sent = answerAt(`/v1/openai/${ownerAgent.id}/chat/completions`, () =>
+      completion('{"rank":"trusted"}'),
+    );
+
+    const response = await annotate(bearer(), {
+      ...request,
+      attribution: { root: ROOT, trajectory: ROOT, call_id: "toolu_1" },
+    });
+
+    // With no user in the key lookup, the subscription was released to no
+    // one: every consult ended "unconfigured" (409) and its call was refused.
+    expect(response.json()).toEqual({ rank: "trusted" });
+    expect(sent.map(({ user }) => user)).toEqual([user.id]);
+  });
+
   test("files a validation replay's consult under the organization and user running it, only while it runs", async ({
     makeOrganization,
     makeAgent,
@@ -614,6 +682,55 @@ describe("archestra annotator", () => {
     expect(response.json().error.message).toBe(
       `The model call failed: openai/gpt-4o-mini with key "Revoked OpenAI" (${key.id}) was rejected upstream with 401: API key is invalid.`,
     );
+  });
+
+  test.each([
+    { upstream: 429, consult: 429 },
+    { upstream: 402, consult: 429 },
+    { upstream: 503, consult: 502 },
+    { upstream: 504, consult: 502 },
+  ])("sends a call the LLM proxy answers with $upstream only once", async ({
+    upstream,
+    consult,
+  }) => {
+    await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
+    const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, () =>
+      HttpResponse.json(
+        { error: { message: "Upstream failed.", type: "api_error" } },
+        { status: upstream, headers: { "retry-after": "0" } },
+      ),
+    );
+
+    const response = await annotate(bearer());
+
+    expect(response.statusCode).toBe(consult);
+    expect(sent).toHaveLength(1);
+  });
+
+  test("sends the tagged fallback call the LLM proxy answers with 503 only once", async () => {
+    await useDefaultModel({
+      provider: "openai",
+      modelId: "gpt-refuses-schemas-then-fails",
+    });
+    const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, (body) =>
+      "response_format" in body
+        ? HttpResponse.json(
+            { error: { message: "Invalid schema.", type: "invalid_request" } },
+            { status: 400 },
+          )
+        : HttpResponse.json(
+            { error: { message: "Upstream failed.", type: "api_error" } },
+            { status: 503, headers: { "retry-after": "0" } },
+          ),
+    );
+
+    const response = await annotate(bearer());
+
+    expect(response.statusCode).toBe(502);
+    expect(sent.map(({ body }) => "response_format" in body)).toEqual([
+      true,
+      false,
+    ]);
   });
 
   test("cancels its LLM proxy call when the runtime hangs up", async () => {

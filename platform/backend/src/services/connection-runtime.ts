@@ -11,6 +11,7 @@ import ConnectionSetupModel from "@/models/connection-setup";
 import MemberModel from "@/models/member";
 import OrganizationModel from "@/models/organization";
 import TeamModel from "@/models/team";
+import UserModel from "@/models/user";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { ApiError, GATEWAY_CAPABLE_AGENT_TYPES } from "@/types";
 import { getVirtualKeyProviderCatalog } from "./agent-connection-setup/credentials/primary-providers";
@@ -40,7 +41,8 @@ export async function authenticateConnectionRuntime(token: string) {
     organizationId: setup.organizationId,
     userIds: [setup.userId],
   });
-  if (!members.length)
+  // Gone too when the identity provider deactivated the owner (SCIM).
+  if (!members.length || (await UserModel.getSoftDeleted(setup.userId)))
     throw new ApiError(403, "Installed connection is no longer available");
   if (setup.mcpGatewayId) {
     const canUse = await ResourcePermissions.allows({

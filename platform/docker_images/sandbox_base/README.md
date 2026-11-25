@@ -24,5 +24,6 @@ Edit `pyproject.toml`, then regenerate the hashed lockfile (requires `uv`):
 make update-lockfile
 ```
 
-The base image is digest-pinned in the `Dockerfile`; bump the digest deliberately
-when moving the uv/python base.
+The published runtime uses a digest-pinned DHI Python base and copies uv from
+the pinned upstream uv image. Keep both on Python 3.14 and Debian 13 when
+moving either source; `check:sandbox-base` checks their relationship.

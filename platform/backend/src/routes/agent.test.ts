@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
+  buildAgentCatalogRuntime,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -62,6 +63,92 @@ describe("agent routes", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("lists an Agent Runtime agent on each person's subscription by the subscription's provider", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const claude = buildAgentCatalogRuntime({
+      id: "claude-code",
+      image: config.agentRuntime.catalogImages["claude-code"],
+    });
+    const onSubscription = await makeAgent({
+      name: "Claude on subscriptions",
+      organizationId,
+      agentType: "agent",
+      runtime: { ...claude, claudeCode: { authentication: "subscription" } },
+    });
+    // Moved from a company key to subscriptions alone: the key it still
+    // stores is not what its runs use.
+    const companyKey = await makeLlmProviderApiKey(organizationId, null, {
+      name: "Company xAI",
+      provider: "xai",
+    });
+    const grokModel = await ModelModel.create({
+      externalId: "xai/grok-4.3",
+      provider: "xai",
+      modelId: "grok-4.3",
+      inputModalities: null,
+      outputModalities: null,
+    });
+    const lockedToSubscriptions = await makeAgent({
+      name: "Grok on subscriptions",
+      organizationId,
+      agentType: "agent",
+      llmApiKeyId: companyKey.id,
+      modelId: grokModel.id,
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "grok",
+          image: config.agentRuntime.catalogImages.grok,
+        }),
+        accountLock: "subscription",
+      },
+    });
+    const onCompanyKey = await makeAgent({
+      name: "Grok on the company key",
+      organizationId,
+      agentType: "agent",
+      llmApiKeyId: companyKey.id,
+      modelId: grokModel.id,
+      runtime: {
+        ...buildAgentCatalogRuntime({
+          id: "grok",
+          image: config.agentRuntime.catalogImages.grok,
+        }),
+        accountLock: "key",
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents?ids=${[onSubscription.id, lockedToSubscriptions.id, onCompanyKey.id].join(",")}`,
+    });
+    expect(response.statusCode).toBe(200);
+    const listed = new Map(
+      response
+        .json()
+        .data.map((agent: { id: string }) => [agent.id, agent] as const),
+    );
+    expect(listed.get(onSubscription.id)).toMatchObject({
+      resolvedLlmProvider: "anthropic",
+      resolvedLlmProviderKeyName: null,
+      resolvedLlmPersonalSubscription: true,
+    });
+    expect(listed.get(lockedToSubscriptions.id)).toMatchObject({
+      resolvedLlmProvider: "xai",
+      resolvedLlmProviderKeyName: null,
+      resolvedLlmModelName: "grok-4.3",
+      resolvedLlmPersonalSubscription: true,
+    });
+    expect(listed.get(onCompanyKey.id)).toMatchObject({
+      resolvedLlmProvider: "xai",
+      resolvedLlmProviderKeyName: "Company xAI",
+    });
+    expect(listed.get(onCompanyKey.id)).not.toHaveProperty(
+      "resolvedLlmPersonalSubscription",
+    );
   });
 
   test("lists configured provider names and filters before pagination", async ({
@@ -350,7 +437,11 @@ describe("agent routes", () => {
         });
 
         expect(response.statusCode).toBe(200);
-        expect(response.json().runtime).toEqual(runtime);
+        // A new agent that names no lock is stored as "each person chooses".
+        expect(response.json().runtime).toEqual({
+          ...runtime,
+          accountLock: null,
+        });
       } finally {
         sandboxInstalled.mockRestore();
       }

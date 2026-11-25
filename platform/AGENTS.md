@@ -45,6 +45,9 @@
 9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
 10.  **Never copy anything from Sentry into code, comments, tests, docs, commits, or PR text — and do not mention Sentry itself.** Sentry is for diagnosing the problem; describe the bug in neutral terms and cite no IDs, environments, URLs, user info, or stack snippets from there.
 11. If you think there is an important bit of information worth remembering between sessions, suggest adding it to AGENTS.md instead of memorizing it yourself. AGENTS.md is the single source of truth for all important information about the platform, its architecture, and its development practices.
+12. **No Rollout Flags Unless Asked** - Ship a feature on by default, in one release. Add a feature flag, an env toggle, or a split across releases only when the user asks for one: only staging deploys every release, and customers skip several versions at once.
+13. **Renamed Exports Break Spies** - After you change or rename an exported function, grep the tests for `vi.spyOn` and `vi.mock` on the old name and run those test files locally (Vitest on a single file is fine). A spy on an export that no longer exists fails only in the merge queue otherwise.
+14. **Plain Product Text** - Text a person reads in the product (chat notices, UI strings, errors) stays calm and plain: say what happens next in everyday words. Leave out internal component names and alarming verbs ("holds", "discards", "blocked by policy") unless the person has to act on them.
 
 ## Docs
 
@@ -78,12 +81,12 @@ Load these project skills when the task matches their domain:
 - **Settings**: <http://localhost:3000/settings> (lands on the first permitted tab; tabs: Organization, Service Accounts, Chat, LLM, MCP, Security, Knowledge, Environments, Users, Teams, Roles, GitHub, Identity Providers, Secrets)
 - **Personal Settings**: <http://localhost:3000/account> (personal profile, API keys, gateway token, sessions; opened by clicking your name in the sidebar)
 - **MCP Registry**: <http://localhost:3000/mcp/registry> (Install and manage MCP servers)
-- **LLM Proxy Logs**: <http://localhost:3000/llm/logs> (View LLM proxy request logs)
-- **MCP Gateway Logs**: <http://localhost:3000/mcp/logs> (View MCP tool call logs)
+- **Logs**: <http://localhost:3000/logs> (One timeline of LLM proxy requests, MCP tool calls, guardrail decisions, client connections and audit events; each row opens its type's detail page)
+- **Adoption**: <http://localhost:3000/adoption> (Who has connected agents and client apps, and how much each is used)
 - **Roles**: <http://localhost:3000/settings/roles> (Admin-only: manage custom RBAC roles)
-- **Cost Statistics**: <http://localhost:3000/llm/cost/statistics> (Usage analytics with time series charts and custom date ranges)
-- **Cost Limits**: <http://localhost:3000/llm/cost/limits> (Token usage limits management with per-profile configuration)
-- **Token Price**: <http://localhost:3000/llm/cost/token-price> (Model pricing configuration)
+- **Costs**: <http://localhost:3000/llm/costs> (Spend, token and request analytics with time series charts and custom date ranges)
+- **Cost Controls**: <http://localhost:3000/llm/limits> (Spend and rate limits, plus scheduled cost exports at /llm/cost-exports)
+- **Token Price**: set per model under <http://localhost:3000/llm/models> (Pricing)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/> (on demand: `tilt trigger database-gui`)
 - **MCP Gateway**: <http://localhost:9000/v1/mcp/:profileId> (POST for JSON-RPC stateless mode; GET with Accept: text/event-stream opens the legacy HTTP+SSE stream, other GETs return 405; requires Bearer archestra_token auth)

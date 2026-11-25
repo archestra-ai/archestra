@@ -4,6 +4,7 @@ import {
   followAgentCatalogImage,
   nextLargerAgentRuntimeTier,
   toPlaceholderTitle,
+  withClaudeAccountItRuns,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
@@ -41,7 +42,7 @@ import type {
   AgentType,
   ResolvedAgentRuntime,
 } from "@/types";
-import { type AgentRunLimits, ApiError } from "@/types";
+import { type AgentRunLimits, ApiError, OWN_ACCOUNT_ONLY } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
   prepareAgentRuntimeBackendDriver,
@@ -50,7 +51,7 @@ import {
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
-import { canLaunchAgentRuntimeModel } from "./preflight";
+import { canLaunchAgentRuntimeModel, runSetsOwnClaudeToken } from "./preflight";
 import {
   agentRunFailure,
   classifyAgentRunFailure,
@@ -60,6 +61,7 @@ import { constructStableRunName } from "./runtime-contract";
 import {
   admitRuntimeSteer,
   bindRuntimeChild,
+  isTransientCrossingRefusal,
   promptWithContract,
   type RuntimeCrossing,
 } from "./runtime-crossing";
@@ -226,7 +228,7 @@ async function startAgentRunSession(params: {
       ? priorRun.runtimeLimits?.workspaceGiB
       : resolveRunWorkspaceGiB(chosen.tier, tiers),
   });
-  const { spec, virtualApiKeyId, gatewayTokenId } =
+  const { spec, virtualApiKeyId, gatewayTokenId, boundLlm } =
     await buildAgentRunLaunchSpec({
       runtime: params.runtime,
       limits,
@@ -314,8 +316,12 @@ async function startAgentRunSession(params: {
         prompt: params.task ?? "Run",
         organizationId: params.organizationId,
         userId: params.titleUserId,
-        modelId: params.modelId,
-        llmApiKeyId: params.llmApiKeyId,
+        // On the account the run is bound to: the agent's own pair is not
+        // what a run uses where its runtime, or the person, sets another.
+        // A run on a person's Claude subscription binds no provider key and
+        // keeps the agent's own pair.
+        modelId: boundLlm ? boundLlm.modelId : params.modelId,
+        llmApiKeyId: boundLlm ? boundLlm.llmApiKeyId : params.llmApiKeyId,
       })
         .then((title) =>
           AgentRunModel.updateTitleIfCurrent({
@@ -500,11 +506,20 @@ export function resolveAgentRuntime(
     return null;
   }
   return {
-    ...agent.runtime,
+    // An agent saved before people could choose its account runs on the
+    // Claude account it always ran on.
+    ...withClaudeAccountItRuns({
+      runtime: agent.runtime,
+      savedBeforeChoosing: agent.runtime.accountLock === undefined,
+    }),
     image: followAgentCatalogImage({
       image: agent.runtime.image,
       catalogImages: config.agentRuntime.catalogImages,
     }),
+    accountLock:
+      agent.runtime.accountLock === undefined
+        ? OWN_ACCOUNT_ONLY
+        : agent.runtime.accountLock,
     agentId: agent.id,
     organizationId: agent.organizationId,
     environmentId: agent.environmentId,
@@ -679,6 +694,11 @@ export async function runTaskInAgentRuntime(params: {
             organizationId: params.organizationId,
             userId: params.actor.kind === "user" ? params.actor.id : null,
             ephemeralCredentials: nextEphemeralCredentials,
+            usesClaudeSubscription: await runSetsOwnClaudeToken({
+              runtime: nextRuntime,
+              agent: nextAgent,
+              actor: params.actor,
+            }),
           });
           if (
             nextCredentials.missing.length > 0 ||
@@ -1162,7 +1182,10 @@ async function recordLaunchFailure(params: {
         params.failure instanceof Error
           ? params.failure.message
           : String(params.failure),
-      failure: classifyAgentRunFailure(params.failure),
+      // Classified here, not on the error: the launch loop must not retry it.
+      failure: isTransientCrossingRefusal(params.failure)
+        ? agentRunFailure("launch.guardrails_unavailable")
+        : classifyAgentRunFailure(params.failure),
     });
   } catch (error) {
     // The run lifecycle settles the task from the rethrown error as well.

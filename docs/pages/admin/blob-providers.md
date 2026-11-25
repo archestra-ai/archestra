@@ -2,12 +2,13 @@
 title: Blob Providers
 description: Connect an Amazon S3 bucket, a Google Cloud Storage bucket, or an Azure Blob Storage container once, so features that write files, such as scheduled cost exports, send them there
 order: 6
-lastUpdated: 2026-11-11
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
-Connect your organization's bucket once, and Archestra features that write files send them there. A [scheduled cost export](/docs/llm-proxy/costs-and-limits/exports#schedule-exports-to-object-storage) picks the provider by name and never sees its credentials, so nobody pastes cloud keys into each feature. On AWS, Google Cloud, and Azure, Archestra can sign in as its own pod identity, so there is no key to store or rotate.
+Connect your organization's bucket once, and Archestra features that write files send them there. A [scheduled cost export](/docs/llm-proxy/cost-controls/exports#schedule-exports-to-object-storage) picks the provider by name and never sees its credentials, so nobody pastes cloud keys into each feature. On AWS, Google Cloud, and Azure, Archestra can sign in as its own pod identity, so there is no key to store or rotate.
 
 A blob provider writes to one of three stores:
 
@@ -30,7 +31,7 @@ Add one provider per bucket or container, and every feature that writes files ca
    - Azure Blob Storage: the **Storage account** and the **Container**.
 5. Pick the **Authentication** method and fill in its fields.
 6. Optionally, open **Advanced** and set a **Key prefix**: a folder that every object Archestra writes goes under. The custom endpoint, path-style addressing, external ID, and session token are there too.
-7. Click **Test and add**.
+7. Click **Add**.
 
 Archestra writes and deletes a small test object under the key prefix before it saves. When the test works, the dialog closes and the provider shows in the table. When it fails:
 
@@ -241,5 +242,5 @@ A failed test names what went wrong and, where the error makes it clear, what to
 
 What to know:
 
-- A failed scheduled export shows the same message on its row in **Costs > Exports**.
+- A failed scheduled export shows the same message on its row in **Costs & Limits → FinOps Export**.
 - A test runs on a web pod and exports run on a worker pod. When tests pass and exports fail, check that the worker pods sign in as the same identity.

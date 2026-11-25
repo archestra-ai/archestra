@@ -6,6 +6,7 @@ lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 [MCP](https://modelcontextprotocol.io/specification) (Model Context Protocol) is the open standard that gives AI agents tools. An MCP server offers tools, such as "create a GitHub issue". An MCP client, such as Claude Code or Cursor, calls them.
 
@@ -15,7 +16,7 @@ Add an MCP server once, and every agent and MCP client can use its tools. Arches
 - Signs in for each person. A tool call can use the caller's own account, a shared service account, or the caller's company identity through your identity provider. OAuth tokens refresh by themselves when the provider allows it. See [Authentication](/docs/mcp/authentication).
 - Keeps credentials out of clients. Archestra stores each server's credential. Clients sign in to the gateway and never see it.
 - Checks who can call what. Each call must pass your access rules for the server, the tool, and the credential.
-- [Logs each call](/docs/admin/logs), with the caller, the account it used, and the result.
+- [Logs each call](/docs/insights/logs), with the caller, the account it used, and the result.
 - Gives each client only its tools. An [MCP Gateway](/docs/mcp/gateway) offers the set you choose. By default, the client sees only two tools: one to search the set, and one to run a tool it finds. This keeps the model's context small. See [Load Tools When Needed](/docs/mcp/gateway#load-tools-when-needed).
 
 ```mermaid
@@ -39,7 +40,7 @@ Install a server, and your coding agent can use its tools. No gateway to set up.
 
 1. Go to **MCP Registry** and find the server. Not there? [Add it](/docs/mcp/servers/adding).
 2. Click **Install**, then enter your credential or sign in.
-3. Ask your agent to use the new tools. Each call shows in [Logs](/docs/admin/logs).
+3. Ask your agent to use the new tools. Each call shows in [Logs](/docs/insights/logs).
 
 For a team, an app, or a script that needs a fixed set of tools, [create a gateway](/docs/mcp/gateway#create-a-gateway).
 

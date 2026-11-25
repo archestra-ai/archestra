@@ -2,12 +2,8 @@ import { AUTO_PROVISIONED_INVITATION_STATUS } from "@archestra/shared";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import {
-  AgentModel,
-  MemberModel,
-  OrganizationModel,
-  UserModel,
-} from "@/models";
+import { OrganizationModel, UserModel } from "@/models";
+import { createPendingSignupMember } from "@/services/pending-signup-member";
 import type { ChatOpsProviderType, User } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 
@@ -38,49 +34,14 @@ export async function autoProvisionUser(params: {
     throw new Error("No organization found for auto-provisioning");
   }
 
-  // Org-configured default role for new users (falls back to "member").
-  const defaultRole = await OrganizationModel.getDefaultMemberRole(org.id);
-
   try {
-    // Create user record (no account — no password/login yet)
-    const userId = crypto.randomUUID();
-    await db.insert(schema.usersTable).values({
-      id: userId,
-      name,
+    // User (no account — no password/login yet), member with the org's
+    // default role, personal chat agent and MCP gateway.
+    const { userId, role: defaultRole } = await createPendingSignupMember({
+      organizationId: org.id,
       email: normalizedEmail,
-      emailVerified: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      name,
     });
-
-    // Create member record linking user to organization
-    await MemberModel.create(userId, org.id, defaultRole);
-
-    // Create personal default chat agent for the new member
-    try {
-      await AgentModel.ensurePersonalChatAgent({
-        userId,
-        organizationId: org.id,
-      });
-    } catch (error) {
-      logger.error(
-        { err: error, userId },
-        "[ChatOps] Failed to create personal chat agent",
-      );
-    }
-
-    // Create personal MCP gateway for the new member
-    try {
-      await AgentModel.ensurePersonalMcpGateway({
-        userId,
-        organizationId: org.id,
-      });
-    } catch (error) {
-      logger.error(
-        { err: error, userId },
-        "[ChatOps] Failed to create personal MCP gateway",
-      );
-    }
 
     // Create invitation record for the signup-completion link
     const invitationId = crypto.randomUUID();

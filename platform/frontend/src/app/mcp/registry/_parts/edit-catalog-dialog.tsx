@@ -76,6 +76,7 @@ interface EditCatalogContentProps {
     isDirty: boolean;
     isSaving: boolean;
     hasBlockingErrors: boolean;
+    detailsOnly: boolean;
     onReset: () => void;
   }) => React.ReactNode;
 }
@@ -233,6 +234,7 @@ export function EditCatalogContent({
               isDirty,
               isSaving: updateMutation.isPending,
               hasBlockingErrors,
+              detailsOnly,
               onReset,
             });
           }

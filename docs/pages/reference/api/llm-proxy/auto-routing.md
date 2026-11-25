@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-11-19
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Manage [Auto Routing](/docs/llm-proxy/auto-routing) routers, test prompts against active plans, simulate budget or traffic changes, and inspect routed usage.
 
 - **Routers and state:** enable or disable auto routing for the organization and create, update, list, or delete routers.

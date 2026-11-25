@@ -1,6 +1,11 @@
 import type { PopularAgentOverrides } from "@archestra/shared";
-import { ApiError, sameAgentRuntimeTierName } from "@archestra/shared";
+import {
+  ApiError,
+  sameAgentRuntimeTierName,
+  TimeInMs,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import { LRUCacheManager } from "@/cache-manager";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { Organization } from "@/types";
 import type {
@@ -28,7 +33,7 @@ class AgentRuntimeTemplateModel {
         .for("share");
       if (!row) throw new ApiError(404, "Organization not found");
       return {
-        ...(await AgentRuntimeTemplateModel.readStoredSettings(
+        ...(await AgentRuntimeTemplateModel.readSettingsOnce(
           organizationId,
           tx,
         )),
@@ -290,6 +295,43 @@ class AgentRuntimeTemplateModel {
     return result;
   }
 
+  /**
+   * The stored settings, decrypted and parsed once for each change. A read
+   * asks only when the secret last changed, so every replica sees a save at
+   * once. They are kept in this process's memory and never in the shared
+   * cache, which would store them outside their secret. What is returned is
+   * shared between readers, so it is frozen.
+   */
+  private static async readSettingsOnce(
+    organizationId: string,
+    tx: Transaction,
+  ): Promise<RuntimeTemplateSettings> {
+    const name = AgentRuntimeTemplateModel.secretName(organizationId);
+    const changedAt = await SecretModel.findUpdatedAtByName(name, tx);
+    if (!changedAt) return AgentRuntimeTemplateModel.emptySettings();
+    const cached = AgentRuntimeTemplateModel.settingsCache.get(organizationId);
+    if (cached?.changedAt === changedAt.getTime()) return cached.settings;
+    const row = await SecretModel.findByName(name, tx);
+    if (!row) return AgentRuntimeTemplateModel.emptySettings();
+    const settings = deepFreeze(
+      RuntimeTemplateSettingsSchema.parse(row.secret),
+    );
+    AgentRuntimeTemplateModel.settingsCache.set(organizationId, {
+      changedAt: row.updatedAt.getTime(),
+      settings,
+    });
+    return settings;
+  }
+
+  private static readonly settingsCache = new LRUCacheManager<{
+    changedAt: number;
+    settings: RuntimeTemplateSettings;
+  }>({ maxSize: 16, defaultTtl: TimeInMs.Day });
+
+  private static emptySettings(): RuntimeTemplateSettings {
+    return { revision: 0, templates: [], builtIns: {} };
+  }
+
   private static secretName(organizationId: string) {
     return `agent-runtime-templates:${organizationId}`;
   }
@@ -304,7 +346,7 @@ class AgentRuntimeTemplateModel {
     );
     return row
       ? RuntimeTemplateSettingsSchema.parse(row.secret)
-      : { revision: 0, templates: [], builtIns: {} };
+      : AgentRuntimeTemplateModel.emptySettings();
   }
 
   private static async writeStoredSettings(
@@ -320,3 +362,12 @@ class AgentRuntimeTemplateModel {
 }
 
 export default AgentRuntimeTemplateModel;
+
+/** Freezes a parsed value and everything in it. */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}

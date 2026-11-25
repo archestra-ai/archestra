@@ -6,6 +6,7 @@ lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Run an n8n workflow or an Open WebUI chat with Archestra models and tools. Configure model routing and tool access separately, then test each connection.
 

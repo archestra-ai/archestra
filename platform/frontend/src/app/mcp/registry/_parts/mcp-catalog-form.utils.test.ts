@@ -378,6 +378,7 @@ describe("transformFormToApiData", () => {
       serverUrl: "https://mcp.example.com",
       oauthConfig: {
         client_id: "client-id",
+        requires_client_credentials: true,
         client_secret: "client-secret",
         audience: "",
         redirect_uris: ["https://app.example.com/oauth-callback"],
@@ -405,6 +406,9 @@ describe("transformFormToApiData", () => {
       labels: [],
     } as never);
 
+    expect(
+      transformFormToApiData(values).oauthConfig?.requires_client_credentials,
+    ).toBe(true);
     expect(values.oauthConfig?.authorizationEndpoint).toBe(
       "https://legacy-idp.example.com/oauth/authorize",
     );
@@ -469,7 +473,7 @@ describe("transformFormToApiData", () => {
     });
   });
 
-  it("hydrates explicit OAuth endpoints from external catalog manifests", () => {
+  it("preserves the external catalog credential requirement and OAuth endpoints on save", () => {
     const values = transformExternalCatalogToFormValues({
       name: "direct-oauth-mcp",
       display_name: "Direct OAuth MCP",
@@ -481,6 +485,7 @@ describe("transformFormToApiData", () => {
       },
       oauth_config: {
         client_id: "client-id",
+        requires_client_credentials: true,
         client_secret: "client-secret",
         redirect_uris: ["https://app.example.com/oauth-callback"],
         scopes: ["read"],
@@ -500,6 +505,9 @@ describe("transformFormToApiData", () => {
       },
     } as never);
 
+    expect(
+      transformFormToApiData(values).oauthConfig?.requires_client_credentials,
+    ).toBe(true);
     expect(values.oauthConfig?.authorizationEndpoint).toBe(
       "https://legacy-idp.example.com/oauth/authorize",
     );
@@ -1494,6 +1502,62 @@ describe("desktop MCP servers", () => {
       name: "matlab-copy",
       serverType: "desktop_mcp",
     });
+  });
+
+  it("imports a desktop catalog entry as a desktop MCP server with its command line", () => {
+    const values = transformExternalCatalogToFormValues({
+      name: "chromedevtools__chrome-devtools-mcp",
+      display_name: "Chrome DevTools",
+      description: "Drives Chrome on the user's device",
+      instructions: "You need **Node.js**.",
+      icon: null,
+      server: {
+        type: "desktop",
+        command: "npx",
+        args: [
+          "-y",
+          "chrome-devtools-mcp@latest",
+          "--user-data-dir=$HOME/My Chrome",
+          'say "hi"',
+        ],
+      },
+    } as never);
+
+    expect(values).toMatchObject({
+      name: "Chrome DevTools",
+      serverType: "desktop_mcp",
+      instructions: "You need **Node.js**.",
+      desktopConfig: {
+        kind: "command",
+        value:
+          'npx -y chrome-devtools-mcp@latest "--user-data-dir=$HOME/My Chrome" "say \\"hi\\""',
+      },
+    });
+    expect(transformFormToApiData(values)).toMatchObject({
+      serverType: "desktop_mcp",
+      instructions: "You need **Node.js**.",
+      desktopConfig: {
+        command:
+          'npx -y chrome-devtools-mcp@latest "--user-data-dir=$HOME/My Chrome" "say \\"hi\\""',
+        url: null,
+      },
+    });
+  });
+
+  it("keeps stored instructions through an edit and sends none from a form that never held them", () => {
+    const edited = transformCatalogItemToFormValues({
+      ...desktopItem,
+      instructions: "Turn on the add-on first.",
+      desktopConfig: { command: "uvx mcp-for-blender" },
+    } as never);
+    expect(transformFormToApiData(edited).instructions).toBe(
+      "Turn on the add-on first.",
+    );
+
+    const { instructions: _, ...withoutInstructions } = edited;
+    expect(transformFormToApiData(withoutInstructions)).not.toHaveProperty(
+      "instructions",
+    );
   });
 });
 

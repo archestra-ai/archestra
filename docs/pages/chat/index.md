@@ -1,11 +1,12 @@
 ---
 title: Chat & Projects
 description: Start conversations, delegate tasks, attach files, and collaborate with autonomous agents in real time
-order: 6
+order: 7
 lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Start a conversation to delegate tasks to an agent, attach reference files, and collaborate in real time. Every prompt flows through the [LLM Proxy](/docs/llm-proxy) and [MCP Gateway](/docs/mcp/gateway), enforcing guardrails, access policies, and audit logging.
 

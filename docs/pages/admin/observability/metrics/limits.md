@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-10-31
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Identify which spend, token, or request limit was exhausted and whether it blocked a request.
 
 ## Metrics
@@ -73,4 +75,4 @@ sum by (entity_type, limit_kind) (
 
 ## Storage Errors
 
-`llm_limit_storage_errors_total` uses `operation="validation"`, `"admission"`, `"settlement"`, or `"cancellation"`. A storage error is separate from an exhausted allowance. See [Limit Behavior](/docs/llm-proxy/costs-and-limits/limits#limit-behavior) to choose enforcement behavior.
+`llm_limit_storage_errors_total` uses `operation="validation"`, `"admission"`, `"settlement"`, or `"cancellation"`. A storage error is separate from an exhausted allowance. See [Limit Behavior](/docs/llm-proxy/cost-controls/limits#limit-behavior) to choose enforcement behavior.

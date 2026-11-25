@@ -6,6 +6,7 @@ lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 An agent always acts for someone, and every tool call signs in as a real account. Ask an agent to file a Jira ticket, and Jira shows your name, while the logs show which agent filed it. Nobody shares one bot key that can do everything.
 
@@ -50,4 +51,4 @@ What to know:
 
 ## See Who Did What
 
-Every tool call records the person, the agent, and the account it used. Open a call in the [MCP Gateway logs](/docs/admin/logs): **Identity** shows the account, **Token issued to** shows the app a company-identity token was issued to, along with the acting agent when the token names one.
+Every tool call records the person, the agent, and the account it used. Open a call in the [MCP Gateway logs](/docs/insights/logs): **Identity** shows the account, **Token issued to** shows the app a company-identity token was issued to, along with the acting agent when the token names one.

@@ -4032,18 +4032,18 @@ const config = {
         x64: {
           url:
             process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64 ||
-            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4",
+            "https://ftp.perforce.com/perforce/r25.2/bin.linux26x86_64/p4",
           sha256:
             process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_AMD64 ||
-            "ba4b931bd37a1fd073785c3194a608906934f62b52d407178121a8184bee8ae6",
+            "8fdaee81e28b5a46e0c241acd97ddeceea388af374cadd57221c2e01b4cb0489",
         },
         arm64: {
           url:
             process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_ARM64 ||
-            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26aarch64/p4",
+            "https://ftp.perforce.com/perforce/r25.2/bin.linux26aarch64/p4",
           sha256:
             process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_ARM64 ||
-            "a67bcae67dd810fdc099525289457ab6af6f647f6e3aceadc0260f42d19cbc93",
+            "b533066632ba80a7a39699d698b89e114af86805c4f3a6c6b40242c5afabdbe3",
         },
       },
     },

@@ -13,6 +13,7 @@ const access = vi.hoisted(() => ({
   role: { plugin: ["read", "create"] } as Record<string, string[]>,
   grants: [] as { resource: string; action: string; scope: string }[],
   plugins: null as unknown[] | null,
+  isPending: false,
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
@@ -20,6 +21,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
     permissions: Record<string, string[]>,
     scope?: string,
   ) => ({
+    isPending: access.isPending,
     data: Object.entries(permissions).every(([resource, actions]) =>
       actions.every((action) =>
         scope === undefined
@@ -131,6 +133,7 @@ describe("PluginsPage", () => {
       { resource: "plugin", action: "use", scope: PLUGIN.id },
     ];
     access.plugins = null;
+    access.isPending = false;
   });
 
   it("offers adding a plugin to a role that may only create plugins", () => {
@@ -141,23 +144,69 @@ describe("PluginsPage", () => {
     ).toHaveAttribute("href", "/plugins/new");
   });
 
-  it("offers the first plugin to a creator and refuses it without plugin:create", () => {
+  it("explains plugins to a creator on an empty page, with create and browse as the next steps", () => {
     access.plugins = [];
     access.role = { plugin: ["create"] };
-    const view = render(<PluginsPage />);
-    expect(
-      screen.getByRole("link", { name: /Add your first plugin/ }),
-    ).toBeVisible();
-
-    view.unmount();
-    access.role = { plugin: ["read"] };
     render(<PluginsPage />);
+
     expect(
-      screen.queryByRole("link", { name: /Add your first plugin/ }),
+      screen.getByText("Extend the coding tools your team already uses"),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/A skill teaches an agent how to do a task/),
+    ).toHaveTextContent(
+      "A plugin bundles files such as skills, commands, and hooks for one coding tool.",
+    );
+    expect(
+      screen.getByRole("link", { name: /Create a plugin/ }),
+    ).toHaveAttribute("href", "/plugins/new?source=blank");
+    // The wizard's first step is where the popular marketplaces are listed.
+    expect(
+      screen.getByRole("link", { name: "Browse popular plugins" }),
+    ).toHaveAttribute("href", "/plugins/new");
+    // The header keeps its line and its Add button, so the first plugin
+    // doesn't shift the page.
+    expect(
+      screen.getByText(
+        "Plugins install client-native files on developer machines.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Add new plugin/ }),
+    ).toHaveAttribute("href", "/plugins/new");
+  });
+
+  it("waits for permissions before showing first-use actions or the reader message", () => {
+    access.plugins = [];
+    access.role = {};
+    access.isPending = true;
+    render(<PluginsPage />);
+
+    expect(
+      screen.getByText("Extend the coding tools your team already uses"),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Your admins haven't shared a plugin yet."),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Add your first plugin/ }),
-    ).toHaveAttribute("aria-disabled", "true");
+      screen.queryByRole("link", { name: /Create a plugin/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("tells a reader without plugin:create who shares plugins instead of offering a disabled button", () => {
+    access.plugins = [];
+    access.role = { plugin: ["read"] };
+    render(<PluginsPage />);
+
+    expect(
+      screen.getByText("Your admins haven't shared a plugin yet."),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: /Create a plugin/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Create a plugin/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens a listed plugin without edit access, and offers bulk actions only as far as its grants go", async () => {

@@ -69,16 +69,16 @@ export function NetworkPolicyFields({
       {enforcementUnavailable ? (
         <Alert variant="warning">
           <TriangleAlert className="h-4 w-4" />
-          <AlertTitle>Network policy enforcement test failed</AlertTitle>
+          <AlertTitle>Network policy not enforced</AlertTitle>
           <AlertDescription className="block leading-6">
-            Egress rules would be accepted and then ignored, so these controls
-            stay disabled until the cluster enforces NetworkPolicy.{" "}
+            Your Kubernetes cluster doesn't enforce NetworkPolicy, so egress
+            settings would have no effect. They stay disabled until it does.{" "}
             <ExternalDocsLink
-              href={NETWORK_POLICY_DOCS_URL}
+              href={NETWORK_ENFORCEMENT_DOCS_URL}
               className="underline"
               showIcon={false}
             >
-              View docs
+              How to turn it on
             </ExternalDocsLink>
           </AlertDescription>
         </Alert>
@@ -302,6 +302,10 @@ const EGRESS_MODE_DESCRIPTIONS: Record<EgressMode, string> = {
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
   DocsPage.PlatformEnvironments,
   "network-egress-policies",
+);
+const NETWORK_ENFORCEMENT_DOCS_URL = getDocsUrl(
+  DocsPage.PlatformDeploymentNetworking,
+  "enforce-workload-egress",
 );
 const PUBLIC_INTERNET_FLOOR_DOCS_URL = getDocsUrl(
   DocsPage.PlatformEnvironments,

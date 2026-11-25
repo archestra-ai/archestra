@@ -6,6 +6,7 @@ lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 GitHub Copilot gives you models from OpenAI, Anthropic, and Google, but GitHub does not provide standard API keys. Archestra bridges this gap so you can run Copilot models in chat, background agents, and local tools without managing raw keys.
 

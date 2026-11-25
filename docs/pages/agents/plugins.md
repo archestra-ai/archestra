@@ -6,6 +6,7 @@ lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give every developer the same coding-agent setup. A plugin packages hooks, subagents, slash commands, skills, and MCP settings for one client. You publish it in Archestra once, and each developer installs it with one command.
 

@@ -64,6 +64,7 @@ import {
 import {
   canLaunchAgentRuntimeModel,
   preflightAgentRuntimeModelReadiness,
+  runSetsOwnClaudeToken,
 } from "@/services/agent-runtime/preflight";
 import {
   agentRunUrl,
@@ -961,6 +962,11 @@ async function launchDelegatedTask(params: {
         userId: actor.kind === "user" ? actor.id : null,
         authorizationUserId: principalUserId,
         ephemeralCredentials: params.ephemeralCredentials,
+        usesClaudeSubscription: await runSetsOwnClaudeToken({
+          runtime,
+          agent,
+          actor,
+        }),
       });
     } catch (error) {
       if (error instanceof SharedCredentialAccessDeniedError) {

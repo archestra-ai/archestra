@@ -68,6 +68,11 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
     // Same for zlib1g: named so apt upgrades the base image's copy to the
     // trixie-security build (CVE-2026-85091, CVE-2026-76844).
     "zlib1g",
+    // Same for glibc: the base's build predates Debian's CVE-2026-5435 and
+    // CVE-2026-19499 fix.
+    "libc6",
+    "libc-bin",
+    "gzip",
     "unzip",
     "zip",
 ];

@@ -6,6 +6,7 @@ lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Claude Code can route model requests through Archestra while using your Claude subscription or an Archestra virtual key. Connect also installs the MCP Gateway and selected shared skills.
 
@@ -21,7 +22,7 @@ Install Claude Code and sign in to your Claude account for subscription inferenc
 4. When the installer asks **Sign in now?**, press Enter. Sign in to Archestra in the browser and approve the gateway connection. If you skipped it, start Claude Code, run `/mcp`, select the Archestra gateway, and choose **Authenticate**.
 5. When the installer asks **Start Claude Code now?**, press Enter. Claude Code starts a new session with the updated settings. On Windows, or if you answer no, open a new terminal and run the `claude` command the installer prints last.
 
-Setup backs up `~/.claude/settings.json` to `~/.claude/settings.json.archestra-backup` before its first change. To disconnect, press `C` in the [launch check](/docs/get-started/connect#startup-guard) and select the connection to remove. To restore settings manually, copy the backup over `settings.json` and remove the gateway with `claude mcp remove --scope user <gateway>`; `<gateway>` is its name in `/mcp`.
+Setup backs up `~/.claude/settings.json` to `~/.claude/settings.json.archestra-backup` before its first change. To disconnect, press `C` in the launch check that runs each time Claude Code starts, and select the connection to remove. To restore settings manually, copy the backup over `settings.json` and remove the gateway with `claude mcp remove --scope user <gateway>`; `<gateway>` is its name in `/mcp`.
 
 ## Verify the Connection
 
@@ -40,6 +41,6 @@ What to know:
 - The rule covers every tool on the gateway. A Claude Code rule cannot match a tool's arguments, so it cannot be narrower.
 - Your access rules and [Guardrails](/docs/agents/guardrails) still apply to each call.
 - To approve each call yourself, run `/permissions` in Claude Code and add the same rule as an ask rule. An ask rule wins over an allow rule.
-- When white-labeling changes the gateway's tool names, the [launch check](/docs/get-started/connect#startup-guard) moves the rules setup added to the new names. Rules you added yourself stay as they are.
+- When white-labeling changes the gateway's tool names, the launch check moves the rules setup added to the new names. Rules you added yourself stay as they are.
 - If an ask or deny rule in `~/.claude/settings.json` names one of these tools under its old name, the launch check leaves setup's rule for that tool under the old name too. Otherwise the moved rule would allow calls your rule no longer matches. Rename your rule to the new name, and the next launch moves setup's rule.
 - The launch check reads only `~/.claude/settings.json`. Rename an ask or deny rule for these tools in project, local or managed settings yourself when the names change.

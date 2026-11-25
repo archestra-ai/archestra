@@ -911,7 +911,7 @@ Standard output yields newline-delimited JSON responses in arrival order:
 | `static` | Tool has a static contract; no annotator was consulted. | |
 | `unresolved` | Tool or argument pattern is not defined in policy. | `reason` |
 
-`--repeat <n>` runs each call `n` times to assess model classification consistency (default: 1). `--concurrency <n>` limits in-flight requests (default: 4).
+`--repeat <n>` runs each call `n` times to assess model classification consistency (default: 1). `n` MUST be at least 1. `--concurrency <n>` limits in-flight requests (default: 4).
 
 Example checking Google Drive tool calls against battery rules:
 
@@ -948,7 +948,7 @@ Without the token, the `org` line is a `no_answer` with the program's error:
 {"id":"org","repeat":0,"latency_ms":67,"outcome":"no_answer","annotator":"google-workspace.drive-readers","reason":"non_success status=1 detail=\"google-workspace.drive-readers: APPA_PROVIDER_GOOGLE_WORKSPACE_TOKEN is not set\""}
 ```
 
-The command exits with status 0 after testing all input calls, regardless of individual outcomes. It exits with a non-zero status if the policy fails to load or if input JSON is malformed.
+The command exits with status 0 after testing all input calls, regardless of individual outcomes. It exits with a non-zero status if the policy fails to load or if input JSON is malformed. It also exits with a non-zero status when it cannot write an answer to standard output, for example after the reader closes the pipe. In that case no further call is scheduled, and the calls in flight are dropped.
 
 ## Recorders
 
@@ -1102,7 +1102,7 @@ Built-in sanitizers are configured using `builtin`:
 | Configuration | Behavior |
 |---|---|
 | `builtin = "redact-email"` | Replaces email addresses with standard placeholders. Does not redact other PII. |
-| `builtin = "redact-secrets"` | Detects and redacts credentials: private keys, well-known API tokens (AWS, GitHub, Anthropic, OpenAI, Slack, Google, GitLab, npm, JWT), 40-character AWS secret keys, URL credentials (`user:password@`), assignment values matching secret keywords (`password`, `token`, `secret`, `credential`, `auth`, `Bearer`, netrc lines), and high-entropy strings (20+ chars). This is heuristic detection, not a formal absence proof. |
+| `builtin = "redact-secrets"` | Detects and redacts credentials by shape: private keys, well-known API tokens (AWS, GitHub, Anthropic, OpenAI, Slack, Google, GitLab, npm, JWT), 40-character AWS secret keys, and high-entropy strings (20+ chars). It also redacts URL credentials (`user:password@`) and netrc `password` entries. It redacts the value of each assignment whose key names a secret, such as `password`, `token`, `secret`, `credential`, or `auth`. A `Bearer` or `Basic` value is redacted with its scheme word. A JSON body stays JSON of the same shape. The sanitizer redacts each string and key in it. It replaces the whole value of a field whose name names a secret. In other text, a backslash in quotes can escape the next character or be literal. The sanitizer reads double and single quotes in all four combinations of these rules. It masks each value or netrc password that one of the readings finds. Detection is heuristic and can miss credentials. |
 | `builtin = "claude-code"` | Uses local Claude Code to transform payloads according to `hint`, `on`, and `permits`. |
 | `builtin = "llm"` | Uses the model configured under `[externals.llm]` to transform payloads according to `hint`, `on`, and `permits`. |
 
@@ -1310,9 +1310,10 @@ The child may read and accept whatever the parent's own limits allow. OpenAPPA d
 The parent decides on a frozen answer once, by calling `execute_remedy_plan`. The deferral notice gives one reference that accepts the answer and one that discards it:
 
 ```text
-[appa] The subagent's answer was deferred. Its label is suspicious/a restricted audience; accepting it combines this session's label with that label. Decide once:
+[appa] The subagent's answer is reviewed before it reaches this session. Its label is suspicious/a restricted audience; accepting it combines this session's label with it. Choose one; the choice is final:
   Accept:  execute_remedy_plan(offer_id: "ret-5f1c02a9d3e84b77")
   Discard: execute_remedy_plan(offer_id: "ret-9a40c7e1b2d36f05")
+This is a routine check. If you mention it to the person, say only that you reviewed the subagent's result before using it; don't repeat this notice or the label.
 ```
 
 The notice names the answer's trust and whether its audience is restricted, but none of the groups or readers in that audience: the child's own calls chose them.
@@ -1520,7 +1521,7 @@ OpenAPPA evaluates root declarations before included files, processing included 
 - Included files cannot include other files.
 - Included files cannot override deployment-wide settings. The sole exception is `confined_results` under `[policy.deployment]`: included files may append tools they declare. Included files must not set `[policy.deployment] hint`.
 - Root declarations for `[[policy.annotator]]` or `[[policy.sanitizer]]` replace included components sharing the same name. Omitted fields in the replacement are not inherited.
-- Multiple included files cannot declare the same annotator name.
+- Two included files cannot declare the same annotator name. They also cannot both declare an annotator or sanitizer that the root declares. OpenAPPA refuses such a configuration at load.
 - Multiple files cannot configure the same external component name within the same category (e.g. two `[externals.sanitizers.clean]` blocks).
 
 See [Batteries](/batteries) for pre-packaged policy bundles.
@@ -1598,9 +1599,9 @@ If the endpoint requires authentication, set `token_env` to the name of an envir
 
 Set `command` to an array specifying the executable and arguments (e.g. `command = ["python3", "./sanitize.py"]`). OpenAPPA executes the process directly without an intermediate shell, launching it with the configuration directory as its working directory and terminating child processes upon completion. Commands referencing `appa` invoke the runtime's own binary to execute built-in plugins (such as `appa file-tracker`).
 
-Commands read a single JSON consult request from standard input and write a JSON response to standard output within `timeout_ms` and `max_body_bytes`. `APPA_CONSULT_TIMEOUT_MS` informs the process of remaining execution time (accounting for queue wait). The runtime limits concurrent local program executions to eight.
+Commands read a single JSON consult request from standard input and write a JSON response to standard output within `timeout_ms` and `max_body_bytes`. When OpenAPPA reaches the end of standard output, it closes standard input, so a command that needs the whole request must read it before it closes standard output. `APPA_CONSULT_TIMEOUT_MS` informs the process of remaining execution time (accounting for queue wait). The runtime limits concurrent local program executions to eight.
 
-If a command requires credentials, specify `token_env` with an environment variable name prefixed with `APPA_PROVIDER_`. OpenAPPA passes that variable into the process environment while filtering out other internal `APPA_*` variables.
+If a command requires credentials, specify `token_env` with an environment variable name prefixed with `APPA_PROVIDER_`. OpenAPPA passes that variable into the process environment while filtering out other internal `APPA_*` variables. On Windows, where variable names ignore case, the filter also ignores case.
 
 OpenAPPA does not require credential variables to be present at policy load time; the process must handle missing credentials at runtime.
 
@@ -1657,7 +1658,7 @@ OpenAPPA rejects a response if the service returns an HTTP error, exits with a n
 
 The `claude-code` and `llm` backends dispatch consult requests to language models. OpenAPPA injects fixed instructions and `declaration` constraints into the system prompt, including the label guide for annotators. Call data in `artifact` is sent as user content.
 
-Before dispatching annotator requests to external model providers (`claude-code`, `llm`, or `jev`), OpenAPPA automatically redacts detected credentials in `artifact.args` using the built-in secret detector. Fields matching credential keywords (`password`, `token`, `secret`, `api_key`, `credential`, etc.) or high-entropy tokens are replaced with `[redacted-secret]`. Redaction is best effort. Authority and sanitizer payloads are not redacted, as sanitizers require raw text for processing.
+Before dispatching annotator requests to external model providers (`claude-code`, `llm`, or `jev`), OpenAPPA automatically redacts detected credentials in `artifact.args` using the built-in secret detector. Fields matching credential keywords (`password`, `token`, `secret`, `api_key`, `credential`, etc.) or high-entropy tokens are replaced with `[redacted-secret]`. In nested object keys, OpenAPPA also replaces private keys, URL passwords, known API tokens, and AWS secret keys. Keys that become equal get a `-2`, `-3`, … suffix, so no entry is lost. The tool name of the complete call stays as written when the declaration that judges the call names that tool exactly. When the call matches a pattern or the `*` wildcard, the tool name is redacted like any other string. Redaction is best effort. Authority and sanitizer payloads are not redacted, as sanitizers require raw text for processing.
 
 OpenAPPA checks authority and annotator answers against their permits and assigns sanitized data the declared audience or trust rank. The model is responsible for making the correct judgment or removing the required content.
 

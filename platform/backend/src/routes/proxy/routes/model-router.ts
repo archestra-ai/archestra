@@ -3,11 +3,9 @@ import {
   isAzureAnthropicBackingModel,
   isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
-  lacksOpenAiChatCompletions,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   providerDisplayNames,
   RouteId,
-  requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -114,6 +112,7 @@ import {
   parseImageEditRequest,
 } from "../image-edit-handler";
 import {
+  assertUserNotSoftDeleted,
   resolveAgent,
   validateVirtualApiKeyToken,
   virtualKeyRateLimiter,
@@ -131,6 +130,7 @@ import {
   type ModelRouterOAuthClientAuth,
   type ModelRouterUserOAuthAuth,
   modelRouterAuthenticatedUserId,
+  modelServesChatCompletions,
   nativeResponsesProvider,
   selectModelRouterCredential,
   userProviderKeyMappings,
@@ -1107,15 +1107,7 @@ async function getNativeResponsesAdapter({
 function assertModelServesChatCompletions(
   resolution: ModelRouterResolution,
 ): void {
-  if (
-    !requiresResponsesApi(resolution.supportedEndpoints) &&
-    !(
-      resolution.provider === "openai" &&
-      lacksOpenAiChatCompletions(resolution.modelId)
-    )
-  ) {
-    return;
-  }
+  if (modelServesChatCompletions(resolution)) return;
   throw new ApiError(
     400,
     `Model "${resolution.requestedModel}" is only served over the Responses API. ` +
@@ -1423,6 +1415,18 @@ async function getModelRouterAuth(
  * a Fastify request: a WebSocket upgrade carries the same bearer token.
  */
 export async function authenticateModelRouterBearer(params: {
+  authorization: string | undefined;
+  ip: string;
+}): Promise<ModelRouterAuth> {
+  const auth = await resolveModelRouterBearer(params);
+  // Here, so that inference, model listing and realtime sessions all refuse a
+  // user the identity provider deactivated (SCIM).
+  const userId = modelRouterAuthenticatedUserId(auth);
+  if (userId) await assertUserNotSoftDeleted(userId);
+  return auth;
+}
+
+async function resolveModelRouterBearer(params: {
   authorization: string | undefined;
   ip: string;
 }): Promise<ModelRouterAuth> {

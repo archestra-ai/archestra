@@ -7,6 +7,7 @@ beta: "Auto Routing is in Beta."
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Send easy sessions to a cheap model and hard ones to a frontier model, while keeping daily spend near a target you pick. An auto router sits behind one model name, `auto` or `auto:<name>`, learns from its own traffic, and keeps each session on one model so prompt caches stay warm. Run one router for the whole organization or separate routers per team or customer, each with its own models, budget, and decision model.
 
@@ -27,14 +28,12 @@ If you want load balancing and failover across keys for a single model, use a [m
 
 ## How It Picks a Model
 
-Jev does not pick the model. Jev scores the session's opening context, and Archestra's own routing plan uses those scores—together with your traffic history, model prices, and daily budget—to choose the tier.
+Jev does not pick the model. Jev scores the session's opening context, and Archestra's own routing plan uses those scores, your traffic history, model prices, and daily budget to choose the tier.
 
 1. **Score the opening turn:** on a session's first request, Jev estimates two things: the probability that fast, normal, or smart is the weakest tier that can finish the whole session as well as a frontier model, and the chance that the session's context will grow past roughly 100,000 tokens.
 2. **Estimate cost and quality per tier:** using a plan fitted from the router's past sessions, Archestra predicts how many tokens this kind of session tends to use, what share will hit long-context pricing, and what it would cost on each of your three models.
 3. **Spend the budget where it buys the most quality:** the plan picks the tier that maximizes expected quality within your daily budget. Under a tight budget, only sessions where a stronger model buys the biggest quality gain per extra dollar move up a tier; under a larger budget, more sessions do.
 4. **Stay on that model for the session:** follow-up turns reuse the saved choice without calling Jev again.
-
-That split is why a new router starts cold on the normal model and why editing a model's price or your daily budget triggers a new plan: Jev's scores do not change, but Archestra's budget allocation does.
 
 ## Set It Up
 
@@ -42,12 +41,14 @@ You need [`llmProxy:update`](/docs/reference/permissions#llmProxy:update) to cre
 
 1. Add a Jev API key shared with the whole organization under [Model Providers](/docs/llm-proxy/providers#jev). Jev scores each new session.
 2. Go to **LLM → Auto Routing** and click **Create auto router**.
-3. Give it a name. Clients request `auto:` followed by that name, such as `auto:support`. The first router is named `auto`.
+3. Give it a name. Clients request `auto:` followed by that name, such as `auto:support`; leave it empty to name the router `auto`.
 4. Pick an organization-wide provider key and model for each of the three tiers: fast, normal, and smart. Each tier can use a different provider.
 5. Pick a daily budget and the decision model.
 6. Turn auto routing on under **Settings → LLM**. This switch covers every router in the organization.
 
 Open a router to check its current plan: expected spend against the budget, quality relative to sending everything to the smart model, and the planned split across fast, normal, and smart. Switch to **7 days** or **14 days** to see what it actually routed: billed spend, sessions and requests, actual tier split, and estimated savings against the smart model at list price.
+
+![An auto router's plan: expected spend against a Balanced budget, quality against the smart model, and the fast, normal, and smart split](/docs/automated_screenshots/llm-proxy-auto-routing_overview.webp)
 
 ## Call a Router
 
@@ -107,12 +108,12 @@ const response = await client.chat.completions.create(
 The request runs on the provider key of the tier the router picks, and the answer appears under **Logs → LLM Proxy** marked **auto→**.
 
 - Native provider routes (`/v1/anthropic`, `/v1/openai`, and others) return `400` for router names. Clients that use a native route, such as Claude Code on Anthropic, cannot call an auto router directly.
-- An agent or chat with an explicit model or model pool is never routed, and Agent Runtime agents are not routed. A [forked subagent](/docs/agents/subagents#fork-the-agent) of a routed agent uses the same router when it runs on **Normal**; if it asks for **Fast** or **Smart**, it uses the organization's **Fast model** or **Smart model** under **Settings → Agents**, which are separate from an auto router's tiers.
+- An agent or chat with an explicit model or model pool is never routed, and Agent Runtime agents are not routed. A [forked subagent](/docs/agents/subagents#fork-the-agent) of a routed agent uses the same router only when it runs on **Normal**.
 - Each tier points to one provider key and model, so it does not fail over to another key the way a model pool does.
 
 ## Daily Budget and Presets
 
-The daily budget is the average daily spend a router aims for, not a hard ceiling; spend on a busy day can run above it. To block requests at a strict cap, [add a spend limit](/docs/llm-proxy/costs-and-limits/limits#create-a-limit) under **Limits** for the team or virtual keys that call the router.
+The daily budget is the average daily spend a router aims for, not a hard ceiling; spend on a busy day can run above it. To block requests at a strict cap, [add a spend limit](/docs/llm-proxy/cost-controls/limits#create-a-limit) under **Limits** for the team or virtual keys that call the router.
 
 Pick a preset and Archestra derives the budget from the router's recent traffic, then updates it every time the plan refits:
 
@@ -123,31 +124,29 @@ Pick a preset and Archestra derives the budget from the router's recent traffic,
 
 Once a router has history, **Configure** previews the estimated daily spend and fast/normal/smart tier split on today's traffic as you switch presets or edit a custom budget.
 
+![Configuring a router: a provider key and model per tier, the budget presets with the estimated split, and the decision model](/docs/automated_screenshots/llm-proxy-auto-routing_configure.webp)
+
 ### Decision Model
 
-Each router chooses a decision-model provider, one of its organization-wide keys, and a model; Jev is the only supported provider today. Changing the decision model resets what that router has learned.
-
-### Each Router Learns on Its Own
-
-A router scores, plans, and learns only from its own sessions. Changing one router's models, budget, or decision model never affects another router.
+Each router chooses a decision-model provider, one of its organization-wide keys, and a model. Jev is the only supported provider. Changing the decision model resets what that router has learned.
 
 ## How Sessions Stay Sticky
 
-A session with an explicit session ID is routed once on its first request and stays on that model until the session ends. Keeping one model per session avoids mid-conversation quality drops and keeps provider prompt caches warm.
+A session with an explicit session ID is routed once on its first request and stays on that model until the session ends.
 
-- **Sending a session ID:** pass `X-Archestra-Session-Id` from your own apps. This header is required when continuing a `/v1/unified-model/responses` conversation with `previous_response_id`; omitting it returns `400`. Archestra also reads session IDs automatically from `X-Archestra-Meta`, Open WebUI (`X-OpenWebUI-Chat-Id`), Codex (`client_metadata.thread_id`, `session_id`, or `session-id`), OpenCode (`x-session-id`, `x-session-affinity`, `x-opencode-session`, or `session-id`), Pi (`x-pi-session-id`), and Claude (`metadata.user_id`).
-- **Without a session ID:** Archestra derives identity from the virtual key, the first user message, initial system instructions, and the current tool-name list. Instructions added after the first user message, tool ordering, and cache markers do not change it, but changing the initial instructions or tool list can trigger a new scorer call and model choice.
-- **What gets sent to the scorer:** a clipped head-and-tail excerpt of the opening user message and system instructions, plus the sorted list of tool names. Common API keys, bearer tokens, and long opaque secrets are redacted before leaving Archestra. Tool descriptions, parameter schemas, tool results, and follow-up turns are never sent. If tool names alone exceed 64 KiB, scoring fails instead of silently dropping tools.
+- **Sending a session ID:** pass `X-Archestra-Session-Id` from your own apps. It is required when continuing a `/v1/unified-model/responses` conversation with `previous_response_id`; omitting it returns `400`. Archestra also reads the session IDs that Open WebUI, Codex, OpenCode, Pi, and Claude send.
+- **Without a session ID:** Archestra derives the session from the virtual key, the first user message, the initial system instructions, and the tool names. Changing the initial instructions or tool list gets a new routing decision.
+- **What gets sent to the scorer:** a clipped excerpt of the opening user message and system instructions, plus the tool names. Common API keys, bearer tokens, and long opaque secrets are redacted first. Tool descriptions, schemas, tool results, and follow-up turns are never sent.
 
 A background job builds a versioned routing plan from each router's past sessions. Editing a router triggers a new plan within about a minute, and every router refits at least once a day.
 
 ## Test and Simulate Through the API
 
-Before shifting production traffic or changing a budget, you can test routing choices and what-if plans through the [Auto Routing API](/docs/reference/api/llm-proxy/auto-routing) without executing an LLM call or publishing a plan.
+Before shifting production traffic or changing a budget, test routing choices and what-if plans through the [Auto Routing API](/docs/reference/api/llm-proxy/auto-routing) without executing an LLM call or publishing a plan.
 
 - **Dry-run a prompt ([`POST /api/auto-routing/routers/{id}/preview`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/POST/api/auto-routing/routers/{id}/preview)):** scores either plain opening `text` or a full opening Chat Completions, Responses, or Anthropic Messages `request` body (including its system prompt and tools) against the active plan, without calling the target model or saving a decision. Needs [`llmProxy:update`](/docs/reference/permissions#llmProxy:update).
 - **Simulate a budget or traffic change ([`POST /api/auto-routing/routers/{id}/simulate`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/POST/api/auto-routing/routers/{id}/simulate)):** fits a candidate plan for a different daily budget, preset, or scaled traffic volume (`volumeMultiplier`) without publishing it. Needs [`llmProxy:read`](/docs/reference/permissions#llmProxy:read).
-- **Inspect or refit a plan:** use [`GET /api/auto-routing/routers/{id}/diagnostics`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/GET/api/auto-routing/routers/{id}/diagnostics) to re-solve the fit history at a target budget and see per-session routes, or [`POST /api/auto-routing/routers/{id}/replan`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/POST/api/auto-routing/routers/{id}/replan) to trigger a fresh plan fit immediately.
+- **Inspect or refit a plan:** use [`GET /api/auto-routing/routers/{id}/diagnostics`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/GET/api/auto-routing/routers/{id}/diagnostics) to see per-session routes at a target budget, or [`POST /api/auto-routing/routers/{id}/replan`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/POST/api/auto-routing/routers/{id}/replan) to trigger a fresh plan fit immediately.
 
 ```bash
 curl -X POST "https://<archestra-host>/api/auto-routing/routers/<router-id>/preview" \
@@ -158,14 +157,14 @@ curl -X POST "https://<archestra-host>/api/auto-routing/routers/<router-id>/prev
 
 ## Learning From Past Sessions
 
-Only the original `auto` router that existed before multi-router support can learn from historical proxy traffic; routers you create start cold. For that router, past sessions can bootstrap a plan immediately instead of waiting for live `auto` traffic.
+A router learns from past proxy traffic only when its **Overview** has a **Past sessions** card: the `auto` router of an organization that used Auto Routing before it could hold several routers. Every router you create starts cold. For the `auto` router, past sessions can bootstrap a plan immediately instead of waiting for live `auto` traffic. Once a router has 200 finished sessions of its own, its plan is fitted on those alone.
 
-The router's **Overview** always has a **Past sessions** card. Its table lists each count and scoring run, newest first, with what it found or scored and what it cost. The button beside it reads **Score** when there are sessions to score, **Stop** while a run is going, and **Up to date** when nothing is left.
+Both steps run from the **Past sessions** card, which lists each run and what it cost.
 
 1. **Find past sessions.** Runs on its own when you first enable auto routing, and again when you click **Score** and the last count is more than a day old. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
-2. **Score them.** You start this with **Score**, which shows what was found and the estimated cost before anything is sent. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set (calls already in flight can take it a few calls over), then fits a plan.
+2. **Score them.** You start this with **Score**, which shows what was found and the estimated cost before anything is sent. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set, then fits a plan. The limit is checked against estimated cost, so actual charges can run slightly over it. **Stop** ends a run early, and the sessions it already scored still count.
 
-Only sessions with a client-supplied session id that began inside the window are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. Changing the decision model restarts routing: sessions scored by the old model stop counting, so the router uses its normal model until enough are scored again. **Configure** warns about this before you save, and afterwards the **Past sessions** card says the sessions need scoring again. **Stop** ends a run early; the sessions it already scored still count.
+Only sessions with a client-supplied session ID that began inside the window are used, and sessions whose content was not logged or is end-to-end encrypted are skipped. After a decision-model change, the old scores stop counting, and the router uses its normal model until enough live or past sessions are scored again.
 
 ## When It Falls Back to the Normal Model
 
@@ -173,7 +172,7 @@ Archestra routes a session to the router's normal model whenever it cannot make 
 
 | Condition | What happens |
 | --- | --- |
-| **Cold start** | The router has fewer finished sessions than [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS). |
+| **Cold start** | The router has fewer than 200 finished sessions of its own, and its own and scored past sessions together are fewer than [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS). |
 | **No valid plan** | No plan has been published yet, or the active plan is stale because the tier models or their prices changed. |
 | **Scorer error or timeout** | Jev fails, is unreachable, or exceeds [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS). |
 | **No user text** | The request has no user text to score, such as Bedrock Converse payloads. |
@@ -182,9 +181,9 @@ Archestra routes a session to the router's normal model whenever it cannot make 
 
 ## Inspect Decisions and Savings
 
-Open [Logs](/docs/admin/logs) under **Logs → LLM Proxy** to see why a request got its model. Auto-routed rows are marked **auto→**; opening one shows **Auto routing** with the router name, how the scorer rated the task for each tier, the tier picked and why, and the estimated savings against the smart model.
+Open [Logs](/docs/insights/logs) under **Logs → LLM Proxy** to see why a request got its model. Auto-routed rows are marked **auto→**; opening one shows **Auto routing** with the router name, how the scorer rated the task for each tier, the tier picked and why, and the estimated savings against the smart model.
 
-To read the saved decision programmatically without calling the scorer again, call [`GET /api/llm-proxy-logs/{logId}/auto-routing`](/docs/reference/api/llm-proxy/logs#tag/llm-proxy-logs/GET/api/llm-proxy-logs/{logId}/auto-routing). It returns the router, chosen model and tier, routing reason, scorer features and version, plan ID, selection probability, budget multiplier, and expected cost. A `null` decision means no retained decision is linked to that log (the request was not auto-routed, or the decision expired).
+To read the saved decision programmatically without calling the scorer again, call [`GET /api/llm-proxy-logs/{logId}/auto-routing`](/docs/reference/api/llm-proxy/logs#tag/llm-proxy-logs/GET/api/llm-proxy-logs/{logId}/auto-routing). It returns the router, chosen model and tier, routing reason, and expected cost.
 
 Estimated savings compare billed tokens against what those same tokens would have cost on the smart model at list price. Requests covered by a subscription count toward sessions and requests, but add no spend and no savings.
 
@@ -196,4 +195,4 @@ Some models charge higher rates past a prompt-length threshold. On a model's set
 
 - Routing decisions are kept for 90 days. After that, the same session ID is scored and routed again as a new session.
 - Deleting a router removes its plans and learned history; agents and chats assigned to it fall back to their own model.
-- Every routed request still runs through your existing [cost limits](/docs/llm-proxy/costs-and-limits) and [Guardrails](/docs/agents/guardrails).
+- Every routed request still runs through your existing [cost limits](/docs/llm-proxy/cost-controls) and [Guardrails](/docs/agents/guardrails).

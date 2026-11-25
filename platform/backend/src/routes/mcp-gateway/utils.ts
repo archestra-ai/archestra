@@ -109,6 +109,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { isOpenappaFailure } from "@/openappa/failure";
 import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
@@ -142,6 +143,7 @@ import { describeToolsForCaller } from "@/services/mcp-install-tool-descriptions
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { verifyServiceAccountBearer } from "@/services/workload-identity/federated-bearer";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
@@ -238,7 +240,8 @@ export type GatewayAuthFailureReason =
   | "no_email_claim"
   | "unknown_user"
   | "not_org_member"
-  | "no_gateway_access";
+  | "no_gateway_access"
+  | "account_deactivated";
 
 /** Outcome of gateway authentication: a result, or the reason there isn't one. */
 export type GatewayAuthOutcome =
@@ -264,6 +267,8 @@ export function describeGatewayAuthFailure(
       return `Token validated, but its email does not match any ${archestraMcpBranding.appName} user.`;
     case "not_org_member":
       return "Token validated, but its user is not a member of this gateway's organization.";
+    case "account_deactivated":
+      return "Token validated, but its user was deactivated in the identity provider and cannot use the gateway.";
     case "no_gateway_access":
       return "Token validated, but the caller does not have access to this gateway. Ask an administrator to grant gateway access.";
     case "invalid_token":
@@ -1570,6 +1575,8 @@ export async function createAgentServer(params: {
           logger.warn({ err: error }, "MCP tool execution refused");
           return errorResult(error.message);
         }
+        // Classification already kept the runtime's detail out of the message.
+        if (isOpenappaFailure(error)) return errorResult(error.message);
         // Custom validation messages and paths can contain submitted secrets.
         if (error instanceof ZodError) {
           logger.warn({ err: error }, "MCP tool arguments failed validation");
@@ -2282,6 +2289,13 @@ export async function authenticateMCPGatewayRequest(
     lookups,
     requiredOAuthScope,
   );
+  // A user the identity provider deactivated (SCIM) keeps their tokens but
+  // cannot use them. Checked outside the token cache, so it applies at once.
+  if (
+    outcome.result?.userId &&
+    (await softDeletedUsers.isSoftDeleted(outcome.result.userId))
+  )
+    return { result: null, reason: "account_deactivated" };
   // A permission-gated agent is reached only by a token whose user or service
   // account holds the permission: no grant or OAuth client stands in for it.
   return outcome.result &&
@@ -2534,6 +2548,14 @@ async function authenticateExternalIdpToken(
         "validateExternalIdpToken: JWT email does not match any Archestra user",
       );
       return { result: null, reason: "unknown_user" };
+    }
+
+    if (user.softDeleted) {
+      logger.warn(
+        { profileId, userId: user.id },
+        "validateExternalIdpToken: the identity provider deactivated this user",
+      );
+      return { result: null, reason: "account_deactivated" };
     }
 
     const member = await MemberModel.getByUserId(user.id, agent.organizationId);

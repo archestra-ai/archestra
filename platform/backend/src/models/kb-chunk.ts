@@ -1,11 +1,13 @@
 import {
   DEFAULT_TEXT_SEARCH_LANGUAGE,
   getEmbeddingColumnName,
+  SUPPORTED_EMBEDDING_DIMENSIONS,
+  type SupportedEmbeddingDimension,
   type TextSearchLanguage,
 } from "@archestra/shared";
 import { count, eq, type SQL, sql } from "drizzle-orm";
 import config from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type {
   AclEntry,
   InsertKbChunk,
@@ -160,8 +162,7 @@ class KbChunkModel {
     const metadataPredicate = buildMetadataFilterPredicate(metadataFilter);
     const hasMetadataFilter = hasUsableMetadataFilter(metadataFilter);
 
-    const col = sql.raw(getEmbeddingColumnName(dimensions));
-    const vectorCast = sql.raw(`::vector(${dimensions})`);
+    const { col, vectorCast } = embeddingColumnSql(dimensions);
     const rows = await executeWithSearchTimeout(
       sql`
       SELECT
@@ -598,22 +599,28 @@ class KbChunkModel {
   ): Promise<void> {
     if (updates.length === 0) return;
 
-    const col = getEmbeddingColumnName(dimensions);
-    const values = updates
-      .map(
-        (u) =>
-          `('${u.chunkId}'::uuid, '[${u.embedding.join(",")}]'::vector(${dimensions}))`,
-      )
-      .join(", ");
+    const { col, vectorCast } = embeddingColumnSql(dimensions);
 
-    await db.execute(
-      sql.raw(`
-        UPDATE kb_chunks AS c
-        SET ${col} = v.embedding
-        FROM (VALUES ${values}) AS v(id, embedding)
-        WHERE c.id = v.id
-      `),
-    );
+    // Ids and vectors go as one bound JSON parameter per statement. Each vector
+    // travels as its JSON text ("[0.1,0.2,…]"), which is also pgvector's input
+    // format. One transaction keeps the write all-or-nothing, and it is retried
+    // as a whole on a transient connection failure.
+    await withDbTransaction(async (tx) => {
+      for (let i = 0; i < updates.length; i += EMBEDDING_ROWS_PER_STATEMENT) {
+        const rows = JSON.stringify(
+          updates.slice(i, i + EMBEDDING_ROWS_PER_STATEMENT).map((u) => ({
+            id: u.chunkId,
+            embedding: JSON.stringify(u.embedding),
+          })),
+        );
+        await tx.execute(sql`
+          UPDATE kb_chunks AS c
+          SET ${col} = v.embedding${vectorCast}
+          FROM jsonb_to_recordset(${rows}::jsonb) AS v(id uuid, embedding text)
+          WHERE c.id = v.id
+        `);
+      }
+    });
   }
 
   private static async runFullTextStatement(params: {
@@ -1157,6 +1164,31 @@ class KbChunkModel {
 export default KbChunkModel;
 
 // === Internal helpers ===
+
+/**
+ * Rows per embedding write statement. One JSON value for a whole indexing
+ * batch can pass jsonb's size limit at high dimensions; at 3072 dimensions a
+ * slice of this size is roughly 30 MB of JSON.
+ */
+const EMBEDDING_ROWS_PER_STATEMENT = 500;
+
+/**
+ * The vector column for `dimensions` and the cast to its type. Both are built
+ * into the SQL text, so `dimensions` must be a size that has a column.
+ */
+function embeddingColumnSql(dimensions: number): { col: SQL; vectorCast: SQL } {
+  if (
+    !SUPPORTED_EMBEDDING_DIMENSIONS.includes(
+      dimensions as SupportedEmbeddingDimension,
+    )
+  ) {
+    throw new Error(`Unsupported embedding dimensions: ${dimensions}`);
+  }
+  return {
+    col: sql.raw(getEmbeddingColumnName(dimensions)),
+    vectorCast: sql.raw(`::vector(${dimensions})`),
+  };
+}
 
 /**
  * Run a search statement under the KB-specific statement timeout

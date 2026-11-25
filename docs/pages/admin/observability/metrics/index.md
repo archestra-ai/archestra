@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-10-30
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Scrape Archestra's Prometheus metrics to track model spend, tool calls, guardrails, agent runs, and platform health. Choose a reference below to look up metric names, labels, and aggregation behavior.
 
 [Guardrails and OpenAPPA metrics](/docs/admin/observability/metrics/openappa) use the same scrape endpoints and authentication as all other Archestra metrics.
@@ -74,8 +76,8 @@ Go to an agent's **Advanced** tab and add a key and value under **Labels**. Each
 
 LLM and MCP request metrics do not carry user, skill, app, or client-supplied identity labels, except where noted below. [Limit metrics](/docs/admin/observability/metrics/limits) separately identify the configured budget target. Use these sources for request attribution:
 
-- **Users:** [per-user statistics](/docs/llm-proxy/costs-and-limits/costs#per-user-usage), or the `archestra.user.*` [span attributes](/docs/admin/observability/tracing#identity-attributes).
-- **Skills and apps:** [per-skill](/docs/llm-proxy/costs-and-limits/costs#per-skill-cost) and [per-app](/docs/llm-proxy/costs-and-limits/costs#per-app-cost) statistics. App LLM spend shows in the LLM metrics as `source="app:llm_complete"`.
+- **Users:** [per-user statistics](/docs/insights/costs#per-user-usage), or the `archestra.user.*` [span attributes](/docs/admin/observability/tracing#identity-attributes).
+- **Skills and apps:** [per-skill](/docs/insights/costs#per-skill-cost) and [per-app](/docs/insights/costs#per-app-cost) statistics. App LLM spend shows in the LLM metrics as `source="app:llm_complete"`.
 - **Client-supplied agent IDs** from the [`X-Archestra-Agent-Id`](/docs/llm-proxy#custom-headers) header: the `archestra.external_agent_id` span attribute. Only [`agent_runs_total`](/docs/admin/observability/metrics/llm#agent_runs_total) carries it as a label.
 - **Credentials:** the `archestra.virtual_key.id` span attribute.
 

@@ -50,7 +50,6 @@ import {
   SectionLabel,
   Tool,
   ToolContent,
-  ToolErrorDetails,
   ToolHeader,
   ToolInput,
   ToolOutput,
@@ -82,6 +81,7 @@ import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
   getToolErrorText,
   getToolHeaderState,
+  hasToolRequest,
 } from "@/lib/chat/chat-tools-display.utils";
 import {
   getMessageFeedback,
@@ -144,7 +144,6 @@ import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { NoDeviceToolCard } from "./no-device-tool-card";
 import {
   isOpenAppaPolicyChange,
-  OpenAppaPolicyArguments,
   OpenAppaPolicyChange,
 } from "./openappa-policy-change";
 import { isPolicyChangeTool } from "./openappa-policy-change.utils";
@@ -575,6 +574,9 @@ export function ChatMessages({
     [messages, optimisticToolCalls],
   );
   const isResponseInProgress = status === "streaming" || status === "submitted";
+  // The run goes on while the chat reconnects to it after a dropped stream:
+  // its calls are still running, whatever the stream's status says meanwhile.
+  const isTurnLive = isResponseInProgress || Boolean(session?.isRecovering);
   const assistantMessageCount = useMemo(
     () => messages.filter((m) => m.role === "assistant").length,
     [messages],
@@ -746,6 +748,7 @@ export function ChatMessages({
         byToolCallId: mcpTasksByToolCallId,
         cancel: handleCancelMcpTask,
         cancelRequestedTaskIds,
+        queuedToolCallIds: session?.queuedToolCallIds,
       }}
     >
       <Conversation
@@ -813,7 +816,7 @@ export function ChatMessages({
                     // Guarded calls in the turn still running read as
                     // running until they settle.
                     const turnActive =
-                      isResponseInProgress &&
+                      isTurnLive &&
                       message.role === "assistant" &&
                       idx === messages.length - 1;
                     const { groupMap, consumedIndices, remedyChainCards } =
@@ -1782,7 +1785,7 @@ export function ChatMessages({
                 toolIconMap={toolIconMap}
                 canExpandToolCalls={canExpandToolCalls}
                 onToolApprovalResponse={onToolApprovalResponse}
-                turnActive={isResponseInProgress}
+                turnActive={isTurnLive}
                 autoOpenPolicyKey={null}
                 renderAuthCard={renderCompactAuthCard}
               />
@@ -2088,8 +2091,6 @@ const MessageTool = memo(
     const mcpAppToolInput =
       runToolInput?.tool_args ?? (part.input as Record<string, unknown>);
 
-    // Use the text content string when available; fall back to the raw output for non-MCP tools.
-    const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
     const policyToolName = parseFullToolName(mcpAppToolName).toolName;
     const validationChange = [
@@ -2115,7 +2116,7 @@ const MessageTool = memo(
       shortName: getToolShortName(displayToolName),
       input: approvalDisplay.input,
     });
-    const hasInput = displayInput && Object.keys(displayInput).length > 0;
+    const hasInput = hasToolRequest(displayInput);
     const hasNestedToolCalls = Boolean(nestedToolCalls);
     const hasContent = Boolean(
       hasInput ||
@@ -2280,6 +2281,7 @@ const MessageTool = memo(
             state: part.state || "input-available",
             toolResultPart,
             errorText,
+            output: rawOutput,
           })}
           isCollapsible={isExpandable}
           actionButton={logsButton}
@@ -2296,10 +2298,7 @@ const MessageTool = memo(
           }
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
-          {/* Under a policy change card the arguments go last, closed. */}
-          {hasInput && !policyChange && !previewedChange ? (
-            <ToolInput input={displayInput} />
-          ) : null}
+          {hasInput ? <ToolInput input={displayInput} /> : null}
           {previewedChange ? (
             <PreviewedChangeReview
               previewed={previewedChange}
@@ -2347,9 +2346,6 @@ const MessageTool = memo(
                 ]}
               />
             )}
-          {errorText && !authToolBody ? (
-            <ToolErrorDetails errorText={errorText} />
-          ) : null}
           {authToolBody}
           {credentialSetup && (
             <RuntimeCredentialSetupTool
@@ -2394,42 +2390,37 @@ const MessageTool = memo(
                 onSendMessage={onSendMessage}
               />
             )}
-          {/* Show error output even when UI resource is present - errors take priority */}
-          {!authToolBody && errorText && uiResourceUri && toolResultPart && (
-            <ToolOutput label="Error" output={output} errorText={errorText} />
-          )}
-          {!authToolBody && policyChange && (
-            <OpenAppaPolicyChange
+          {/* A failed call shows its error once, in one section, with or
+              without a result beside it and whatever UI it would have had. */}
+          {!authToolBody && errorText ? (
+            <ToolOutput
+              label="Error"
               output={rawOutput}
-              validationChange={validationChange}
-              input={part.input}
+              errorText={errorText}
             />
-          )}
-          {/* Show text output when NOT rendering a UI resource */}
-          {!authToolBody &&
-            !uiResourceUri &&
-            !policyChange &&
-            toolResultPart && (
-              <ToolOutput
-                label={errorText ? "Error" : "Result"}
-                output={output}
-                errorText={errorText}
-              />
-            )}
-          {!authToolBody &&
-            !uiResourceUri &&
-            !policyChange &&
-            !toolResultPart &&
-            Boolean(part.output) && (
-              <ToolOutput
-                label={errorText ? "Error" : "Result"}
-                output={output}
-                errorText={errorText}
-              />
-            )}
-          {hasInput && policyChange ? (
-            <OpenAppaPolicyArguments input={displayInput} />
           ) : null}
+          {/* A policy change's result reads as its diff. */}
+          {!authToolBody && policyChange && (
+            <>
+              <div className="px-3 pt-2">
+                <SectionLabel accent="bg-emerald-400">Result</SectionLabel>
+              </div>
+              <OpenAppaPolicyChange
+                output={rawOutput}
+                validationChange={validationChange}
+                input={part.input}
+              />
+            </>
+          )}
+          {/* Show the result when NOT rendering a UI resource. The whole
+              result goes in, so its images render beside its text. */}
+          {!authToolBody &&
+            !errorText &&
+            !uiResourceUri &&
+            !policyChange &&
+            (toolResultPart || Boolean(part.output)) && (
+              <ToolOutput label="Result" output={rawOutput} />
+            )}
         </ToolContent>
       </Tool>
     );
@@ -2462,12 +2453,14 @@ const getHeaderState = ({
   state,
   toolResultPart,
   errorText,
+  output,
 }: {
   state: ToolUIPart["state"] | DynamicToolUIPart["state"];
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
+  output: unknown;
 }) => {
-  return getToolHeaderState({ state, toolResultPart, errorText });
+  return getToolHeaderState({ state, toolResultPart, errorText, output });
 };
 
 /** Synthesize a tool UI part from a surfaced subagent call so the existing tool card renders it. */

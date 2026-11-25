@@ -35,7 +35,8 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useId, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   CatalogAgentIcon,
@@ -63,6 +64,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { RUNTIME_EDIT_PARAM } from "@/lib/agent-runtime-settings-link";
 import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
   useRuntimeTemplateCatalog,
@@ -71,6 +73,7 @@ import {
 } from "@/lib/agent-runtime-templates.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -133,8 +136,7 @@ export function RuntimeTemplateSection({
       id,
       name: AGENT_CATALOG_NAMES[id],
       description:
-        builtIns.find((item) => item.id === id)?.summary ??
-        "Maintained runtime",
+        builtIns.find((item) => item.id === id)?.summary ?? "Built-in runtime",
       image: images[id],
       icon: null,
       hidden: state.popularAgentOverrides?.[id]?.hidden ?? false,
@@ -150,6 +152,27 @@ export function RuntimeTemplateSection({
   ].sort((a, b) => position(a.id) - position(b.id));
   const visibleRows = rows.filter((row) => !row.hidden);
   const removedRows = rows.filter((row) => row.hidden);
+  // A link can name the runtime whose editor opens on load, as the badge
+  // beside an agent's name does: a maintained runtime's id or a custom
+  // runtime's. It opens once the list can be edited, and closing the editor
+  // takes the name out of the URL.
+  const linkedId = useSearchParams().get(RUNTIME_EDIT_PARAM);
+  const linkedRow =
+    editable && linkedId ? rows.find((row) => row.id === linkedId) : undefined;
+  const linkedRowId = linkedRow?.id;
+  const linked = useDialogUrlParam<{ id: string }>({
+    paramName: RUNTIME_EDIT_PARAM,
+    entityFromUrl: useMemo(
+      () => (linkedRowId ? { id: linkedRowId } : null),
+      [linkedRowId],
+    ),
+  });
+  const openedByLink = linked.entity?.id;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: opened once per link, with the list as it is then
+  useEffect(() => {
+    if (openedByLink) editRuntime(openedByLink);
+  }, [openedByLink]);
+  const closeLinked = linked.close;
   const customImageHidden = isIntegrationHidden(
     state.popularAgentOverrides,
     CUSTOM_IMAGE_RUNTIME_ID,
@@ -169,6 +192,19 @@ export function RuntimeTemplateSection({
       onSuccess: onSaved,
       onSettled: () => setPending(null),
     });
+  }
+  function editRuntime(id: string) {
+    if (AGENT_CATALOG_IDS.includes(id as AgentCatalogId)) {
+      setEditingBuiltIn(id as AgentCatalogId);
+      return;
+    }
+    setEditing(state.templates.find((item) => item.id === id) ?? null);
+  }
+  /** Closes the open editor, and forgets the link that opened it. */
+  function closeEditor() {
+    setEditing(null);
+    setEditingBuiltIn(null);
+    if (openedByLink) closeLinked();
   }
   function position(id: string) {
     return runtimeTemplatePosition(
@@ -323,15 +359,7 @@ export function RuntimeTemplateSection({
                     disabled={!editable}
                     onMove={(direction) => move(index, index + direction)}
                     onRemove={() => setAvailable(row, false)}
-                    onEdit={() =>
-                      row.builtIn
-                        ? setEditingBuiltIn(row.id as AgentCatalogId)
-                        : setEditing(
-                            state.templates.find(
-                              (item) => item.id === row.id,
-                            ) ?? null,
-                          )
-                    }
+                    onEdit={() => editRuntime(row.id)}
                   />
                 ))}
               </ul>
@@ -371,14 +399,14 @@ export function RuntimeTemplateSection({
           isSaving={save.isPending}
           image={images[editingBuiltIn]}
           value={state.builtIns?.[editingBuiltIn]}
-          onClose={() => setEditingBuiltIn(null)}
-          onSave={(builtIn) =>
+          onClose={closeEditor}
+          onSave={(builtIn, onSaved) =>
             commit(
               {
                 ...state,
                 builtIns: { ...state.builtIns, [editingBuiltIn]: builtIn },
               },
-              () => setEditingBuiltIn(null),
+              onSaved,
             )
           }
         />
@@ -397,8 +425,8 @@ export function RuntimeTemplateSection({
           names={rows
             .filter((row) => row.id !== (editing === "new" ? null : editing.id))
             .map((row) => row.name)}
-          onClose={() => setEditing(null)}
-          onSave={(template) => {
+          onClose={closeEditor}
+          onSave={(template, onSaved) => {
             const next = {
               ...state,
               templates:
@@ -416,7 +444,15 @@ export function RuntimeTemplateSection({
                     ...removedRows.map((row) => row.id),
                   ])
                 : next,
-              () => setEditing(null),
+              () => {
+                // A runtime just added has no agents to update.
+                if (editing === "new") {
+                  setEditing(null);
+                  return;
+                }
+                setEditing(template);
+                onSaved();
+              },
             );
           }}
         />

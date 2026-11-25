@@ -45,7 +45,7 @@ test("keeps the session title, status, and actions readable in narrow panels", a
   await page.goto(`/chat/runs/${taskId}`);
   const heading = page.getByRole("heading", { name: title });
   const running = page.getByText("Running", { exact: true });
-  const attention = page.getByText("Needs your input", { exact: true });
+  const attention = page.getByText("Waiting for input", { exact: true });
   const stop = page.getByRole("button", { name: "Stop", exact: true });
   const more = page.getByRole("button", { name: "More run actions" });
   for (const width of [320, 390, 768, 1280]) {

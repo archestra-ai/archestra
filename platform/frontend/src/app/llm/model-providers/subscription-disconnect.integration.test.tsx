@@ -22,6 +22,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { WithPagePermissions } from "@/app/_parts/with-page-permissions";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { makeSession } from "@/mocks/data/auth";
 import { configSeed } from "@/mocks/data/config";
@@ -614,6 +615,90 @@ describe("API key delete", () => {
         screen.queryByRole("button", { name: "Delete Shared API key" }),
       ).not.toBeInTheDocument(),
     );
+  });
+});
+
+describe("runtime-only custom role without provider-key grants", () => {
+  it("opens Model Providers through WithPagePermissions and disconnects a personal Claude Code subscription", async () => {
+    const user = userEvent.setup();
+    let connected = true;
+    let disconnectCalls = 0;
+    let apiKeyListCalls = 0;
+    let labelKeyCalls = 0;
+    server.use(
+      http.get("/api/user/permissions", () =>
+        HttpResponse.json({ agent: ["read"] }),
+      ),
+      http.get("/api/resource-permissions", () => HttpResponse.json([])),
+      http.get("/api/config", () =>
+        HttpResponse.json({
+          ...configSeed,
+          features: { ...configSeed.features, agentRuntime: true },
+        }),
+      ),
+      http.get("/api/organization", () =>
+        HttpResponse.json({
+          ...organizationSeed,
+          modelProviderOverrides: { anthropic: { hidden: true } },
+        }),
+      ),
+      http.get("/api/llm-provider-api-keys", () => {
+        apiKeyListCalls++;
+        return HttpResponse.json([], { status: 403 });
+      }),
+      http.get("/api/llm-provider-api-keys/labels/keys", () => {
+        labelKeyCalls++;
+        return HttpResponse.json([], { status: 403 });
+      }),
+      http.get("/api/agent-runtime/claude-code/account", () =>
+        HttpResponse.json(
+          connected
+            ? { state: "connected", expiresAt: "2027-06-15T00:00:00.000Z" }
+            : { state: "disconnected" },
+        ),
+      ),
+      http.delete("/api/agent-runtime/claude-code/account", () => {
+        disconnectCalls++;
+        connected = false;
+        return HttpResponse.json({ state: "disconnected" });
+      }),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WithPagePermissions>
+          <ApiKeysPage />
+        </WithPagePermissions>
+      </QueryClientProvider>,
+    );
+
+    const card = within(
+      await screen.findByTestId("subscription-provider-card-claude-code"),
+    );
+    expect(await card.findByText("Connected")).toBeVisible();
+    expect(
+      screen.queryByText("You don't have permission to access this page."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Enterprise plans")).not.toBeInTheDocument();
+    expect(screen.queryByText("Provider API keys")).not.toBeInTheDocument();
+
+    await user.click(card.getByRole("button", { name: "Disconnect" }));
+    const confirmDialog = await screen.findByRole("dialog", {
+      name: "Disconnect Claude Code",
+    });
+    await user.click(
+      within(confirmDialog).getByRole("button", { name: "Disconnect" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("subscription-provider-card-claude-code"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(disconnectCalls).toBe(1);
+    expect(apiKeyListCalls).toBe(0);
+    expect(labelKeyCalls).toBe(0);
+    expect(toast.success).toHaveBeenCalledWith("Claude Code disconnected");
   });
 });
 

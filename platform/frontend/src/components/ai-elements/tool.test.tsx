@@ -117,3 +117,120 @@ describe("Tool copy actions", () => {
     expect(writeText).toHaveBeenCalledWith("ARCH_TEST = asdfasdfadsf");
   });
 });
+
+describe("ToolOutput for results that are not plain text", () => {
+  const TINY_PNG =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+  it("says an empty result is empty, and shows none of the fields it is stored in", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    render(
+      <ToolOutput
+        label="Result"
+        output={{
+          _meta: { archestraExecutedAs: { kind: "org" } },
+          content: "",
+          rawContent: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("The tool returned no content.")).toBeVisible();
+    expect(screen.queryByText(/_meta|rawContent/)).not.toBeInTheDocument();
+  });
+
+  it("shows an image the tool returned, with a marker where it stood in the text", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    render(
+      <ToolOutput
+        label="Result"
+        output={{
+          content: "Chart:\n[image]",
+          rawContent: [
+            { type: "text", text: "Chart:" },
+            { type: "image", data: TINY_PNG, mimeType: "image/png" },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("img")).toHaveAttribute(
+      "src",
+      `data:image/png;base64,${TINY_PNG}`,
+    );
+    expect(screen.getByText(/\[image\]/)).toBeVisible();
+  });
+
+  it("shows the image of a result stored with its payload in the text, never the payload", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    const block = { type: "image", data: TINY_PNG, mimeType: "image/png" };
+    render(
+      <ToolOutput
+        label="Result"
+        output={{
+          content: `Chart:\n${JSON.stringify(block)}`,
+          rawContent: [{ type: "text", text: "Chart:" }, block],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("img")).toBeVisible();
+    expect(screen.queryByText(new RegExp(TINY_PNG.slice(0, 24)))).toBeNull();
+    expect(screen.getByText(/\[image\]/)).toBeVisible();
+  });
+
+  it("leaves out an image whose payload was stripped or is not a picture format", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    render(
+      <ToolOutput
+        label="Result"
+        output={{
+          content: "[image]\n[image]",
+          rawContent: [
+            {
+              type: "image",
+              data: "[Image data stripped to save context]",
+              mimeType: "image/png",
+            },
+            { type: "image", data: TINY_PNG, mimeType: "image/svg+xml" },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("shows a failed call's error once, whether or not a result repeats it", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    const { rerender } = render(
+      <ToolOutput label="Error" output={undefined} errorText="Timed out" />,
+    );
+    expect(screen.getAllByText("Timed out")).toHaveLength(1);
+
+    // The usual shape: the result's text is the error text.
+    rerender(
+      <ToolOutput
+        label="Error"
+        output={{ content: "Error: disk is full", isError: true }}
+        errorText="Error: disk is full"
+      />,
+    );
+    expect(screen.getAllByText("Error: disk is full")).toHaveLength(1);
+    expect(screen.getAllByText("Error")).toHaveLength(1);
+  });
+
+  it("keeps a result that says something the error does not", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    render(
+      <ToolOutput
+        label="Error"
+        output={{ content: '{"attempts":3}' }}
+        errorText="Gave up"
+      />,
+    );
+
+    expect(screen.getByText("Gave up")).toBeVisible();
+    expect(screen.getByText(/"attempts":/)).toBeVisible();
+  });
+});

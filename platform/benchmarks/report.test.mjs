@@ -111,6 +111,22 @@ test("scaling is an explicit setup change rather than an implementation-only rel
   assert.doesNotMatch(rendered, /%\)/);
 });
 
+test("backend limits are reported and are a setup change from an unlimited release", () => {
+  const baseline = createSummary(report());
+  const source = report();
+  source.metadata.backendLimits = { cpus: 4, memoryBytes: 8 * 1024 ** 3 };
+  const current = createSummary(source);
+  assert.equal(current.backendCpus, 4);
+  assert.equal(current.backendMemoryGiB, 8);
+  const rendered = renderSummary(current, comparison(baseline));
+  assert.match(rendered, /backend limited to 4 vCPU \/ 8\.0 GiB/);
+  assert.match(rendered, /setup differs from `platform-v1\.0\.0`/);
+  assert.doesNotMatch(
+    renderSummary(current, comparison(current)),
+    /setup differs/,
+  );
+});
+
 test("no completed requests produces no fabricated success or latency", () => {
   const source = report();
   source.blocks = [];

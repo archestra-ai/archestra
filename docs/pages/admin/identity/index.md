@@ -5,6 +5,8 @@ order: 4
 lastUpdated: 2026-11-09
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 <span id="adding-a-provider"></span><span id="supported-providers"></span>
 
 

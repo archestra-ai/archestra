@@ -7,6 +7,7 @@ lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Upload a document once, and every agent you allow can answer from it, with a citation. A signed contract that came by email, a vendor's SOC 2 report, a policy PDF: if no connector reaches it, upload it here.
 

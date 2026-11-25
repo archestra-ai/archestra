@@ -5,6 +5,8 @@ order: 2
 lastUpdated: 2026-11-04
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Connect Archestra agents to remote A2A agents and manage the resulting agent-to-agent communication.
 
 ## Authentication

@@ -6,7 +6,7 @@ FROM ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657d
 
 # One Rust toolchain both builds the review engine and ships in the runtime, so
 # projects with native code (Archestra's addons included) compile in place.
-FROM rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 AS rust
+FROM rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97 AS rust
 
 # Build the review engine once for each native architecture. Skills supply the
 # review procedure and configuration; the runtime needs only this executable.
@@ -38,32 +38,45 @@ RUN curl -fsSL --retry 3 \
  && /out/gh api --help >/dev/null \
  && /out/gh auth git-credential --help >/dev/null
 
-FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS agent-base
+FROM dhi.io/node:24.22.3-debian13-dev@sha256:810c2c99b5a81edea5a402abd0afc693ccd51712e22cee6824d910c3e564c182 AS agent-base
 ARG TARGETARCH
+# DHI's apt mirror can serve a stale archive after its signed index changes.
+# Request fresh packages while retaining apt's index and archive verification.
+RUN printf '%s\n' 'Acquire::http::No-Cache "true";' > /etc/apt/apt.conf.d/99dhi-no-cache \
+ && mkdir -p /usr/local/bin && ln -s /usr/bin/node /usr/local/bin/node
 
 # Require fixed apt, OpenSSL and Cyrus SASL packages and refresh cached apt layers.
 # CVE-2026-109518 (apt), CVE-2026-84782 (OpenSSL), CVE-2026-107161 (Cyrus SASL).
+# Keep already-installed hardened packages; libssl-dev still pulls in its
+# matching fixed OpenSSL libraries, and the version checks below enforce them.
 RUN apt-get update -qq \
- && apt-get install -y --no-install-recommends \
-      apt libapt-pkg6.0 build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less \
-      libsasl2-2 libsasl2-modules-db libssl-dev libssl3 \
-      openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
- && for package in apt libapt-pkg6.0; do \
-      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '2.6.2' || exit 1; \
+ && apt-get install -y --no-upgrade --no-install-recommends \
+      apt libapt-pkg7.0 build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less \
+      libsasl2-2 libsasl2-modules-db libssl-dev libssl3t64 \
+      openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux ncurses-term gzip hostname bsdutils \
+ && for package in apt libapt-pkg7.0; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.4' || exit 1; \
     done \
- && for package in openssl libssl3 libssl-dev; do \
-      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
+ && for package in openssl libssl3t64 libssl-dev; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.5.9-1~deb13u1' || exit 1; \
     done \
  && for package in libsasl2-2 libsasl2-modules-db; do \
-      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '2.1.28+dfsg-10+deb12u1' || exit 1; \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '2.1.28+dfsg1-9' || exit 1; \
     done \
  && rm -rf /var/lib/apt/lists/*
 
 # A local PostgreSQL with pgvector for projects that need a database. Debian's
-# own postgresql-common enables the PGDG repository: bookworm's pgvector
+# own postgresql-common enables the PGDG repository: Debian's pgvector
 # predates HNSW indexes. No cluster ships; the agent runs initdb under HOME,
 # and the shared socket directory lets local clients connect without flags.
-RUN apt-get update -qq \
+# The DHI mirror has served postgresql-common archives that do not match its
+# signed index, and its PostgreSQL builds collide with Debian's helpers. Resolve
+# every PostgreSQL package from the signed Debian and PGDG repositories.
+RUN printf '%s\n' \
+      'Package: postgresql* libpq*' \
+      'Pin: origin "dhi.io"' \
+      'Pin-Priority: -1' > /etc/apt/preferences.d/postgresql-common \
+ && apt-get update -qq \
  && apt-get install -y --no-install-recommends postgresql-common \
  && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y \
  && sed -i 's/^#*\s*create_main_cluster.*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf \
@@ -86,24 +99,25 @@ COPY --from=gh-build /out/gh /usr/bin/gh
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=nitpicker-build /usr/local/cargo/bin/nitpicker /usr/local/bin/nitpicker
 
-# Bookworm seeds new venvs from an old setuptools wheel. Keep the bootstrap
-# wheel and system pip on fixed, checksum-verified versions.
-RUN curl -fsSL \
+# Keep the venv bootstrap wheel and system pip on fixed, checksum-verified
+# versions. Debian 13 no longer seeds setuptools into newly created venvs.
+RUN find /usr/share/python-wheels -maxdepth 1 -name 'setuptools-*.whl' -delete \
+ && curl -fsSL --retry 3 --retry-all-errors \
       "https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl" \
       -o /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl \
  && echo "51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670  /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl" | sha256sum -c - \
- && rm /usr/share/python-wheels/setuptools-66.1.1-py3-none-any.whl \
- && curl -fsSL \
+ && curl -fsSL --retry 3 --retry-all-errors \
       "https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl" \
       -o /tmp/pip-25.3-py3-none-any.whl \
  && echo "9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd  /tmp/pip-25.3-py3-none-any.whl" | sha256sum -c - \
- && mkdir -p /usr/local/lib/python3.11/dist-packages \
- && python3 -m zipfile -e /tmp/pip-25.3-py3-none-any.whl /usr/local/lib/python3.11/dist-packages \
+ && mkdir -p /usr/local/lib/python3.13/dist-packages \
+ && python3 -m zipfile -e /tmp/pip-25.3-py3-none-any.whl /usr/local/lib/python3.13/dist-packages \
  && rm /tmp/pip-25.3-py3-none-any.whl \
  && printf '%s\n' '#!/bin/sh' 'exec python3 -m pip "$@"' > /usr/local/bin/pip \
  && chmod 0755 /usr/local/bin/pip \
  && ln -s pip /usr/local/bin/pip3 \
  && python3 -m venv /tmp/agent-python-check \
+ && /tmp/agent-python-check/bin/python -m pip install --no-index --find-links=/usr/share/python-wheels setuptools==84.0.0 \
  && /tmp/agent-python-check/bin/python -c "import setuptools; assert setuptools.__version__ == '84.0.0'" \
  && rm -rf /tmp/agent-python-check
 
@@ -152,6 +166,8 @@ RUN corepack disable \
  && rm -rf /usr/local/lib/node_modules/npm/node_modules/undici \
  && mkdir -p /usr/local/lib/node_modules/npm/node_modules/undici \
  && tar -xzf /tmp/undici.tgz --strip-components=1 -C /usr/local/lib/node_modules/npm/node_modules/undici \
+ && ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
  && curl -fsSL https://registry.npmjs.org/corepack/-/corepack-0.36.0.tgz -o /tmp/corepack.tgz \
  && echo '9128cfe26aee0c99f4fc68c15c6b8b12309a68be0de2c012cdfea2a463cb722f  /tmp/corepack.tgz' | sha256sum -c - \
  && mkdir -p /usr/local/lib/node_modules/corepack \
@@ -186,8 +202,10 @@ RUN { printf '%s\n' \
     } > /tmp/bash.bashrc \
  && mv /tmp/bash.bashrc /etc/bash.bashrc
 
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV HOME=/home/node
-RUN mkdir -p /home/node/workspace /var/run/archestra \
+RUN usermod -s /bin/bash node \
+ && mkdir -p /home/node/workspace /var/run/archestra \
  && chown -R 1000:1000 /home/node /var/run/archestra
 USER 1000:1000
 WORKDIR /home/node/workspace
@@ -203,12 +221,12 @@ RUN --network=none \
 
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.311 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.326 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.311","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.326","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -231,7 +249,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.169.0 \
+RUN pnpm add --global @openai/codex@0.170.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -246,7 +264,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-opencode
 USER root
-RUN pnpm add --global opencode-ai@1.19.5 \
+RUN pnpm add --global opencode-ai@1.19.6 \
  && OPENCODE_PACKAGE_DIR="$(pnpm list --global --json opencode-ai | jq -r '.[0].dependencies["opencode-ai"].path')" \
  && node "${OPENCODE_PACKAGE_DIR}/postinstall.mjs" \
  && opencode --version \
@@ -272,8 +290,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.23.1 \
- && hermes_commit=3b421578588243f920886e6fe79a6faa87ea026e \
+    hermes_version=0.23.2 \
+ && hermes_commit=ae2a81ccc00e9b7c06301523e5bb09608397149c \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -391,14 +409,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=aa32f87a8e487f80487e75b294943f93a7dce747acde366d3f11baf88381ffa0 ;; \
-      arm64) grok_arch=arm64; checksum=29bba0ee6618fe6fe158602a5649f4659aa4a9f7c2dd99e82932932c96e9ac9b ;; \
+      amd64) grok_arch=x64; checksum=cf08714037f2e2eb76f766a1c7cd39e3a690a82f6116abe356d28e3b3344b6ea ;; \
+      arm64) grok_arch=arm64; checksum=864757973551ae5ad38188594cf57afef896342c83387494caba104288ea64a1 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.84" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.84.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.89" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.89.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -452,13 +470,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=5e82d04da0b22fdaf710b3b0e35a613f365b4ca8e54e02eb3200b3f19e5176fb7c957cb7591b290b5baaefee3e9802605b54f63ab65a727bc981eeaf47841c60 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=80c0dd5e0b699b12926f9e437f18adcf030748d26fa0106d6c4c3578268dcdfd430944190bd29fb5d40996231fa57a8d241bcbdcd1d812a985f9991933d28783 ;; \
+      amd64) copilot_arch=x64; copilot_checksum=8079c8366f5f7c5ab3f86d7d71052a45ede5b130103b74db763eebec1c7592d66f0b95fa89777f9dfa350d14e3f666a06f9d9a1918aec01df2bc3d65916ebcc5 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=e30ab66a503e3d7fe101c64c41ea6e2e496b9f6c26388bcd80fbd7db1d10b4e5a89d7adf8b1c4aff1e4088d8a1c81104abe62a523a36f60d1f1f04dd369b47c1 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.111)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.114)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

@@ -51,6 +51,7 @@ import {
   withOpenappaContentEncryption,
 } from "@/openappa/encrypted-chat";
 import {
+  OpenappaRefusal,
   OpenappaRootOnlyError,
   openappaFailure,
   type RuntimeFailureCode,
@@ -1878,6 +1879,9 @@ export async function endChildTurn(params: {
   if (decision.decision === "held") {
     return { decision: "held", running: decision.running };
   }
+  // A ruling against the empty return is shown; any other answer is a defect.
+  if (decision.decision === "block" || decision.decision === "deny_call")
+    throw openappaFailure(new OpenappaRefusal(decisionMessage(decision)));
   if (decision.decision !== "ack") {
     throw openappaFailure(new Error(decisionMessage(decision)));
   }

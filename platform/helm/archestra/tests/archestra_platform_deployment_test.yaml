@@ -3455,7 +3455,8 @@ tests:
             mountPath: /vault/secrets
             readOnly: true
 
-  - it: should wrap main container command to source vault secrets
+  # The Kubernetes image has no shell, so the wrapper is Node.
+  - it: should load vault secrets into the main container through the Node wrapper
     documentIndex: 1
     set:
       archestra.initContainers.vaultSecrets.enabled: true
@@ -3466,13 +3467,38 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].command
-          value: ["/bin/sh", "-c"]
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "/vault/secrets/env"
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "exec /docker-entrypoint.sh"
+          value: ["node", "/app/with-vault-env.mjs"]
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["node", "/app/entrypoint.mjs"]
+
+  - it: should map the old /docker-entrypoint.sh default to the Node entrypoint
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.entrypoint: /docker-entrypoint.sh
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["node", "/app/entrypoint.mjs"]
+
+  - it: should run a custom entrypoint under vault secrets
+    documentIndex: 1
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.entrypoint: node /app/custom.mjs --flag
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["node", "/app/custom.mjs", "--flag"]
 
   - it: should not wrap main container command when vault secrets is disabled
     documentIndex: 1

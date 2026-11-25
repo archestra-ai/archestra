@@ -1,6 +1,5 @@
 "use client";
 
-import { isCodexRuntimeCommand } from "@archestra/shared";
 import Link from "next/link";
 import { useState } from "react";
 import { agentEditHref } from "@/components/agent-pages/agent-page-config";
@@ -10,14 +9,11 @@ import {
   AgentSetupBanner,
   type AgentSetupItem,
 } from "@/components/agent-setup-banner";
-import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useProfile } from "@/lib/agent.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 
 export function AgentSavedSetupBanner({
   agentId,
@@ -31,32 +27,19 @@ export function AgentSavedSetupBanner({
   const { data: agent } = useProfile(agentId);
   const runtime = agent?.runtime;
   const preflight = useAgentRuntimePreflight(agentId, !!runtime);
-  const isCodex = isCodexRuntimeCommand(runtime?.command?.[0]);
-  const keyPermission = useHasPermissions({ llmProviderApiKey: ["read"] });
-  const keys = useAvailableLlmProviderApiKeys({
-    enabled: isCodex && keyPermission.data === true,
-    includeKeyId: agent?.llmApiKeyId ?? undefined,
-    toastOnError: false,
-  });
   // The credential whose Set up was clicked: its dialog asks for it alone.
   const [credentialKey, setCredentialKey] = useState<string | null>(null);
   if (!runtime) {
     return <AgentSetupBanner key={agentId} items={[]} showReady={showReady} />;
   }
   const failed = preflight.isError;
-  const loading =
-    preflight.isPending ||
-    (isCodex &&
-      (keyPermission.isPending || (keyPermission.data && keys.isPending)));
+  const loading = preflight.isPending;
   if (failed) {
     return (
       <QueryLoadError
         title="Cannot check agent setup"
         error={preflight.error}
-        onRetry={() => {
-          void preflight.refetch();
-          if (isCodex) void keys.refetch();
-        }}
+        onRetry={() => void preflight.refetch()}
       />
     );
   }
@@ -92,12 +75,11 @@ export function AgentSavedSetupBanner({
       />
     );
   }
-  const needsClaudeAccount = missing.some(
-    ({ key }) => key === "CLAUDE_CODE_ACCOUNT",
-  );
   const items: AgentSetupItem[] = Array.from(
     new Map(missing.map((credential) => [credential.key, credential])).values(),
   )
+    // The person's own Claude sign-in is not listed here: the Account strip
+    // under "Give it work" offers it, next to what their runs use.
     .filter(({ key }) => key !== "CLAUDE_CODE_ACCOUNT")
     .map(
       ({ key, label, canConnect }): AgentSetupItem =>
@@ -125,16 +107,6 @@ export function AgentSavedSetupBanner({
               ),
             },
     );
-  if (needsClaudeAccount) {
-    items.unshift({
-      id: "CLAUDE_CODE_ACCOUNT",
-      label: "Claude subscription",
-      description:
-        "Runs use your own Pro or Max plan. Each person who uses this agent connects their own; nobody shares yours.",
-      status: "now",
-      action: <ClaudeCodeAccount agentId={agentId} variant="button" />,
-    });
-  }
   if (preflight.data.incompatible) {
     items.push({
       id: "model-incompatible",
@@ -146,71 +118,6 @@ export function AgentSavedSetupBanner({
         </Button>
       ),
     });
-  }
-  if (isCodex) {
-    const selectedKey = keys.data?.find((key) => key.id === agent?.llmApiKeyId);
-    const hasPersonalSubscription = keys.data?.some(
-      (key) =>
-        key.subscriptionKind === "chatgpt" &&
-        key.scope === "personal" &&
-        !key.isAgentKey,
-    );
-    if (!keyPermission.data || keyPermission.isError || keys.isError) {
-      items.push({
-        id: "chatgpt-subscription",
-        label: "Verify your ChatGPT subscription",
-        status: "now",
-        action: (
-          <div className="flex flex-wrap items-center gap-2">
-            <span>
-              {keyPermission.isError || keys.isError
-                ? "Subscription verification is unavailable. Try again."
-                : "Subscription verification is unavailable without permission to read model provider keys."}
-            </span>
-            {keys.isError && keyPermission.data && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void keys.refetch()}
-              >
-                Retry
-              </Button>
-            )}
-          </div>
-        ),
-      });
-    } else if (!hasPersonalSubscription) {
-      items.push({
-        id: "chatgpt-subscription",
-        label: "Connect your ChatGPT subscription",
-        description:
-          "Runs use your own ChatGPT plan. Each person who uses this agent connects their own.",
-        status: "now",
-        action: (
-          <Button asChild size="sm" variant="outline">
-            <Link
-              href="/llm/model-providers?connect=chatgpt"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Sign in
-            </Link>
-          </Button>
-        ),
-      });
-    } else if (selectedKey?.subscriptionKind !== "chatgpt") {
-      items.push({
-        id: "chatgpt-subscription",
-        label: "Select a ChatGPT subscription for this agent",
-        status: "now",
-        action: (
-          <Button asChild size="sm" variant="outline">
-            <Link href={agentEditHref(agentId)}>Set up</Link>
-          </Button>
-        ),
-      });
-    }
   }
   return (
     <>

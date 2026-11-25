@@ -108,7 +108,12 @@ vi.mock("@/lib/agent-runtime-templates.query", () => ({
   }),
   useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
   useBuiltInRuntimeDefaults: () => () => undefined,
-  useAgentRuntimePermissions: () => runtimePermissions.current,
+  // The runtime has no account rule unless a test gives it one: it names no
+  // kind of account, and fixes no connection or model.
+  useAgentRuntimePermissions: () => ({
+    accounts: null,
+    ...runtimePermissions.current,
+  }),
   useAgentRuntimeAccess: () => ({
     data: {
       runtimes: [
@@ -130,14 +135,37 @@ vi.mock("@/lib/agent-runtime-templates.query", () => ({
   }),
 }));
 const runtimePermissions = vi.hoisted(() => ({
-  current: { canChange: true, readOnlyBy: null } as {
+  current: { canChange: true, canConfigure: true, readOnlyBy: null } as {
     canChange: boolean | undefined;
+    canConfigure: boolean | undefined;
     readOnlyBy: string | null;
+    accounts?: {
+      kind?: "subscription" | "key";
+      llmApiKeyId?: string;
+      modelId?: string;
+      keyName?: string;
+      keyProvider?: string;
+      modelName?: string;
+      keyMissing?: true;
+      modelMissing?: true;
+      connectionModels?: Record<string, string>;
+      connectionModelNames?: Record<string, string>;
+      models?: Array<{
+        id: string;
+        modelId: string;
+        displayName: string;
+        provider: string;
+      }>;
+    } | null;
   },
 }));
 // Everyone may use and configure the runtime unless a test says otherwise.
 beforeEach(() => {
-  runtimePermissions.current = { canChange: true, readOnlyBy: null };
+  runtimePermissions.current = {
+    canChange: true,
+    canConfigure: true,
+    readOnlyBy: null,
+  };
 });
 vi.mock("next/navigation");
 
@@ -205,7 +233,11 @@ const {
         scope: string;
         bestModelId: string;
         subscriptionKind?: string | null;
+        isPrimary?: boolean;
+        isGithubAppKey?: boolean;
+        githubOrganizationName?: string | null;
       }>;
+      isFetched?: boolean;
     } => ({ data: [] }),
   ),
   useLlmModelsByProviderMock: vi.fn(() => ({ modelsByProvider: {} })),
@@ -580,7 +612,10 @@ vi.mock("@/lib/llm-models.query", () => ({
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
-  useAvailableLlmProviderApiKeys: useAvailableLlmProviderApiKeysMock,
+  // The list has answered unless a test says otherwise.
+  useAvailableLlmProviderApiKeys: (
+    ...args: Parameters<typeof useAvailableLlmProviderApiKeysMock>
+  ) => ({ isFetched: true, ...useAvailableLlmProviderApiKeysMock(...args) }),
 }));
 
 vi.mock("@/lib/hooks/use-app-name");
@@ -856,35 +891,132 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   ),
 }));
 
-// Claude Code lists its connections instead of the dropdown; the same stub
-// buttons keep the form-level tests about key selection working for both.
-vi.mock("@/components/claude-provider-connections", () => ({
-  ClaudeProviderConnections: ({
+// A runtime agent picks its company connection and model in the composer's
+// menu; the same stub buttons and outputs as the dropdown and model selector
+// above keep the form-level tests about key and model selection working for
+// both. Like the real fields, they are disabled as a whole, and a connection
+// decided elsewhere (`connectionFixed`) leaves only the model to pick.
+vi.mock("@/components/claude-connection-pickers", () => ({
+  CompanyConnectionPickers: ({
     onAddApiKey,
-    onSelect,
-    canRunClaude,
+    onApiKeyChange,
+    runsOn,
+    connectionFixed = false,
+    apiKeyId,
+    modelId,
+    onModelChange,
+    modelFilter,
+    disabled = false,
+    lockedConnection,
+    modelLocked = false,
+    modelName,
+    models,
+    onApiKeyClear,
+    onModelClear,
   }: {
     onAddApiKey?: () => void;
-    onSelect: (keyId: string) => void;
-    canRunClaude: (provider: SupportedProvider) => boolean;
+    onApiKeyChange: (keyId: string) => void;
+    runsOn: (provider: SupportedProvider) => boolean;
+    connectionFixed?: boolean;
+    apiKeyId: string | null;
+    modelId: string | null;
+    lockedConnection?: { name: string } | null;
+    modelLocked?: boolean;
+    modelName?: string | null;
+    models?: Array<{ dbId: string; displayName: string }>;
+    onApiKeyClear?: () => void;
+    onModelClear?: () => void;
+    onModelChange: (modelId: string) => void;
+    modelFilter?: (model: {
+      id: string;
+      provider: SupportedProvider;
+    }) => boolean;
+    disabled?: boolean;
   }) => (
     <>
-      <button type="button" onClick={() => onSelect("key-1")}>
-        Pick API key
-      </button>
+      {!connectionFixed && (
+        <button
+          type="button"
+          disabled={disabled || !!lockedConnection}
+          onClick={() => onApiKeyChange("key-1")}
+        >
+          Pick API key
+        </button>
+      )}
+      {lockedConnection && (
+        <output data-testid="locked-connection">{lockedConnection.name}</output>
+      )}
+      <output data-testid="selected-model-name">{modelName ?? ""}</output>
       {onAddApiKey && (
-        <button type="button" onClick={onAddApiKey}>
+        <button type="button" disabled={disabled} onClick={onAddApiKey}>
           Add provider key
         </button>
       )}
       <output data-testid="runtime-provider-filter">
         {JSON.stringify({
-          gemini: canRunClaude("gemini"),
-          openai: canRunClaude("openai"),
-          anthropic: canRunClaude("anthropic"),
-          bedrock: canRunClaude("bedrock"),
+          gemini: runsOn("gemini"),
+          openai: runsOn("openai"),
+          anthropic: runsOn("anthropic"),
+          bedrock: runsOn("bedrock"),
+          xai: runsOn("xai"),
         })}
       </output>
+      <output data-testid="selected-model">{modelId ?? ""}</output>
+      {apiKeyId && (
+        <button
+          type="button"
+          disabled={disabled || modelLocked}
+          // From the caller's own list where it gives one.
+          onClick={() => onModelChange(models?.[0]?.dbId ?? "manual-model")}
+        >
+          Pick manual model
+        </button>
+      )}
+      {onApiKeyClear && apiKeyId && !connectionFixed && !lockedConnection && (
+        <button type="button" disabled={disabled} onClick={onApiKeyClear}>
+          Clear connection
+        </button>
+      )}
+      {onModelClear && apiKeyId && modelId && !modelLocked && (
+        <button type="button" disabled={disabled} onClick={onModelClear}>
+          Clear model
+        </button>
+      )}
+      {models && (
+        <output data-testid="offered-models">
+          {models.map((model) => model.displayName).join(", ")}
+        </output>
+      )}
+      {apiKeyId && modelFilter && (
+        <>
+          <output data-testid="runtime-model-filter">
+            {JSON.stringify({
+              gemini: modelFilter({ id: "gemini-2.5-pro", provider: "gemini" }),
+              openai: modelFilter({ id: "gpt-4o", provider: "openai" }),
+              anthropic: modelFilter({
+                id: "claude-sonnet-4-6",
+                provider: "anthropic",
+              }),
+              bedrock: modelFilter({
+                id: "us.anthropic.claude-sonnet-4-6",
+                provider: "bedrock",
+              }),
+            })}
+          </output>
+          <output data-testid="runtime-bedrock-model-filter">
+            {JSON.stringify({
+              claude: modelFilter({
+                id: "anthropic.claude-sonnet-4-6",
+                provider: "bedrock",
+              }),
+              nova: modelFilter({
+                id: "amazon.nova-pro-v1:0",
+                provider: "bedrock",
+              }),
+            })}
+          </output>
+        </>
+      )}
     </>
   ),
 }));
@@ -1118,36 +1250,141 @@ vi.mock("@/components/ui/popover", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/select", () => ({
-  Select: ({
-    children,
-    value,
-    onValueChange,
-  }: {
-    children?: React.ReactNode;
+vi.mock("@/components/ui/select", async () => {
+  // Options are reachable only after the trigger opens the list, and the
+  // trigger shows the chosen item's label, so a broken trigger or value fails.
+  const { createContext, useContext, useLayoutEffect, useState } = await import(
+    "react"
+  );
+  const SelectContext = createContext<{
     value?: string;
     onValueChange?: (value: string) => void;
-  }) => (
-    <div>
-      <button
-        type="button"
-        aria-label={`Set ${value} to OpenAI Responses`}
-        onClick={() => onValueChange?.("openai_responses")}
-      />
-      {children}
-    </div>
-  ),
-  SelectContent: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectItem: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectTrigger: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectValue: () => null,
-}));
+    open: boolean;
+    setOpen: (open: boolean) => void;
+    labels: Record<string, string>;
+    setLabel: (value: string, label: string) => void;
+  }>({
+    open: false,
+    setOpen: () => undefined,
+    labels: {},
+    setLabel: () => undefined,
+  });
+  const textOf = (node: React.ReactNode): string =>
+    typeof node === "string" || typeof node === "number"
+      ? String(node)
+      : Array.isArray(node)
+        ? node.map(textOf).join("")
+        : "";
+  return {
+    Select: function Select({
+      children,
+      value,
+      onValueChange,
+    }: {
+      children?: React.ReactNode;
+      value?: string;
+      onValueChange?: (value: string) => void;
+    }) {
+      const [open, setOpen] = useState(false);
+      const [labels, setLabels] = useState<Record<string, string>>({});
+      return (
+        <SelectContext.Provider
+          value={{
+            value,
+            onValueChange,
+            open,
+            setOpen,
+            labels,
+            setLabel: (item, label) =>
+              setLabels((current) =>
+                current[item] === label
+                  ? current
+                  : { ...current, [item]: label },
+              ),
+          }}
+        >
+          <div>{children}</div>
+        </SelectContext.Provider>
+      );
+    },
+    SelectContent: function SelectContent({
+      children,
+    }: {
+      children?: React.ReactNode;
+    }) {
+      const select = useContext(SelectContext);
+      return (
+        <div role="listbox" hidden={!select.open}>
+          {children}
+        </div>
+      );
+    },
+    SelectItem: function SelectItem({
+      children,
+      value,
+    }: {
+      children?: React.ReactNode;
+      value: string;
+    }) {
+      const select = useContext(SelectContext);
+      const label = textOf(children);
+      const { setLabel } = select;
+      useLayoutEffect(() => setLabel(value, label), [setLabel, value, label]);
+      return (
+        <div
+          role="option"
+          aria-selected={select.value === value}
+          tabIndex={-1}
+          onClick={() => {
+            select.onValueChange?.(value);
+            select.setOpen(false);
+          }}
+          onKeyDown={() => undefined}
+        >
+          {children}
+        </div>
+      );
+    },
+    SelectTrigger: function SelectTrigger({
+      children,
+      id,
+      "aria-label": ariaLabel,
+    }: {
+      children?: React.ReactNode;
+      id?: string;
+      "aria-label"?: string;
+    }) {
+      const select = useContext(SelectContext);
+      return (
+        <button
+          type="button"
+          role="combobox"
+          aria-controls={undefined}
+          aria-expanded={select.open}
+          id={id}
+          aria-label={ariaLabel}
+          onClick={() => select.setOpen(!select.open)}
+        >
+          {children}
+        </button>
+      );
+    },
+    SelectValue: function SelectValue({
+      placeholder,
+    }: {
+      placeholder?: string;
+    }) {
+      const select = useContext(SelectContext);
+      return (
+        <span>
+          {(select.value !== undefined && select.labels[select.value]) ||
+            placeholder ||
+            ""}
+        </span>
+      );
+    },
+  };
+});
 
 vi.mock("@/components/ui/switch", () => ({
   // A real checkbox rather than null: a switch's checked state is
@@ -1330,14 +1567,16 @@ describe("AgentForm delegation state", () => {
   it.each([
     "mcp_gateway",
     "profile",
-  ] as const)("offers Subagents on %s forms, seeded from that record's sets", (agentType) => {
+  ] as const)("offers Agents, not Subagents, on %s forms, seeded from that record's sets", (agentType) => {
     render(
       <AgentForm agentType={agentType} agent={{ ...baseAgent, agentType }} />,
     );
 
+    // A gateway's agents are called by its clients, not by another agent.
+    expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Subagents" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Subagents" }),
+    ).not.toBeInTheDocument();
     expect(useAgentDelegationsMock).toHaveBeenCalledWith(baseAgent.id);
   });
 
@@ -1387,15 +1626,16 @@ describe("AgentForm delegation state", () => {
     render(<AgentForm agentType="mcp_gateway" agent={gateway} />);
 
     const section = screen
-      .getByRole("heading", { name: "Subagents" })
+      .getByRole("heading", { name: "Agents" })
       .closest("section") as HTMLElement;
+    expect(within(section).getByText("No agents assigned")).toBeInTheDocument();
     expect(
       within(section).getByText(
         "No delegation tools appear in this gateway's tool list.",
       ),
     ).toBeInTheDocument();
     await user.click(
-      within(section).getByRole("combobox", { name: "Add subagent" }),
+      within(section).getByRole("combobox", { name: "Add agent" }),
     );
     await user.click(screen.getByRole("option", { name: /Target Agent/ }));
     await user.click(screen.getByRole("button", { name: /update/i }));
@@ -3275,7 +3515,11 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("keeps saved runtime settings read-only without use of the runtime", () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
-    runtimePermissions.current = { canChange: false, readOnlyBy: null };
+    runtimePermissions.current = {
+      canChange: false,
+      canConfigure: false,
+      readOnlyBy: null,
+    };
     render(
       <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
     );
@@ -3289,7 +3533,11 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("omits the saved runtime when an ordinary editor changes an agent name", async () => {
     const user = userEvent.setup();
-    runtimePermissions.current = { canChange: false, readOnlyBy: null };
+    runtimePermissions.current = {
+      canChange: false,
+      canConfigure: false,
+      readOnlyBy: null,
+    };
     const runtime = {
       ...defaultAgentRuntime(),
       image: "example.test/worker:v1",
@@ -3769,7 +4017,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
   });
 
-  it("enables Save after disabling a runtime with a stale preflight incompatibility", async () => {
+  it("keeps a saved agent's dedicated runtime when it is switched off", async () => {
     vi.mocked(useFeature).mockImplementation(
       ((flag: string) =>
         flag === "agentRuntime") as unknown as typeof useFeature,
@@ -3825,15 +4073,11 @@ describe("AgentForm save payload and failure handling", () => {
     await screen.findByText("Choose a compatible model or runtime to save.");
     await user.click(screen.getByRole("button", { name: "Disable runtime" }));
 
-    await waitFor(() =>
-      expect(
-        screen.queryByText("Choose a compatible model or runtime to save."),
-      ).not.toBeInTheDocument(),
-    );
-    expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: /update/i }));
-    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody()).toEqual({ runtime: null });
+    // Nothing changed: the runtime stays, and so does what it needs.
+    expect(
+      screen.getByText("Choose a compatible model or runtime to save."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
   });
 
   it("requires an image and a command before saving a runtime newly enabled on an existing agent", async () => {
@@ -4113,7 +4357,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
   });
 
-  it("does not let a delayed catalog subscription overwrite a newer key choice", async () => {
+  it("does not let a delayed catalog subscription put a model on a company connection picked since", async () => {
     useAvailableLlmProviderApiKeysMock.mockReturnValue({
       data: [
         {
@@ -4148,8 +4392,16 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /^Model/ })).toHaveTextContent(
-      "Connected",
+    // Until someone chooses, the creator's own subscription is taken.
+    expect(
+      screen.getByRole("button", { name: /^Accounts that can run it/ }),
+    ).toHaveTextContent("Connected");
+    // The company key's connection is picked in its card, once it is ticked.
+    expect(
+      screen.queryByRole("button", { name: "Pick API key" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: /A company API key/ }),
     );
     expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
     await user.click(screen.getByRole("button", { name: "Pick API key" }));
@@ -4182,12 +4434,19 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
-    expect(await screen.findByTestId("selected-model")).toHaveTextContent(
-      "regular-model",
-    );
+    // The connection is set alone: its model is picked after it, or left
+    // to each person. Neither the subscription's model nor the key's best
+    // one is taken for it.
+    expect(
+      await screen.findByText(
+        "Every run uses this connection. Each person picks their model on the agent's page, unless you set one here.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
   });
 
-  it("filters Codex to OpenAI but leaves OpenCode's same protocol provider-neutral", async () => {
+  it("limits the company key of Codex and Grok Build to their own vendor but leaves OpenCode's same protocol provider-neutral", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     useAvailableLlmProviderApiKeysMock.mockReturnValue({
       data: [
         {
@@ -4199,49 +4458,58 @@ describe("AgentForm save payload and failure handling", () => {
         },
       ],
     });
-    const runtime = (command: string[]) => ({
-      image: "example.com/coding-agent:latest",
-      command,
-      inferenceProtocol: "openai_responses" as const,
-      backend: "kubernetes" as const,
-      steerMode: "pipe" as const,
-      privileged: false,
-      environment: null,
-      credentials: null,
-      ttlHours: null,
-      maxCostUsd: null,
-      idleTimeoutMinutes: null,
-    });
+    const template = (id: "codex" | "grok" | "opencode") =>
+      getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
+        (candidate) => candidate.id === id,
+      );
+    const renderRuntime = (id: "codex" | "grok" | "opencode") =>
+      render(
+        <AgentForm
+          agentType="agent"
+          initialRuntimeId={id}
+          initialValues={template(id)?.initialValues}
+          sections={["configuration"]}
+        />,
+      );
+    const companyKeyWay = () =>
+      screen.getByRole("checkbox", { name: /A company API key/ });
     const user = userEvent.setup();
-    const codex = render(
-      <AgentForm
-        agentType="agent"
-        initialValues={{ runtime: runtime(["archestra-codex"]) }}
-        sections={["configuration"]}
-      />,
-    );
 
+    // Codex runs its company key on OpenAI, beside ChatGPT subscriptions. A
+    // creator with no ChatGPT of their own starts with both ways open.
+    const codex = renderRuntime("codex");
+    await waitFor(() => expect(companyKeyWay()).toBeChecked());
+    expect(screen.getByTestId("runtime-provider-filter")).toHaveTextContent(
+      '{"gemini":false,"openai":true,"anthropic":false,"bedrock":false,"xai":false}',
+    );
     await user.click(screen.getByRole("button", { name: "Pick API key" }));
     expect(await screen.findByTestId("runtime-model-filter")).toHaveTextContent(
       '{"gemini":false,"openai":true,"anthropic":false,"bedrock":false}',
     );
-    expect(screen.getByTestId("runtime-provider-filter")).toHaveTextContent(
-      '{"gemini":false,"openai":true,"anthropic":false,"bedrock":false}',
-    );
-
     codex.unmount();
-    render(
-      <AgentForm
-        agentType="agent"
-        initialValues={{ runtime: runtime(["archestra-opencode"]) }}
-        sections={["configuration"]}
-      />,
+
+    // Grok Build could call any provider, but its company key is an xAI one,
+    // beside SuperGrok subscriptions.
+    const grok = renderRuntime("grok");
+    await user.click(companyKeyWay());
+    expect(screen.getByTestId("runtime-provider-filter")).toHaveTextContent(
+      '{"gemini":false,"openai":false,"anthropic":false,"bedrock":false,"xai":true}',
+    );
+    // A key added from the card is selected at once, so only an xAI key can
+    // be added there.
+    await user.click(screen.getByRole("button", { name: "Add provider key" }));
+    expect(screen.getByTestId("create-key-allowed-providers").textContent).toBe(
+      "xai",
+    );
+    grok.unmount();
+
+    // OpenCode has no subscription of its own: any provider it can call.
+    renderRuntime("opencode");
+    expect(screen.getByTestId("runtime-provider-filter")).toHaveTextContent(
+      '{"gemini":true,"openai":true,"anthropic":true,"bedrock":true,"xai":true}',
     );
     await user.click(screen.getByRole("button", { name: "Pick API key" }));
     expect(await screen.findByTestId("runtime-model-filter")).toHaveTextContent(
-      '{"gemini":true,"openai":true,"anthropic":true,"bedrock":true}',
-    );
-    expect(screen.getByTestId("runtime-provider-filter")).toHaveTextContent(
       '{"gemini":true,"openai":true,"anthropic":true,"bedrock":true}',
     );
   });
@@ -4275,7 +4543,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(
       await screen.findByTestId("runtime-provider-filter"),
     ).toHaveTextContent(
-      '{"gemini":false,"openai":false,"anthropic":true,"bedrock":true}',
+      '{"gemini":false,"openai":false,"anthropic":true,"bedrock":true,"xai":false}',
     );
     expect(screen.getByTestId("runtime-model-filter")).toHaveTextContent(
       '{"gemini":false,"openai":false,"anthropic":true,"bedrock":true}',
@@ -4690,7 +4958,18 @@ describe("AgentForm save payload and failure handling", () => {
     await user.clear(instructions);
     await user.paste("Start with the failing build logs.");
 
+    // Without a ChatGPT subscription of their own the creator starts with
+    // both ways open; subscriptions alone wait for theirs.
     await user.click(screen.getByRole("radio", { name: /Codex/ }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("checkbox", { name: /A company API key/ }),
+      ).toBeChecked(),
+    );
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    await user.click(
+      screen.getByRole("checkbox", { name: /A company API key/ }),
+    );
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     expect(
       screen.getByRole("img", {
@@ -4700,10 +4979,15 @@ describe("AgentForm save payload and failure handling", () => {
     await user.click(screen.getByRole("radio", { name: "OpenCode" }));
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
     expect(
-      screen.queryByText("Connect your ChatGPT subscription"),
+      screen.queryByRole("img", {
+        name: "Connect your ChatGPT subscription before creating the agent",
+      }),
     ).not.toBeInTheDocument();
+    // Back on Codex the start is applied again: both ways open.
     await user.click(screen.getByRole("radio", { name: /Codex/ }));
-    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Create" })).toBeEnabled(),
+    );
     await user.click(screen.getByRole("radio", { name: "OpenCode" }));
 
     expect(name).toHaveValue("Incident helper");
@@ -4747,6 +5031,15 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
     await user.click(screen.getByRole("radio", { name: /Codex/ }));
+    // Subscriptions alone, which wait for the creator's own ChatGPT.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("checkbox", { name: /A company API key/ }),
+      ).toBeChecked(),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: /A company API key/ }),
+    );
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     expect(
       screen.getByRole("img", {
@@ -4790,136 +5083,284 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
-  it("requires an explicit compatible connection after switching Claude billing to a provider", async () => {
-    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
-    useAvailableLlmProviderApiKeysMock.mockReturnValue({
-      data: [
-        {
-          id: "key-1",
-          name: "Anthropic key",
-          provider: "anthropic",
-          scope: "org",
-          bestModelId: "claude-model",
-        },
-      ],
-    });
-    useLlmModelsByProviderMock.mockReturnValue({
-      modelsByProvider: {
-        anthropic: [
+  describe("a new Claude agent starts on the account its runtime names", () => {
+    const companyKeyWay = () =>
+      screen.getByRole("checkbox", { name: /A company API key/ });
+    const subscriptionWay = () =>
+      screen.getByRole("checkbox", {
+        name: /Each person's Claude subscription/,
+      });
+    // What the creator may configure, with a default connection of their own
+    // and one of the organization's that the runtime can call.
+    beforeEach(() => {
+      vi.mocked(useFeature).mockImplementation(
+        (flag) => flag === "agentRuntime",
+      );
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [
           {
-            dbId: "claude-model",
-            id: "claude-sonnet-4-6",
-            displayName: "Claude Sonnet",
+            id: "org-default",
+            name: "Organization Anthropic",
             provider: "anthropic",
-            isFree: false,
+            scope: "org",
+            isPrimary: true,
+            bestModelId: "claude-model",
+          },
+          {
+            id: "my-default",
+            name: "My Anthropic",
+            provider: "anthropic",
+            scope: "personal",
+            isPrimary: true,
+            bestModelId: "claude-model",
           },
         ],
-      },
-    });
-    useOrganizationDefaultModelMock.mockReturnValue({
-      model: {
-        dbId: "gpt-default",
-        id: "gpt-5.6-luna",
-        displayName: "GPT-5.6 Luna",
-        provider: "openai",
-        isFree: false,
-      },
-      label: "OpenAI · GPT-5.6 Luna",
-      autoRouters: [],
-    } as never);
-    const user = userEvent.setup();
-    const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
-      (template) => template.id === "claude-code",
-    );
-    render(
-      <AgentForm
-        agentType="agent"
-        sections={["configuration"]}
-        initialRuntimeId="claude-code"
-        initialValues={claude?.initialValues}
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
-    expect(
-      screen.queryByRole("img", { name: /Connect your Claude account/ }),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /A company API key/ }));
-    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
-    expect(screen.queryByText(/GPT-5.6 Luna/)).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("img", {
-        name: "Select a provider and Claude model",
-      }),
-    ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
-    );
-    expect(
-      screen.queryByRole("button", { name: "Pick API key" }),
-    ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
-    );
-    await user.click(screen.getByRole("button", { name: "Pick API key" }));
-    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
-    expect(
-      screen.queryByRole("img", {
-        name: "Select a provider and Claude model",
-      }),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Create" }));
-    await waitFor(() => expect(createAgent).toHaveBeenCalled());
-    expect(createAgent.mock.calls[0][0]).toMatchObject({
-      llmApiKeyId: "key-1",
-      modelId: "claude-model",
-      runtime: { claudeCode: { authentication: "provider" } },
-    });
-  });
-
-  it("keeps authentication flagged when a provider has no compatible model to select", async () => {
-    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
-    useAvailableLlmProviderApiKeysMock.mockReturnValue({
-      data: [
-        {
-          id: "key-1",
-          name: "Anthropic key",
-          provider: "anthropic",
-          scope: "org",
-          bestModelId: "",
+      });
+      useLlmModelsByProviderMock.mockReturnValue({
+        modelsByProvider: {
+          anthropic: [
+            {
+              dbId: "claude-model",
+              id: "claude-sonnet-4-6",
+              displayName: "Claude Sonnet",
+              provider: "anthropic",
+              isFree: false,
+            },
+          ],
         },
-      ],
+      });
     });
-    const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
+    const claudeCode = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
       (template) => template.id === "claude-code",
-    );
-    const user = userEvent.setup();
-    render(
-      <AgentForm
-        agentType="agent"
-        sections={["configuration"]}
-        initialRuntimeId="claude-code"
-        initialValues={claude?.initialValues}
-      />,
-    );
-    await user.click(screen.getByRole("radio", { name: /A company API key/ }));
-    await user.click(screen.getByRole("button", { name: "Pick API key" }));
-    expect(
-      screen.getByRole("img", {
-        name: "Select a model for the selected provider",
-      }),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
-    await user.click(
-      screen.getByRole("radio", { name: /Each person's Claude subscription/ }),
-    );
-    expect(
-      screen.queryByRole("img", { name: /Select a model/ }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    )?.initialValues;
+    /** The built-in Claude Code runtime, set to `authentication` if given. */
+    const renderNewAgent = (authentication?: "provider" | "subscription") =>
+      render(
+        <AgentForm
+          agentType="agent"
+          sections={["configuration"]}
+          initialRuntimeId="claude-code"
+          initialValues={
+            claudeCode && {
+              ...claudeCode,
+              runtime: claudeCode.runtime && {
+                ...claudeCode.runtime,
+                ...(authentication && {
+                  claudeCode: {
+                    ...claudeCode.runtime.claudeCode,
+                    authentication,
+                  },
+                }),
+              },
+            }
+          }
+        />,
+      );
+
+    it("on each person's subscription: that card alone, whatever default connection the creator has", async () => {
+      const user = userEvent.setup();
+      // The built-in runtime's own setting is each person's subscription.
+      renderNewAgent();
+
+      await waitFor(() => expect(subscriptionWay()).toBeChecked());
+      expect(companyKeyWay()).not.toBeChecked();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      await user.type(screen.getByLabelText(/Name/), "Subscription agent");
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Create" })).toBeEnabled(),
+      );
+      await user.click(screen.getByRole("button", { name: "Create" }));
+      await waitFor(() => expect(createAgent).toHaveBeenCalled());
+      // What ticking only the subscription card saves.
+      expect(createAgent.mock.calls[0][0]).toMatchObject({
+        llmApiKeyId: null,
+        modelId: null,
+        runtime: {
+          accountLock: "subscription",
+          claudeCode: { authentication: "subscription" },
+        },
+      });
+    });
+
+    it("with no account named on a custom image: the company card, with no connection picked for it", async () => {
+      render(
+        <AgentForm
+          agentType="agent"
+          sections={["configuration"]}
+          initialRuntimeId="custom"
+          initialValues={{
+            runtime: {
+              image: "example.com/claude-code:latest",
+              command: ["custom-claude-entrypoint"],
+              inferenceProtocol: "anthropic",
+              backend: "kubernetes",
+              steerMode: "tmux_keys",
+              privileged: false,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              maxCostUsd: null,
+              idleTimeoutMinutes: null,
+            },
+          }}
+        />,
+      );
+
+      // An image that does not declare Claude Code has only the company key,
+      // and nothing ticks the subscription or picks a connection for it.
+      expect(companyKeyWay()).toBeChecked();
+      expect(subscriptionWay()).not.toBeChecked();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(companyKeyWay()).toBeChecked();
+      expect(subscriptionWay()).not.toBeChecked();
+      expect(screen.getByTestId("selected-model")).toHaveTextContent("");
+    });
+
+    it("on a custom image whose settings store a Claude subscription and no rule: the company card, as every agent there ran", async () => {
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          sections={["configuration"]}
+          initialRuntimeId="custom"
+          initialValues={{
+            runtime: {
+              image: "example.com/claude-code:latest",
+              command: ["custom-claude-entrypoint"],
+              inferenceProtocol: "anthropic",
+              // What the old runtime dialog stored, which a custom image
+              // never ran on.
+              claudeCode: { authentication: "subscription" },
+              backend: "kubernetes",
+              steerMode: "tmux_keys",
+              privileged: false,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              maxCostUsd: null,
+              idleTimeoutMinutes: null,
+            },
+          }}
+        />,
+      );
+
+      await waitFor(() => expect(companyKeyWay()).toBeChecked());
+      expect(subscriptionWay()).not.toBeChecked();
+
+      // Its creator may still open the subscription way themselves.
+      await user.click(subscriptionWay());
+      expect(subscriptionWay()).toBeChecked();
+    });
+
+    describe("on a runtime whose rule names no account", () => {
+      /** May use the runtime, not configure it. */
+      const useOnly = (name: string) => {
+        runtimePermissions.current = {
+          canChange: true,
+          canConfigure: false,
+          readOnlyBy: name,
+        };
+      };
+      const create = async (user: ReturnType<typeof userEvent.setup>) => {
+        await user.type(screen.getByLabelText(/Name/), "Their agent");
+        await waitFor(() =>
+          expect(screen.getByRole("button", { name: "Create" })).toBeEnabled(),
+        );
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await waitFor(() => expect(createAgent).toHaveBeenCalled());
+        return createAgent.mock.calls[0][0];
+      };
+
+      it("starts the built-in runtime's agent on the subscription the runtime comes with, whatever default connection the creator has", async () => {
+        // Someone who may configure it, with a default connection.
+        runtimePermissions.current = {
+          canChange: true,
+          canConfigure: true,
+          readOnlyBy: null,
+        };
+        const user = userEvent.setup();
+        renderNewAgent("subscription");
+
+        await waitFor(() => expect(subscriptionWay()).toBeChecked());
+        expect(companyKeyWay()).not.toBeChecked();
+        expect(subscriptionWay()).not.toHaveAttribute("aria-readonly");
+        expect(await create(user)).toMatchObject({
+          llmApiKeyId: null,
+          runtime: { accountLock: "subscription" },
+        });
+      });
+
+      it("starts someone who may only use the built-in runtime on that card too, with nothing read-only", async () => {
+        useOnly("Claude Code");
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+        renderNewAgent("subscription");
+
+        await waitFor(() => expect(subscriptionWay()).toBeChecked());
+        expect(companyKeyWay()).not.toBeChecked();
+        expect(subscriptionWay()).not.toHaveAttribute("aria-readonly");
+        expect(
+          screen.queryByText("Select at least one option."),
+        ).not.toBeInTheDocument();
+        // Nothing says the accounts need `configure` on the runtime.
+        expect(
+          screen.queryByText(/can change which accounts run it/),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.getByText("Set by the Claude Code runtime").parentElement,
+        ).toHaveTextContent(
+          "Environment, credentials, ports and accounts stay this agent's own.",
+        );
+      });
+
+      it("lets someone who may only use a custom runtime with no account choose its agent's accounts", async () => {
+        useOnly("Team runtime");
+        const user = userEvent.setup();
+        render(
+          <AgentForm
+            agentType="agent"
+            sections={["configuration"]}
+            initialRuntimeId="custom"
+            initialValues={{
+              runtime: {
+                image: "example.com/claude-code:latest",
+                command: ["custom-claude-entrypoint"],
+                inferenceProtocol: "anthropic",
+                backend: "kubernetes",
+                steerMode: "tmux_keys",
+                privileged: false,
+                environment: null,
+                credentials: null,
+                ttlHours: null,
+                maxCostUsd: null,
+                idleTimeoutMinutes: null,
+              },
+            }}
+          />,
+        );
+
+        // As for someone who configures it: the company card, open to change.
+        expect(companyKeyWay()).toBeChecked();
+        expect(subscriptionWay()).not.toBeChecked();
+        expect(companyKeyWay()).not.toHaveAttribute("aria-readonly");
+        expect(
+          screen.queryByText(/can change which accounts run it/),
+        ).not.toBeInTheDocument();
+
+        await user.click(subscriptionWay());
+        await user.click(companyKeyWay());
+        expect(subscriptionWay()).toBeChecked();
+        expect(companyKeyWay()).not.toBeChecked();
+        expect(await create(user)).toMatchObject({
+          runtime: {
+            accountLock: "subscription",
+            claudeCode: { authentication: "subscription" },
+          },
+        });
+      });
+    });
   });
 
-  it("keeps the Claude account radio cards visible with personal subscription disabled, shows the command notice, and rewrites subscription to provider on save when a Claude runtime uses a custom command", async () => {
+  it("shows an agent saved before people could choose on a custom Claude image on the company API key it runs on, and saves its Claude account untouched", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     useAvailableLlmProviderApiKeysMock.mockReturnValue({
       data: [
@@ -4975,36 +5416,174 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
-    expect(screen.getByText("Whose Claude account runs it")).toBeVisible();
-    const subscriptionRadio = screen.getByRole("radio", {
-      name: /Each person's Claude subscription/,
-    });
-    const providerRadio = screen.getByRole("radio", {
-      name: /A company API key/,
-    });
-    expect(subscriptionRadio).toBeDisabled();
-    expect(subscriptionRadio).not.toBeChecked();
-    expect(providerRadio).toBeChecked();
+    expect(screen.getByText("Accounts that can run it")).toBeVisible();
+    // Saved before people could choose: it runs only the way it always ran.
+    // A custom image ran every agent on its company API key, whatever Claude
+    // account the agent stored.
     expect(
-      screen.getByText(
-        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current custom-claude-entrypoint entrypoint will be lost.",
-      ),
-    ).toBeVisible();
+      screen.getByRole("checkbox", { name: /A company API key/ }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", {
+        name: /Each person's Claude subscription/,
+      }),
+    ).not.toBeChecked();
 
     await user.click(screen.getByRole("button", { name: /update/i }));
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody().runtime).toMatchObject({
-      command: ["custom-claude-entrypoint"],
-      claudeCode: {
-        authentication: "provider",
-        model: "opus",
+    // Nothing changed its accounts, so its stored runtime is not sent.
+    expect(savedBody().runtime).toBeUndefined();
+  });
+
+  describe("a connection an agent saved before people could choose stores without a model", () => {
+    const anthropicKey = {
+      id: "anthropic-key",
+      name: "Anthropic key",
+      provider: "anthropic",
+      scope: "org",
+      bestModelId: "claude-model",
+    };
+    const savedAgent = (accountLock?: null) => ({
+      ...baseAgent,
+      llmApiKeyId: "anthropic-key",
+      modelId: null,
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: ["my-agent"],
+        inferenceProtocol: "openai_chat" as const,
+        backend: "kubernetes" as const,
+        steerMode: "pipe" as const,
+        privileged: false,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+        ...(accountLock !== undefined && { accountLock }),
       },
     });
+    const organizationDefault = (
+      model: { provider: "openai"; displayName: string } | null,
+    ) =>
+      useOrganizationDefaultModelMock.mockReturnValue({
+        autoRouters: [],
+        autoRoutedTiers: null,
+        defaultAutoRouterId: null,
+        label: model?.displayName ?? null,
+        model: model && {
+          dbId: "default-model",
+          id: "gpt-5",
+          displayName: model.displayName,
+          provider: model.provider,
+          capabilities: { supportedEndpoints: null },
+          isFree: false,
+        },
+      } as never);
+    beforeEach(() => {
+      vi.mocked(useFeature).mockImplementation(
+        (flag) => flag === "agentRuntime",
+      );
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [anthropicKey],
+      });
+    });
+
+    it("says it is not used where the organization's default model is of another provider", () => {
+      organizationDefault({ provider: "openai", displayName: "GPT-5" });
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={savedAgent()}
+          sections={["configuration"]}
+        />,
+      );
+
+      expect(
+        screen.getByText(
+          "This connection is not used: every run uses the organization's default model, GPT-5. Pick a model to run on this connection.",
+        ),
+      ).toBeVisible();
+    });
+
+    it("says when it is used where the organization sets no default model", () => {
+      organizationDefault(null);
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={savedAgent()}
+          sections={["configuration"]}
+        />,
+      );
+
+      expect(
+        screen.getByText(
+          "Every run uses the best available model, on this connection only where it serves that model. Pick a model to run on this connection.",
+        ),
+      ).toBeVisible();
+    });
+
+    it("is every run's connection on an agent saved with its accounts", () => {
+      organizationDefault({ provider: "openai", displayName: "GPT-5" });
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={savedAgent(null)}
+          sections={["configuration"]}
+        />,
+      );
+
+      expect(
+        screen.getByText(
+          "Every run uses this connection. Each person picks their model on the agent's page, unless you set one here.",
+        ),
+      ).toBeVisible();
+      expect(screen.queryByText(/This connection is not used/)).toBeNull();
+    });
+  });
+
+  it("starts a custom Claude command without Claude settings on a company API key", () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["custom-claude-entrypoint"],
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    // An image that does not declare Claude Code has only the company key.
+    expect(
+      screen.getByRole("checkbox", { name: /A company API key/ }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", {
+        name: /Each person's Claude subscription/,
+      }),
+    ).not.toBeChecked();
   });
 
   it("omits runtime from the configuration save when the caller may not use the agent's runtime even if claudeCode.authentication is subscription on a custom command", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
-    runtimePermissions.current = { canChange: false, readOnlyBy: null };
+    runtimePermissions.current = {
+      canChange: false,
+      canConfigure: false,
+      readOnlyBy: null,
+    };
     const user = userEvent.setup();
     render(
       <AgentForm
@@ -5041,6 +5620,7 @@ describe("AgentForm save payload and failure handling", () => {
   });
 
   it("does not treat a maintained non-Claude harness on the Anthropic protocol as Claude Code", () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     render(
       <AgentForm
         agentType="agent"
@@ -5066,13 +5646,22 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
+    // Its accounts are a runtime's, not Claude Code's: the company key alone,
+    // with no Claude subscription to allow and nothing said about its image.
+    const accounts = screen.getByRole("group", {
+      name: "Accounts that can run it",
+    });
+    expect(within(accounts).getByText("A company API key")).toBeVisible();
     expect(
-      screen.queryByText("Whose Claude account runs it"),
+      screen.queryByText(/Each person's Claude subscription/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Choose a personal subscription only for an image/),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/change Dedicated runtime → Container → Command/),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pick API key" })).toBeVisible();
+      within(accounts).getByRole("button", { name: "Pick API key" }),
+    ).toBeVisible();
   });
 
   it("marks the image row until a container image and command are supplied", async () => {
@@ -5495,6 +6084,2384 @@ describe("AgentForm save payload and failure handling", () => {
     );
     expect(onCreated).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith("Tools were refused");
+  });
+
+  describe("account lock", () => {
+    // Null is "each person chooses"; "none" leaves the lock out, as on an
+    // agent saved before people could choose.
+    const lockRuntime = (
+      command: string[],
+      accountLock?: "subscription" | "key" | "none",
+    ) => ({
+      image: "example.com/coding-agent:latest",
+      command,
+      inferenceProtocol: "openai_responses" as const,
+      backend: "kubernetes" as const,
+      steerMode: "pipe" as const,
+      privileged: false,
+      environment: null,
+      credentials: null,
+      ttlHours: null,
+      maxCostUsd: null,
+      idleTimeoutMinutes: null,
+      ...(accountLock !== "none" && { accountLock: accountLock ?? null }),
+    });
+    const companyKey = {
+      id: "openai-key",
+      name: "Company OpenAI",
+      provider: "openai",
+      scope: "org",
+      bestModelId: "openai-model",
+    };
+    const chatgptKey = {
+      id: "chatgpt-key",
+      name: "ChatGPT Subscription",
+      provider: "openai",
+      scope: "personal",
+      bestModelId: "openai-model",
+      subscriptionKind: "chatgpt",
+    };
+    const lockedAgent = (params: {
+      command?: string[];
+      lock?: "subscription" | "key" | "none";
+      llmApiKeyId?: string | null;
+    }) => ({
+      ...baseAgent,
+      llmApiKeyId:
+        params.llmApiKeyId === undefined ? "openai-key" : params.llmApiKeyId,
+      modelId: "openai-model",
+      runtime: lockRuntime(params.command ?? ["my-agent"], params.lock),
+    });
+    // The runtimes with a subscription of their own: only they have two
+    // accounts to tick. Codex runs on ChatGPT, Grok Build on SuperGrok.
+    const codex = ["archestra-codex"];
+    const xaiKey = {
+      id: "xai-key",
+      name: "Company xAI",
+      provider: "xai",
+      scope: "org",
+      bestModelId: "grok-model",
+    };
+    const superGrokKey = {
+      id: "supergrok-key",
+      name: "SuperGrok",
+      provider: "xai",
+      scope: "personal",
+      bestModelId: "grok-model",
+      subscriptionKind: "x-premium",
+    };
+    const grokAgent = (params: {
+      lock?: "subscription" | "key" | "none";
+      llmApiKeyId?: string;
+    }) => ({
+      ...baseAgent,
+      llmApiKeyId: params.llmApiKeyId ?? "xai-key",
+      modelId: "grok-model",
+      runtime: {
+        ...lockRuntime(["archestra-grok"], params.lock),
+        inferenceProtocol: "openai_chat" as const,
+      },
+    });
+    const withGrokKeys = () => {
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [xaiKey, superGrokKey],
+      });
+      useLlmModelsByProviderMock.mockReturnValue({
+        modelsByProvider: {
+          xai: [
+            {
+              dbId: "grok-model",
+              id: "grok-4",
+              displayName: "Grok 4",
+              provider: "xai",
+              isFree: false,
+            },
+          ],
+        },
+      });
+    };
+    const subscriptionWay = () =>
+      screen.getByRole("checkbox", {
+        name: /Each person's ChatGPT subscription/,
+      });
+    const superGrokWay = () =>
+      screen.getByRole("checkbox", {
+        name: /Each person's SuperGrok subscription/,
+      });
+    const companyKeyWay = () =>
+      screen.getByRole("checkbox", { name: /A company API key/ });
+
+    beforeEach(() => {
+      vi.mocked(useFeature).mockImplementation(
+        ((flag: string) =>
+          flag === "agentRuntime") as unknown as typeof useFeature,
+      );
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [companyKey, chatgptKey],
+      });
+      useLlmModelsByProviderMock.mockReturnValue({
+        modelsByProvider: {
+          openai: [
+            {
+              dbId: "openai-model",
+              id: "gpt-5",
+              displayName: "GPT-5",
+              provider: "openai",
+              isFree: false,
+            },
+          ],
+        },
+      });
+    });
+
+    it("ticks both ways for an unlocked agent and locks it to the company key when the subscription is unticked", async () => {
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command: codex })}
+          sections={["configuration"]}
+        />,
+      );
+      expect(await screen.findByText("Accounts that can run it")).toBeVisible();
+      expect(subscriptionWay()).toBeChecked();
+      expect(companyKeyWay()).toBeChecked();
+      // The company key's two fields sit in its card; nothing else picks a
+      // key or a model for a runtime agent.
+      expect(
+        within(
+          companyKeyWay().closest("label")?.parentElement as HTMLElement,
+        ).getByTestId("selected-model"),
+      ).toHaveTextContent("openai-model");
+      expect(screen.getAllByTestId("selected-model")).toHaveLength(1);
+      expect(
+        screen.getByText(
+          "Each person who runs this agent chooses their own subscription or a company API key on the agent's page.",
+        ),
+      ).toBeVisible();
+
+      await user.click(subscriptionWay());
+      expect(subscriptionWay()).not.toBeChecked();
+      expect(companyKeyWay()).toBeChecked();
+      expect(screen.getByText("Locked to a company API key")).toBeVisible();
+      // The agent has a company key and model, so nothing is left to set up.
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+    });
+
+    it("shows an agent saved before people could choose on its one way, and opens it to each person's choice", async () => {
+      withGrokKeys();
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={grokAgent({ lock: "none" })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      // Everyone runs on its own connection today, so that is what is ticked.
+      expect(superGrokWay()).not.toBeChecked();
+      expect(companyKeyWay()).toBeChecked();
+
+      await user.click(superGrokWay());
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({ accountLock: null });
+    });
+
+    it("lets both options be unticked and blocks Save until one is selected", async () => {
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command: codex, lock: "key" })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      expect(subscriptionWay()).not.toBeChecked();
+      await user.click(companyKeyWay());
+      expect(companyKeyWay()).not.toBeChecked();
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Select at least one option.",
+      );
+      expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+
+      // Selecting one again clears that message.
+      await user.click(subscriptionWay());
+      expect(
+        screen.queryByText("Select at least one option."),
+      ).not.toBeInTheDocument();
+      expect(subscriptionWay()).toBeChecked();
+      expect(companyKeyWay()).not.toBeChecked();
+    });
+
+    it("locks an agent with an incompatible company key to personal subscriptions and drops the unused pair", async () => {
+      // The runtime has a subscription of its own, so the lock does not
+      // depend on what the agent's own connection is.
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [companyKey, xaiKey, superGrokKey],
+      });
+      useLlmModelsByProviderMock.mockReturnValue({
+        modelsByProvider: {
+          openai: [
+            {
+              dbId: "openai-model",
+              id: "gpt-5",
+              displayName: "GPT-5",
+              provider: "openai",
+              isFree: false,
+            },
+          ],
+          xai: [
+            {
+              dbId: "grok-model",
+              id: "grok-4",
+              displayName: "Grok 4",
+              provider: "xai",
+              isFree: false,
+            },
+          ],
+        },
+      });
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={{
+            ...grokAgent({ llmApiKeyId: "openai-key" }),
+            modelId: "openai-model",
+          }}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(companyKeyWay());
+      expect(superGrokWay()).toBeChecked();
+      expect(companyKeyWay()).not.toBeChecked();
+      expect(
+        screen.getByText("Locked to each user's personal subscription"),
+      ).toBeVisible();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({
+        accountLock: "subscription",
+      });
+      // SuperGrok does not serve OpenAI models, so neither the company key nor
+      // its model is used by any run and both are cleared.
+      expect(savedBody()).toMatchObject({ llmApiKeyId: null, modelId: null });
+    });
+
+    it("keeps a subscription-served model when locking a company-key agent to personal subscriptions", async () => {
+      withGrokKeys();
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={grokAgent({})}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(companyKeyWay());
+      expect(superGrokWay()).toBeChecked();
+      expect(companyKeyWay()).not.toBeChecked();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({
+        accountLock: "subscription",
+      });
+      // SuperGrok serves xAI models (`grok-4`), so saving preserves the model
+      // instead of clearing it (runs bind each person's SuperGrok and ignore
+      // the stored company key).
+      expect(savedBody().llmApiKeyId).toBeUndefined();
+      expect(savedBody().modelId).toBeUndefined();
+    });
+
+    it("does not clear a stored personal subscription on an unrelated edit when keys are unreadable or still loading", async () => {
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [],
+        isFetched: false,
+      });
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={grokAgent({
+            lock: "subscription",
+            llmApiKeyId: "supergrok-key",
+          })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      const descriptionInput = screen.getByLabelText("Description");
+      await user.clear(descriptionInput);
+      await user.type(descriptionInput, "Updated description");
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().description).toBe("Updated description");
+      expect(savedBody().llmApiKeyId).toBeUndefined();
+      expect(savedBody().modelId).toBeUndefined();
+    });
+
+    it("lifts the ChatGPT requirement when a new Codex agent runs only on a company API key", async () => {
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [companyKey],
+      });
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          sections={["configuration"]}
+          initialValues={{
+            ...getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
+              (template) => template.id === "codex",
+            )?.initialValues,
+          }}
+        />,
+      );
+      // The creator has no ChatGPT of their own: the agent starts with both
+      // ways open. Beside subscriptions the company key is still what the
+      // agent's own setting runs on, so the creator needs no subscription.
+      await waitFor(() => expect(companyKeyWay()).toBeChecked());
+      expect(subscriptionWay()).toBeChecked();
+      expect(
+        screen.queryByText("ChatGPT Subscription required"),
+      ).not.toBeInTheDocument();
+      // Subscriptions alone: the agent takes its model from its creator's.
+      await user.click(companyKeyWay());
+      expect(
+        screen.getByText("ChatGPT Subscription required"),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /create/i })).toBeDisabled();
+      // The company key alone needs no subscription either.
+      await user.click(companyKeyWay());
+      await user.click(subscriptionWay());
+      expect(subscriptionWay()).not.toBeChecked();
+      expect(companyKeyWay()).toBeChecked();
+      expect(
+        screen.queryByText("ChatGPT Subscription required"),
+      ).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ["OpenCode", ["archestra-opencode"]],
+      ["a custom image", ["my-agent"]],
+    ])("shows %s one company API key card with nothing to tick, and no subscription for its OpenAI key", async (_name, command) => {
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command })}
+          sections={["configuration"]}
+        />,
+      );
+      // The section is the accounts one for every runtime, never "Model".
+      expect(await screen.findByText("Accounts that can run it")).toBeVisible();
+      expect(screen.queryByText("Model")).not.toBeInTheDocument();
+      const accounts = screen.getByRole("group", {
+        name: "Accounts that can run it",
+      });
+      expect(within(accounts).getByText("A company API key")).toBeVisible();
+      // The runtime has no subscription of its own, and an OpenAI key does
+      // not bring ChatGPT's along.
+      expect(screen.queryByText(/Each person's/)).not.toBeInTheDocument();
+      // One account is always on: nothing to tick, and no line on what the
+      // ticks amount to.
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Locked to a company API key"),
+      ).not.toBeInTheDocument();
+      // Its connection and model are picked in the card, and nowhere else.
+      expect(
+        within(accounts).getByRole("button", { name: "Pick API key" }),
+      ).toBeEnabled();
+      expect(within(accounts).getByTestId("selected-model")).toHaveTextContent(
+        "openai-model",
+      );
+      expect(
+        screen.getAllByRole("button", { name: "Pick API key" }),
+      ).toHaveLength(1);
+    });
+
+    it("sends the key lock when the subscription is unticked and null when it is ticked again", async () => {
+      const user = userEvent.setup();
+      const { unmount } = render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command: codex })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(subscriptionWay());
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({ accountLock: "key" });
+      unmount();
+
+      updateAgent.mockClear();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command: codex, lock: "key" })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      expect(subscriptionWay()).not.toBeChecked();
+      await user.click(subscriptionWay());
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({ accountLock: null });
+    });
+
+    it("sends the subscription lock when the company key is unticked", async () => {
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command: codex, llmApiKeyId: "chatgpt-key" })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(companyKeyWay());
+      expect(
+        screen.getByText("Locked to each user's personal subscription"),
+      ).toBeVisible();
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({
+        accountLock: "subscription",
+      });
+    });
+
+    it("keeps a Codex agent's own ChatGPT subscription once it allows subscriptions alone", async () => {
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command: codex, llmApiKeyId: "chatgpt-key" })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(companyKeyWay());
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody()).not.toHaveProperty("llmApiKeyId");
+    });
+
+    it.each([
+      ["becomes one with a single account", "Set runtime image and command"],
+    ])("forgets that both options were unticked when the runtime %s", async (_change, button) => {
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ command: codex })}
+          sections={["configuration", "runtime"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      await user.click(subscriptionWay());
+      await user.click(companyKeyWay());
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Select at least one option.",
+      );
+      expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+
+      // No boxes are left to tick, so nothing may go on waiting for one.
+      await user.click(screen.getByRole("button", { name: button }));
+      await waitFor(() =>
+        expect(screen.queryByRole("checkbox")).not.toBeInTheDocument(),
+      );
+      expect(
+        screen.queryByText("Select at least one option."),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+    });
+
+    it("leaves a Claude agent's own account as it was when the subscription is unticked and ticked again", async () => {
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [
+          {
+            id: "anthropic-key",
+            name: "Company Anthropic",
+            provider: "anthropic",
+            scope: "org",
+            bestModelId: "claude-model",
+          },
+        ],
+      });
+      useLlmModelsByProviderMock.mockReturnValue({
+        modelsByProvider: {
+          anthropic: [
+            {
+              dbId: "claude-model",
+              id: "claude-sonnet-4-6",
+              displayName: "Claude Sonnet",
+              provider: "anthropic",
+              isFree: false,
+            },
+          ],
+        },
+      });
+      const onDirtyChange = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={{
+            ...lockedAgent({ llmApiKeyId: "anthropic-key" }),
+            modelId: "claude-model",
+            runtime: {
+              ...lockRuntime(["archestra-claude-code"]),
+              inferenceProtocol: "anthropic" as const,
+              // Each person's subscription is what a run with no choice
+              // uses, beside a company key for those who choose it.
+              claudeCode: { authentication: "subscription" as const },
+              credentials: [
+                {
+                  key: "CLAUDE_CODE_OAUTH_TOKEN",
+                  scope: "per_user" as const,
+                  label: "Claude token",
+                  required: false,
+                },
+              ],
+            },
+          }}
+          sections={["configuration"]}
+          onDirtyChange={onDirtyChange}
+        />,
+      );
+      const claudeSubscriptionWay = () =>
+        screen.getByRole("checkbox", {
+          name: /Each person's Claude subscription/,
+        });
+      await screen.findByText("Accounts that can run it");
+      expect(claudeSubscriptionWay()).toBeChecked();
+      expect(companyKeyWay()).toBeChecked();
+
+      await user.click(claudeSubscriptionWay());
+      expect(claudeSubscriptionWay()).not.toBeChecked();
+      await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
+      await user.click(claudeSubscriptionWay());
+      expect(claudeSubscriptionWay()).toBeChecked();
+      expect(companyKeyWay()).toBeChecked();
+
+      // Back where it started: nothing to save, and a save sends no runtime.
+      await waitFor(() =>
+        expect(onDirtyChange).toHaveBeenLastCalledWith(false),
+      );
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody()).not.toHaveProperty("runtime");
+      expect(savedBody()).not.toHaveProperty("llmApiKeyId");
+    });
+
+    it("does not send an unchanged lock", async () => {
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ lock: "key" })}
+          sections={["configuration", "runtime"]}
+        />,
+      );
+      await user.type(
+        await screen.findByDisplayValue("Existing Agent"),
+        " renamed",
+      );
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toBeDefined();
+      expect(savedBody().runtime).not.toHaveProperty("accountLock");
+    });
+
+    it("keeps a locked Claude agent's connection and model read-only for someone who may not use its runtime", async () => {
+      // Someone who may use the runtime locked this agent to its company
+      // key. The reader may not use it, so the lock holds for them.
+      runtimePermissions.current = {
+        canChange: false,
+        canConfigure: false,
+        readOnlyBy: null,
+      };
+      const anthropicKey = {
+        id: "anthropic-key",
+        name: "Company Anthropic",
+        provider: "anthropic",
+        scope: "org",
+        bestModelId: "claude-model",
+      };
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [anthropicKey],
+      });
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={{
+            ...lockedAgent({ llmApiKeyId: "anthropic-key" }),
+            modelId: "claude-model",
+            runtime: {
+              ...lockRuntime(["archestra-claude-code"], "key"),
+              inferenceProtocol: "anthropic" as const,
+              claudeCode: { authentication: "provider" as const },
+            },
+          }}
+          sections={["configuration"]}
+        />,
+      );
+      // The runtime's rule names no account, so `use` on it is what changing
+      // the lock takes.
+      expect(
+        await screen.findByText(/This agent's account is locked/),
+      ).toHaveTextContent(
+        "Only people who can use the agent's runtime can change it.",
+      );
+      expect(
+        screen.getByRole("button", { name: "Pick API key" }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "Pick manual model" }),
+      ).toBeDisabled();
+    });
+
+    it("leaves a locked Claude agent's accounts to someone who may only use a runtime that stores a Claude account and names no kind", async () => {
+      // The runtime's settings store each person's subscription, with no
+      // rule. That restricts nobody: the agent's lock is theirs to change.
+      runtimePermissions.current = {
+        canChange: true,
+        canConfigure: false,
+        readOnlyBy: "Claude Code",
+      };
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [
+          {
+            id: "anthropic-key",
+            name: "Company Anthropic",
+            provider: "anthropic",
+            scope: "org",
+            bestModelId: "claude-model",
+          },
+        ],
+      });
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={{
+            ...lockedAgent({ llmApiKeyId: "anthropic-key" }),
+            modelId: "claude-model",
+            runtime: {
+              ...lockRuntime(["archestra-claude-code"], "key"),
+              inferenceProtocol: "anthropic" as const,
+              claudeCode: { authentication: "provider" as const },
+            },
+          }}
+          sections={["configuration"]}
+        />,
+      );
+      const claudeSubscriptionWay = await screen.findByRole("checkbox", {
+        name: /Each person's Claude subscription/,
+      });
+      expect(claudeSubscriptionWay).not.toBeChecked();
+      expect(claudeSubscriptionWay).not.toHaveAttribute("aria-readonly");
+      expect(
+        screen.queryByText(/This agent's account is locked/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/can change which accounts run it/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Pick API key" }),
+      ).toBeEnabled();
+      // The lock moves: both ways open is saved as no lock.
+      await user.click(claudeSubscriptionWay);
+      expect(claudeSubscriptionWay).toBeChecked();
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({ accountLock: null });
+    });
+
+    it("does not block Save for a lock this edit leaves as it is", async () => {
+      // A subscription lock on an agent whose own account is a company key
+      // does not fit, but the backend accepts a save that moves neither.
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ lock: "subscription" })}
+          sections={["configuration"]}
+        />,
+      );
+      await screen.findByText("Accounts that can run it");
+      expect(
+        screen.queryByText(/^To allow only personal subscriptions/),
+      ).not.toBeInTheDocument();
+      await user.type(
+        await screen.findByDisplayValue("Existing Agent"),
+        " renamed",
+      );
+      expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+
+      // A runtime with no subscription of its own has no option to untick,
+      // so giving it a company connection lifts the lock it could not keep.
+      await user.click(screen.getByRole("button", { name: "Pick API key" }));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({ accountLock: null });
+      expect(savedBody().llmApiKeyId).toBe("key-1");
+    });
+
+    it("does not block Save for an editor who cannot see the lock", async () => {
+      runtimePermissions.current = {
+        canChange: true,
+        canConfigure: false,
+        readOnlyBy: "Worker",
+      };
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({ lock: "subscription" })}
+          sections={["configuration"]}
+        />,
+      );
+      await user.type(
+        await screen.findByDisplayValue("Existing Agent"),
+        " renamed",
+      );
+      expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+    });
+
+    it("leaves an unlocked account editable for people who cannot configure the runtime", async () => {
+      runtimePermissions.current = {
+        canChange: true,
+        canConfigure: false,
+        readOnlyBy: "Worker",
+      };
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={lockedAgent({})}
+          sections={["configuration"]}
+        />,
+      );
+      expect(
+        await screen.findByRole("button", { name: "Pick API key" }),
+      ).toBeEnabled();
+      expect(
+        screen.queryByText(/This agent's account is locked/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("lets someone who may only use the runtime change a saved agent's accounts where the runtime leaves them to the agent", async () => {
+      runtimePermissions.current = {
+        canChange: true,
+        canConfigure: false,
+        readOnlyBy: "Claude Code",
+      };
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [
+          {
+            id: "anthropic-key",
+            name: "Company Anthropic",
+            provider: "anthropic",
+            scope: "org",
+            bestModelId: "claude-model",
+          },
+        ],
+      });
+      const user = userEvent.setup();
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={{
+            ...lockedAgent({ llmApiKeyId: "anthropic-key" }),
+            modelId: "claude-model",
+            runtime: {
+              ...lockRuntime(["archestra-claude-code"]),
+              inferenceProtocol: "anthropic" as const,
+              claudeCode: { authentication: "provider" as const },
+            },
+          }}
+          sections={["configuration"]}
+        />,
+      );
+      const claudeSubscriptionWay = await screen.findByRole("checkbox", {
+        name: /Each person's Claude subscription/,
+      });
+      expect(claudeSubscriptionWay).toBeChecked();
+      expect(claudeSubscriptionWay).not.toHaveAttribute("aria-readonly");
+      expect(
+        screen.queryByText(/can change which accounts run it/),
+      ).not.toBeInTheDocument();
+
+      await user.click(claudeSubscriptionWay);
+      expect(claudeSubscriptionWay).not.toBeChecked();
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().runtime).toMatchObject({
+        accountLock: "key",
+        claudeCode: { authentication: "provider" },
+      });
+    });
+
+    it("keeps a Claude agent's boxes reachable, and its connection disabled, for someone who may not use its runtime", async () => {
+      runtimePermissions.current = {
+        canChange: false,
+        canConfigure: false,
+        readOnlyBy: null,
+      };
+      useAvailableLlmProviderApiKeysMock.mockReturnValue({
+        data: [
+          {
+            id: "anthropic-key",
+            name: "Company Anthropic",
+            provider: "anthropic",
+            scope: "org",
+            bestModelId: "claude-model",
+          },
+        ],
+      });
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={{
+            ...lockedAgent({ llmApiKeyId: "anthropic-key" }),
+            modelId: "claude-model",
+            runtime: {
+              ...lockRuntime(["archestra-claude-code"]),
+              inferenceProtocol: "anthropic" as const,
+              claudeCode: { authentication: "provider" as const },
+            },
+          }}
+          sections={["configuration"]}
+        />,
+      );
+      const claudeSubscriptionWay = await screen.findByRole("checkbox", {
+        name: /Each person's Claude subscription/,
+      });
+      // Read-only, not disabled: a disabled box cannot be focused to be read.
+      expect(claudeSubscriptionWay).toBeEnabled();
+      expect(claudeSubscriptionWay).toHaveAttribute("aria-readonly", "true");
+      expect(
+        screen.getByRole("button", { name: "Pick API key" }),
+      ).toBeDisabled();
+      // The runtime's rule names no account, so `use` on it is what
+      // changing them takes.
+      expect(
+        screen.getByText(
+          "Only people who can use the agent's runtime can change which accounts run it.",
+        ),
+      ).toBeVisible();
+    });
+
+    describe("the account rule its runtime sets for every agent", () => {
+      type RuntimeId = "opencode" | "codex" | "claude-code" | "grok";
+      const template = (id: RuntimeId) =>
+        getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
+          (candidate) => candidate.id === id,
+        );
+      const LOCK_LINE = /^An admin locked this connection/;
+      /** A model of the runtime's connection, as the rule lists it. */
+      const ruleModel = {
+        id: "rule-model",
+        modelId: "gpt-5",
+        displayName: "GPT-5",
+        provider: "openai",
+      };
+      /**
+       * The runtime's rule, with what the server fills in: the names, and
+       * the connection's models where it fixes no model.
+       */
+      const fixed = (model: boolean) => ({
+        llmApiKeyId: "runtime-key",
+        keyName: "Runtime OpenAI",
+        keyProvider: "openai",
+        ...(model
+          ? { modelId: "runtime-model", modelName: "Runtime GPT" }
+          : { models: [ruleModel] }),
+      });
+      type Rule = NonNullable<typeof runtimePermissions.current.accounts>;
+      /** May use the runtime, not configure it. */
+      const useOnly = (name: string, accounts: Rule | null) => {
+        runtimePermissions.current = {
+          canChange: true,
+          canConfigure: false,
+          readOnlyBy: name,
+          accounts,
+        };
+      };
+      /** May configure the runtime: the rule holds for them as well. */
+      const configurer = (accounts: Rule | null) => {
+        runtimePermissions.current = {
+          canChange: true,
+          canConfigure: true,
+          readOnlyBy: null,
+          accounts,
+        };
+      };
+      const renderNew = (id: RuntimeId) =>
+        render(
+          <AgentForm
+            agentType="agent"
+            sections={["configuration"]}
+            initialRuntimeId={id}
+            initialValues={template(id)?.initialValues}
+          />,
+        );
+      const create = async (user: ReturnType<typeof userEvent.setup>) => {
+        await user.type(screen.getByLabelText(/Name/), "Their agent");
+        await waitFor(() =>
+          expect(screen.getByRole("button", { name: "Create" })).toBeEnabled(),
+        );
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await waitFor(() => expect(createAgent).toHaveBeenCalled());
+        return createAgent.mock.calls[0][0];
+      };
+      const renameAndUpdate = async (
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await user.type(
+          await screen.findByDisplayValue("Existing Agent"),
+          " renamed",
+        );
+        await user.click(screen.getByRole("button", { name: /update/i }));
+        await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+        return savedBody();
+      };
+      const row = () =>
+        screen.getByRole("button", { name: /^Accounts that can run it/ });
+
+      it("shows a fixed connection and model as two disabled fields with their note", async () => {
+        useOnly("OpenCode", fixed(true));
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+        const user = userEvent.setup();
+        renderNew("opencode");
+
+        expect(
+          await screen.findByTestId("locked-connection"),
+        ).toHaveTextContent("Runtime OpenAI");
+        await waitFor(() =>
+          expect(screen.getByTestId("selected-model-name")).toHaveTextContent(
+            "Runtime GPT",
+          ),
+        );
+        expect(
+          screen.getByRole("button", { name: "Pick API key" }),
+        ).toBeDisabled();
+        expect(
+          screen.getByRole("button", { name: "Pick manual model" }),
+        ).toBeDisabled();
+        expect(
+          screen.getByText("An admin locked this connection and model."),
+        ).toBeVisible();
+        // The row's summary names them as the fields do.
+        expect(row()).toHaveTextContent("Runtime OpenAI, Runtime GPT");
+        expect(
+          screen.getByText("Set by the OpenCode runtime").parentElement,
+        ).toHaveTextContent(
+          "limits, tiers, accounts, connection or model needs agentRuntime:configure on it.",
+        );
+        // Both are the runtime's: the agent stores neither.
+        const body = await create(user);
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        expect(body).not.toHaveProperty("modelId");
+      });
+
+      it("leaves the model of a fixed connection to each person unless the agent sets one, and saves that model alone", async () => {
+        useOnly("OpenCode", fixed(false));
+        // The connection is not one they can read: only its name is known,
+        // and its models come with the rule.
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+        const user = userEvent.setup();
+        renderNew("opencode");
+
+        expect(
+          await screen.findByTestId("locked-connection"),
+        ).toHaveTextContent("Runtime OpenAI");
+        expect(
+          screen.getByRole("button", { name: "Pick API key" }),
+        ).toBeDisabled();
+        expect(
+          screen.getByText("An admin locked this connection."),
+        ).toBeInTheDocument();
+        // The line speaks only of what is left to the agent: the model.
+        expect(
+          screen.getByText(
+            "Each person picks their model on the agent's page, unless you set one here.",
+          ),
+        ).toBeInTheDocument();
+        expect(row()).toHaveTextContent("Runtime OpenAI, each person's model");
+        // The notice names the connection, and not the model, as the
+        // runtime's to change.
+        expect(
+          screen.getByText("Set by the OpenCode runtime").parentElement,
+        ).toHaveTextContent(
+          "limits, tiers, accounts or connection needs agentRuntime:configure on it.",
+        );
+
+        // Nothing is asked for: the agent can be created as it is.
+        await user.type(screen.getByLabelText(/Name/), "Their agent");
+        expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+        expect(screen.getByTestId("offered-models")).toHaveTextContent("GPT-5");
+        await user.click(
+          screen.getByRole("button", { name: "Pick manual model" }),
+        );
+        expect(
+          screen.getByText("Every run uses this model."),
+        ).toBeInTheDocument();
+        await waitFor(() =>
+          expect(row()).toHaveTextContent("Runtime OpenAI, GPT-5"),
+        );
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await waitFor(() => expect(createAgent).toHaveBeenCalled());
+        // The connection is the runtime's: only the agent's model is sent.
+        const body = createAgent.mock.calls[0][0];
+        expect(body).toMatchObject({ modelId: "rule-model" });
+        expect(body).not.toHaveProperty("llmApiKeyId");
+      });
+
+      it("creates an agent on a fixed connection with no model of its own, and clears a saved one", async () => {
+        useOnly("OpenCode", fixed(false));
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+        const user = userEvent.setup();
+        const created = renderNew("opencode");
+        await screen.findByTestId("locked-connection");
+        const body = await create(user);
+        expect(body).toMatchObject({ modelId: null });
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        created.unmount();
+
+        render(
+          <AgentForm
+            agentType="agent"
+            // Saved under the rule: one of the connection's models, alone.
+            agent={{
+              ...lockedAgent({
+                command: ["archestra-opencode"],
+                llmApiKeyId: null,
+              }),
+              modelId: "rule-model",
+            }}
+            sections={["configuration"]}
+          />,
+        );
+        expect(
+          await screen.findByText("Every run uses this model."),
+        ).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Clear model" }));
+        expect(
+          screen.getByText(
+            "Each person picks their model on the agent's page, unless you set one here.",
+          ),
+        ).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: /update/i }));
+        await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+        expect(savedBody()).toMatchObject({ modelId: null });
+        expect(savedBody()).not.toHaveProperty("llmApiKeyId");
+      });
+
+      it("says when the fixed connection has no model the runtime can run, and asks for none", async () => {
+        useOnly("OpenCode", { ...fixed(false), models: [] });
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+        const user = userEvent.setup();
+        renderNew("opencode");
+
+        expect(
+          await screen.findByTestId("locked-connection"),
+        ).toHaveTextContent("Runtime OpenAI");
+        expect(
+          screen.getByText(
+            "The connection this runtime fixes has no model the runtime can run. Ask someone who can configure the runtime to choose another.",
+          ),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(LOCK_LINE)).not.toBeInTheDocument();
+        expect(screen.queryByText(/picks their model/)).toBeNull();
+        expect(
+          screen.getByRole("button", { name: "Pick manual model" }),
+        ).toBeDisabled();
+        const body = await create(user);
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        expect(body.modelId ?? null).toBeNull();
+      });
+
+      it("leaves a saved agent as it is when its own model is none of the fixed connection's, and asks for none", async () => {
+        useOnly("OpenCode", fixed(false));
+        const user = userEvent.setup();
+        render(
+          <AgentForm
+            agentType="agent"
+            // Its own model is of its own connection, not the runtime's.
+            agent={lockedAgent({ command: ["archestra-opencode"] })}
+            sections={["configuration"]}
+          />,
+        );
+        expect(
+          await screen.findByTestId("locked-connection"),
+        ).toHaveTextContent("Runtime OpenAI");
+        expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
+        expect(
+          screen.getByText(
+            "Each person picks their model on the agent's page, unless you set one here.",
+          ),
+        ).toBeInTheDocument();
+        const body = await renameAndUpdate(user);
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        expect(body).not.toHaveProperty("modelId");
+      });
+
+      describe("under a kind the rule names: the one card of that kind", () => {
+        const accounts = () =>
+          screen.getByRole("group", { name: "Accounts that can run it" });
+        const TITLES = {
+          "claude-code": "Each person's Claude subscription",
+          codex: "Each person's ChatGPT subscription",
+          grok: "Each person's SuperGrok subscription",
+        };
+        const COMPANY = "A company API key";
+        /**
+         * One card, always on, as a runtime with one kind of account shows
+         * it: no box to tick, no card for the other kind, and nothing said
+         * about a choice or about who may change it.
+         */
+        const expectOneCard = (
+          id: keyof typeof TITLES,
+          kind: "subscription" | "key",
+        ) => {
+          const [shown, hidden] =
+            kind === "key" ? [COMPANY, TITLES[id]] : [TITLES[id], COMPANY];
+          expect(within(accounts()).getByText(shown)).toBeInTheDocument();
+          expect(within(accounts()).queryByText(hidden)).toBeNull();
+          expect(within(accounts()).queryByRole("checkbox")).toBeNull();
+          expect(screen.queryByText(/^Locked to /)).toBeNull();
+          expect(
+            screen.queryByText(
+              /sets which accounts run it|can change which accounts run it|account is locked/,
+            ),
+          ).toBeNull();
+          // The company card holds its two fields; the subscription card
+          // holds none.
+          expect(
+            screen.queryAllByRole("button", { name: "Pick API key" }),
+          ).toHaveLength(kind === "key" ? 1 : 0);
+        };
+        const CASES = [
+          ["claude-code", "subscription"],
+          ["claude-code", "key"],
+          ["codex", "subscription"],
+          ["codex", "key"],
+          ["grok", "subscription"],
+          ["grok", "key"],
+        ] as const;
+
+        it.each(
+          CASES,
+        )("shows a new %s agent only the %s card, with no box, and names no lock of its own", async (id, kind) => {
+          configurer({ kind });
+          if (id === "grok") withGrokKeys();
+          const user = userEvent.setup();
+          renderNew(id);
+
+          await waitFor(() => expectOneCard(id, kind));
+          // Its fields follow the same rule as anywhere: both optional. No
+          // company connection here runs Claude, and then the fields say
+          // only that.
+          const nothingSet = screen.queryByText(
+            "Optional. Set a connection and model to fix them for every run on the company account. Leave them empty and each person picks their own on the agent's page.",
+          );
+          if (kind === "key" && id !== "claude-code") {
+            expect(nothingSet).toBeInTheDocument();
+          } else {
+            expect(nothingSet).toBeNull();
+          }
+          const body = await create(user);
+          // The rule is the runtime's: the agent names no lock, and stores
+          // nothing of the kind that is not shown.
+          expect(body.runtime).not.toHaveProperty("accountLock");
+          if (kind === "key") {
+            expect(body).toMatchObject({ llmApiKeyId: null, modelId: null });
+          }
+        });
+
+        it.each(
+          CASES,
+        )("shows a saved %s agent that stores the other kind only the %s card, and saves no account change", async (id, kind) => {
+          useOnly("Its runtime", { kind });
+          if (id === "grok") withGrokKeys();
+          const other = kind === "key" ? "subscription" : "key";
+          const saved =
+            id === "grok"
+              ? grokAgent({
+                  lock: other,
+                  llmApiKeyId: other === "key" ? "xai-key" : "supergrok-key",
+                })
+              : id === "codex"
+                ? lockedAgent({
+                    command: codex,
+                    lock: other,
+                    llmApiKeyId: other === "key" ? "openai-key" : "chatgpt-key",
+                  })
+                : {
+                    ...lockedAgent({
+                      llmApiKeyId: other === "key" ? "openai-key" : null,
+                    }),
+                    modelId: other === "key" ? "openai-model" : null,
+                    runtime: {
+                      ...lockRuntime(["archestra-claude-code"], other),
+                      inferenceProtocol: "anthropic" as const,
+                      claudeCode: {
+                        authentication:
+                          other === "key"
+                            ? ("provider" as const)
+                            : ("subscription" as const),
+                      },
+                    },
+                  };
+          const user = userEvent.setup();
+          render(
+            <AgentForm
+              agentType="agent"
+              agent={saved}
+              sections={["configuration"]}
+            />,
+          );
+
+          await waitFor(() => expectOneCard(id, kind));
+          const body = await renameAndUpdate(user);
+          expect(body).toMatchObject({ name: "Existing Agent renamed" });
+          expect(body).not.toHaveProperty("llmApiKeyId");
+          expect(body).not.toHaveProperty("modelId");
+          expect(body).not.toHaveProperty("runtime");
+        });
+
+        it("leaves the notice as the place that says the runtime decides, for someone who may only use it", async () => {
+          useOnly("Codex", { kind: "subscription" });
+          renderNew("codex");
+
+          await waitFor(() => expectOneCard("codex", "subscription"));
+          expect(
+            screen.getByText("Set by the Codex runtime").parentElement,
+          ).toHaveTextContent(
+            "Changing its launch command, protocol, follow-up delivery, limits, tiers or accounts needs agentRuntime:configure on it. Environment, credentials and ports stay this agent's own.",
+          );
+        });
+
+        it.each([
+          "subscription",
+          "key",
+        ] as const)("shows someone who may configure the runtime no notice under the %s kind: nothing is set over their head", async (kind) => {
+          configurer({ kind });
+          renderNew("codex");
+
+          await waitFor(() => expectOneCard("codex", kind));
+          expect(screen.queryByText(/^Set by the /)).toBeNull();
+          expect(screen.queryByText(/agentRuntime:configure/)).toBeNull();
+        });
+
+        it.each([
+          "subscription",
+          "key",
+        ] as const)("names the accounts as the runtime's on a saved agent's runtime settings, under the %s kind", async (kind) => {
+          useOnly("Team Codex", { kind });
+          const other = kind === "key" ? "subscription" : "key";
+          render(
+            <AgentForm
+              agentType="agent"
+              // It stores the other kind, from before the rule.
+              agent={lockedAgent({
+                command: codex,
+                lock: other,
+                llmApiKeyId: other === "key" ? "openai-key" : "chatgpt-key",
+              })}
+              sections={["configuration", "runtime"]}
+            />,
+          );
+
+          await waitFor(() => expectOneCard("codex", kind));
+          // The accounts are the runtime's to change, and not among what
+          // stays the agent's own.
+          expect(
+            screen.getByText("Set by the Team Codex runtime").parentElement,
+          ).toHaveTextContent(
+            "Changing its launch command, protocol, follow-up delivery, limits, tiers or accounts needs agentRuntime:configure on it. Environment, credentials and ports stay this agent's own.",
+          );
+        });
+
+        it("shows someone who may configure the runtime no notice on a saved agent either", async () => {
+          configurer({ kind: "key" });
+          render(
+            <AgentForm
+              agentType="agent"
+              agent={lockedAgent({
+                command: codex,
+                lock: "subscription",
+                llmApiKeyId: "chatgpt-key",
+              })}
+              sections={["configuration", "runtime"]}
+            />,
+          );
+
+          await waitFor(() => expectOneCard("codex", "key"));
+          expect(screen.queryByText(/^Set by the /)).toBeNull();
+        });
+
+        it("names the connection the rule fixes beside the accounts, for someone who may only use the runtime", async () => {
+          useOnly("Team Codex", { kind: "key", ...fixed(true) });
+          useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+          renderNew("codex");
+
+          await waitFor(() => expectOneCard("codex", "key"));
+          expect(
+            screen.getByText("Set by the Team Codex runtime").parentElement,
+          ).toHaveTextContent(
+            "Changing its launch command, protocol, follow-up delivery, limits, tiers, accounts, connection or model needs agentRuntime:configure on it. Environment, credentials and ports stay this agent's own.",
+          );
+        });
+
+        it("shows the one company card on the connection and model the rule fixes, disabled, with the note", async () => {
+          configurer({ kind: "key", ...fixed(true) });
+          useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+          const user = userEvent.setup();
+          renderNew("codex");
+
+          await waitFor(() => expectOneCard("codex", "key"));
+          expect(screen.getByTestId("locked-connection")).toHaveTextContent(
+            "Runtime OpenAI",
+          );
+          expect(screen.getByTestId("selected-model-name")).toHaveTextContent(
+            "Runtime GPT",
+          );
+          expect(
+            screen.getByRole("button", { name: "Pick manual model" }),
+          ).toBeDisabled();
+          expect(
+            screen.getByText("An admin locked this connection and model."),
+          ).toBeInTheDocument();
+          // Both are fixed above: nothing is left to say of this level.
+          expect(screen.queryByText(/^Every run uses/)).toBeNull();
+          const body = await create(user);
+          expect(body).not.toHaveProperty("llmApiKeyId");
+          expect(body).not.toHaveProperty("modelId");
+          expect(body.runtime).not.toHaveProperty("accountLock");
+        });
+
+        it("keeps both cards with their boxes where the rule names no kind", async () => {
+          configurer(null);
+          renderNew("codex");
+
+          expect(
+            await screen.findByRole("checkbox", { name: /A company API key/ }),
+          ).toBeInTheDocument();
+          expect(subscriptionWay()).toBeInTheDocument();
+          expect(within(accounts()).getAllByRole("checkbox")).toHaveLength(2);
+        });
+      });
+
+      it("leaves both fields to someone who may only use a runtime that fixes neither", async () => {
+        useOnly("OpenCode", null);
+        renderNew("opencode");
+
+        expect(
+          await screen.findByRole("button", { name: "Pick API key" }),
+        ).toBeEnabled();
+        expect(screen.queryByTestId("locked-connection")).toBeNull();
+        expect(screen.queryByText(LOCK_LINE)).not.toBeInTheDocument();
+        expect(
+          screen.getByText("Set by the OpenCode runtime").parentElement,
+        ).toHaveTextContent(
+          "limits, tiers or accounts needs agentRuntime:configure on it.",
+        );
+      });
+
+      it("puts a Claude agent's company card on the connection its runtime fixes, where the kind is left to the agent", async () => {
+        runtimePermissions.current = {
+          canChange: true,
+          canConfigure: false,
+          readOnlyBy: "Claude Code",
+          accounts: { ...fixed(true), keyProvider: "anthropic" },
+        };
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+        const user = userEvent.setup();
+        renderNew("claude-code");
+        const claudeSubscriptionWay = () =>
+          screen.getByRole("checkbox", {
+            name: /Each person's Claude subscription/,
+          });
+
+        // The cards are theirs to tick; the connection under the company
+        // card is not theirs to change.
+        await waitFor(() => expect(companyKeyWay()).toBeChecked());
+        expect(companyKeyWay()).not.toHaveAttribute("aria-readonly");
+        expect(screen.getByTestId("locked-connection")).toHaveTextContent(
+          "Runtime OpenAI",
+        );
+        expect(
+          screen.getByText("An admin locked this connection and model."),
+        ).toBeVisible();
+        // Subscriptions alone hide it; the company card brings it back.
+        await user.click(claudeSubscriptionWay());
+        await user.click(companyKeyWay());
+        expect(screen.queryByTestId("locked-connection")).toBeNull();
+        await user.click(companyKeyWay());
+        expect(await screen.findByTestId("locked-connection")).toBeVisible();
+        const body = await create(user);
+        expect(body).toMatchObject({ runtime: { accountLock: null } });
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        expect(body).not.toHaveProperty("modelId");
+      });
+
+      it("holds a fixed connection and model for someone who may configure the runtime too", async () => {
+        configurer(fixed(true));
+        // Their own default connection, which the runtime's stands before.
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({
+          data: [
+            { ...companyKey, id: "my-default", isPrimary: true },
+            { ...companyKey, id: "key-1" },
+          ],
+        });
+        const user = userEvent.setup();
+        renderNew("opencode");
+
+        expect(
+          await screen.findByTestId("locked-connection"),
+        ).toHaveTextContent("Runtime OpenAI");
+        expect(screen.getByTestId("selected-model-name")).toHaveTextContent(
+          "Runtime GPT",
+        );
+        expect(
+          screen.getByRole("button", { name: "Pick API key" }),
+        ).toBeDisabled();
+        expect(
+          screen.getByRole("button", { name: "Pick manual model" }),
+        ).toBeDisabled();
+        expect(
+          screen.getByText("An admin locked this connection and model."),
+        ).toBeVisible();
+        expect(row()).toHaveTextContent("Runtime OpenAI, Runtime GPT");
+        const body = await create(user);
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        expect(body).not.toHaveProperty("modelId");
+      });
+
+      it("shows the rule's connection on a saved agent that stores another, for someone who may only use the runtime", async () => {
+        useOnly("OpenCode", fixed(true));
+        const user = userEvent.setup();
+        render(
+          <AgentForm
+            agentType="agent"
+            agent={lockedAgent({ command: ["archestra-opencode"] })}
+            sections={["configuration"]}
+          />,
+        );
+        // The runtime's connection and model show, not the agent's own.
+        expect(
+          await screen.findByTestId("locked-connection"),
+        ).toHaveTextContent("Runtime OpenAI");
+        expect(screen.getByTestId("selected-model-name")).toHaveTextContent(
+          "Runtime GPT",
+        );
+        // Its own stay stored as they are.
+        const body = await renameAndUpdate(user);
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        expect(body).not.toHaveProperty("modelId");
+      });
+
+      it("shows a saved agent's model on the fixed connection, where the agent stores that model and no connection", async () => {
+        useOnly("OpenCode", fixed(false));
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+        const user = userEvent.setup();
+        render(
+          <AgentForm
+            agentType="agent"
+            // Saved under the rule: one of the connection's models, alone.
+            agent={{
+              ...lockedAgent({
+                command: ["archestra-opencode"],
+                llmApiKeyId: null,
+              }),
+              modelId: "rule-model",
+            }}
+            sections={["configuration"]}
+          />,
+        );
+        expect(
+          await screen.findByTestId("locked-connection"),
+        ).toHaveTextContent("Runtime OpenAI");
+        expect(screen.getByTestId("selected-model-name")).toHaveTextContent(
+          "GPT-5",
+        );
+        expect(
+          screen.getByRole("button", { name: "Pick manual model" }),
+        ).toBeEnabled();
+        // Complete as it is: an unrelated edit saves, and moves no account.
+        const body = await renameAndUpdate(user);
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        expect(body).not.toHaveProperty("modelId");
+      });
+
+      it("says when the connection the runtime fixes no longer works, and does not offer the agent's own instead", async () => {
+        configurer({ llmApiKeyId: "gone-key", keyMissing: true });
+        const user = userEvent.setup();
+        render(
+          <AgentForm
+            agentType="agent"
+            agent={lockedAgent({ command: ["archestra-opencode"] })}
+            sections={["configuration"]}
+          />,
+        );
+        expect(
+          await screen.findByText(
+            "The connection this runtime fixes no longer works. Ask someone who can configure the runtime to choose another.",
+          ),
+        ).toBeVisible();
+        expect(screen.queryByText(LOCK_LINE)).not.toBeInTheDocument();
+        // The fields stay the runtime's, and name no connection.
+        expect(screen.getByTestId("locked-connection")).toHaveTextContent("");
+        expect(
+          screen.getByRole("button", { name: "Pick API key" }),
+        ).toBeDisabled();
+        expect(
+          screen.getByRole("button", { name: "Pick manual model" }),
+        ).toBeDisabled();
+        expect(screen.getByTestId("selected-model")).toHaveTextContent("");
+        // Nothing here puts it right, so other edits still save.
+        const body = await renameAndUpdate(user);
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        expect(body).not.toHaveProperty("modelId");
+      });
+
+      it("says when the model the runtime fixes no longer works", async () => {
+        useOnly("OpenCode", {
+          llmApiKeyId: "runtime-key",
+          keyName: "Runtime OpenAI",
+          keyProvider: "openai",
+          modelId: "gone-model",
+          modelMissing: true,
+        });
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+        renderNew("opencode");
+
+        expect(
+          await screen.findByText(
+            "The model this runtime fixes no longer works. Ask someone who can configure the runtime to choose another.",
+          ),
+        ).toBeVisible();
+        expect(screen.getByTestId("locked-connection")).toHaveTextContent(
+          "Runtime OpenAI",
+        );
+        expect(
+          screen.getByRole("button", { name: "Pick manual model" }),
+        ).toBeDisabled();
+        expect(screen.queryByText(LOCK_LINE)).not.toBeInTheDocument();
+        // The row says so too, where the form is collapsed.
+        expect(
+          screen.getByRole("img", {
+            name: "The model this runtime fixes no longer works",
+          }),
+        ).toBeInTheDocument();
+      });
+
+      it("names what the runtime fixes in the row's summary for someone who may configure it", async () => {
+        configurer(fixed(true));
+        // They cannot read the runtime's connection either.
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+        renderNew("opencode");
+
+        await waitFor(() =>
+          expect(row()).toHaveTextContent("Runtime OpenAI, Runtime GPT"),
+        );
+      });
+
+      it("sends no connection or model of its own on update, whatever the form took up before the rule answered", async () => {
+        useOnly("OpenCode", null);
+        runtimePermissions.current.accounts = undefined;
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({
+          data: [companyKey, { ...companyKey, id: "key-1" }],
+        });
+        const user = userEvent.setup();
+        const saved = lockedAgent({ command: ["archestra-opencode"] });
+        const { rerender } = render(
+          <AgentForm
+            agentType="agent"
+            agent={saved}
+            sections={["configuration"]}
+          />,
+        );
+        // A change of connection made while the fields were still theirs.
+        await user.click(
+          await screen.findByRole("button", { name: "Pick API key" }),
+        );
+        runtimePermissions.current = {
+          ...runtimePermissions.current,
+          accounts: fixed(true),
+        };
+        rerender(
+          <AgentForm
+            agentType="agent"
+            agent={saved}
+            sections={["configuration"]}
+          />,
+        );
+        await screen.findByTestId("locked-connection");
+        const body = await renameAndUpdate(user);
+        expect(body).not.toHaveProperty("llmApiKeyId");
+        expect(body).not.toHaveProperty("modelId");
+      });
+    });
+
+    describe("the company card's connection and model, each optional", () => {
+      const template = (id: "opencode" | "codex" | "claude-code") =>
+        getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
+          (candidate) => candidate.id === id,
+        );
+      const renderNew = (id: "opencode" | "codex" | "claude-code") =>
+        render(
+          <AgentForm
+            agentType="agent"
+            sections={["configuration"]}
+            initialRuntimeId={id}
+            initialValues={template(id)?.initialValues}
+          />,
+        );
+      const create = async (user: ReturnType<typeof userEvent.setup>) => {
+        await user.type(screen.getByLabelText(/Name/), "Their agent");
+        await waitFor(() =>
+          expect(screen.getByRole("button", { name: "Create" })).toBeEnabled(),
+        );
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await waitFor(() => expect(createAgent).toHaveBeenCalled());
+        return createAgent.mock.calls[0][0];
+      };
+      const row = () =>
+        screen.getByRole("button", { name: /^Accounts that can run it/ });
+      const NOTHING_SET =
+        "Optional. Set a connection and model to fix them for every run on the company account. Leave them empty and each person picks their own on the agent's page.";
+      const CONNECTION_SET =
+        "Every run uses this connection. Each person picks their model on the agent's page, unless you set one here.";
+      const BOTH_SET = "Every run uses this connection and model.";
+      /** The creator's own default connection, which the picker also offers. */
+      const ownDefault = { ...companyKey, id: "key-1", isPrimary: true };
+
+      beforeEach(() => {
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({
+          data: [ownDefault, companyKey, chatgptKey],
+        });
+      });
+
+      it("starts a new agent's fields empty, whatever default connection its creator has, and asks for nothing", async () => {
+        const user = userEvent.setup();
+        renderNew("opencode");
+
+        expect(await screen.findByText(NOTHING_SET)).toBeInTheDocument();
+        expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
+        // The model waits for a connection.
+        expect(
+          screen.queryByRole("button", { name: "Pick manual model" }),
+        ).toBeNull();
+        expect(row()).toHaveTextContent("Each person's connection and model");
+        expect(
+          screen.queryByRole("img", { name: /Select a/ }),
+        ).not.toBeInTheDocument();
+        const body = await create(user);
+        expect(body).toMatchObject({
+          llmApiKeyId: null,
+          modelId: null,
+          runtime: { command: ["archestra-opencode"] },
+        });
+        // One account leaves nothing to lock.
+        expect(body.runtime).not.toHaveProperty("accountLock");
+      });
+
+      it("fixes the connection alone, then its model, and clears each again", async () => {
+        const user = userEvent.setup();
+        renderNew("opencode");
+
+        await user.click(
+          await screen.findByRole("button", { name: "Pick API key" }),
+        );
+        // A connection brings no model with it.
+        expect(screen.getByText(CONNECTION_SET)).toBeInTheDocument();
+        expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
+        expect(row()).toHaveTextContent("Company OpenAI, each person's model");
+
+        await user.click(
+          screen.getByRole("button", { name: "Pick manual model" }),
+        );
+        expect(screen.getByText(BOTH_SET)).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Clear model" }));
+        expect(screen.getByText(CONNECTION_SET)).toBeInTheDocument();
+
+        // The connection takes its model away with it.
+        await user.click(
+          screen.getByRole("button", { name: "Pick manual model" }),
+        );
+        await user.click(
+          screen.getByRole("button", { name: "Clear connection" }),
+        );
+        expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
+        expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
+      });
+
+      it.each([
+        ["nothing", [], { llmApiKeyId: null, modelId: null }],
+        [
+          "a connection",
+          ["Pick API key"],
+          { llmApiKeyId: "key-1", modelId: null },
+        ],
+        [
+          "a connection and its model",
+          ["Pick API key", "Pick manual model"],
+          { llmApiKeyId: "key-1", modelId: "manual-model" },
+        ],
+      ] as const)("creates an agent with %s set on its company card", async (_state, clicks, payload) => {
+        const user = userEvent.setup();
+        renderNew("opencode");
+        await screen.findByRole("button", { name: "Pick API key" });
+        for (const name of clicks) {
+          await user.click(screen.getByRole("button", { name }));
+        }
+        expect(await create(user)).toMatchObject(payload);
+      });
+
+      it.each([
+        [
+          "nothing",
+          "Clear connection",
+          { llmApiKeyId: null, modelId: null },
+          NOTHING_SET,
+        ],
+        [
+          "its connection alone",
+          "Clear model",
+          { llmApiKeyId: "openai-key", modelId: null },
+          CONNECTION_SET,
+        ],
+        [
+          "another connection, without the old one's model",
+          "Pick API key",
+          { llmApiKeyId: "key-1", modelId: null },
+          CONNECTION_SET,
+        ],
+      ] as const)("saves a saved agent's company card left with %s", async (_state, click, payload, line) => {
+        const user = userEvent.setup();
+        render(
+          <AgentForm
+            agentType="agent"
+            // It stores a connection and a model.
+            agent={lockedAgent({ command: ["archestra-opencode"] })}
+            sections={["configuration"]}
+          />,
+        );
+        expect(await screen.findByText(BOTH_SET)).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: click }));
+        expect(screen.getByText(line)).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: /update/i }));
+        await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+        expect(savedBody()).toMatchObject(payload);
+      });
+
+      it("starts a new Codex agent on its creator's ChatGPT subscription, and needs no connection for the company API key", async () => {
+        const user = userEvent.setup();
+        renderNew("codex");
+
+        // Two kinds of account and no rule: the creator has ChatGPT, so the
+        // agent starts on subscriptions, like Claude Code, and can be
+        // created at once.
+        await waitFor(() => expect(subscriptionWay()).toBeChecked());
+        expect(companyKeyWay()).not.toBeChecked();
+        expect(screen.queryByText("Select at least one option.")).toBeNull();
+
+        await user.click(companyKeyWay());
+        await user.click(subscriptionWay());
+        expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
+        // The company key runs it, so their own ChatGPT is not asked for,
+        // and is not kept as the company option's connection.
+        expect(
+          screen.queryByText("ChatGPT Subscription required"),
+        ).not.toBeInTheDocument();
+        expect(await create(user)).toMatchObject({
+          llmApiKeyId: null,
+          modelId: null,
+          runtime: { accountLock: "key" },
+        });
+      });
+
+      it("takes the creator's ChatGPT subscription again once a new Codex agent is left on subscriptions alone", async () => {
+        const user = userEvent.setup();
+        renderNew("codex");
+        await waitFor(() => expect(subscriptionWay()).toBeChecked());
+
+        // The company card alone, then both, then the subscription alone.
+        await user.click(companyKeyWay());
+        await user.click(subscriptionWay());
+        await user.click(subscriptionWay());
+        await user.click(companyKeyWay());
+        expect(subscriptionWay()).toBeChecked();
+        expect(companyKeyWay()).not.toBeChecked();
+        expect(await create(user)).toMatchObject({
+          llmApiKeyId: "chatgpt-key",
+          runtime: { accountLock: "subscription" },
+        });
+      });
+
+      it("opens the company API key beside subscriptions on Codex with nothing set for it", async () => {
+        const user = userEvent.setup();
+        renderNew("codex");
+        await waitFor(() => expect(subscriptionWay()).toBeChecked());
+        await user.click(companyKeyWay());
+
+        expect(subscriptionWay()).toBeChecked();
+        expect(companyKeyWay()).toBeChecked();
+        expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
+        expect(await create(user)).toMatchObject({
+          llmApiKeyId: null,
+          modelId: null,
+          runtime: { accountLock: null },
+        });
+      });
+
+      it("starts a new Claude agent on the company API key its runtime stores, with no connection", async () => {
+        const user = userEvent.setup();
+        const claude = template("claude-code")?.initialValues;
+        render(
+          <AgentForm
+            agentType="agent"
+            sections={["configuration"]}
+            initialRuntimeId="claude-code"
+            initialValues={
+              claude && {
+                ...claude,
+                runtime: claude.runtime && {
+                  ...claude.runtime,
+                  claudeCode: {
+                    ...claude.runtime.claudeCode,
+                    authentication: "provider",
+                  },
+                },
+              }
+            }
+          />,
+        );
+
+        await waitFor(() => expect(companyKeyWay()).toBeChecked());
+        expect(
+          screen.getByRole("checkbox", {
+            name: /Each person's Claude subscription/,
+          }),
+        ).not.toBeChecked();
+        // No company connection here runs Claude: the fields say only that.
+        expect(screen.queryByText(NOTHING_SET)).toBeNull();
+        expect(
+          screen.queryByRole("img", { name: /Select a provider/ }),
+        ).not.toBeInTheDocument();
+        expect(await create(user)).toMatchObject({
+          llmApiKeyId: null,
+          modelId: null,
+          runtime: {
+            accountLock: "key",
+            claudeCode: { authentication: "provider" },
+          },
+        });
+      });
+
+      it("opens the company API key beside subscriptions on a Claude agent with nothing set for it", async () => {
+        const user = userEvent.setup();
+        renderNew("claude-code");
+        const claudeSubscriptionWay = () =>
+          screen.getByRole("checkbox", {
+            name: /Each person's Claude subscription/,
+          });
+        await waitFor(() => expect(claudeSubscriptionWay()).toBeChecked());
+
+        await user.click(companyKeyWay());
+        expect(claudeSubscriptionWay()).toBeChecked();
+        expect(companyKeyWay()).toBeChecked();
+        // No company connection here runs Claude: the fields say only that.
+        expect(screen.queryByText(NOTHING_SET)).toBeNull();
+        // Nothing is asked for the company card.
+        expect(screen.queryByText(/^Choose a connection and model/)).toBeNull();
+        expect(await create(user)).toMatchObject({
+          llmApiKeyId: null,
+          modelId: null,
+          runtime: { accountLock: null },
+        });
+      });
+
+      describe("an organization default the runtime cannot run", () => {
+        const organizationDefault = (
+          provider: "anthropic" | "openai",
+          displayName: string,
+        ) =>
+          useOrganizationDefaultModelMock.mockReturnValue({
+            autoRouters: [],
+            autoRoutedTiers: null,
+            defaultAutoRouterId: null,
+            label: displayName,
+            model: {
+              dbId: "default-model",
+              id: displayName.toLowerCase().replaceAll(" ", "-"),
+              displayName,
+              provider,
+              capabilities: { supportedEndpoints: null },
+              isFree: false,
+            },
+          } as never);
+        const NOTE =
+          "The organization's default model, Claude Sonnet 4.5, cannot run on this runtime. Each person must pick a connection, unless you set one here.";
+        // What the API answers such a save with, as the query layer hands
+        // it on once it has shown it.
+        const REFUSAL =
+          "The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses Anthropic.";
+
+        it("says so under the empty fields without holding Create back, and leaves the API's refusal to the one message already shown", async () => {
+          organizationDefault("anthropic", "Claude Sonnet 4.5");
+          createAgent.mockRejectedValue(new ReportedApiError(REFUSAL));
+          const onCreated = vi.fn();
+          const user = userEvent.setup();
+          render(
+            <AgentForm
+              agentType="agent"
+              sections={["configuration"]}
+              initialRuntimeId="codex"
+              initialValues={template("codex")?.initialValues}
+              onCreated={onCreated}
+            />,
+          );
+          await waitFor(() => expect(subscriptionWay()).toBeChecked());
+          // The fields are not shown yet: nothing is said about them.
+          expect(screen.queryByText(NOTE)).toBeNull();
+
+          // Beside each person's own subscription their runs need no
+          // connection: nothing is said yet.
+          await user.click(companyKeyWay());
+          expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
+          expect(screen.queryByText(NOTE)).toBeNull();
+          // The company API key alone: each person needs a connection.
+          await user.click(subscriptionWay());
+          const noticeText = screen.getByText(NOTE);
+          expect(noticeText).toBeInTheDocument();
+          const notice = noticeText.closest('[data-slot="inline-notice"]');
+          expect(notice).toHaveAttribute("role", "status");
+          expect(notice).toHaveClass(
+            "[&>svg]:text-[#A25E07]",
+            "dark:[&>svg]:text-amber-400",
+            "text-muted-foreground",
+          );
+          expect(notice).not.toHaveClass("border");
+          // What the API resolves for each person is the API's to say: the
+          // form holds no save back for it.
+          await user.type(screen.getByLabelText(/Name/), "Their agent");
+          await waitFor(() =>
+            expect(
+              screen.getByRole("button", { name: "Create" }),
+            ).toBeEnabled(),
+          );
+          vi.mocked(toast.error).mockClear();
+          vi.mocked(toast.success).mockClear();
+          await user.click(screen.getByRole("button", { name: "Create" }));
+          await waitFor(() => expect(createAgent).toHaveBeenCalled());
+          expect(createAgent.mock.calls[0][0]).toMatchObject({
+            llmApiKeyId: null,
+            modelId: null,
+          });
+
+          // The refusal was shown once, by the write itself: the form adds
+          // no second message, claims no save, and keeps what was entered.
+          await waitFor(() =>
+            expect(
+              screen.getByRole("button", { name: "Create" }),
+            ).toBeEnabled(),
+          );
+          expect(toast.error).not.toHaveBeenCalled();
+          expect(toast.success).not.toHaveBeenCalled();
+          expect(onCreated).not.toHaveBeenCalled();
+          expect(screen.getByLabelText(/Name/)).toHaveValue("CodexTheir agent");
+          // The reason stays beside the fields that put it right.
+          expect(screen.getByText(NOTE)).toBeInTheDocument();
+          await user.click(
+            screen.getByRole("button", { name: "Pick API key" }),
+          );
+          expect(screen.queryByText(NOTE)).toBeNull();
+        });
+
+        it("says nothing where the organization default runs on the runtime", async () => {
+          organizationDefault("openai", "GPT-5");
+          const user = userEvent.setup();
+          renderNew("codex");
+          await waitFor(() => expect(subscriptionWay()).toBeChecked());
+
+          await user.click(companyKeyWay());
+          await user.click(subscriptionWay());
+          expect(screen.getByText(NOTHING_SET)).toBeInTheDocument();
+          expect(screen.queryByText(/cannot run on this runtime/)).toBeNull();
+        });
+
+        it("says nothing while a Claude agent's own account is each person's subscription", async () => {
+          // Both ways open and nothing set for the company API key: the
+          // agent's own account is the subscription, which the API accepts.
+          organizationDefault("openai", "GPT-5");
+          const user = userEvent.setup();
+          renderNew("claude-code");
+          await waitFor(() =>
+            expect(
+              screen.getByRole("checkbox", {
+                name: /Each person's Claude subscription/,
+              }),
+            ).toBeChecked(),
+          );
+
+          await user.click(companyKeyWay());
+          // No company connection here runs Claude: the fields say only that.
+          expect(screen.queryByText(NOTHING_SET)).toBeNull();
+          expect(screen.queryByText(/cannot run on this runtime/)).toBeNull();
+        });
+      });
+    });
+
+    describe("GitHub Copilot CLI", () => {
+      const copilot = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(
+        (candidate) => candidate.id === "copilot",
+      );
+      const plan = (id: string, organization: string) => ({
+        id,
+        name: "GitHub Copilot",
+        provider: "github-copilot",
+        scope: "org",
+        bestModelId: `${id}-model`,
+        isGithubAppKey: true,
+        githubOrganizationName: organization,
+      });
+      const withPlans = (...plans: ReturnType<typeof plan>[]) => {
+        useAvailableLlmProviderApiKeysMock.mockReturnValue({
+          // Someone's own Copilot sign-in is not a company account.
+          data: [
+            ...plans,
+            {
+              id: "my-copilot",
+              name: "GitHub Copilot",
+              provider: "github-copilot",
+              scope: "personal",
+              bestModelId: "plan-a-model",
+            },
+          ],
+        });
+        useLlmModelsByProviderMock.mockReturnValue({
+          modelsByProvider: {
+            "github-copilot": plans.map(({ bestModelId }) => ({
+              dbId: bestModelId,
+              id: "gpt-4o",
+              displayName: "GPT-4o",
+              provider: "github-copilot",
+              isFree: false,
+            })),
+          },
+        });
+      };
+      const copilotWay = () =>
+        screen.getByRole("checkbox", {
+          name: /Each person's GitHub Copilot subscription/,
+        });
+      const planWay = (organization: string) =>
+        screen.getByRole("checkbox", {
+          name: new RegExp(`^Enterprise plan: GitHub Copilot ${organization}`),
+        });
+      const cardOf = (checkbox: HTMLElement) =>
+        checkbox.closest("label")?.parentElement as HTMLElement;
+      const accounts = () =>
+        screen.getByRole("group", { name: "Accounts that can run it" });
+
+      const renderNewCopilot = () =>
+        render(
+          <AgentForm
+            agentType="agent"
+            sections={["configuration"]}
+            initialRuntimeId="copilot"
+            initialValues={copilot?.initialValues}
+          />,
+        );
+      /**
+       * A new Copilot agent starts on each person's own Copilot, like Claude
+       * Code on Claude; unticking it leaves nothing ticked.
+       */
+      const untickCopilot = async (
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await waitFor(() => expect(copilotWay()).toBeChecked());
+        await user.click(copilotWay());
+        expect(
+          await screen.findByText("Select at least one option."),
+        ).toBeInTheDocument();
+      };
+      const createCopilot = async (
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await user.type(screen.getByLabelText(/Name/), "Copilot agent");
+        await waitFor(() =>
+          expect(screen.getByRole("button", { name: "Create" })).toBeEnabled(),
+        );
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await waitFor(() => expect(createAgent).toHaveBeenCalled());
+        return createAgent.mock.calls[0][0];
+      };
+
+      it("leaves the plan to each person while every plan is ticked, with a model to set for each, and fixes the one that is ticked alone, with its model", async () => {
+        withPlans(plan("plan-a", "Example Org"), plan("plan-b", "Second Org"));
+        const user = userEvent.setup();
+        renderNewCopilot();
+        await untickCopilot(user);
+        // One plan ticked alone is fixed for every run.
+        await user.click(planWay("Example Org"));
+        expect(planWay("Example Org")).toBeChecked();
+        expect(planWay("Second Org")).not.toBeChecked();
+        expect(copilotWay()).not.toBeChecked();
+        expect(
+          within(cardOf(planWay("Example Org"))).getByText(
+            "Each person picks their model on the agent's page, unless you set one here.",
+          ),
+        ).toBeInTheDocument();
+        // Ticking the other opens the company's way on every plan: none is
+        // fixed, and each card holds the model set for its plan.
+        await user.click(planWay("Second Org"));
+        expect(planWay("Example Org")).toBeChecked();
+        expect(planWay("Second Org")).toBeChecked();
+        const modelLeftOpen =
+          "Each person who picks this plan picks their model.";
+        for (const organization of ["Example Org", "Second Org"]) {
+          expect(
+            within(cardOf(planWay(organization))).getByText(modelLeftOpen),
+          ).toBeInTheDocument();
+        }
+        await user.click(
+          within(cardOf(planWay("Second Org"))).getByRole("button", {
+            name: "Pick manual model",
+          }),
+        );
+        expect(
+          within(cardOf(planWay("Second Org"))).getByText(
+            "Every run on this plan uses this model.",
+          ),
+        ).toBeInTheDocument();
+        expect(
+          within(cardOf(planWay("Example Org"))).getByText(modelLeftOpen),
+        ).toBeInTheDocument();
+        await user.click(copilotWay());
+        const open = await createCopilot(user);
+        expect(open).toMatchObject({
+          llmApiKeyId: null,
+          modelId: null,
+          runtime: {
+            accountLock: null,
+            connectionModels: { "plan-b": "manual-model" },
+          },
+        });
+      });
+
+      it("keeps a plan's model with it when the other plan is ticked and unticked again", async () => {
+        withPlans(plan("plan-a", "Example Org"), plan("plan-b", "Second Org"));
+        const user = userEvent.setup();
+        renderNewCopilot();
+        await untickCopilot(user);
+
+        // Fixed with its model, then every plan opened: the model is now
+        // the one set for that plan.
+        await user.click(planWay("Second Org"));
+        await user.click(
+          within(cardOf(planWay("Second Org"))).getByRole("button", {
+            name: "Pick manual model",
+          }),
+        );
+        await user.click(planWay("Example Org"));
+        expect(
+          within(cardOf(planWay("Second Org"))).getByText(
+            "Every run on this plan uses this model.",
+          ),
+        ).toBeInTheDocument();
+
+        // Fixed again: the model is the agent's own, and none is set per
+        // plan.
+        await user.click(planWay("Example Org"));
+        expect(planWay("Example Org")).not.toBeChecked();
+        expect(
+          within(cardOf(planWay("Second Org"))).getByText(
+            "Every run uses this model.",
+          ),
+        ).toBeInTheDocument();
+        const fixed = await createCopilot(user);
+        expect(fixed).toMatchObject({
+          llmApiKeyId: "plan-b",
+          modelId: "manual-model",
+          runtime: { accountLock: "key" },
+        });
+        expect(fixed.runtime.connectionModels).toBeUndefined();
+      });
+
+      it("saves the one plan ticked alone and the model set on it", async () => {
+        withPlans(plan("plan-a", "Example Org"), plan("plan-b", "Second Org"));
+        const user = userEvent.setup();
+        renderNewCopilot();
+        await untickCopilot(user);
+
+        await user.click(planWay("Second Org"));
+        await user.click(
+          within(cardOf(planWay("Second Org"))).getByRole("button", {
+            name: "Pick manual model",
+          }),
+        );
+        expect(
+          within(cardOf(planWay("Second Org"))).getByText(
+            "Every run uses this model.",
+          ),
+        ).toBeInTheDocument();
+        expect(await createCopilot(user)).toMatchObject({
+          llmApiKeyId: "plan-b",
+          modelId: "manual-model",
+          runtime: { accountLock: "key" },
+        });
+      });
+
+      it("shows a model the runtime sets for a plan as locked, beside the plan whose model is the agent's to set", async () => {
+        runtimePermissions.current = {
+          canChange: true,
+          canConfigure: true,
+          readOnlyBy: null,
+          accounts: {
+            connectionModels: { "plan-b": "plan-b-model" },
+            connectionModelNames: { "plan-b": "Runtime model" },
+          },
+        };
+        withPlans(plan("plan-a", "Example Org"), plan("plan-b", "Second Org"));
+        const user = userEvent.setup();
+        renderNewCopilot();
+        await untickCopilot(user);
+        await user.click(planWay("Example Org"));
+        await user.click(planWay("Second Org"));
+
+        const locked = within(cardOf(planWay("Second Org")));
+        expect(locked.getByText("An admin locked this model.")).toBeVisible();
+        expect(
+          locked.getByText("Every run on this plan uses this model."),
+        ).toBeInTheDocument();
+        const open = within(cardOf(planWay("Example Org")));
+        expect(
+          open.getByText("Each person who picks this plan picks their model."),
+        ).toBeInTheDocument();
+        expect(open.queryByText("An admin locked this model.")).toBeNull();
+        // The runtime's model is not written on the agent.
+        const body = await createCopilot(user);
+        expect(body.runtime.connectionModels).toBeUndefined();
+      });
+
+      it("shows only the enterprise plan under a rule that names the company's plan, with no box where one plan remains", async () => {
+        runtimePermissions.current = {
+          canChange: true,
+          canConfigure: true,
+          readOnlyBy: null,
+          accounts: { kind: "key" },
+        };
+        withPlans(plan("plan-a", "Example Org"));
+        const user = userEvent.setup();
+        renderNewCopilot();
+
+        expect(
+          await within(accounts()).findByText(
+            /^Enterprise plan: GitHub Copilot Example Org/,
+          ),
+        ).toBeInTheDocument();
+        expect(within(accounts()).queryByRole("checkbox")).toBeNull();
+        expect(
+          within(accounts()).queryByText(
+            "Each person's GitHub Copilot subscription",
+          ),
+        ).toBeNull();
+        expect(screen.queryByText(/^Locked to /)).toBeNull();
+        expect(
+          screen.queryByText(/sets which accounts run it/),
+        ).not.toBeInTheDocument();
+        // The lone plan is the connection: its model is optional.
+        expect(
+          screen.getByText(
+            "Each person picks their model on the agent's page, unless you set one here.",
+          ),
+        ).toBeInTheDocument();
+        const body = await createCopilot(user);
+        expect(body).toMatchObject({ llmApiKeyId: null, modelId: null });
+        expect(body.runtime).not.toHaveProperty("accountLock");
+      });
+
+      it("leaves the plans such a rule allows to tick: all of them, or one fixed for every run", async () => {
+        runtimePermissions.current = {
+          canChange: true,
+          canConfigure: true,
+          readOnlyBy: null,
+          accounts: { kind: "key" },
+        };
+        withPlans(plan("plan-a", "Example Org"), plan("plan-b", "Second Org"));
+        const user = userEvent.setup();
+        renderNewCopilot();
+
+        // No subscription card, and every plan open.
+        await waitFor(() => expect(planWay("Example Org")).toBeChecked());
+        expect(planWay("Second Org")).toBeChecked();
+        expect(
+          screen.queryByRole("checkbox", {
+            name: /Each person's GitHub Copilot subscription/,
+          }),
+        ).toBeNull();
+        // Unticking one settles on the other.
+        await user.click(planWay("Second Org"));
+        expect(planWay("Example Org")).toBeChecked();
+        expect(planWay("Second Org")).not.toBeChecked();
+        const body = await createCopilot(user);
+        expect(body).toMatchObject({ llmApiKeyId: "plan-a", modelId: null });
+        // The kind is the rule's: the agent names no lock.
+        expect(body.runtime).not.toHaveProperty("accountLock");
+      });
+
+      it("shows each person's Copilot as the one account when no enterprise plan is connected, and asks for no choice", async () => {
+        withPlans();
+        const user = userEvent.setup();
+        render(
+          <AgentForm
+            agentType="agent"
+            sections={["configuration"]}
+            initialRuntimeId="copilot"
+            initialValues={copilot?.initialValues}
+          />,
+        );
+        expect(
+          within(accounts()).getByText(
+            "Each person's GitHub Copilot subscription",
+          ),
+        ).toBeVisible();
+        expect(
+          within(accounts()).queryByRole("checkbox"),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByText("Select at least one option."),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("img", { name: "Choose who pays for its runs" }),
+        ).not.toBeInTheDocument();
+
+        await user.type(screen.getByLabelText(/Name/), "Copilot agent");
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await waitFor(() => expect(createAgent).toHaveBeenCalled());
+        expect(createAgent.mock.calls[0][0]).toMatchObject({
+          runtime: { command: ["archestra-copilot"] },
+        });
+      });
+    });
   });
 });
 

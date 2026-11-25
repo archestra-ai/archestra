@@ -1,9 +1,11 @@
 ---
 title: Integrations
 description: Connect your AI clients and frameworks to Archestra
-order: 8
+order: 9
 lastUpdated: 2026-10-30
 ---
+
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Keep your existing client and route its model requests, tool calls, or both through Archestra.
 

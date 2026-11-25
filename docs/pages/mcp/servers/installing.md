@@ -6,6 +6,7 @@ lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 When an agent uses a tool, it acts as a real account in that app. Ask an agent to open a GitHub issue with your account, and the issue shows your name. The agent sees only what you can see.
 
@@ -42,4 +43,4 @@ An agent or gateway can override this for each tool. See [Credential Resolution]
 - No account to use? The tool returns an error with a setup link. Follow it, then try again.
 - Credential rejected, or OAuth scopes changed? Click **Re-authenticate**.
 - **Uninstall** on a card removes only your personal install. Team and organization installs stay until an admin removes them.
-- Which account ran a call? See **Identity** in the [MCP Gateway logs](/docs/admin/logs).
+- Which account ran a call? See **Identity** in the [MCP Gateway logs](/docs/insights/logs).

@@ -121,6 +121,12 @@ const needsForwardedOrigin = (pathname: string) =>
   pathname.startsWith("/api/");
 
 const shouldLogApiRequest = (req: NextRequest) => {
+  // One line per proxied call drowns the server log, so it takes the level
+  // the backend logs its own per-request lines at.
+  const level = process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase();
+  if (level !== "debug" && level !== "trace") {
+    return false;
+  }
   const { pathname } = req.nextUrl;
   // ignore nextjs internal requests
   if (pathname.startsWith("/_next")) {

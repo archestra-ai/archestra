@@ -26,6 +26,13 @@ import { fixedRoleGroups } from "@archestra/shared/fixed-roles";
 import logger from "@/logging";
 import { assertPortsBound } from "@/models/ports";
 
+/**
+ * The pointer every docs page carries under its frontmatter. Generated pages
+ * carry it too: CI checks that codegen reproduces the committed pages exactly.
+ */
+const DOCS_WRITER_SKILL_COMMENT =
+  "<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->";
+
 // The composition module, imported first, bound the ports of the layers
 // below; stop here if one is unbound.
 assertPortsBound();
@@ -53,9 +60,10 @@ function generatePredefinedRolesSections(): string {
     } else if (role === PLATFORM_ADMIN_ROLE_NAME) {
       section +=
         "Platform Admin holds every permission except `log:admin`, " +
-        "`guardrailsYell:admin`, `auditLog:admin`, and `member:impersonate`. It " +
-        "manages users, roles, settings, and resources, but sees only its " +
-        "own logs, yells, and audit records and cannot sign in as another member. " +
+        "`guardrailsLog:admin`, `clientConnection:admin`, `auditLog:admin`, " +
+        "and `member:impersonate`. It manages users, roles, settings, and " +
+        "resources, but sees only its own logs, Guardrails records, client " +
+        "connections, and audit records and cannot sign in as another member. " +
         "Because of " +
         "[No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), " +
         "it cannot grant a role that holds the withheld permissions.\n";
@@ -193,6 +201,9 @@ lastUpdated: ${lastUpdated}
  */
 function generateMarkdownBody(): string {
   return `
+
+${DOCS_WRITER_SKILL_COMMENT}
+
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
 Run \`pnpm codegen:access-control-docs\` to regenerate.

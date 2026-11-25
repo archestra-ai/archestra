@@ -314,6 +314,13 @@ export function AppaGithubSyncPanel() {
                     </InlineNotice>
                   </GitSourceNotice>
                 ) : null}
+                {connected &&
+                !source.setupPullRequestNumber &&
+                source.githubAppConfigId ? (
+                  <GitSourceNotice>
+                    <AutoMergeStatus autoMerge={query.data.autoMerge} />
+                  </GitSourceNotice>
+                ) : null}
                 {connected && !source.setupPullRequestNumber && (
                   <SelfServiceRow
                     source={source}
@@ -490,9 +497,6 @@ function SelfServiceRow({
             .
           </p>
         ) : null}
-        {selfService.enabled ? (
-          <AutoMergeStatus autoMerge={selfService.autoMerge} />
-        ) : null}
         {selfService.leftoverRule ? (
           <p className="text-sm leading-5 text-muted-foreground">
             {hostLink(selfService.leftoverRule.url, "Ruleset")} still requires
@@ -532,14 +536,15 @@ function SelfServiceRow({
 }
 
 /**
- * Whether the GitHub App merges each self-served pull request once its check
- * passes, in either state. The setting lives in the wizard's Self-service
- * step; the card says only what holds, and which variable holds it.
+ * Whether the GitHub App merges each policy pull request Archestra opens once
+ * its checks pass, in either state. The setting lives in the wizard's
+ * Repository step; the card says only what holds, and which variable holds
+ * it.
  */
 function AutoMergeStatus({
   autoMerge,
 }: {
-  autoMerge: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"]["autoMerge"];
+  autoMerge: archestraApiTypes.GetAppaGithubSyncResponses["200"]["autoMerge"];
 }) {
   return (
     <p className="text-sm leading-5 text-muted-foreground">
@@ -549,8 +554,8 @@ function AutoMergeStatus({
       </strong>
       .{" "}
       {autoMerge.enabled
-        ? "Admitted self-service pull requests merge automatically."
-        : "Self-service pull requests have to be merged manually."}
+        ? "Admitted Guardrails pull requests merge automatically."
+        : "Guardrails pull requests have to be merged manually."}
       {autoMerge.environment ? (
         <span>
           {" "}

@@ -8,11 +8,16 @@ import {
   type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
+  isTurnStoppedPart,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
+  markTurnStopped,
+  settleStoppedToolCalls,
   stripDanglingToolCalls,
   TOOL_CREATE_AGENT_SHORT_NAME,
+  TOOL_QUEUE_PART_TYPE,
   type TokenUsage,
+  type ToolQueuePartData,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai";
@@ -162,6 +167,8 @@ export default function ChatSessionHook({
     [clearElicitationFailureTimer],
   );
   const [mcpTasks, setMcpTasks] = useState<Record<string, McpTaskPartData>>({});
+  const [queuedToolCallIds, setQueuedToolCallIds] =
+    useState<ReadonlySet<string>>(NO_QUEUED_TOOL_CALLS);
   const [optimisticToolCalls, setOptimisticToolCalls] = useState<
     Array<{
       toolCallId: string;
@@ -431,6 +438,8 @@ export default function ChatSessionHook({
         preserveQueuedMessagesOnAbortRef.current = null;
       }
       setOptimisticToolCalls([]);
+      // No call waits once its stream has ended, however it ended.
+      setQueuedToolCallIds(NO_QUEUED_TOOL_CALLS);
       // An errored stream keeps its questions: onError either clears them
       // (terminal) or is about to retry/reattach into the same run, whose
       // replay re-sends them — clearing here would unmount the card and lose
@@ -475,10 +484,12 @@ export default function ChatSessionHook({
       }
 
       // When the user stops mid-tool-call, the assistant message is left with a
-      // tool part that never produced output, which the UI renders as a
-      // perpetually "running" tool. Drop those dangling parts so the live view
-      // matches what the backend persists (and a reload would show). A stall
-      // recovery resets the messages and replays the run instead.
+      // tool part that never produced output. Give a call that was running
+      // the same "stopped" result the backend stores for it, and drop one
+      // still receiving its arguments, so the live view matches what the
+      // backend persists (and a reload would show), and the next turn sends
+      // the model the same history. A stall recovery resets the messages and
+      // replays the run instead.
       if (isAbort && !isStallRecoveryAbort) {
         // An explicit steering interrupt preserves queued follow-ups so the
         // normal ready-state drain can deliver the oldest one immediately.
@@ -490,9 +501,7 @@ export default function ChatSessionHook({
         // callback's (throttled, possibly stale) closure, so the most recently
         // streamed text is never rolled back.
         setMessages((current) => {
-          const stripped = pruneEmptyTrailingAssistantMessage(
-            stripDanglingToolCalls(current),
-          );
+          const stripped = settleStoppedTurn(current);
           // restoreRenderableAssistantParts treats the shrink as a streaming
           // regression and would resurrect the stripped parts on the next
           // render; sync the ref so that comparison sees no regression.
@@ -583,6 +592,9 @@ export default function ChatSessionHook({
     onError: (chatError) => {
       errorSeqRef.current += 1;
       setOptimisticToolCalls([]);
+      // The "started" signal of a queued call can be lost with the stream. A
+      // recovery replays the run's signals, so start from none.
+      setQueuedToolCallIds(NO_QUEUED_TOOL_CALLS);
       clearActiveContextCompaction();
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
@@ -905,6 +917,22 @@ export default function ChatSessionHook({
           | undefined;
         if (data?.id && data.conversationId === conversationId) {
           settleMcpElicitation(data.id);
+        }
+      }
+
+      // A tool call started waiting for a free place on its server, or
+      // stopped waiting. Its circle reads "queued" in between.
+      if (customData.type === TOOL_QUEUE_PART_TYPE) {
+        const data = customData.data as ToolQueuePartData | undefined;
+        if (data?.toolCallId) {
+          const { toolCallId, queued } = data;
+          setQueuedToolCallIds((current) => {
+            if (current.has(toolCallId) === queued) return current;
+            const next = new Set(current);
+            if (queued) next.add(toolCallId);
+            else next.delete(toolCallId);
+            return next;
+          });
         }
       }
 
@@ -1339,19 +1367,30 @@ export default function ChatSessionHook({
 
       stopInFlightRef.current = true;
       setIsStopping(true);
-      const finishStop = async () => {
+      const finishStop = async (result: unknown) => {
         const latestUserMessageId = latestMessagesRef.current.findLast(
           (message) => message.role === "user",
         )?.id;
         const responseStillInFlight =
           latestStatusRef.current === "submitted" ||
           latestStatusRef.current === "streaming";
-        if (
-          responseStillInFlight &&
-          latestUserMessageId === activeUserMessageId
-        ) {
+        const sameTurn = latestUserMessageId === activeUserMessageId;
+        if (responseStillInFlight && sameTurn) {
           await stop();
           transport.abortReconnect();
+        } else if (
+          sameTurn &&
+          (result as { stopped?: boolean } | undefined)?.stopped &&
+          (await storedTurnWasStopped(conversationId))
+        ) {
+          // The server ended the stream before its answer to the stop came
+          // back, so the stream finished as any other does and nothing above
+          // marked the turn. Give it the state the backend stored for it.
+          setMessages((current) => {
+            const settled = settleStoppedTurn(current);
+            previousMessagesRef.current = settled;
+            return settled;
+          });
         }
         stopInFlightRef.current = false;
         setIsStopping(false);
@@ -1361,7 +1400,13 @@ export default function ChatSessionHook({
         setIsStopping(false);
       });
     },
-    [stop, transport, conversationId, contextCompaction.isCompacting],
+    [
+      stop,
+      transport,
+      conversationId,
+      contextCompaction.isCompacting,
+      setMessages,
+    ],
   );
   const sendOrQueueText = useCallback(
     (text: string) => {
@@ -1453,6 +1498,7 @@ export default function ChatSessionHook({
     pendingMcpElicitations,
     resolveMcpElicitation,
     mcpTasks,
+    queuedToolCallIds,
     // Computed, not stored: the page paints the SDK error before onError has
     // run (so no flag set inside onError can suppress the first frame), and
     // consumers read the session from a map refreshed an effect-cycle later.
@@ -1507,6 +1553,7 @@ export default function ChatSessionHook({
     pendingMcpElicitations,
     resolveMcpElicitation,
     mcpTasks,
+    queuedToolCallIds,
     isRecoveringState,
     isTransportStalled,
     optimisticToolCalls,
@@ -1590,3 +1637,40 @@ function getCurrentArchestraToolShortName(
     includeDefaultPrefix: true,
   });
 }
+
+/**
+ * The state a turn has once the user stopped it, the same the backend stores:
+ * a call that was running has its "stopped" result, the turn carries the mark
+ * that it was stopped, and a call still receiving its arguments is gone.
+ */
+function settleStoppedTurn(messages: UIMessage[]): UIMessage[] {
+  return pruneEmptyTrailingAssistantMessage(
+    stripDanglingToolCalls(markTurnStopped(settleStoppedToolCalls(messages))),
+  );
+}
+
+/**
+ * Whether the backend stored the conversation's last turn as a stopped one.
+ * A stop can arrive just after the turn ended by itself, and the stop call
+ * still answers "stopped" then, so the stored turn is what tells the two
+ * apart. A failed lookup reads as "not stopped": the open chat then keeps
+ * what it streamed, and a reload shows the stored turn.
+ */
+async function storedTurnWasStopped(conversationId: string): Promise<boolean> {
+  try {
+    const conversation = await fetchConversation(conversationId);
+    const last = conversation?.messages?.at(-1) as
+      | { role?: unknown; parts?: unknown }
+      | undefined;
+    return (
+      last?.role === "assistant" &&
+      Array.isArray(last.parts) &&
+      last.parts.some(isTurnStoppedPart)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** One shared empty set, so a session with no queued call keeps its identity. */
+const NO_QUEUED_TOOL_CALLS: ReadonlySet<string> = new Set();

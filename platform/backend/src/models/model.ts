@@ -303,15 +303,14 @@ class ModelModel {
           canonicalNames.has(ollamaAvailabilityName(model.modelId) ?? ""),
       );
     } else {
-      const models = await ModelModel.findByProviderModelIds(
-        [
+      // Runs at least twice per proxied request: a prepared query for the
+      // hidden match only, not every alias's full catalog row.
+      [hidden] = await ModelModel.hiddenByProviderAndModelIds.get().execute({
+        provider: params.provider,
+        modelIds: [
           ...new Set([modelId, ...providerAliases, ...(params.aliases ?? [])]),
-        ].map((id) => ({
-          provider: params.provider,
-          modelId: id,
-        })),
-      );
-      hidden = [...models.values()].find((model) => model.ignored);
+        ],
+      });
     }
     if (hidden) {
       throw new ApiError(
@@ -1072,6 +1071,7 @@ class ModelModel {
       });
       // SPDX-SnippetEnd
       await tx.delete(schema.modelsTable).where(eq(schema.modelsTable.id, id));
+      await ModelModel.clearAgentConnectionModels([id], tx);
       return { status: "deleted" } as const;
     });
   }
@@ -1092,14 +1092,17 @@ class ModelModel {
       return false;
     }
 
-    await db
-      .delete(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.provider, provider),
-          eq(schema.modelsTable.modelId, modelId),
-        ),
-      );
+    await withDbTransaction(async (tx) => {
+      await tx
+        .delete(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, provider),
+            eq(schema.modelsTable.modelId, modelId),
+          ),
+        );
+      await ModelModel.clearAgentConnectionModels([existing.id], tx);
+    });
 
     return true;
   }
@@ -1117,22 +1120,29 @@ class ModelModel {
    * can define custom token pricing for metrics.
    */
   static async deleteOrphanedModels(): Promise<number> {
-    const orphaned = await db
-      .delete(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.discoveredViaLlmProxy, false),
-          notInArray(
-            schema.modelsTable.id,
-            db
-              .selectDistinct({
-                modelId: schema.llmProviderApiKeyModelsTable.modelId,
-              })
-              .from(schema.llmProviderApiKeyModelsTable),
+    const orphaned = await withDbTransaction(async (tx) => {
+      const deleted = await tx
+        .delete(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.discoveredViaLlmProxy, false),
+            notInArray(
+              schema.modelsTable.id,
+              tx
+                .selectDistinct({
+                  modelId: schema.llmProviderApiKeyModelsTable.modelId,
+                })
+                .from(schema.llmProviderApiKeyModelsTable),
+            ),
           ),
-        ),
-      )
-      .returning({ id: schema.modelsTable.id });
+        )
+        .returning({ id: schema.modelsTable.id });
+      await ModelModel.clearAgentConnectionModels(
+        deleted.map(({ id }) => id),
+        tx,
+      );
+      return deleted;
+    });
 
     return orphaned.length;
   }
@@ -1970,6 +1980,22 @@ class ModelModel {
     return { llmModelRowCount: await ModelModel.countAll() };
   }
 
+  private static readonly hiddenByProviderAndModelIds = new PreparedQuery(
+    (database) =>
+      database
+        .select({ modelId: schema.modelsTable.modelId })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, sql.placeholder("provider")),
+            sql`${schema.modelsTable.modelId} = ANY(${sql.placeholder("modelIds")}::text[])`,
+            eq(schema.modelsTable.ignored, true),
+          ),
+        )
+        .limit(1)
+        .prepare("archestra_model_hidden_by_provider_and_ids"),
+  );
+
   private static readonly byProviderAndModel = new PreparedQuery((database) =>
     database
       .select()
@@ -2000,6 +2026,33 @@ class ModelModel {
         )
         .prepare("archestra_proxy_model_identity"),
   );
+
+  /**
+   * Clears deleted models from the model an agent sets for each connection
+   * it leaves to each person, as the database clears an agent's own model:
+   * whoever picks that connection then picks its model. The agent keeps its
+   * other entries, and drops the map once none is left.
+   */
+  private static async clearAgentConnectionModels(
+    modelIds: string[],
+    tx: Transaction,
+  ): Promise<void> {
+    if (modelIds.length === 0) return;
+    const runtime = schema.agentsTable.runtime;
+    const deleted = sql.join(
+      modelIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const kept = sql`(SELECT jsonb_object_agg(entry.key, entry.value) FROM jsonb_each(${runtime}->'connectionModels') AS entry WHERE entry.value #>> '{}' NOT IN (${deleted}))`;
+    await tx
+      .update(schema.agentsTable)
+      .set({
+        runtime: sql`CASE WHEN ${kept} IS NULL THEN ${runtime} - 'connectionModels' ELSE jsonb_set(${runtime}, '{connectionModels}', ${kept}) END`,
+      })
+      .where(
+        sql`jsonb_typeof(${runtime}->'connectionModels') = 'object' AND EXISTS (SELECT 1 FROM jsonb_each_text(${runtime}->'connectionModels') AS entry WHERE entry.value IN (${deleted}))`,
+      );
+  }
 }
 
 export default ModelModel;

@@ -6,6 +6,7 @@ lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give each agent its own client at your identity provider, and every downstream token names the person and the agent. The person stays the subject (`sub`), and the agent is the actor (`act`), as [RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693#section-4.1) defines. Use it with Keycloak, PingOne, ZITADEL, Auth0 Custom Token Exchange, or any provider whose token exchange accepts an actor token.
 
@@ -54,7 +55,7 @@ The stored key stays hidden. Leave it blank to keep it.
 1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
 2. Under **Identity**, pick your provider under **Identity Provider**, paste the agent's client ID into **Agent client ID**, and click **Save changes**.
 
-To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows the agent's client ID as the acting agent.
+To check it works, call a tool on an MCP server that uses IdP token exchange with this provider. Open the call in the [MCP Gateway logs](/docs/insights/logs): **Token issued to** shows the agent's client ID as the acting agent.
 
 ## Require an Agent Identity
 

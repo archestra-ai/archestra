@@ -1,25 +1,27 @@
 ---
-title: Get Started
-description: Run Archestra, connect your clients, and see your first governed request
+title: Meet Archestra
+sectionTitle: Get Started
+description: What Archestra is, how its parts fit together, and how to run it
 order: 1
 explore: false
-lastUpdated: 2026-10-05
+lastUpdated: 2026-11-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
-Three steps take you from nothing to a working setup:
+Archestra is an open-source platform for those who want to orchestrate, secure, and scale AI across their organization.
 
-1. **Run Archestra** on your machine. This page.
-2. **[Connect your agents](/docs/get-started/connect)**, such as Claude Code or Cursor.
-3. **[See it work](/docs/get-started/see-it-work)** in Chat and in the logs.
+It covers [governance and guardrails](/docs/agents/guardrails), central management of AI assets such as [MCP servers](/docs/mcp/servers), [skills](/docs/agents/skills), and [model providers](/docs/llm-proxy/providers), [cost management](/docs/llm-proxy/cost-controls), [identity and access control](/docs/admin/identity), [knowledge with permission sync](/docs/knowledge), and [observability](/docs/admin/observability).
 
-Already have an agent set up in Claude Code or OpenClaw? [Migrate it](/docs/get-started/migrate) after step 1.
+Archestra also helps your organization **adopt more AI**. It simplifies building [agents](/docs/agents) and [mini apps](/docs/chat/apps), gives everyone a [chat](/docs/chat) with shared [projects](/docs/chat/projects), runs agents from [Slack, Microsoft Teams, email, and other channels](/docs/agents/triggers-and-channels), connects [coding clients like Claude Code and Cursor](/docs/get-started/connect) to shared tools and models, and distributes [skills](/docs/agents/skills/sharing) from one marketplace.
+
+:::architecture-diagram:::
 
 <span id="run-it-locally-to-try"></span>
 
 ## Run Archestra
 
-:::quickstart:::
+Archestra is self-hosted only. Run it locally, or on your own [Kubernetes cluster](/docs/admin/deployment/helm) in any cloud provider.
 
-**Next:** [Connect your agents](/docs/get-started/connect).
+:::quickstart:::

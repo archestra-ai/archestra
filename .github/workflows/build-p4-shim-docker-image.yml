@@ -13,8 +13,8 @@ on:
         description: "Destination registry prefix"
         type: string
         default: ghcr.io/archestra-ai
-      push_to_gcr:
-        description: "Whether to push the built image to GCR"
+      push_image:
+        description: "Whether to push the built image"
         required: true
         type: boolean
       version:
@@ -36,11 +36,6 @@ on:
         required: false
         type: string
         default: ""
-    secrets:
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
-        required: false
-      GCP_SERVICE_ACCOUNT_NAME:
-        required: false
   pull_request:
     paths:
       - "platform/docker_images/p4_shim/**"
@@ -71,14 +66,11 @@ jobs:
       image_name: p4-shim
       image_registry: ${{ inputs.image_registry }}
       version: ${{ inputs.version }}
-      push_image: ${{ inputs.push_to_gcr }}
-      auth_provider: ${{ startsWith(inputs.image_registry, 'ghcr.io/') && 'ghcr' || 'gar' }}
+      push_image: ${{ inputs.push_image }}
+      auth_provider: ghcr
       checkout_ref: ${{ inputs.checkout_ref }}
       reuse_from_version: ${{ inputs.reuse_from_version }}
       reuse_paths: '["platform/docker_images/p4_shim", ".github/workflows/build-p4-shim-docker-image.yml"]'
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   # Direct pull_request path: build-only validation, never pushes. A plain
   # single-arch build (same pattern docker-image-scanning.yml uses for the MCP
@@ -97,6 +89,13 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Log in to Docker Hardened Images
+        uses: $/.github/actions/docker-login
+        with:
+          registry: dhi.io
+          username: archestra
+          password: ${{ secrets.DOCKERHUB_DHI_TOKEN }}
 
       - name: Build p4 shim image
         uses: $/.github/actions/build-docker-image

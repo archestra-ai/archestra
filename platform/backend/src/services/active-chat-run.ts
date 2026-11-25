@@ -152,6 +152,22 @@ export class ActiveChatRunService {
     return failed;
   }
 
+  /**
+   * Whether someone asked for this run to stop. A run's abort signal alone
+   * does not say so: the signal also fires when the run's row is gone, and
+   * nobody pressed Stop then.
+   */
+  async wasStopRequested(runId: string): Promise<boolean> {
+    try {
+      const run = await ActiveChatRunModel.findById(runId);
+      return Boolean(run?.stopRequestedAt);
+    } catch (error) {
+      // Without the row there is no evidence of a stop, so the answer is no.
+      logger.warn({ error, runId }, "Failed to read active chat run stop flag");
+      return false;
+    }
+  }
+
   async requestStop(params: {
     conversationId: string;
     organizationId: string;

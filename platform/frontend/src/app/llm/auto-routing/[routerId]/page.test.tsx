@@ -136,7 +136,12 @@ const activePlan: AutoRoutingPlanDetail = {
     value_size_weighted: 0.84,
     tier_session_share: [0.5, 0.3, 0.2],
     tier_token_share: [0.2, 0.3, 0.5],
-    value_per_usd: 0.002,
+    frontier: [
+      { spend: 4, value: 0.6 },
+      { spend: 12.5, value: 0.84 },
+      { spend: 20, value: 0.94 },
+      { spend: 40, value: 1 },
+    ],
   },
   diagnostics: { holdout: { status: "insufficient_history" } },
   error: null,
@@ -590,7 +595,9 @@ describe("AutoRoutingOverviewPage", () => {
 
     expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
     expect(screen.getByText("84.0%")).toBeInTheDocument();
-    expect(screen.getByText("+2.0 points")).toBeInTheDocument();
+    // $12.50 × 25% rounds down to $2; the frontier gains 0.1 per $7.50 there
+    expect(screen.getByText("Extra $2/day")).toBeInTheDocument();
+    expect(screen.getByText("+2.7 points")).toBeInTheDocument();
     expect(screen.getByTestId("auto-routing-plan-caption")).toHaveTextContent(
       "Plan updated",
     );

@@ -43,6 +43,11 @@ export function openappaFailure(error: unknown): ApiError {
   return apiError;
 }
 
+/** Whether `error` is already classified, so its message is safe to show. */
+export function isOpenappaFailure(error: unknown): error is ApiError {
+  return error instanceof OpenappaFailure;
+}
+
 /** The class the native binding stamped on `error`, if it carries one. */
 export function runtimeFailureCode(error: unknown): RuntimeFailureCode | null {
   const code = RuntimeFailureCode.safeParse(
@@ -106,6 +111,18 @@ export class OpenappaRootOnlyError extends Error {
   constructor(readonly refusal: string) {
     super("no composition of the organization's policy has opened");
     this.name = "OpenappaRootOnlyError";
+  }
+}
+
+/**
+ * The runtime ruled against an operation (a block or a denial) in text it
+ * wrote for the model. The message keeps the ruling whole, because the
+ * soft-block waiver reads it on the cause chain; the client sees it bounded.
+ */
+export class OpenappaRefusal extends Error {
+  constructor(ruling: string) {
+    super(ruling);
+    this.name = "OpenappaRefusal";
   }
 }
 
@@ -215,6 +232,8 @@ function classify(error: unknown): Failure {
       statusCode: 500,
       detail: `Guardrails refused the organization's policy, and no earlier version of it can run (${summarize(error.refusal)}). An administrator can fix it on the ${POLICY_PAGE} page.`,
     };
+  if (error instanceof OpenappaRefusal)
+    return modelRefusal("Guardrails refused this operation", error.message);
   if (error instanceof OpenappaCredentialError)
     return {
       statusCode: 500,

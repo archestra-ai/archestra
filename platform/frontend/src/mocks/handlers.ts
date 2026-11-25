@@ -88,6 +88,8 @@ import {
   toolCallUsageFor,
   userStatisticsFor,
 } from "./data/statistics";
+import { unifiedLogsDetailHandlers } from "./log-event-details";
+import { unifiedLogsHandlers } from "./log-events";
 import { registryHandlers } from "./registry";
 import { scheduledRunsHandlers } from "./scheduled-runs";
 
@@ -179,6 +181,10 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  ...unifiedLogsHandlers,
+  // Detail pages for the events the unified Logs feed lists. Each answers
+  // only for the feed's own ids and sessions and falls through otherwise.
+  ...unifiedLogsDetailHandlers,
   ...(process.env.NEXT_PUBLIC_SCHEDULE_REVIEW === "enabled"
     ? scheduledRunsHandlers
     : []),
@@ -450,6 +456,7 @@ export const handlers: HttpHandler[] = [
     templates: [],
     popularAgentOverrides: organizationSeed.popularAgentOverrides,
   }),
+  ...getJson("/api/limits", []),
   ...getJson("/api/default-user-limits", []),
   // Per-user limit usage on the Limits page: no members, nothing spent.
   ...getJson("/api/default-user-limits/users", {
@@ -479,7 +486,8 @@ export const handlers: HttpHandler[] = [
   }),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
-  // the red dots nor the survey/feedback dialogs interfere with other tests.
+  // the red dots nor the feedback dialog interfere with other tests.
+  ...getJson("/api/onboarding/first-run-setup", { show: false }),
   ...getJson("/api/onboarding/seen-nav-items", {
     items: [
       "nav:projects",
@@ -491,8 +499,6 @@ export const handlers: HttpHandler[] = [
     ],
   }),
   ...postJson("/api/onboarding/seen-nav-items", { items: [] }),
-  ...getJson("/api/onboarding/survey-eligibility", { eligible: false }),
-  ...postJson("/api/onboarding/survey", { ok: true }),
   ...getJson("/api/organization/mcp-preset-entries", []),
   ...getJson("/api/connected-clients", []),
   ...getJson("/api/connected-clients/disconnect-reference", {
@@ -757,6 +763,26 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/organization/agent-settings/default-model-dependents", {
     agents: [],
     hiddenBlockingCount: 0,
+  }),
+  // A runtime agent's page and composer read the viewer's own account.
+  ...getJson("/api/agents/:id/runtime/account", {
+    agentAccount: {
+      authentication: "provider",
+      llmApiKeyId: null,
+      modelId: null,
+    },
+    // Nothing is set for the company API key at any level, and nothing
+    // resolves: its connection and model are the viewer's to pick.
+    companyKey: false,
+    companyAccount: {
+      connection: { id: null, name: null, provider: null, fixedBy: null },
+      model: { id: null, name: null, fixedBy: null },
+      usesOrganizationDefault: false,
+    },
+    choice: null,
+    choiceError: null,
+    lock: null,
+    subscription: null,
   }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(

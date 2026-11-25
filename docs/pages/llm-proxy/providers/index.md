@@ -6,6 +6,7 @@ lastUpdated: 2026-11-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Add each AI provider once. Chat, agents, and every app behind the [LLM Proxy](/docs/llm-proxy) can use it, and none of them sees the key. Paste an OpenAI key, sign in with your ChatGPT subscription, or point at your own vLLM server.
 
@@ -45,7 +46,7 @@ These credentials belong to one person and cannot be shared. An agent that uses 
 - **ChatGPT**: first turn on **Enable device code authorization for Codex** in ChatGPT under **Settings → Security**. It is off by default, and ChatGPT blocks the sign-in until you turn it on. If the backend's outbound traffic is restricted, also allow [its hosts](#chatgpt-subscription-egress).
 - **GitHub Copilot** and **Microsoft 365 Copilot** have their own pages: [GitHub Copilot](/docs/llm-proxy/providers/github-copilot), [Microsoft 365 Copilot](/docs/llm-proxy/providers/microsoft-365-copilot).
 
-ChatGPT and SuperGrok use bills $0 in Costs. GitHub Copilot and Microsoft 365 Copilot use counts as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
+ChatGPT and SuperGrok use bills $0 in Costs. GitHub Copilot and Microsoft 365 Copilot use counts as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/cost-controls#subscription-vs-metered-cost).
 
 <span id="which-key-a-request-uses"></span>
 
@@ -133,7 +134,7 @@ Archestra fills in each model's prices, context window, and input types for you.
 
 | Detail | What it changes |
 | --- | --- |
-| **Pricing** | The cost Archestra records for each request. Wrong prices give wrong [cost reports and budgets](/docs/llm-proxy/costs-and-limits). |
+| **Pricing** | The cost Archestra records for each request. Wrong prices give wrong [cost reports and budgets](/docs/llm-proxy/cost-controls). |
 | **Context window** | When chat compacts a long conversation. |
 | **Max output tokens** | How long one answer can be. Without it, a turn asks for 8,192 tokens, which can cut a long answer short. |
 | **Modalities** | Which files chat sends to the model, and which models you can pick for [embedding](/docs/knowledge/settings#embedding-model) and [OCR](/docs/knowledge/settings#document-ocr). A file the model cannot read goes to the conversation's **Files** panel instead. |

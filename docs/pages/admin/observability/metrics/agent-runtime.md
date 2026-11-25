@@ -5,6 +5,8 @@ order: 4
 lastUpdated: 2026-10-31
 ---
 
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
+
 Track agent runs from startup through completion and identify tasks waiting for attention.
 
 ## Metrics

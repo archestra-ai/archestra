@@ -163,9 +163,24 @@ export const AgentAdoptionSchema = z.object({
   /** The span traffic is read over; calls in it make a member active. */
   since: z.date(),
   until: z.date(),
+  /** Every organization member, with an agent or not. */
+  memberCount: z.number(),
+  /**
+   * The members with an agent or any traffic. Every other member is not
+   * connected, with no agents and no calls; the members list pages them all.
+   */
   members: z.array(AgentAdoptionMemberSchema),
 });
 export type AgentAdoption = z.infer<typeof AgentAdoptionSchema>;
+
+/** What the members list sorts by: state, name, or a last call. */
+export const AdoptionMemberSortBySchema = z.enum([
+  "state",
+  "user",
+  "gateway",
+  "llm",
+]);
+export type AdoptionMemberSortBy = z.infer<typeof AdoptionMemberSortBySchema>;
 
 /** Calls from members' agents per UTC day, oldest first. */
 export const AgentAdoptionUsageSchema = z.object({

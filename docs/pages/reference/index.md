@@ -1,11 +1,12 @@
 ---
 title: Reference
 description: Look up environment variables, permissions, API endpoints, built-in MCP tools, and the Apps SDK
-order: 10
+order: 11
 lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Look up an exact value here: an environment variable, a permission, an endpoint, or a built-in tool.
 

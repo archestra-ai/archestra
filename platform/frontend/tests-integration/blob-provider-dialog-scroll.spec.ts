@@ -189,9 +189,8 @@ test("cost export body scrolls while its schedule action stays visible", async (
     },
   ]);
   await page.goto("/llm/cost-exports");
-  await page
-    .getByRole("button", { name: "Schedule export", exact: true })
-    .click();
+  // With no export yet, Configure is the page's one way into the dialog.
+  await page.getByRole("button", { name: "Configure", exact: true }).click();
   const dialog = page.getByRole("dialog", {
     name: "Schedule cost export",
     exact: true,

@@ -2,10 +2,11 @@
 title: Claude Desktop
 description: Route Claude Desktop's inference and tools through Archestra
 order: 2
-lastUpdated: 2026-10-31
+lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Claude Desktop uses a downloadable setup helper or a terminal command. The setup script supports macOS, Windows, and Linux. Linux requires Anthropic's official Desktop beta.
 
@@ -64,4 +65,4 @@ To use another third-party profile, select it in **Configure Third-Party Inferen
 
 ## Verify the Connection
 
-Send `Reply with connection verified.` In **Logs → LLM Proxy**, filter by **Claude Desktop** to review its requests. Claude Code has a separate filter. Older requests with generic Claude attribution appear as **Claude Code**.
+Send `Reply with connection verified.` In **Logs**, pick the **LLM Proxy** type and filter the client apps to **Claude Desktop** to review its requests. Claude Code has a separate filter. Older requests with generic Claude attribution appear as **Claude Code**.

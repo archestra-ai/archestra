@@ -30,6 +30,18 @@ import { cn } from "@/lib/utils/tailwind";
  * third framed element in the same column made a dead-end state look like a
  * form. Pass it only while a filter is actually applied — offering to clear
  * nothing is what makes an empty page look broken.
+ * @param variant - `"firstUse"` is for a page the reader has never put
+ * anything on. The panel is then the whole page, so it explains the feature
+ * rather than reporting the empty list: `title` names the outcome ("Send each
+ * session to the right model"), `description` says what the thing is in one
+ * or two plain sentences, `action` is the first step, and `secondaryAction` is
+ * at most one text link (ready-made examples, or the docs). Guardrails' own
+ * first-run page set this layout. A filtered list that matched nothing keeps
+ * the default variant: its reader already knows the feature.
+ * @param canAct - `firstUse` only. `false` replaces both actions with
+ * `readerMessage`, so a reader without permission sees who sets the feature
+ * up rather than a disabled button. `undefined` (permissions still loading)
+ * shows neither, so nothing flickers.
  */
 export function EmptyState({
   icon: Icon = Inbox,
@@ -38,6 +50,10 @@ export function EmptyState({
   action,
   onClearFilters,
   className,
+  variant = "default",
+  secondaryAction,
+  canAct,
+  readerMessage,
 }: {
   icon?: LucideIcon;
   title: ReactNode;
@@ -45,7 +61,47 @@ export function EmptyState({
   action?: ReactNode;
   onClearFilters?: () => void;
   className?: string;
+  variant?: "default" | "firstUse";
+  secondaryAction?: ReactNode;
+  canAct?: boolean;
+  readerMessage?: ReactNode;
 }) {
+  if (variant === "firstUse") {
+    return (
+      <div
+        className={cn(
+          "mx-auto flex max-w-xl flex-col items-center px-2 py-10 text-center sm:py-16",
+          className,
+        )}
+      >
+        <span className="flex size-28 items-center justify-center rounded-full bg-muted sm:size-36">
+          <Icon
+            aria-hidden="true"
+            className="size-12 text-primary sm:size-14"
+            strokeWidth={1.5}
+          />
+        </span>
+        {/* Not a heading, for the same reason as the default variant below. */}
+        <p className="mt-8 text-2xl font-semibold tracking-tight text-balance">
+          {title}
+        </p>
+        {description ? (
+          <p className="mt-3 max-w-md leading-relaxed text-pretty text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
+        {canAct === true ? (
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+            {action}
+            {secondaryAction}
+          </div>
+        ) : canAct === false && readerMessage ? (
+          <p className="mt-8 text-sm text-muted-foreground">{readerMessage}</p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(

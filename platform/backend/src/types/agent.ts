@@ -372,6 +372,13 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    */
   resolvedLlmModelName: z.string().nullable().optional(),
   /**
+   * The runs of this Agent Runtime agent use each person's own subscription
+   * unless that person chooses otherwise: `resolvedLlmProvider` is then the
+   * subscription's provider, and no company connection is named. Set on the
+   * Agents list only.
+   */
+  resolvedLlmPersonalSubscription: z.boolean().optional(),
+  /**
    * Whether the agent's configured provider requires a per-user credential
    * (e.g. GitHub Copilot). Lets the chat/dialog show a read-only model and
    * prompt the viewer to connect their own account instead of silently

@@ -439,11 +439,13 @@ describe("own-vs-all log split (Read and Admin role actions)", () => {
     expect(memberPermissions.auditLog).toEqual([]);
   });
 
-  test("yells have their own resource, apart from log", () => {
-    expect(allAvailableActions.guardrailsYell).toEqual(["read", "admin"]);
-    expect(editorPermissions.guardrailsYell).toEqual(["read"]);
-    expect(memberPermissions.guardrailsYell).toEqual([]);
-    expect(permissionDescriptions["log:admin"]).not.toMatch(/yell/);
+  test("Guardrails records and client connections have their own resources, apart from log", () => {
+    for (const resource of ["guardrailsLog", "clientConnection"] as const) {
+      expect(allAvailableActions[resource]).toEqual(["read", "admin"]);
+      expect(editorPermissions[resource]).toEqual(["read"]);
+      expect(memberPermissions[resource]).toEqual([]);
+    }
+    expect(permissionDescriptions["log:admin"]).not.toMatch(/yell|consult/i);
   });
 });
 
@@ -452,11 +454,20 @@ describe("platform_admin predefined role", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
-    expect(p.guardrailsYell).toEqual(["read"]);
+    expect(p.guardrailsLog).toEqual(["read"]);
+    expect(p.clientConnection).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
     // …and is otherwise the full admin set.
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (["log", "auditLog", "guardrailsYell", "member"].includes(resource)) {
+      if (
+        [
+          "log",
+          "auditLog",
+          "guardrailsLog",
+          "clientConnection",
+          "member",
+        ].includes(resource)
+      ) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);
@@ -470,7 +481,8 @@ describe("platform_admin predefined role", () => {
         "member:impersonate",
         "log:admin",
         "auditLog:admin",
-        "guardrailsYell:admin",
+        "guardrailsLog:admin",
+        "clientConnection:admin",
       ]),
     );
     // …while granting its own role or member stays possible.

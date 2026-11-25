@@ -66,6 +66,43 @@ export const PROVIDER_KEYS = [
   { name: "Anthropic production", provider: "anthropic", apiKey: "sk-ant-api03-docs-example" },
 ] as const;
 
+/** Keys shared with the whole organization, the only kind an auto router runs on. Jev accepts any key until it is called. */
+export const SHARED_PROVIDER_KEYS = [
+  { name: "OpenAI shared", provider: "openai", apiKey: "sk-docs-example-openai-shared" },
+  { name: "Anthropic shared", provider: "anthropic", apiKey: "sk-ant-api03-docs-example-shared" },
+  { name: "Jev shared", provider: "jev", apiKey: "jev-docs-example" },
+] as const;
+
+/**
+ * The auto router on LLM → Auto Routing, and the scored sessions its plan is
+ * fitted on: more than the backend's default minimum for a first plan (1000).
+ * Each session needs the fast, normal or smart tier with the probabilities
+ * of its kind; harder sessions run longer. Each tier model gets a custom
+ * price, since the plan is priced per tier and the mocked ids have no registry
+ * price to fall back on.
+ */
+export const AUTO_ROUTER = {
+  name: "auto",
+  budgetPreset: "balanced",
+  tiers: {
+    fast: { key: "OpenAI shared", model: "gpt-6-luna", pricePerMillion: { input: "0.40", output: "1.60" } },
+    normal: { key: "Anthropic shared", model: "claude-sonnet-5-5", pricePerMillion: { input: "3.00", output: "15.00" } },
+    smart: { key: "Anthropic shared", model: "claude-opus-5-5", pricePerMillion: { input: "5.00", output: "25.00" } },
+  },
+  decisionModel: { key: "Jev shared", model: "jev-1.13.0" },
+  history: {
+    sessions: 1400,
+    days: 28,
+    kinds: [
+      { share: 0.4, tierNeeded: [0.93, 0.05, 0.02], requests: [1, 2] },
+      { share: 0.4, tierNeeded: [0.15, 0.7, 0.15], requests: [2, 6] },
+      { share: 0.2, tierNeeded: [0.04, 0.21, 0.75], requests: [4, 12] },
+    ],
+    clients: ["anthropic_claude_code", "cursor"],
+    request: { input: [3000, 12000], cacheRead: [0, 8000], output: [300, 2000] },
+  },
+} as const;
+
 export const MCP_GATEWAYS = [{ name: "Engineering Gateway" }, { name: "Support Gateway" }] as const;
 
 export const REMOTE_MCP_SERVERS = [
@@ -515,7 +552,7 @@ export const CHANNEL_BINDINGS = {
   ],
 } as const;
 
-/** Monthly budgets on Costs & Limits → Limits, by the kind of record they apply to. */
+/** Monthly budgets on Cost Controls → Limits, by the kind of record they apply to. */
 export const LIMITS = [
   { entity: "organization", name: "id", dollars: 2500 },
   { entity: "teams", name: "Platform Engineering", dollars: 800 },
@@ -546,6 +583,22 @@ export const USAGE = [
   { user: "persona", agent: null, client: "openai_codex", type: "openai:responses", model: "gpt-5.4", billingMode: "subscription", authMethod: "passthrough_virtual_key", source: "api", perDay: 25, inputTokens: 30000, outputTokens: 1500, inputPrice: 2.5, outputPrice: 15, cacheShare: 0.6 },
   { user: "persona", agent: null, client: "cursor", type: "anthropic:messages", model: "claude-sonnet-4-6", billingMode: "metered", authMethod: "virtual_key", source: "api", perDay: 30, inputTokens: 20000, outputTokens: 900, inputPrice: 3, outputPrice: 15, cacheShare: 0.5 },
   { user: "persona", agent: "Research Assistant", client: null, type: "openai:responses", model: "gpt-5.4", billingMode: "metered", authMethod: "internal", source: "chat", perDay: 10, inputTokens: 16000, outputTokens: 1800, inputPrice: 2.5, outputPrice: 15, cacheShare: 0.3 },
+] as const;
+
+/**
+ * Coding clients members set up through the Connect page, for Adoption and the
+ * Client connections type in Logs. Sofia and Daniel set up nothing, so
+ * Coverage shows who has not connected; Marcus's Cursor makes no calls, so he
+ * is connected but inactive. Times count back from the capture, inside the
+ * three days the Logs page reads; `disconnectedHoursAgo` adds a disconnect.
+ */
+export const CONNECTIONS = [
+  { id: "c0ec7100-0000-4000-8000-000000000001", user: "persona", client: "claude-code", platform: "macos", device: "Jordans-MacBook-Pro", hoursAgo: 52 },
+  { id: "c0ec7100-0000-4000-8000-000000000002", user: "persona", client: "codex", platform: "macos", device: "Jordans-MacBook-Pro", hoursAgo: 31 },
+  { id: "c0ec7100-0000-4000-8000-000000000003", user: "persona", client: "cursor", platform: "macos", device: "Jordans-MacBook-Pro", hoursAgo: 19 },
+  { id: "c0ec7100-0000-4000-8000-000000000004", user: "priya", client: "claude-code", platform: "macos", device: "priya-mbp", hoursAgo: 44 },
+  { id: "c0ec7100-0000-4000-8000-000000000005", user: "marcus", client: "cursor", platform: "linux", device: "marcus-workstation", hoursAgo: 7 },
+  { id: "c0ec7100-0000-4000-8000-000000000006", user: "marcus", client: "codex", platform: "linux", device: "marcus-workstation", hoursAgo: 66, disconnectedHoursAgo: 3 },
 ] as const;
 
 /** Which team runs each agent, and where it runs, so team and environment budgets have usage. */

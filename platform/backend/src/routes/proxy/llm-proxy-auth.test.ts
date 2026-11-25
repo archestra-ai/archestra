@@ -14,8 +14,10 @@ import {
   MemberModel,
   ModelModel,
   OAuthAccessTokenModel,
+  UserModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { softDeletedUsers } from "@/services/soft-deleted-users";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { accessGrants, afterEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -33,6 +35,7 @@ import {
   validatePassthroughVirtualKey,
   validateVirtualApiKey,
 } from "./llm-proxy-auth";
+import { authenticateModelRouterBearer } from "./routes/model-router";
 
 // =========================================================================
 // resolveAgent
@@ -374,6 +377,66 @@ describe("validateVirtualApiKey", () => {
       expectedOrganizationId: null,
     });
     expect(result.apiKey).toBe("gho_owner");
+  });
+
+  test("refuses a personal virtual key of a user the identity provider deactivated", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const secret = await makeSecret({ secret: { apiKey: "sk-owner" } });
+    const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      userId: user.id,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "deactivated-owner-vk",
+      authorId: user.id,
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+    await UserModel.setSoftDeleted({
+      userId: user.id,
+      softDeleted: new Date(),
+    });
+    softDeletedUsers.invalidate(user.id);
+    const deactivated = {
+      statusCode: 403,
+      message: "Your account was deactivated in your identity provider",
+    };
+
+    // Provider routes, including their model listing.
+    await expect(
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "openai",
+        expectedOrganizationId: null,
+      }),
+    ).rejects.toMatchObject(deactivated);
+    // The Unified Model API: inference, model listing and realtime sessions.
+    await expect(
+      authenticateModelRouterBearer({
+        authorization: `Bearer ${value}`,
+        ip: "127.0.0.1",
+      }),
+    ).rejects.toMatchObject(deactivated);
+
+    await UserModel.setSoftDeleted({ userId: user.id, softDeleted: null });
+    softDeletedUsers.invalidate(user.id);
+    await expect(
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "openai",
+        expectedOrganizationId: null,
+      }),
+    ).resolves.toMatchObject({ apiKey: "sk-owner" });
   });
 
   test("per-user provider: rejects an org-scoped (legacy/shared) virtual key at runtime", async ({

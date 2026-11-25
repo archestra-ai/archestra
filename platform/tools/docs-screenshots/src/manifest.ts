@@ -124,29 +124,6 @@ export const SHOTS: Shot[] = [
     route: () => "/connection?clientId=codex",
   },
   {
-    asset: "automated_screenshots/platform-connection_browser-approval",
-    route: () => "/connection",
-    // An installer would start this request; a pending one expires in ten minutes.
-    prepare: async (page) => {
-      const response = await page.request.post("/api/client-connections", {
-        data: { clientId: "codex", platform: "macos" },
-      });
-      const { verificationPath } = await response.json();
-      await page.goto(verificationPath);
-      await page.waitForLoadState("networkidle");
-      // Setup generation can start after networkidle and light the sidebar spinner.
-      await expect(page.getByTestId("connect-command-status")).toHaveText(
-        "Setup command ready",
-      );
-      const code = page.getByText(/^[A-F0-9]{4}-[A-F0-9]{4}$/);
-      await code.waitFor();
-      await code.evaluate((element) => {
-        element.textContent = "0123-4567";
-      });
-    },
-    viewport: { width: 1100, height: 480 },
-  },
-  {
     asset: "automated_screenshots/chat_composer",
     route: (seed) => `/chat?agentId=${seed.agents["Support Triage"]}`,
     beforeNavigate: async (page) => {
@@ -156,9 +133,9 @@ export const SHOTS: Shot[] = [
           contentType: "application/json",
           body: JSON.stringify([
             {
-              id: "claude-3-5-sonnet-20241022",
+              id: "claude-sonnet-5-5",
               dbId: "m0000000-0000-4000-8000-000000000001",
-              displayName: "Claude 3.5 Sonnet",
+              displayName: "Claude Sonnet 5.5",
               provider: "anthropic",
               isBest: true,
               isFree: false,
@@ -187,7 +164,7 @@ export const SHOTS: Shot[] = [
       );
     },
     prepare: async (page) => {
-      await page.getByText("Claude 3.5 Sonnet").first().waitFor();
+      await page.getByText("Claude Sonnet 5.5").first().waitFor();
     },
   },
   {
@@ -219,9 +196,9 @@ export const SHOTS: Shot[] = [
           contentType: "application/json",
           body: JSON.stringify([
             {
-              id: "claude-3-5-sonnet-20241022",
+              id: "claude-sonnet-5-5",
               dbId: "m0000000-0000-4000-8000-000000000001",
-              displayName: "Claude 3.5 Sonnet",
+              displayName: "Claude Sonnet 5.5",
               provider: "anthropic",
               isBest: true,
               isFree: false,
@@ -262,7 +239,7 @@ export const SHOTS: Shot[] = [
               title: "Incident INC-4091 Command Center",
               selectedModel: "m0000000-0000-4000-8000-000000000001",
               selectedProvider: "anthropic",
-              modelId: "claude-3-5-sonnet-20241022",
+              modelId: "claude-sonnet-5-5",
               thinkingEffort: "medium",
               hasCustomToolSelection: false,
               hooksDebugEnabled: false,
@@ -464,8 +441,8 @@ export const SHOTS: Shot[] = [
     viewport: { width: 1440, height: 920 },
     prepare: async (page) => {
       await page
-        .getByRole("button", { name: "Create new virtual key" })
-        .first()
+        .getByRole("region", { name: "Endpoint", exact: true })
+        .getByRole("combobox", { name: "API format" })
         .waitFor();
     },
   },
@@ -502,6 +479,30 @@ export const SHOTS: Shot[] = [
     route: () => "/llm/limits",
     viewport: { width: 1440, height: 1000 },
     prepare: prepareThroughputLimit,
+  },
+  {
+    asset: "automated_screenshots/llm-proxy-auto-routing_overview",
+    route: (seed) => `/llm/auto-routing/${seed.autoRouters.auto}`,
+    prepare: async (page) => {
+      await expect(page.getByTestId("auto-routing-header-status")).toHaveText(
+        "Active",
+      );
+      await expect(page.getByTestId("auto-routing-plan-caption")).toHaveText(
+        /^Plan updated /,
+      );
+    },
+  },
+  {
+    asset: "automated_screenshots/llm-proxy-auto-routing_configure",
+    route: (seed) => `/llm/auto-routing/${seed.autoRouters.auto}`,
+    viewport: { width: 1440, height: 1100 },
+    prepare: async (page) => {
+      await page.getByRole("button", { name: "Configure" }).click();
+      await page.getByTestId("auto-routing-preset-estimate").waitFor();
+      // The dialog focuses the name field; the shot is about tiers and budget.
+      await page.getByRole("heading", { name: "Configure auto" }).click();
+    },
+    target: (page) => page.getByRole("dialog"),
   },
   {
     asset: "automated_screenshots/platform-agent-plugins_catalog",
@@ -671,7 +672,8 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/platform-openappa_policy",
-    route: () => "/openappa/policy",
+    // The file workspace, which the Policy tab does not open yet.
+    route: () => "/openappa/policy/workspace",
     prepare: async (page) => {
       // The docs' rules are at the end of the file: jump there, then drop focus
       // so no cursor shows.
@@ -692,7 +694,8 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/platform-openappa_validations",
-    route: () => "/openappa/policy",
+    // The file workspace, which the Policy tab does not open yet.
+    route: () => "/openappa/policy/workspace",
     prepare: async (page) => {
       // The first validation, open in the editor with its last run's result.
       await page
@@ -703,8 +706,30 @@ export const SHOTS: Shot[] = [
     },
   },
   {
+    asset: "automated_screenshots/insights-adoption_usage",
+    fixedTime: true,
+    // The seeded calls fall in the same thirty days as Costs.
+    route: () => {
+      const [start, end] = USAGE_TIMEFRAME.replace("custom:", "").split("_");
+      return `/connections/logs?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`;
+    },
+    viewport: { width: 1440, height: 900 },
+    prepare: async (page) => {
+      await page.getByRole("region", { name: "Connection summary" }).waitFor();
+      await page.waitForLoadState("networkidle");
+    },
+  },
+  {
+    asset: "automated_screenshots/insights-logs_client-connections",
+    route: () => "/logs?type=connections",
+    viewport: { width: 1440, height: 760 },
+    prepare: async (page) => {
+      await page.getByText("Priya Raman").first().waitFor();
+    },
+  },
+  {
     asset: "automated_screenshots/platform-openappa_yells",
-    route: () => "/consults/logs?type=yell",
+    route: () => "/logs?type=guardrails&record=yell",
     prepare: async (page) => {
       await page
         .getByText("Blocked from opening an issue in acme/sdk")

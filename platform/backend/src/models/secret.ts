@@ -81,6 +81,21 @@ class SecretModel {
   }
 
   /**
+   * When the named secret last changed, without reading or decrypting its
+   * value. Null when there is no such secret.
+   */
+  static async findUpdatedAtByName(
+    name: string,
+    tx?: Transaction,
+  ): Promise<Date | null> {
+    const [row] = await (tx ?? db)
+      .select({ updatedAt: schema.secretsTable.updatedAt })
+      .from(schema.secretsTable)
+      .where(eq(schema.secretsTable.name, name));
+    return row?.updatedAt ?? null;
+  }
+
+  /**
    * Find multiple secrets by IDs in a single query
    */
   static async findByIds(ids: string[]): Promise<SelectSecret[]> {

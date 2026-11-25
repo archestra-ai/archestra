@@ -6,6 +6,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
 import { LlmProviderApiKeyModel, ModelModel, ModelPoolModel } from "@/models";
+import AutoRouterModel from "@/models/auto-router";
 import { ApiError, type ModelPool } from "@/types";
 
 /** A pool as the chat picker shows it: no members, only their providers. */
@@ -94,6 +95,52 @@ async function resolveModelPoolSelection(
     chatApiKeyId: member.providerApiKeyId,
     modelId: model.id,
   };
+}
+
+/**
+ * An auto router replaces the agent's model, key and pool; picking any of
+ * them leaves the router. Agent Runtime agents and built-in agents cannot run
+ * on one.
+ */
+export async function applyAgentAutoRouter(
+  body: {
+    autoRouterId?: string | null;
+    modelPoolId?: string | null;
+    llmApiKeyId?: string | null;
+    modelId?: string | null;
+  },
+  agent: { organizationId: string; runtime: unknown; builtIn?: boolean },
+): Promise<void> {
+  const hasRuntime = agent.runtime !== null && agent.runtime !== undefined;
+  if (body.autoRouterId) {
+    if (hasRuntime) {
+      throw new ApiError(
+        400,
+        "Agent Runtime agents cannot run on an auto router.",
+      );
+    }
+    if (agent.builtIn) {
+      throw new ApiError(400, "Built-in agents cannot run on an auto router.");
+    }
+    if (
+      !(await AutoRouterModel.findInOrganization(
+        agent.organizationId,
+        body.autoRouterId,
+      ))
+    ) {
+      throw new ApiError(400, "The selected auto router no longer exists.");
+    }
+    body.modelId = null;
+    body.llmApiKeyId = null;
+    body.modelPoolId = null;
+  } else if (
+    hasRuntime ||
+    (body.autoRouterId === undefined &&
+      (body.modelPoolId || body.llmApiKeyId || body.modelId))
+  ) {
+    // An agent that becomes an Agent Runtime agent leaves its auto router too.
+    body.autoRouterId = null;
+  }
 }
 
 /**

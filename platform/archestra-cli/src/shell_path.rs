@@ -35,24 +35,6 @@ pub enum Added {
     UserPath,
 }
 
-impl Added {
-    /// What the terminal shows after the first start.
-    pub fn message(&self) -> String {
-        match self {
-            Self::AlreadyOnPath => "The `archestra` command is on your PATH.".to_owned(),
-            // No path: the terminal says it in plain words. The file is in
-            // the log of the MCP bridge.
-            #[cfg(unix)]
-            Self::StartupFile(path) => {
-                tracing::info!(file = %path.display(), "put the `archestra` command on the PATH");
-                "The `archestra` command works in each new terminal.".to_owned()
-            }
-            #[cfg(windows)]
-            Self::UserPath => "The `archestra` command works in each new terminal.".to_owned(),
-        }
-    }
-}
-
 /// Puts the folder of the program on the `PATH` of the user.
 pub fn add(home: &Path) -> io::Result<Added> {
     #[cfg(unix)]

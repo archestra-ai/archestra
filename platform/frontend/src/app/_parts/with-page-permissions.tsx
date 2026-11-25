@@ -13,9 +13,14 @@ import {
 } from "@/app/_parts/settings-navigation";
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ClientRedirect } from "@/components/client-redirect";
-import { useHasPagePermissions } from "@/lib/auth/auth.query";
+import {
+  useHasAnyPagePermissions,
+  useHasPagePermissions,
+} from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useServerRulesAccess } from "@/lib/openappa-github-sync.query";
+import { POLICY_WORKSPACE_PATH } from "@/lib/openappa-policy-views";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   children,
@@ -26,10 +31,10 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   // Get required permissions for current page
   const requiredPermissions = resolvePagePermissions(pathname);
   const required = useHasPagePermissions(requiredPermissions || {});
-  // A page that shows two kinds of record also opens with the permission of
-  // the second kind (`alternativePagePermissionsMap`).
+  // A page that shows several kinds of record also opens with the permission
+  // of any other kind (`alternativePagePermissionsMap`).
   const alternativePermissions = alternativePagePermissionsMap[pathname];
-  const alternative = useHasPagePermissions(alternativePermissions ?? {});
+  const alternative = useHasAnyPagePermissions(alternativePermissions ?? []);
   const hasRequiredPermissions =
     required.data || (!!alternativePermissions && alternative.data);
   const isPending =
@@ -38,7 +43,10 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   const canSeeSettings = useSettingsAreaAccess();
   // The Policy page also opens to a reader of some MCP server's rules.
   const serverRules = useServerRulesAccess();
-  const isPolicy = pathname === POLICY_PATH;
+  const isPolicy =
+    pathname === POLICY_PATH || pathname === POLICY_WORKSPACE_PATH;
+  const agentRuntime = useFeature("agentRuntime");
+  const isModelProviders = pathname === MODEL_PROVIDERS_PATH;
 
   // No loader while the permission check is in flight. It used to render one
   // here, inside the shell and centred on the content column — a different
@@ -56,7 +64,10 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
       (pathname === "/llm/costs" &&
         !hasRequiredPermissions &&
         limitsAccess.isTeamAdminPending) ||
-      (isPolicy && !hasRequiredPermissions && serverRules.scoped === null)) &&
+      (isPolicy && !hasRequiredPermissions && serverRules.scoped === null) ||
+      (isModelProviders &&
+        !hasRequiredPermissions &&
+        agentRuntime === undefined)) &&
     requiredPermissions
   ) {
     return isOptimisticChatPath(pathname) ? <>{children}</> : null;
@@ -87,7 +98,11 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
     !(pathname === "/llm/limits" && limitsAccess.canRead) &&
     // A team admin sees the Costs page scoped to their teams.
     !(pathname === "/llm/costs" && limitsAccess.isTeamAdmin) &&
-    !(isPolicy && serverRules.scoped)
+    !(isPolicy && serverRules.scoped) &&
+    // Personal Claude Code subscription management lives on Model Providers
+    // and is self-service when Agent Runtime is enabled; provider-key lists
+    // and organization plans remain gated inside the page.
+    !(isModelProviders && agentRuntime === true)
   ) {
     return <ForbiddenPage />;
   }
@@ -104,6 +119,7 @@ function isOptimisticChatPath(pathname: string) {
 
 const NON_CONVERSATION_CHAT_SEGMENTS = new Set(["new", "runs"]);
 
+const MODEL_PROVIDERS_PATH = "/llm/model-providers";
 const POLICY_PATH = "/openappa/policy";
 
 function resolvePagePermissions(pathname: string) {

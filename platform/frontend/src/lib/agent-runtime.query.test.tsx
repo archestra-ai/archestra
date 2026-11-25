@@ -234,6 +234,82 @@ describe("runtimePreflightDisabledReason", () => {
     expect(
       runtimePreflightDisabledReason({
         isPending: false,
+        data: {
+          ready: false,
+          missing: [],
+          accountError: "Its API key no longer exists.",
+          accountErrorFromChoice: true,
+        },
+      }),
+    ).toBe("Choose your account again");
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: {
+          ready: false,
+          missing: [],
+          accountError:
+            "This agent's model is not available through your SuperGrok. Choose a model on the agent's page.",
+          accountErrorFromChoice: false,
+          accountErrorFromModel: true,
+        },
+      }),
+    ).toBe("Choose a model for this agent");
+    // The connection is left to each person, and none of theirs runs.
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: {
+          ready: false,
+          missing: [],
+          accountError:
+            "This agent leaves the connection to each person. Choose one on the agent's page.",
+          accountErrorFromChoice: false,
+          accountErrorFromConnection: true,
+        },
+      }),
+    ).toBe("Choose a connection for this agent");
+    // The GitHub Copilot CLI's company account is a plan.
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: {
+          ready: false,
+          missing: [],
+          accountError: "Choose a plan on the agent's page to run this agent.",
+          accountErrorFromChoice: false,
+          accountErrorFromConnection: true,
+          companyAccountIsPlan: true,
+        },
+      }),
+    ).toBe("Choose a plan for this agent");
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: {
+          ready: false,
+          missing: [],
+          accountError: "Its model has no personal subscription.",
+          accountErrorFromChoice: false,
+        },
+      }),
+    ).toBe("This agent's account cannot run");
+    // Their own sign-in is theirs to do, so Send names it.
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: {
+          ready: false,
+          missing: [],
+          accountError: "Connect your ChatGPT subscription to run this agent.",
+          accountErrorFromChoice: false,
+          missingSubscription: "chatgpt",
+        },
+      }),
+    ).toBe("Sign in with ChatGPT");
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
         data: { ready: true, missing: [] },
       }),
     ).toBeUndefined();

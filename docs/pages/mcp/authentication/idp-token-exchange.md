@@ -6,6 +6,7 @@ lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+<!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
 Give every person their own account in an MCP server without anyone installing it. Ask an agent for your unread mail, and the mail server sees you, not a shared bot. On each tool call, Archestra trades the person's company sign-in token for a token the server accepts, so your identity provider still decides who gets what.
 
@@ -48,7 +49,7 @@ Every downstream token names a person and an app, and your identity provider's c
 2. **MCP server's client:** the server's exchange client, when it sets one. See [Give a Server Its Own Exchange Client](#give-a-server-its-own-exchange-client).
 3. **Identity provider's client:** the app in your identity provider's settings, otherwise.
 
-To see which one a call used, open it in the [MCP Gateway logs](/docs/admin/logs) and check **Token issued to**.
+To see which one a call used, open it in the [MCP Gateway logs](/docs/insights/logs) and check **Token issued to**.
 
 ### Give a Server Its Own Exchange Client
 

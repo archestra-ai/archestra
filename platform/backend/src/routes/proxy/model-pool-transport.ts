@@ -80,6 +80,11 @@ import {
   openaiResponseToAnthropic,
 } from "./adapters/openai-anthropic-translator";
 import {
+  converseToOpenai,
+  createOpenaiToConverseStreamTranslator,
+  openaiResponseToConverse,
+} from "./adapters/openai-bedrock-translator";
+import {
   withOpenAiChatToolCallIds,
   withOpenAiResponsesToolCallIds,
 } from "./utils/tool-call-ids";
@@ -98,6 +103,8 @@ export interface MemberTransport {
   getUsage?: () => UsageView | null;
   /** Observed usage retained even when translation cannot emit a terminal event. */
   getStreamUsage?: () => UsageView | null;
+  /** A translated provider may distinguish a stop sequence from a natural stop. */
+  stoppedOnSequence?: () => boolean;
   execute(request: unknown): Promise<unknown>;
   /** `onAccepted` fires once the member's provider accepted the request. */
   executeStream(
@@ -287,21 +294,21 @@ function memberTransportOnWire(params: {
 
   if (inbound === "openai-chat" && target === "anthropic") {
     let getUsage: (() => UsageView | null) | undefined;
+    let stoppedOnSequence = () => false;
     return {
       getStreamUsage: () => getUsage?.() ?? null,
+      stoppedOnSequence: () => stoppedOnSequence(),
       async execute(request) {
         const { anthropicBody, openaiContext } = openaiToAnthropic(
           request as OpenAi.Types.ChatCompletionsRequest,
         );
-        const response = await adapter.execute(client, {
+        const response = (await adapter.execute(client, {
           ...anthropicBody,
           model: modelId,
           messages: withAnthropicToolCallIds(anthropicBody.messages),
-        });
-        return anthropicResponseToOpenai(
-          response as Anthropic.Types.MessagesResponse,
-          openaiContext,
-        );
+        })) as Anthropic.Types.MessagesResponse;
+        stoppedOnSequence = () => response.stop_reason === "stop_sequence";
+        return anthropicResponseToOpenai(response, openaiContext);
       },
       async executeStream(request, onAccepted) {
         const { anthropicBody, openaiContext } = openaiToAnthropic(
@@ -319,6 +326,7 @@ function memberTransportOnWire(params: {
         );
         const translator = anthropicEventsToOpenAiChunks(openaiContext);
         getUsage = translator.getUsage;
+        stoppedOnSequence = translator.stoppedOnSequence;
         return mapStream(events, translator.translate, translator.finish);
       },
     };
@@ -441,16 +449,7 @@ function memberTransportOnWire(params: {
     });
     let usage: UsageView | null = null;
     const observe = (raw: OpenAi.Types.ChatCompletionChunk["usage"]) => {
-      if (!raw) return;
-      const tokens = openAIUsageTokens(raw);
-      usage = {
-        inputTokens: tokens.input,
-        outputTokens: tokens.output,
-        cacheReadTokens: tokens.cacheRead,
-        cacheWriteTokens: tokens.cacheWrite,
-        cacheWrite1hTokens: tokens.cacheWrite1h,
-        reasoningTokens: tokens.reasoning,
-      };
+      if (raw) usage = readOpenAiUsage(raw);
     };
     return {
       getUsage: () => usage,
@@ -490,6 +489,66 @@ function memberTransportOnWire(params: {
           (raw) => {
             const chunk = raw as OpenAi.Types.ChatCompletionChunk;
             observe(chunk.usage);
+            return translator.translate(chunk);
+          },
+          translator.finish,
+        );
+      },
+    };
+  }
+
+  if (
+    inbound === "bedrock-converse" &&
+    (target === "openai-chat" || target === "anthropic")
+  ) {
+    const viaOpenai = memberTransport({
+      inbound: "openai-chat",
+      provider,
+      modelId,
+      client,
+    });
+    let usage: UsageView | null = null;
+    return {
+      getUsage: () => usage,
+      getStreamUsage: () => viaOpenai.getStreamUsage?.() ?? usage,
+      async execute(request) {
+        const response = (await viaOpenai.execute(
+          converseToOpenai(request as Bedrock.Types.ConverseRequest),
+        )) as OpenAi.Types.ChatCompletionsResponse;
+        usage = readOpenAiUsage(response.usage);
+        try {
+          return openaiResponseToConverse(
+            response,
+            viaOpenai.stoppedOnSequence?.(),
+          );
+        } catch (error) {
+          if (!usage) throw error;
+          throw new ObservedProviderUsageError({
+            original: error,
+            usage,
+            response: {
+              error:
+                "Upstream Chat Completions response cannot be translated to Converse",
+            },
+          });
+        }
+      },
+      async executeStream(request, onAccepted) {
+        const chunks = await viaOpenai.executeStream(
+          {
+            ...converseToOpenai(request as Bedrock.Types.ConverseRequest),
+            stream: true,
+          },
+          onAccepted,
+        );
+        const translator = createOpenaiToConverseStreamTranslator(
+          viaOpenai.stoppedOnSequence,
+        );
+        return mapStream(
+          chunks,
+          (raw) => {
+            const chunk = raw as OpenAi.Types.ChatCompletionChunk;
+            if (chunk.usage) usage = readOpenAiUsage(chunk.usage);
             return translator.translate(chunk);
           },
           translator.finish,
@@ -611,6 +670,8 @@ const TRANSLATED = new Set([
   "openai-chat>anthropic",
   "openai-chat>bedrock-converse",
   "openai-chat>gemini",
+  "bedrock-converse>openai-chat",
+  "bedrock-converse>anthropic",
   "anthropic>openai-chat",
   "anthropic>bedrock-converse",
   "anthropic>gemini",
@@ -618,6 +679,21 @@ const TRANSLATED = new Set([
   "gemini>anthropic",
   "gemini>bedrock-converse",
 ]);
+
+function readOpenAiUsage(
+  raw: OpenAi.Types.ChatCompletionChunk["usage"],
+): UsageView | null {
+  if (!raw) return null;
+  const tokens = openAIUsageTokens(raw);
+  return {
+    inputTokens: tokens.input,
+    outputTokens: tokens.output,
+    cacheReadTokens: tokens.cacheRead,
+    cacheWriteTokens: tokens.cacheWrite,
+    cacheWrite1hTokens: tokens.cacheWrite1h,
+    reasoningTokens: tokens.reasoning,
+  };
+}
 
 function wireOf(provider: SupportedProvider): PoolWire | null {
   if (!isModelPoolProvider(provider)) return null;
@@ -717,6 +793,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
   translate(event: unknown): unknown[];
   finish(): unknown[];
   getUsage(): UsageView | null;
+  stoppedOnSequence(): boolean;
 } {
   // biome-ignore lint/suspicious/noExplicitAny: Anthropic SDK event union
   type Event = any;
@@ -737,6 +814,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
     choices: [{ index: 0, delta, finish_reason: finish }],
   });
   return {
+    stoppedOnSequence: () => finishReason === "stop_sequence",
     getUsage: () =>
       observedUsage
         ? {

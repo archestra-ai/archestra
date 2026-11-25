@@ -162,7 +162,9 @@ describe("SubagentLoadBalancingSection", () => {
     expect(screen.getByText("Agent Runtime Delegation")).toBeInTheDocument();
     expect(screen.queryByText("Beta")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Split runs between subagents with dedicated runtimes."),
+      screen.getByText(
+        "Load balance Agent Runtime subagents runs or invoke directly.",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -182,7 +184,9 @@ describe("SubagentLoadBalancingSection", () => {
     );
 
     expect(
-      screen.getByText("Split runs between agents with dedicated runtimes."),
+      screen.getByText(
+        "Load balance Agent Runtime agents runs or invoke directly.",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Assign agents above to set custom weights."),

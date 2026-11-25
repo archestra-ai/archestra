@@ -81,8 +81,8 @@ export function SubagentLoadBalancingSection({
   const noun = isGateway ? "agent" : "subagent";
   const nouns = isGateway ? "agents" : "subagents";
   const sectionDescription = isGateway
-    ? "Split runs between agents with dedicated runtimes."
-    : "Split runs between subagents with dedicated runtimes.";
+    ? "Load balance Agent Runtime agents runs or invoke directly."
+    : "Load balance Agent Runtime subagents runs or invoke directly.";
   const modeOptions = getModeOptions({ noun, nouns });
 
   const isEnabled = value?.enabled === true;

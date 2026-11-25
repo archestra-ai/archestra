@@ -56,6 +56,28 @@ describe("what a failed tool call says", () => {
     expect(upstream.activity.initializations).toBe(1);
   });
 
+  test("a server's own error that reads like a closed connection keeps the connection", async ({
+    makeUser,
+  }) => {
+    upstream = await startUpstream();
+    const install = await installServer({ makeUser, url: upstream.url });
+
+    // The reply has the code and the exact words of the SDK's own error for
+    // a closed connection. The connection is open, and that is what decides.
+    const refused = await callTool({ ...install, tool: "refuse_as_closed" });
+
+    expect(refused).toMatchObject({
+      isError: true,
+      content: [{ type: "text", text: "MCP error -32000: Connection closed" }],
+    });
+    const next = await callTool({ ...install, tool: "ok" });
+    expect(next).toMatchObject({
+      isError: false,
+      content: [{ type: "text", text: "ok done" }],
+    });
+    expect(upstream.activity.initializations).toBe(1);
+  });
+
   test("a rate-limited call reads as its status, not as the server's HTML page", async ({
     makeUser,
   }) => {
@@ -123,7 +145,7 @@ describe("a question the server asks during a call", () => {
 // Helpers
 // =============================================================================
 
-const TOOLS = ["ok", "refuse", "limited"] as const;
+const TOOLS = ["ok", "refuse", "refuse_as_closed", "limited"] as const;
 const NOTES_URI = "notes://all";
 
 const RATE_LIMIT_PAGE = `<!doctype html>
@@ -269,6 +291,11 @@ async function startUpstream(options: { askOnResourceRead?: boolean } = {}) {
           if (request.params.name === "refuse") {
             // The SDK sends an error's own `code` and `message` as the reply.
             throw Object.assign(new Error("Out of quota"), { code: -32000 });
+          }
+          if (request.params.name === "refuse_as_closed") {
+            throw Object.assign(new Error("Connection closed"), {
+              code: -32000,
+            });
           }
           return { content: [{ type: "text", text: "ok done" }] };
         });

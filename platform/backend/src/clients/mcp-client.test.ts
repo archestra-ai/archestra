@@ -1303,6 +1303,44 @@ describe("McpClient", () => {
       ).toEqual([]);
     });
 
+    test.each([
+      [401, "invalid_token"],
+      [403, "Forbidden"],
+    ])("fails a Skills server that refuses the credential with HTTP %i, instead of installing it with no tools", async (status, body) => {
+      const catalogItem = await remoteCatalogItem();
+      mockConnect.mockImplementationOnce(async (transport) =>
+        declareSkillsExtension(transport),
+      );
+      const { StreamableHTTPError } = await import(
+        "@modelcontextprotocol/sdk/client/streamableHttp.js"
+      );
+      // The server turned down who is asking. It said nothing about whether
+      // it has a tool list.
+      mockListTools.mockRejectedValueOnce(
+        new StreamableHTTPError(status, `Error POSTing to endpoint: ${body}`),
+      );
+
+      await expect(
+        mcpClient.connectAndGetTools({ catalogItem, mcpServerId, secrets: {} }),
+      ).rejects.toThrow(`HTTP ${status}`);
+    });
+
+    test("fails a Skills server whose error reply is about the credential, instead of installing it with no tools", async () => {
+      const catalogItem = await remoteCatalogItem();
+      mockConnect.mockImplementationOnce(async (transport) =>
+        declareSkillsExtension(transport),
+      );
+      const { McpError } = await import("@modelcontextprotocol/sdk/types.js");
+      // Some servers answer a bad token with HTTP 200 and a JSON-RPC error.
+      mockListTools.mockRejectedValueOnce(
+        new McpError(-32001, "Unauthorized: token expired"),
+      );
+
+      await expect(
+        mcpClient.connectAndGetTools({ catalogItem, mcpServerId, secrets: {} }),
+      ).rejects.toThrow("token expired");
+    });
+
     test("fails a Skills server whose tool list never answered, instead of installing it with no tools", async () => {
       const catalogItem = await remoteCatalogItem();
       mockConnect.mockImplementationOnce(async (transport) =>

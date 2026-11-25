@@ -2243,12 +2243,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // A stopped run's in-flight tool calls keep their place in
                     // the transcript, as calls that were stopped. Only a stop
                     // counts: a run that failed keeps its error as the turn's
-                    // last word, and an abort that names its own cause (this
-                    // pod shutting down, the run failing to save) is not one.
+                    // last word, an abort that names its own cause (this pod
+                    // shutting down, the run failing to save) is not one, and
+                    // neither is an abort nobody asked for (the run's row is
+                    // gone).
                     const stopped =
                       (isAborted || chatAbortController.signal.aborted) &&
                       !activeRunError &&
-                      !isAbortWithCause(chatAbortController.signal);
+                      !isAbortWithCause(chatAbortController.signal) &&
+                      (await activeChatRunService.wasStopRequested(
+                        activeRun.id,
+                      ));
                     const finalMessages = stopped
                       ? markTurnStopped(
                           settleStoppedToolCalls(streamedMessages),

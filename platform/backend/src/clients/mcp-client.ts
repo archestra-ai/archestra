@@ -6638,9 +6638,9 @@ function asMcpServerStoppedError(
  * Whether the SDK raised this error because the transport closed. The SDK
  * uses -32000 for that, and -32000 is also the first code of the range
  * JSON-RPC leaves to servers, so a server's own error reply can carry it. The
- * code alone therefore says nothing: the SDK's error has a fixed text, and the
- * SDK drops the client's transport before it raises it. Recheck the text after
- * an SDK upgrade.
+ * code alone therefore says nothing. The SDK drops the client's transport
+ * before it raises its error, and gives the error a fixed text. Recheck the
+ * text after an SDK upgrade.
  */
 function isSdkConnectionClosedError(
   error: unknown,
@@ -6648,10 +6648,12 @@ function isSdkConnectionClosedError(
 ): boolean {
   if (!(error instanceof McpError)) return false;
   if (error.code !== ErrorCode.ConnectionClosed) return false;
-  return (
-    error.message === SDK_CONNECTION_CLOSED_MESSAGE ||
-    (client !== undefined && !client.transport)
-  );
+  // With the client at hand its transport decides: a server can send these
+  // exact words in its own error reply. The text is for a caller that has no
+  // client to look at.
+  return client !== undefined
+    ? !client.transport
+    : error.message === SDK_CONNECTION_CLOSED_MESSAGE;
 }
 
 const SDK_CONNECTION_CLOSED_MESSAGE = `MCP error ${ErrorCode.ConnectionClosed}: Connection closed`;
@@ -6711,18 +6713,22 @@ function deploymentFailureCause(message: string): string {
 // SPDX-SnippetEnd
 
 /**
- * Whether the server answered a request and said no, as opposed to the
- * request failing on its way: a JSON-RPC error reply, or an HTTP status that
- * turns the request down. A timeout, a lost connection and a status that
- * means "not now" are failures, not answers.
+ * Whether the server answered a request and said it does not serve it, as
+ * opposed to the request failing on its way or being turned away: a JSON-RPC
+ * error reply, or an HTTP status that turns the method down. A timeout, a lost
+ * connection and a status that means "not now" are failures, not answers. A
+ * refused credential is not an answer about the method either: the server
+ * never looked at the request.
  */
 function isServerRefusal(error: unknown): boolean {
+  if (error instanceof Error && isAuthRelatedError(error.message)) return false;
   if (error instanceof StreamableHTTPError) {
     const status = error.code;
     return (
       status !== undefined &&
       ((status >= 400 && status < 500) || status === 501) &&
-      !TRANSIENT_RESOURCE_HTTP_STATUSES.has(status)
+      !TRANSIENT_RESOURCE_HTTP_STATUSES.has(status) &&
+      !CREDENTIAL_HTTP_STATUSES.has(status)
     );
   }
   if (isMethodNotFoundError(error)) return true;
@@ -6740,6 +6746,9 @@ function isServerRefusal(error: unknown): boolean {
     code !== ErrorCode.ConnectionClosed
   );
 }
+
+/** HTTP statuses that turn down who is asking, not what is asked. */
+const CREDENTIAL_HTTP_STATUSES = new Set([401, 403, 407]);
 
 function isMethodNotFoundError(error: unknown): boolean {
   if (error instanceof Error && error.message.includes("Method not found")) {

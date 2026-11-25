@@ -53,13 +53,13 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
     go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
     # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
+    go get github.com/go-jose/go-jose/v4@v4.1.9 && \
     # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
-    go get github.com/moby/go-archive@v0.3.0 && \
+    go get github.com/moby/go-archive@v0.3.3 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
     # x/net@v0.62.0 requires x/sys >= v0.49.0 and x/term >= v0.47.0.
-    go get golang.org/x/sys@v0.49.0 && \
-    go get golang.org/x/term@v0.47.0 && \
+    go get golang.org/x/sys@v0.50.0 && \
+    go get golang.org/x/term@v0.48.0 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0.
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0.
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3.
@@ -95,12 +95,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
     # CVE-2026-34986, CVE-2026-116587 and the advisories 4.1.7 fixes: patched go-jose parsing.
-    go get github.com/go-jose/go-jose/v4@v4.1.7 && \
+    go get github.com/go-jose/go-jose/v4@v4.1.9 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
     # cve-2026-71556: go-git link following fixed in >= 5.19.2
-    go get github.com/go-git/go-git/v5@v5.19.2 && \
+    go get github.com/go-git/go-git/v5@v5.19.3 && \
     # cve-2026-44973: go-billy path traversal fixed in >= 5.9.0
-    go get github.com/go-git/go-billy/v5@v5.9.0 && \
+    go get github.com/go-git/go-billy/v5@v5.9.2 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
@@ -109,17 +109,17 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     # cve-2026-78662 / cve-2026-56855: x/crypto HIGH fixed in >= 0.56.0.
     # Keep >= 0.58.0 to satisfy x/net@v0.62.0 without downgrading it.
-    go get golang.org/x/crypto@v0.58.0 && \
+    go get golang.org/x/crypto@v0.59.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
     # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs
     # an explicit requirement rather than a bump of any single dependency.
     # Keep the patched x/mod floor when updating transitive dependencies.
-    go get golang.org/x/mod@v0.41.0 && \
+    go get golang.org/x/mod@v0.43.0 && \
     # cve-2026-17106: go-archive path traversal fixed in >= 0.3.0 (matches dockercompat's floor).
     # sys/user must be >= 0.4.1 here — go-archive 0.3.0 requires it, and asking for 0.4.0 in the
     # same `go get` would make go resolve the conflict by downgrading go-archive below 0.3.0.
-    go get github.com/moby/go-archive@v0.3.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.1 && \
+    go get github.com/moby/go-archive@v0.3.3 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.1 && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
     # cve-2026-95837: containerd improper privilege management (HIGH) fixed in >= 2.2.7
@@ -160,7 +160,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
     # Keep the patched x/mod floor when updating transitive dependencies.
-    go get golang.org/x/mod@v0.41.0 && \
+    go get golang.org/x/mod@v0.43.0 && \
     # Keep the patched x/net after all transitive dependency updates.
     go get golang.org/x/net@v0.62.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \

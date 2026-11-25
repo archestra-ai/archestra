@@ -2111,20 +2111,34 @@ describe("APPA feature boundary", () => {
       });
 
     // Nothing proves the client ran the remedy, so its body never passes:
-    // whatever it holds, the model reads one fixed notice.
+    // the model reads one fixed notice. Only a classifier's refusal, which
+    // leaves the user to decide, adds how to ask them.
     test.each([
-      { label: "a client refusal", content: [{ type: "text", text: REFUSAL }] },
-      { label: "a bare string", content: "The user rejected this tool call." },
-      { label: "no content", content: null },
-      { label: "a long body", content: `${"a".repeat(3999)}\u{1F600}tail` },
+      {
+        label: "a classifier refusal",
+        content: [{ type: "text", text: REFUSAL }],
+        notice: `${NOT_APPLIED}${ASK}`,
+      },
+      {
+        label: "the user's decline",
+        content: "The user rejected this tool call.",
+        notice: NOT_APPLIED,
+      },
+      { label: "no content", content: null, notice: NOT_APPLIED },
+      {
+        label: "a long body",
+        content: `${"a".repeat(3999)}\u{1F600}tail`,
+        notice: NOT_APPLIED,
+      },
     ])("says the plan is not applied and never echoes $label", async ({
       content,
+      notice,
     }) => {
       for (const isError of [true, false]) {
         const result = await process({ name: CONTROL, content, isError });
 
         expect(result.toolResultUpdates.remedy).toEqual({
-          content: `${NOT_APPLIED}${ASK}`,
+          content: notice,
           outputSource: "runtime",
           code: "unreleased_call",
         });

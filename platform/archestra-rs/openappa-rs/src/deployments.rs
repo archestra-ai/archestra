@@ -197,15 +197,26 @@ impl Deployments {
         let pinned = self
             .pinned(runtime, store, line, policy, agent_yell)
             .await?;
-        // A session meant for this line dispatches on it, which checks the marks; one
-        // sent to Enforce for life is sent only on the marks the settings hold.
-        Ok(match pinned.fallback {
-            Some(_) => current(store, line, policy, pinned)
-                .await?
-                .fallback
-                .is_some(),
-            None => false,
-        })
+        // A session meant for this line dispatches on it, which checks the marks. One
+        // sent to Enforce for life is sent only on the marks the settings hold and the
+        // composition the organization stores, which a save may have replaced with one
+        // the line carries.
+        if pinned.fallback.is_none() {
+            return Ok(false);
+        }
+        current(store, line, policy, pinned).await?;
+        if let Some(composition) = policy.composition.clone() {
+            let (store, organization_id) = (store.clone(), line.organization_id.clone());
+            let stored = tokio::task::spawn_blocking(move || {
+                stored_composition(&store, &organization_id, &composition)
+            })
+            .await
+            .map_err(panicked)??;
+            if !stored {
+                return Err(DeploymentError::Superseded);
+            }
+        }
+        Ok(true)
     }
 
     /// After a dispatch pinned to `stale` found that its line moved on: the

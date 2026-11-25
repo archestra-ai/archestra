@@ -1180,7 +1180,6 @@ impl State {
                         .output
                         .clone()
                         .ok_or_else(|| invalid_input("missing output"))?,
-                    operation: None,
                 },
                 HookEventKind::SessionStart
                 | HookEventKind::ToolResult

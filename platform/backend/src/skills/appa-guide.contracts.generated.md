@@ -659,14 +659,6 @@ Authorities with `permits = { attention = ["*"] }` can approve any declared atte
 
 `blocked` is a reserved attention mark used for unconditional denials. No authority can permit `blocked`, and the `["*"]` wildcard does not match it. A call requiring `blocked` cannot be approved by any authority or remedy plan.
 
-Use `blocked` to deny a call outright. Any other requirement that nothing in the policy can meet has the same effect on a new trajectory that inherits nothing: while a call selects that tool rule, it is never dispatched. `appa describe --check` reports each such requirement apart from whether the configuration loads, and exits unsuccessfully:
-
-- an attention mark that no authority permits;
-- an effect in `effects.contains` that no in-scope authority waives with `prior_effects_containing`, and that no other tool rule emits, counting only rules a call can select and release: a rule that an earlier rule for the same tool always matches first, because the earlier rule has no argument selector or each of its argument patterns covers every alternative of the later rule's pattern for that argument (the same alternative, `*`, or `prefix*` for an alternative that begins with `prefix`), a rule that requires `blocked`, and a tool served by the `jev` annotator emit nothing;
-- a trust floor above the trust the call carries once its own `forwards` narrows the starting label, which no in-scope authority covers with `trust_below`.
-
-Such a policy still loads, and the runtime refuses the call with no remedy plan. The check judges the policy revision it reads: a trajectory carried from an earlier revision, or a sanitizer that rewrites a call onto another tool rule, can still reach the call. The check reads only the requirements that the policy writes. It does not read the requirements that an annotator returns for a call.
-
 ## Annotators
 
 An annotator dynamically computes contract rules for tool calls. It can return output restrictions (`delta`), restrictions on content the call sends beyond its arguments (`forwards`), execution preconditions (`requires`), and side effects (`effects`). (The built-in `jev` annotator determines audience and trust labels only.)

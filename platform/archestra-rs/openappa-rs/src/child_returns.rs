@@ -856,7 +856,6 @@ mod runtime_child_tests {
                 root: root.clone(),
                 child: child.clone(),
                 value: "exact file bytes".into(),
-                operation: None,
             },
         )
         .await;
@@ -917,7 +916,6 @@ mod runtime_child_tests {
                 root: root.clone(),
                 child: child.clone(),
                 value: "pending".into(),
-                operation: None,
             },
         )
         .await;
@@ -967,7 +965,6 @@ mod runtime_child_tests {
                 root: root.clone(),
                 child: child.clone(),
                 value: "exact file bytes".into(),
-                operation: None,
             },
         )
         .await;
@@ -1158,7 +1155,6 @@ mod runtime_child_tests {
             root: root.clone(),
             child: child.clone(),
             value: "the answer".into(),
-            operation: None,
         };
         let ended = hooks::handle(&runtime, stop()).await;
         assert_eq!(ended, HookDecision::DeferReturn);

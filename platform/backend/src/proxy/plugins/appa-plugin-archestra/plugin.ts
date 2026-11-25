@@ -1504,8 +1504,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     await forgetUnansweredNotices(
       this.governedSession(binding),
       calls.flatMap((call, index) => {
-        const decision = decisions[index];
-        return decision?.kind === "hold" && decision.proxyNotice
+        const decision: AppaHostedCallDecision = decisions[index];
+        return decision.kind === "hold" && decision.proxyNotice
           ? []
           : [call.id];
       }),

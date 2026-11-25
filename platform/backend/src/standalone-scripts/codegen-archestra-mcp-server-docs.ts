@@ -529,8 +529,18 @@ function truncateDescription(description: string): string {
   return cleaned;
 }
 
-function escapeTableCell(text: string): string {
-  return text.replace(/\|/g, "\\|");
+/**
+ * Makes text safe for a Markdown table cell: escapes `|`, and turns `<` and `>` outside inline
+ * code into entities, so a placeholder such as `role:<roleId>` is not parsed as an HTML tag.
+ */
+export function escapeTableCell(text: string): string {
+  return text
+    .replace(/\|/g, "\\|")
+    .split(/(`[^`]*`)/)
+    .map((part, index) =>
+      index % 2 ? part : part.replace(/</g, "&lt;").replace(/>/g, "&gt;"),
+    )
+    .join("");
 }
 
 export function formatToolPermission(

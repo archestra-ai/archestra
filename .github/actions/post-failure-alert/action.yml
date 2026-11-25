@@ -29,7 +29,7 @@ runs:
   using: composite
   steps:
     - name: Authenticate to read the alerting webhook
-      uses: archestra-ai/.github/actions/google-auth@322ad980dd4f3b530a192df546bf3bb703dcb003 # v1.25.2
+      uses: archestra-ai/.github/actions/google-auth@0bd6a54bf206174fd0cebc3222def111651e91bb # v1.31.1
       with:
         service_account: ${{ inputs.service-account }}
         workload_identity_provider: ${{ inputs.workload-identity-provider }}

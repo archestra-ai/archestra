@@ -10,13 +10,14 @@ ARG DAGGER_VERSION=v0.21.11
 ARG DAGGER_COMMIT=631cdb609aaddc0037c2ba713e7642cadf645ff4
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
-FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS go-builder-base
+# Docker's hardened Go image; its -dev variant ships git, so the builders add no packages.
+FROM dhi.io/golang:1.26.11-alpine3.23-dev@sha256:4c427bdf5ab99a6b4aeb8e93237a5fcbe2b0f6285dc5fd01669a26149e0b991d AS go-builder-base
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi && \
-    apk add --no-cache git
+    git --version
 
 # Build the four pinned Go tools in independent stages so BuildKit schedules
 # them concurrently. Go caches stay outside exported layers, and each clone is
@@ -547,7 +548,7 @@ RUN node /tmp/prune-backend-deploy.mjs /prod/backend
 # node and its libraries. The Kubernetes image is built on it (unified-slim).
 # Keep its digest on the same Node release as the -dev pin below.
 FROM dhi.io/node:24.22.3-alpine3.23@sha256:056085462c7ee6d47db4e10ab26a9ff63c6cb4c1b88473096ec9c3660345cb54 AS runtime-base-distroless
-FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:abe5e2eb4166f422dea213c4181c1ab069f63bb5d4b4bb0878abba2039fefec6 AS runtime
+FROM dhi.io/node:24.22.3-alpine3.23-dev@sha256:15790f002ac9021e621e5cbd5321fc341051d7288ad250823e11268542bf49dc AS runtime
 WORKDIR /app
 # The hardened image runs as UID 1000 by default. This stage installs packages,
 # and the full image starts as root (see the archestra user below).

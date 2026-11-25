@@ -8,6 +8,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   AgentRuntimeBadge,
+  AgentRuntimeChip,
   RuntimeCapableIndicator,
 } from "./runtime-capable-indicator";
 
@@ -260,5 +261,142 @@ describe("AgentRuntimeBadge", () => {
       <AgentRuntimeBadge runtime={claudeCodeRuntime} fallback="pill" />,
     );
     expect(off.container).toBeEmptyDOMElement();
+  });
+});
+
+describe("AgentRuntimeChip", () => {
+  const clients: QueryClient[] = [];
+  const mount = (ui: ReactNode) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    clients.push(client);
+    return render(
+      <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+    );
+  };
+
+  beforeEach(() => {
+    sdk.listAgentRuntimeTemplates.mockReset();
+    sdk.listAgentRuntimeTemplates.mockResolvedValue({
+      data: [],
+      error: undefined,
+    } as never);
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime"
+        ? true
+        : flag === "agentRuntimeCatalogImages"
+          ? catalogImages
+          : undefined,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+  });
+
+  afterEach(() => {
+    for (const client of clients.splice(0)) client.clear();
+  });
+
+  it("renders nothing when the agent has no runtime", () => {
+    const { container } = mount(<AgentRuntimeChip runtime={null} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("names built-in runtimes even when the agentRuntime feature flag is off", () => {
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime"
+        ? false
+        : flag === "agentRuntimeCatalogImages"
+          ? catalogImages
+          : undefined,
+    );
+
+    mount(
+      <>
+        <AgentRuntimeChip runtime={claudeCodeRuntime} />
+        <AgentRuntimeChip
+          runtime={{ image: catalogImages.codex, command: ["archestra-codex"] }}
+        />
+        <AgentRuntimeChip
+          runtime={{ image: catalogImages.grok, command: ["archestra-grok"] }}
+        />
+      </>,
+    );
+
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    expect(screen.getByText("Codex")).toBeInTheDocument();
+    expect(screen.getByText("Grok Build")).toBeInTheDocument();
+    expect(sdk.listAgentRuntimeTemplates).not.toHaveBeenCalled();
+  });
+
+  it("resolves custom organization runtime names and falls back to Custom image", async () => {
+    sdk.listAgentRuntimeTemplates.mockResolvedValue({
+      data: [
+        {
+          id: "c0ffee00-0000-4000-8000-000000000001",
+          name: "Review sandbox",
+          description: "",
+          icon: null,
+          hidden: false,
+          position: 0,
+          image: "registry.example.com/platform/review:v3",
+        },
+      ],
+      error: undefined,
+    } as never);
+
+    mount(
+      <>
+        <AgentRuntimeChip
+          runtime={{
+            image: "registry.example.com/platform/review:v3",
+            command: ["review-agent"],
+          }}
+        />
+        <AgentRuntimeChip runtime={customRuntime} />
+      </>,
+    );
+
+    expect(await screen.findByText("Review sandbox")).toBeInTheDocument();
+    expect(screen.getByText("Custom image")).toBeInTheDocument();
+  });
+
+  it("renders icon-only appearance with an accessible runtime label and no visible text label", () => {
+    mount(<AgentRuntimeChip runtime={claudeCodeRuntime} appearance="icon" />);
+
+    expect(
+      screen.getByRole("img", { name: "Agent Runtime: Claude Code" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+  });
+
+  it("renders icon-link appearance as a settings link for runtime admins and a hoverable button for others", () => {
+    vi.mocked(useRouter).mockReturnValue({
+      prefetch: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+
+    const adminRender = mount(
+      <AgentRuntimeChip runtime={claudeCodeRuntime} appearance="icon-link" />,
+    );
+    const link = screen.getByRole("link", {
+      name: "Runtime: Claude Code, open its settings",
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "/settings/agents/runtimes?edit=claude-code",
+    );
+    adminRender.unmount();
+
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    mount(
+      <AgentRuntimeChip runtime={claudeCodeRuntime} appearance="icon-link" />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Runtime: Claude Code" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });

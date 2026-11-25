@@ -27,7 +27,7 @@ Once we let Codex, Claude Code, OpenCode, and other coding agents [run in the cl
 
 Archestra agents are available in [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), [Telegram](/docs/agents/triggers-and-channels/telegram), and [Email](/docs/agents/triggers-and-channels/email). You can also call them through [Agent-to-Agent (A2A) calls or incoming webhooks](/docs/agents/triggers-and-channels/webhook-a2a).
 
-> Fun fact: Archestra the company replaced its project manager with a Slack agent called "Archestra PM". It prioritizes tasks, reviews customer calls, and makes borderline jokes.
+> Fun fact: at Archestra, the company, an agent in Slack works as our project manager. It prioritizes tasks, reviews customer calls, and makes borderline jokes.
 
 <span id="default-agents"></span>
 <span id="organizing-agents"></span>

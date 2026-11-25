@@ -30,10 +30,6 @@ You can also set a key through an environment variable, `ARCHESTRA_CHAT_<PROVIDE
 
 Keys that come from deployment settings, such as [Vertex AI](/docs/llm-proxy/providers/gemini#using-vertex-ai), show **Env Vars** under **Storage**. Their credentials change only in the environment, and they cannot be deleted. Edit one to choose who can use it.
 
-<span id="turning-providers-off"></span>
-
-To hide a provider your company does not use, go to **Settings → LLM → Model providers** and switch **Available** off. It leaves every picker, and nobody can add a key for it. Its existing keys keep working. On the same page, you can give a provider a display name. For GitHub Copilot, you can also turn off only [personal subscriptions or enterprise plans](/docs/llm-proxy/providers/github-copilot#offer-only-one-way-to-connect).
-
 <span id="personal-subscriptions"></span>
 
 ### With a Subscription
@@ -46,6 +42,31 @@ These credentials belong to one person and cannot be shared. An agent that uses 
 - **GitHub Copilot** and **Microsoft 365 Copilot** have their own pages: [GitHub Copilot](/docs/llm-proxy/providers/github-copilot), [Microsoft 365 Copilot](/docs/llm-proxy/providers/microsoft-365-copilot).
 
 ChatGPT and SuperGrok use bills $0 in Costs. GitHub Copilot and Microsoft 365 Copilot use counts as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/cost-controls#subscription-vs-metered-cost).
+
+<span id="turning-providers-off"></span>
+
+### Choose What Your Company Offers
+
+Most companies use a few providers, and pay for each one in one way. Some want only company API keys, so all spend shows on one bill. Others want people to use the ChatGPT or Claude seats they already pay for, and no API keys at all.
+
+Go to **Settings → LLM → Model providers**. Each card has an **Available** switch and a display name. A provider with more than one way to connect has one card for each way:
+
+| Provider | Cards |
+| --- | --- |
+| OpenAI | **OpenAI** (API keys) and **ChatGPT** (personal subscription) |
+| Anthropic | **Anthropic** (API keys) and **Claude Code** (personal subscription) |
+| xAI | **xAI** (API keys) and **SuperGrok** (personal subscription) |
+| GitHub Copilot | **GitHub Copilot** (personal subscription) and **GitHub Copilot Organization** ([enterprise plan](/docs/llm-proxy/providers/github-copilot#offer-only-one-way-to-connect)) |
+| Microsoft 365 Copilot | **Microsoft 365 Copilot** (personal subscription) |
+
+Every other provider has one card.
+
+- Each switch controls only its own card. Turn off **ChatGPT**, and people can still add OpenAI API keys.
+- A card you turn off leaves **Model Providers**, the chat menu, and **Connect**. Nobody can add a key or sign in with it.
+- Keys and sign-ins that already exist keep working, and their owners can still delete or disconnect them.
+- Turn off every card of a provider, and the provider is off.
+
+The display name replaces the built-in name everywhere people see it. A personal subscription has its own name, so you can show ChatGPT as "Company ChatGPT" while keeping "OpenAI" for API keys.
 
 <span id="which-key-a-request-uses"></span>
 

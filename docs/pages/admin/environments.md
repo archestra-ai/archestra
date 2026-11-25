@@ -75,7 +75,7 @@ These rules apply to both manual assignments and execution. An app created from 
 
 ## Network Egress Policies
 
-Limit what self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [coding agent workspaces](/docs/agents/runtime#environments-and-network-egress) can connect to. For example, let staging reach the public internet, and let production reach only your own APIs.
+Archestra runs self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [coding agent workspaces](/docs/agents/runtime#environments-and-network-egress) in your Kubernetes cluster. So you can use Kubernetes network policies to limit what they can connect to. For example, let staging reach the public internet, and let production reach only your own APIs.
 
 To set a policy, go to **Settings → Environments**, edit an environment, and open the **Network Egress Policy** tab. Under **Egress**, pick one:
 

@@ -97,6 +97,8 @@ export class McpElicitationRouter {
     const scoped = this.scope.getStore();
     // A settled call's context outlives it (the standalone stream keeps the
     // context it was opened in), so only a call still in flight counts.
+    // A Set iterates in insertion order and a finished call's lease is
+    // deleted, so the first entry is the oldest call still in flight.
     const [oldest] = this.leases.get(client) ?? [];
     const handler =
       (scoped?.active ? scoped.handler : oldest?.handler) ??

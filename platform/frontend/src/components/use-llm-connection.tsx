@@ -199,7 +199,15 @@ export function useLlmConnection({
     );
   // A credential with a pool or auto router added still fits the Unified
   // Model API when it cannot call a provider directly.
-  const keyOptions = (virtualKeys?.data ?? []).filter((key) =>
+  const listedKeys = virtualKeys?.data ?? [];
+  // A just-created key can be beyond the first page of the list.
+  const requestedCreatedKey = created?.id === pickedId ? created : null;
+  const candidateKeys =
+    requestedCreatedKey &&
+    !listedKeys.some((key) => key.id === requestedCreatedKey.id)
+      ? [...listedKeys, requestedCreatedKey]
+      : listedKeys;
+  const keyOptions = candidateKeys.filter((key) =>
     pool
       ? callsPool(key, pool)
       : auth === "passthrough" ||
@@ -277,16 +285,15 @@ export function useLlmConnection({
   const picked =
     pickedId === null
       ? undefined
-      : (options.find((option) => option.id === pickedId) ?? options[0]);
+      : (options.find((option) => option.id === pickedId) ??
+        (requestedCreatedKey ? undefined : options[0]));
   const createdWithoutEndpointAccess =
-    created &&
-    created.id === pickedId &&
-    virtualKeys?.data.some((key) => key.id === created.id) &&
+    requestedCreatedKey &&
     !providerKeysPending &&
     !poolsFetching &&
     !routersFetching &&
-    !options.some((option) => option.id === created.id)
-      ? created.name
+    !picked
+      ? { id: requestedCreatedKey.id, name: requestedCreatedKey.name }
       : null;
   // The chosen key goes into the request masked, revealed or copied on
   // request — but only for keys the reader may read (their own, or one just

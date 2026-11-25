@@ -102,6 +102,7 @@ function EndpointRequest({
   const { data: organization } = useOrganization();
   const { data: providerKeys = [] } = useLlmProviderApiKeys();
   const connection = useLlmConnection({ selected, auth, offerAutoModel: true });
+  const keyWithoutAccess = connection.createdWithoutEndpointAccess;
   const ids = { format: useId(), auth: useId(), credential: useId() };
 
   // Providers with a key lead, as clients can reach them.
@@ -212,7 +213,7 @@ function EndpointRequest({
               </Select>
             </Field>
           </div>
-          {!connection.createdWithoutEndpointAccess && (
+          {!keyWithoutAccess && (
             <NotReadyHint
               auth={auth}
               connection={connection}
@@ -221,17 +222,20 @@ function EndpointRequest({
           )}
         </>
       )}
-      {connection.createdWithoutEndpointAccess && (
+      {keyWithoutAccess && (
         <output className="block text-[12.5px] text-muted-foreground">
-          <strong>{connection.createdWithoutEndpointAccess}</strong> was
-          created, but it can’t call this endpoint yet. Add access in{" "}
+          <strong>{keyWithoutAccess.name}</strong> was created, but it has no
+          access to this endpoint.{" "}
           <Link
-            href="/llm/proxy/virtual-keys"
+            href={`/llm/proxy/virtual-keys?${new URLSearchParams({
+              keyType: "standard",
+              search: keyWithoutAccess.name,
+              edit: keyWithoutAccess.id,
+            })}`}
             className="text-primary underline underline-offset-2"
           >
-            Virtual keys
+            Edit key to add access
           </Link>
-          .
         </output>
       )}
       {connection.ready && auth === "oauth" && connection.picked?.oauth && (

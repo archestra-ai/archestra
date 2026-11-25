@@ -344,7 +344,17 @@ describe("LlmConnectSteps", () => {
       includeFutureProviders: true,
       providerApiKeys: [],
     };
-    let keys: (typeof created)[] = [];
+    const existing = {
+      ...JUDGE_KEY,
+      name: "Existing personal mapping",
+      providerApiKeys: [
+        {
+          provider: "openai",
+          providerApiKeyId: "pk-openai",
+          providerApiKeyName: "Personal OpenAI",
+        },
+      ],
+    };
     server.use(
       http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
         HttpResponse.json([
@@ -360,14 +370,14 @@ describe("LlmConnectSteps", () => {
         ]),
       ),
       http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
-        HttpResponse.json(page(keys)),
+        // The freshly created key need not be on the first page.
+        HttpResponse.json(page(hasSharedPrimary ? [] : [existing])),
       ),
       http.post(`${API_ORIGIN}/api/llm-virtual-keys`, async ({ request }) => {
         expect(await request.json()).toMatchObject({
           includeFutureProviders: true,
           providerApiKeys: [],
         });
-        keys = [created];
         return HttpResponse.json({
           ...created,
           value: "arch_fresh_secret_value",
@@ -385,6 +395,13 @@ describe("LlmConnectSteps", () => {
         <EndpointCard baseUrl="http://localhost:3000/v1" />
       </QueryClientProvider>,
     );
+    if (!hasSharedPrimary) {
+      await waitFor(() =>
+        expect(
+          screen.getByRole("combobox", { name: "Virtual key" }),
+        ).toHaveTextContent(existing.name),
+      );
+    }
     await user.click(screen.getByRole("combobox", { name: "Virtual key" }));
     await user.click(
       await screen.findByRole("option", { name: "Create new virtual key" }),
@@ -413,9 +430,18 @@ describe("LlmConnectSteps", () => {
       ).not.toBeInTheDocument();
     } else {
       expect(await screen.findByText(/was created, but/)).toHaveTextContent(
-        "Fresh key was created, but it can’t call this endpoint yet.",
+        "Fresh key was created, but it has no access to this endpoint.",
       );
       expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
+      expect(
+        screen.getByRole("combobox", { name: "Virtual key" }),
+      ).not.toHaveTextContent(existing.name);
+      expect(
+        screen.getByRole("link", { name: "Edit key to add access" }),
+      ).toHaveAttribute(
+        "href",
+        "/llm/proxy/virtual-keys?keyType=standard&search=Fresh+key&edit=vk-new",
+      );
     }
   });
 

@@ -437,9 +437,12 @@ export function EditVirtualKeyDialog({
           hasGrantedRoutes={
             grantedPoolIds.length > 0 ||
             grantedRouterIds.length > 0 ||
-            // Without provider access the API requires at least one pool
-            // or router on a standard key, even if this viewer cannot list it.
-            (virtualKey.keyType === "standard" &&
+            // Preserve the guide for legacy pool/router-only keys when this
+            // viewer cannot confirm the routes. If both lists have loaded,
+            // don't infer a grant: the last pool, router or provider may have
+            // been deleted after the key was saved.
+            ((pools === undefined || autoRouters === undefined) &&
+              virtualKey.keyType === "standard" &&
               !virtualKey.includeFutureProviders &&
               virtualKey.providerApiKeys.length === 0)
           }

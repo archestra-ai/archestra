@@ -111,7 +111,6 @@ describe("UserLimitsOverview", () => {
       screen.getByRole("heading", { name: "Affected by Limits" }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /1\s*near/ })).toBeVisible();
-    expect(screen.getByRole("button", { name: "1 custom" })).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Users and their limits" }),
     ).toBeVisible();
@@ -173,7 +172,9 @@ describe("UserLimitsOverview", () => {
     const user = userEvent.setup();
     renderOverview();
 
-    await user.click(await screen.findByRole("button", { name: "1 custom" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Users and their limits" }),
+    );
     const drawer = await screen.findByRole("dialog", {
       name: "Users and their limits",
     });

@@ -255,7 +255,6 @@ function AffectedByLimits({
   const allUnlimited = total > 0 && unlimited === total;
   const spent = summary?.spent ?? 0;
   const spenders = summary?.spenders ?? 0;
-  const custom = summary?.custom ?? 0;
   // Nobody at or near a limit; with no limits at all, nobody spending either.
   const noOneAffected =
     Boolean(summary) && (allUnlimited ? spenders === 0 : flagged === 0);
@@ -290,21 +289,6 @@ function AffectedByLimits({
           ),
         }
       : null;
-  const customItem: DotItem | null =
-    custom > 0
-      ? {
-          key: "custom",
-          node: (
-            <UnstyledButton
-              onClick={() => onOpen({ filter: "custom" })}
-              className={cn("tabular-nums", LINK_CLASS)}
-            >
-              {`${custom} custom`}
-            </UnstyledButton>
-          ),
-        }
-      : null;
-
   let main: ReactNode;
   let meta: (DotItem | null)[];
 
@@ -313,7 +297,7 @@ function AffectedByLimits({
     meta = [];
   } else if (noOneAffected) {
     main = null;
-    meta = [unlimitedItem, customItem, resetsItem];
+    meta = [unlimitedItem, resetsItem];
   } else if (allUnlimited) {
     main = (
       <>
@@ -382,7 +366,7 @@ function AffectedByLimits({
         </div>
       </>
     );
-    meta = [unlimitedItem, customItem, resetsItem];
+    meta = [unlimitedItem, resetsItem];
   }
 
   return (

@@ -4623,17 +4623,14 @@ class McpClient {
         } catch (error) {
           // A Skills-only server may intentionally expose neither tools/list
           // nor resources/list, and such servers refuse the two methods in
-          // more ways than method-not-found. Its declared extension is enough
-          // to keep the installation; the companion metadata pass will call
-          // skills/list. A rate limit or an outage is different: it says
-          // nothing about what the server offers, so it is a failed discovery
-          // (and one worth another attempt), not a server without tools.
-          const transient =
-            error instanceof StreamableHTTPError &&
-            error.code !== undefined &&
-            TRANSIENT_RESOURCE_HTTP_STATUSES.has(error.code);
+          // more ways than method-not-found. A refusal with the declared
+          // extension is enough to keep the installation; the companion
+          // metadata pass will call skills/list. A rate limit, an outage, a
+          // timeout or a dropped connection is different: it says nothing
+          // about what the server offers, so it is a failed discovery, not a
+          // server without tools.
           if (
-            !transient &&
+            isServerRefusal(error) &&
             Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)
           ) {
             tools = [];
@@ -6712,6 +6709,37 @@ function deploymentFailureCause(message: string): string {
   return message.replace(/^Deployment \S+ failed: /, "");
 }
 // SPDX-SnippetEnd
+
+/**
+ * Whether the server answered a request and said no, as opposed to the
+ * request failing on its way: a JSON-RPC error reply, or an HTTP status that
+ * turns the request down. A timeout, a lost connection and a status that
+ * means "not now" are failures, not answers.
+ */
+function isServerRefusal(error: unknown): boolean {
+  if (error instanceof StreamableHTTPError) {
+    const status = error.code;
+    return (
+      status !== undefined &&
+      ((status >= 400 && status < 500) || status === 501) &&
+      !TRANSIENT_RESOURCE_HTTP_STATUSES.has(status)
+    );
+  }
+  if (isMethodNotFoundError(error)) return true;
+  // A JSON-RPC error carries a negative integer code. The two the SDK raises
+  // by itself are not the server's answer.
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  const { code } = error;
+  return (
+    typeof code === "number" &&
+    Number.isInteger(code) &&
+    code < 0 &&
+    code !== ErrorCode.RequestTimeout &&
+    code !== ErrorCode.ConnectionClosed
+  );
+}
 
 function isMethodNotFoundError(error: unknown): boolean {
   if (error instanceof Error && error.message.includes("Method not found")) {

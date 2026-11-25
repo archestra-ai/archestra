@@ -1303,6 +1303,20 @@ describe("McpClient", () => {
       ).toEqual([]);
     });
 
+    test("fails a Skills server whose tool list never answered, instead of installing it with no tools", async () => {
+      const catalogItem = await remoteCatalogItem();
+      mockConnect.mockImplementationOnce(async (transport) =>
+        declareSkillsExtension(transport),
+      );
+      // The request failed on its way: the server said nothing about what it
+      // offers.
+      mockListTools.mockRejectedValueOnce(new Error("fetch failed"));
+
+      await expect(
+        mcpClient.connectAndGetTools({ catalogItem, mcpServerId, secrets: {} }),
+      ).rejects.toThrow("fetch failed");
+    });
+
     test("fails a Skills server that limits requests, instead of installing it with no tools", async () => {
       const catalogItem = await remoteCatalogItem();
       mockConnect.mockImplementation(async (transport) =>

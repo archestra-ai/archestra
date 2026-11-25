@@ -823,16 +823,19 @@ export async function buildArchestraToolOutput(params: {
   const executedAs =
     extractMcpExecutedAs(response) ?? platformExecutedAs(userId);
   const executedAsMeta = { [MCP_EXECUTED_AS_META_KEY]: executedAs };
-  // Never stringify an image block into the text summary — its base64 would
-  // bloat context and evade the history image-stripper. Images ride rawContent
-  // and reach the model as bounded media parts via toModelOutput instead.
+  // Never stringify an image or audio block into the text summary — its
+  // base64 would bloat context and evade the history image-stripper. Images
+  // ride rawContent and reach the model as bounded media parts via
+  // toModelOutput instead.
   const text = response.content
     .map((item) =>
       item.type === "text"
         ? item.text
         : item.type === "image"
           ? "[image]"
-          : JSON.stringify(item),
+          : item.type === "audio"
+            ? "[audio]"
+            : JSON.stringify(item),
     )
     .join("\n");
 

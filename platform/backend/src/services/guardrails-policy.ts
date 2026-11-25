@@ -151,6 +151,22 @@ async function deploymentRefusal(params: {
   };
 }
 
+/**
+ * The lines' fallback warnings for a valid document. They advise and decide
+ * nothing, so a check that fails says so and leaves the save to go ahead.
+ */
+async function advisoryLineWarnings(composed: string): Promise<string[]> {
+  try {
+    return await openappaDeclarations.lineWarnings(composed);
+  } catch (error) {
+    logger.error({ err: error }, "Guardrails line check failed");
+    return [LINE_CHECK_FAILED];
+  }
+}
+
+const LINE_CHECK_FAILED =
+  "Whether Observe and automatic approval can run with this policy could not be checked. See the backend log.";
+
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
 export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
 
@@ -277,9 +293,7 @@ export const guardrailsPolicyService = {
         errors.push(...deployed.errors);
         warnings.push(...deployed.warnings);
         if (params.lineWarnings !== false && deployed.composed !== null)
-          warnings.push(
-            ...(await openappaDeclarations.lineWarnings(deployed.composed)),
-          );
+          warnings.push(...(await advisoryLineWarnings(deployed.composed)));
       }
     }
     if (errors.length === 0 && params.userId)

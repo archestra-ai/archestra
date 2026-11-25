@@ -216,6 +216,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
 import {
@@ -411,7 +412,58 @@ function AgentToolsList({ agentId }: { agentId: string }) {
   );
 }
 
-// Single subagent pill with popover
+function SubagentPopoverContent({
+  agent,
+  onClose,
+}: {
+  agent: AgentOption;
+  onClose: () => void;
+}) {
+  return (
+    <PopoverContent
+      className="w-[350px] p-0"
+      side="bottom"
+      align="start"
+      sideOffset={8}
+      avoidCollisions
+    >
+      <div className="p-4 border-b flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <h4 className="font-semibold truncate">{agent.name}</h4>
+          {agent.description && (
+            <ExpandableText
+              text={agent.description}
+              maxLines={2}
+              className="text-sm text-muted-foreground mt-1"
+            />
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="shrink-0"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {agent.runtime && (
+        <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2 text-xs">
+          <span className="text-muted-foreground">Agent Runtime</span>
+          <AgentRuntimeChip runtime={agent.runtime} />
+        </div>
+      )}
+
+      <div className="p-4">
+        <AgentToolsList agentId={agent.id} />
+      </div>
+    </PopoverContent>
+  );
+}
+
+// Single subagent pill with popover (used when weights are not shown)
 interface SubagentPillProps {
   agent: AgentOption;
   isSelected: boolean;
@@ -420,10 +472,6 @@ interface SubagentPillProps {
   // "delegate" pills read as an active delegation target (green); "exclude"
   // pills read as a target removed from the Auto surface (red).
   tone?: "delegate" | "exclude";
-  /** Inline weight controls shown on runtime pills when Weighted mode is active. */
-  weight?: number;
-  sharePercent?: number;
-  onWeightChange?: (rawValue: string) => void;
 }
 
 function SubagentPill({
@@ -432,13 +480,8 @@ function SubagentPill({
   onToggle,
   readOnly = false,
   tone = "delegate",
-  weight,
-  sharePercent,
-  onWeightChange,
 }: SubagentPillProps) {
   const [open, setOpen] = useState(false);
-  const showWeight =
-    weight !== undefined && Boolean(agent.runtime) && tone === "delegate";
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
@@ -449,7 +492,7 @@ function SubagentPill({
             size="sm"
             className={cn(
               "group max-w-[280px] text-xs",
-              (!readOnly || showWeight) && "rounded-r-none border-r-0",
+              !readOnly && "rounded-r-none border-r-0",
               !isSelected && "border-dashed opacity-50",
             )}
           >
@@ -477,30 +520,6 @@ function SubagentPill({
             )}
           </Button>
         </PopoverTrigger>
-        {showWeight && (
-          <div
-            className={cn(
-              "flex h-8 items-center gap-1.5 border bg-muted/30 px-2 text-xs dark:border-input",
-              readOnly ? "rounded-r-md" : "border-r-0",
-            )}
-            title={`Weight (${SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}–${SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}) · ${sharePercent ?? 0}% of runs`}
-          >
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
-              max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
-              aria-label={`Weight for ${agent.name}`}
-              value={weight}
-              disabled={readOnly}
-              onChange={(event) => onWeightChange?.(event.target.value)}
-              className="h-5 w-11 rounded border-input bg-background px-1.5 py-0 text-right text-xs font-medium tabular-nums dark:bg-background [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
-            <span className="min-w-[2.1rem] text-right text-[11px] tabular-nums text-muted-foreground">
-              {sharePercent ?? 0}%
-            </span>
-          </div>
-        )}
         {!readOnly && (
           <Button
             variant="outline"
@@ -517,47 +536,202 @@ function SubagentPill({
           </Button>
         )}
       </div>
-      <PopoverContent
-        className="w-[350px] p-0"
-        side="bottom"
-        align="start"
-        sideOffset={8}
-        avoidCollisions
-      >
-        <div className="p-4 border-b flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <h4 className="font-semibold truncate">{agent.name}</h4>
-            {agent.description && (
-              <ExpandableText
-                text={agent.description}
-                maxLines={2}
-                className="text-sm text-muted-foreground mt-1"
-              />
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="shrink-0"
-            onClick={() => setOpen(false)}
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {agent.runtime && (
-          <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2 text-xs">
-            <span className="text-muted-foreground">Agent Runtime</span>
-            <AgentRuntimeChip runtime={agent.runtime} />
-          </div>
-        )}
-
-        <div className="p-4">
-          <AgentToolsList agentId={agent.id} />
-        </div>
-      </PopoverContent>
+      <SubagentPopoverContent agent={agent} onClose={() => setOpen(false)} />
     </Popover>
+  );
+}
+
+/**
+ * Numeric weight input with a local draft so clearing the field to type a new
+ * value does not immediately snap back to 1 mid-keystroke.
+ */
+function SubagentWeightInput({
+  agentName,
+  value,
+  disabled,
+  onChange,
+}: {
+  agentName: string;
+  value: number;
+  disabled: boolean;
+  onChange: (rawValue: string) => void;
+}) {
+  const [draft, setDraft] = useState(() => String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const handleChange = (raw: string) => {
+    setDraft(raw);
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const parsed = Number.parseInt(trimmed, 10);
+    if (
+      !Number.isNaN(parsed) &&
+      parsed >= SUBAGENT_LOAD_BALANCING_MIN_WEIGHT &&
+      parsed <= SUBAGENT_LOAD_BALANCING_MAX_WEIGHT
+    ) {
+      onChange(String(parsed));
+    }
+  };
+
+  const handleBlur = () => {
+    const trimmed = draft.trim();
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!trimmed || Number.isNaN(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+    const clamped = Math.max(
+      SUBAGENT_LOAD_BALANCING_MIN_WEIGHT,
+      Math.min(SUBAGENT_LOAD_BALANCING_MAX_WEIGHT, parsed),
+    );
+    setDraft(String(clamped));
+    if (clamped !== value) {
+      onChange(String(clamped));
+    }
+  };
+
+  return (
+    <Input
+      type="number"
+      inputMode="numeric"
+      min={SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}
+      max={SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}
+      aria-label={`Weight for ${agentName}`}
+      value={draft}
+      disabled={disabled}
+      onChange={(event) => handleChange(event.target.value)}
+      onBlur={handleBlur}
+      className="h-8 w-full px-2.5 font-mono text-xs tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+    />
+  );
+}
+
+const WEIGHTED_ROW_GRID_EDITABLE =
+  "grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_5.5rem_8rem_1.75rem]";
+const WEIGHTED_ROW_GRID_READONLY =
+  "grid-cols-[minmax(0,1fr)_4.5rem_5.5rem] sm:grid-cols-[minmax(0,1fr)_5.5rem_8rem]";
+
+function SubagentWeightRow({
+  agent,
+  weight,
+  sharePercent,
+  readOnly,
+  onWeightChange,
+  onRemove,
+}: {
+  agent: AgentOption;
+  weight?: number;
+  sharePercent?: number;
+  readOnly: boolean;
+  onWeightChange?: (rawValue: string) => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasRuntime = Boolean(agent.runtime);
+
+  return (
+    <li
+      className={cn(
+        "grid items-center gap-3 px-3 py-2",
+        readOnly ? WEIGHTED_ROW_GRID_READONLY : WEIGHTED_ROW_GRID_EDITABLE,
+      )}
+    >
+      <Popover open={open} onOpenChange={setOpen} modal>
+        <PopoverTrigger asChild>
+          <UnstyledButton className="group flex min-w-0 items-center gap-2 rounded-md py-0.5 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+            <AgentIcon
+              icon={agent.icon}
+              size={14}
+              fallbackType="agent"
+              className="shrink-0"
+            />
+            <span className="truncate font-medium group-hover:underline">
+              {agent.name}
+            </span>
+            {hasRuntime ? (
+              <AgentRuntimeChip runtime={agent.runtime} appearance="icon" />
+            ) : (
+              <span className="shrink-0 rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+                Local
+              </span>
+            )}
+          </UnstyledButton>
+        </PopoverTrigger>
+        <SubagentPopoverContent agent={agent} onClose={() => setOpen(false)} />
+      </Popover>
+
+      {hasRuntime && weight !== undefined && onWeightChange ? (
+        <SubagentWeightInput
+          agentName={agent.name}
+          value={weight}
+          disabled={readOnly}
+          onChange={onWeightChange}
+        />
+      ) : (
+        <span
+          className="px-2.5 text-xs text-muted-foreground"
+          aria-hidden="true"
+        >
+          —
+        </span>
+      )}
+
+      {hasRuntime ? (
+        <div className="grid content-center gap-1 text-xs tabular-nums">
+          <span className="font-medium leading-none">{sharePercent ?? 0}%</span>
+          <span
+            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            aria-hidden="true"
+          >
+            <span
+              className="block h-full rounded-full bg-primary transition-[width] duration-150"
+              style={{ width: `${sharePercent ?? 0}%` }}
+            />
+          </span>
+        </div>
+      ) : (
+        <span className="text-xs text-muted-foreground">Direct</span>
+      )}
+
+      {!readOnly && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="justify-self-end text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+          aria-label={`Remove agent ${agent.name}`}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </li>
+  );
+}
+
+function PendingSubagentRow({ readOnly }: { readOnly: boolean }) {
+  return (
+    <li
+      className={cn(
+        "grid h-12 items-center gap-3 px-3",
+        readOnly ? WEIGHTED_ROW_GRID_READONLY : WEIGHTED_ROW_GRID_EDITABLE,
+      )}
+    >
+      <output
+        aria-label="Loading subagent"
+        className="flex items-center gap-2 text-xs text-muted-foreground"
+      >
+        <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+        <Skeleton className="h-3 w-28" />
+      </output>
+      <Skeleton className="h-8 w-full" />
+      <Skeleton className="h-3 w-12" />
+      {!readOnly && <span />}
+    </li>
   );
 }
 
@@ -627,10 +801,12 @@ function SubagentsEditor({
       localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
     setIds(ids);
   };
-  const showInlineWeights = weightedMode && localMode === "selected";
-  const runtimeAssignedAgents = showInlineWeights
-    ? visibleIds
-        .filter((id) => id !== agentId)
+  const showWeightedTable = weightedMode && localMode === "selected";
+  const visibleTargetIds = visibleIds.filter(
+    (id) => id !== agentId && (agentsById.has(id) || agentsFetching),
+  );
+  const runtimeAssignedAgents = showWeightedTable
+    ? visibleTargetIds
         .map((id) => agentsById.get(id))
         .filter((agent): agent is AgentOption => Boolean(agent?.runtime))
     : [];
@@ -638,57 +814,66 @@ function SubagentsEditor({
     (sum, agent) => sum + (weights?.[agent.id] ?? 1),
     0,
   );
-  // In pick order, so a new pick holds its place as a loading pill until the
-  // lookup names it, and the pills around it do not move.
-  const pills = visibleIds
-    .filter((id) => id !== agentId && (agentsById.has(id) || agentsFetching))
-    .map((id) => {
-      const agent = agentsById.get(id);
-      if (!agent) return <PendingSubagentPill key={id} />;
-      const hasInlineWeight = showInlineWeights && Boolean(agent.runtime);
-      const weight = hasInlineWeight ? (weights?.[id] ?? 1) : undefined;
-      const sharePercent =
-        weight !== undefined
-          ? totalRuntimeWeight > 0
-            ? Math.round((weight / totalRuntimeWeight) * 100)
-            : 0
-          : undefined;
-      return (
-        <SubagentPill
-          key={id}
-          agent={agent}
-          isSelected={true}
-          readOnly={readOnly}
-          onToggle={() =>
-            handleSelectionChange(
-              selectedIds.filter((selectedId) => selectedId !== id),
-            )
-          }
-          tone={localMode === "all" ? "exclude" : "delegate"}
-          weight={weight}
-          sharePercent={sharePercent}
-          onWeightChange={
-            hasInlineWeight
-              ? (rawValue) => onWeightChange?.(id, rawValue)
-              : undefined
-          }
-        />
-      );
-    });
+  // In pick order, so a new pick holds its place as a loading placeholder until
+  // the lookup names it, and surrounding items do not jump.
+  const pills = showWeightedTable
+    ? []
+    : visibleTargetIds.map((id) => {
+        const agent = agentsById.get(id);
+        if (!agent) return <PendingSubagentPill key={id} />;
+        return (
+          <SubagentPill
+            key={id}
+            agent={agent}
+            isSelected={true}
+            readOnly={readOnly}
+            onToggle={() =>
+              handleSelectionChange(
+                selectedIds.filter((selectedId) => selectedId !== id),
+              )
+            }
+            tone={localMode === "all" ? "exclude" : "delegate"}
+          />
+        );
+      });
+  const weightedRows = showWeightedTable
+    ? visibleTargetIds.map((id) => {
+        const agent = agentsById.get(id);
+        if (!agent) return <PendingSubagentRow key={id} readOnly={readOnly} />;
+        const hasRuntime = Boolean(agent.runtime);
+        const weight = hasRuntime ? (weights?.[id] ?? 1) : undefined;
+        const sharePercent =
+          weight !== undefined
+            ? totalRuntimeWeight > 0
+              ? Math.round((weight / totalRuntimeWeight) * 100)
+              : 0
+            : undefined;
+        return (
+          <SubagentWeightRow
+            key={id}
+            agent={agent}
+            weight={weight}
+            sharePercent={sharePercent}
+            readOnly={readOnly}
+            onWeightChange={
+              hasRuntime
+                ? (rawValue) => onWeightChange?.(id, rawValue)
+                : undefined
+            }
+            onRemove={() =>
+              handleSelectionChange(
+                selectedIds.filter((selectedId) => selectedId !== id),
+              )
+            }
+          />
+        );
+      })
+    : [];
   const hasSelectedTargets = selectedAgentIds.length > 0;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-sm font-medium">Assigned</p>
-        {runtimeAssignedAgents.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            <span>
-              {`Weight (${SUBAGENT_LOAD_BALANCING_MIN_WEIGHT}–${SUBAGENT_LOAD_BALANCING_MAX_WEIGHT}) · higher gets more runs`}
-            </span>
-          </p>
-        )}
-      </div>
+      <p className="text-sm font-medium">Assigned</p>
       {localMode === "all" ? (
         <div className="rounded-md border bg-muted/20 px-3 py-2.5">
           <div className="flex items-center gap-2">
@@ -719,8 +904,27 @@ function SubagentsEditor({
         </div>
       )}
 
-      {localMode === "selected" && pills.length > 0 && (
+      {localMode === "selected" && !showWeightedTable && pills.length > 0 && (
         <div className="flex flex-wrap gap-2">{pills}</div>
+      )}
+
+      {showWeightedTable && weightedRows.length > 0 && (
+        <div className="overflow-hidden rounded-lg border bg-card">
+          <div
+            className={cn(
+              "grid h-8 items-center gap-3 border-b bg-muted/40 px-3 text-xs font-medium text-muted-foreground",
+              readOnly
+                ? WEIGHTED_ROW_GRID_READONLY
+                : WEIGHTED_ROW_GRID_EDITABLE,
+            )}
+          >
+            <span>{noun === "agent" ? "Agent" : "Subagent"}</span>
+            <span>Weight</span>
+            <span>Traffic</span>
+            {!readOnly && <span />}
+          </div>
+          <ul className="divide-y">{weightedRows}</ul>
+        </div>
       )}
 
       {selectedIds.length > 20 && (

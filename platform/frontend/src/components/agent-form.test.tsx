@@ -2008,7 +2008,7 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="agent" agent={weightedAgent} />);
 
-    // Runtime pills get inline weight inputs; local non-runtime pill does not.
+    // Runtime rows get weight inputs; local non-runtime row shows Direct with no weight input.
     const claudeWeight = await screen.findByLabelText(
       "Weight for Lobster Claude Code",
     );
@@ -2018,11 +2018,21 @@ describe("AgentForm delegation state", () => {
     expect(
       screen.queryByLabelText(`Weight for ${targetAgent.name}`),
     ).not.toBeInTheDocument();
+    const localRow = screen
+      .getByRole("button", { name: /Target AgentLocal/ })
+      .closest("li");
+    expect(localRow).toHaveTextContent("Direct");
 
-    // Only the two runtime pills split 100% (50% / 50%); no duplicate list below.
+    // Only the two runtime rows split 100% (50% / 50%); no duplicate list or redundant hint.
     expect(screen.getAllByText("50%")).toHaveLength(2);
     expect(screen.queryByText(/Subagent weights/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/higher gets more runs/i),
+    ).not.toBeInTheDocument();
 
+    // Clearing the weight input lets a user type a new value without snapping back to 1.
+    fireEvent.change(claudeWeight, { target: { value: "" } });
+    expect(claudeWeight).toHaveValue(null);
     fireEvent.change(claudeWeight, { target: { value: "3" } });
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(screen.getByText("25%")).toBeInTheDocument();

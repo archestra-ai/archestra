@@ -94,6 +94,16 @@ describe("UserModel.findByEmail", () => {
     expect(foundUser?.email).toBe("findme@test.com");
   });
 
+  test("should find a user whatever the case of the given email", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser({ email: "first.last@test.com" });
+
+    const foundUser = await UserModel.findByEmail("First.Last@Test.com");
+
+    expect(foundUser?.id).toBe(user.id);
+  });
+
   test("should return undefined for non-existent email", async () => {
     const foundUser = await UserModel.findByEmail("nonexistent@test.com");
 

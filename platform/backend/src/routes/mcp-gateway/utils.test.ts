@@ -1070,6 +1070,40 @@ describe("validateExternalIdpToken", () => {
     expect(result?.isExternalIdp).toBe(true);
   });
 
+  test("matches the email claim to a user regardless of letter case", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "first.last@example.com" });
+    await makeMember(user.id, org.id, { role: "admin" });
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    // Entra sends the email claim with the capitals from the directory.
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "user-123",
+      email: "First.Last@example.com",
+      name: "First Last",
+      rawClaims: { sub: "user-123", email: "First.Last@example.com" },
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+    expect(result?.userId).toBe(user.id);
+    expect(result?.isExternalIdp).toBe(true);
+  });
+
   test("returns null when the identity provider OIDC config has no clientId for audience validation", async ({
     makeOrganization,
     makeIdentityProvider,

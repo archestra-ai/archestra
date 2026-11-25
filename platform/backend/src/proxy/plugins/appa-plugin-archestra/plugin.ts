@@ -1499,11 +1499,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const decision: AppaHostedCallDecision = decisions[index];
       return decision.kind === "hold" ? [{ call, ...decision }] : [];
     });
+    // A notice an earlier refusal of an id left must not answer for the call now
+    // decided under it.
     await forgetUnansweredNotices(
       this.governedSession(binding),
-      calls.flatMap((call, index) =>
-        decisions[index]?.kind === "hold" ? [] : [call.id],
-      ),
+      calls.flatMap((call, index) => {
+        const decision = decisions[index];
+        return decision?.kind === "hold" && decision.proxyNotice
+          ? []
+          : [call.id];
+      }),
     );
     if (held.length === 0) return { decision: "release" };
     // As for a proposed call, the runtime holds no record of a call refused
@@ -1870,12 +1875,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           notice: decision.feedback,
         });
     }
-    // A notice an earlier refusal of an id left must not answer the result of
-    // the call now admitted under it.
+    // A notice an earlier refusal of an id left must not answer for the call now
+    // decided under it.
     await forgetUnansweredNotices(
       session,
       [...decisionById].flatMap(([id, decision]) =>
-        decision.kind === "allow" || decision.kind === "control" ? [id] : [],
+        decision.kind === "deny" && decision.proxyNotice ? [] : [id],
       ),
     );
     for (const [id, feedback] of notLoaded) {

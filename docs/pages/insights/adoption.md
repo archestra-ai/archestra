@@ -2,7 +2,6 @@
 title: Adoption
 description: Track who has connected coding clients and agents, what each one connected, and how much it is used
 order: 2
-lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

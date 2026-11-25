@@ -2,7 +2,6 @@
 title: Contributing
 description: Propose changes and report bugs through GitHub issues, and report vulnerabilities privately
 order: 10
-lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

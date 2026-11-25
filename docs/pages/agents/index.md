@@ -2,7 +2,6 @@
 title: Agents
 description: Build agents with instructions, tools, skills, subagents, and triggers
 order: 2
-lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -34,6 +33,8 @@ Archestra agents are available in [Slack](/docs/agents/triggers-and-channels/sla
 <span id="organizing-agents"></span>
 <span id="system-prompt-templating"></span>
 
+<span id="prompt-templates"></span>
+
 ## Prompt Templates for Archestra Agent Runtime
 
 Archestra's native agent runtime supports [Handlebars](https://handlebarsjs.com/) expressions in the **Instructions** field, so the agent can behave differently for each person. For example:
@@ -51,6 +52,8 @@ You help {{user.name}}. Today is {{currentDate}}.
 | `{{user.teams}}`                     | Their team names, as a list                                       |
 | `{{currentDate}}`, `{{currentTime}}` | The date and time in UTC, such as `2026-03-12` and `14:30:00 UTC` |
 | `{{archestraVersion}}`               | The version of the running platform, such as `1.4.0`              |
+
+<span id="code-sandbox"></span>
 
 ## Code Sandbox in Archestra Agent Runtime
 

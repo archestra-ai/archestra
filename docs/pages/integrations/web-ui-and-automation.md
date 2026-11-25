@@ -2,7 +2,6 @@
 title: Web UIs and Automation
 description: Connect n8n workflows and Open WebUI to Archestra LLM Proxy and MCP Gateway
 order: 4
-lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

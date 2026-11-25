@@ -2,7 +2,6 @@
 title: Secret Rotation
 description: Change each secret Archestra uses, and know who gets signed out and what must be redone
 order: 7
-lastUpdated: 2026-11-11
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

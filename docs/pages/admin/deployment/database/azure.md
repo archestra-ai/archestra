@@ -2,7 +2,6 @@
 title: Azure Database for PostgreSQL
 description: Connect Archestra to Azure Database for PostgreSQL flexible server with Microsoft Entra ID and AKS Workload Identity
 order: 3
-lastUpdated: 2026-11-14
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

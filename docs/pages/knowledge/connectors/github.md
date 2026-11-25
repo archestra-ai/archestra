@@ -2,7 +2,6 @@
 title: GitHub
 description: Connect GitHub documents to Knowledge and configure source access
 order: 3
-lastUpdated: 2026-11-11
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

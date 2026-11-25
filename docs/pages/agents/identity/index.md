@@ -2,7 +2,6 @@
 title: Agent Identity
 description: Who an agent acts for, whose account each tool call uses, and how to give each agent its own identity at your identity provider
 order: 8
-lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

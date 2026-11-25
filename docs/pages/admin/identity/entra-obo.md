@@ -2,7 +2,6 @@
 title: "Microsoft Entra ID"
 description: "Sign people in with Microsoft Entra ID, and let MCP tools call Microsoft Graph and your APIs as each person with On-Behalf-Of"
 order: 2
-lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

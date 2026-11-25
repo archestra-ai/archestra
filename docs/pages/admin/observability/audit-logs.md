@@ -2,7 +2,6 @@
 title: Audit log export
 description: Send administrative audit events to your SIEM through an OpenTelemetry Collector
 order: 3
-lastUpdated: 2026-11-20
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

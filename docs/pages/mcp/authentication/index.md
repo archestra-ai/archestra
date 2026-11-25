@@ -3,7 +3,6 @@ title: MCP Authentication
 sidebarTitle: Authentication
 description: How clients sign in to a gateway, and how Archestra signs in to each MCP server
 order: 4
-lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

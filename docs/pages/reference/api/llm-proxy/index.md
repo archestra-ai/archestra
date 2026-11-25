@@ -2,7 +2,6 @@
 title: LLM Proxy
 description: Configure model access, limits, routing, and provider credentials; inspect request logs
 order: 5
-lastUpdated: 2026-11-04
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

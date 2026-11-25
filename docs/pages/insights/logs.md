@@ -2,7 +2,6 @@
 title: Logs
 description: Investigate model requests, tool calls, and admin changes
 order: 1
-lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

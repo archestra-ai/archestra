@@ -2,7 +2,6 @@
 title: Slack
 description: Give each Archestra agent its own Slack bot
 order: 3
-lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

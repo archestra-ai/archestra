@@ -2,7 +2,6 @@
 title: "Identity, Chat, and Tool Discovery"
 description: "Archestra MCP Server tools for identity, chat, and tool discovery"
 order: 1
-lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

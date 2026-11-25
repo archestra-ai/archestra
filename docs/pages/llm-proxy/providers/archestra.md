@@ -2,7 +2,6 @@
 title: Archestra
 description: Use another Archestra instance as the upstream model provider
 order: 9
-lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

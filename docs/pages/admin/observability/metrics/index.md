@@ -2,7 +2,6 @@
 title: Metrics
 description: Configure Prometheus scraping and explore Archestra's metric references.
 order: 1
-lastUpdated: 2026-10-30
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

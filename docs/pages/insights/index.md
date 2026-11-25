@@ -2,7 +2,6 @@
 title: Insights
 description: See what agents did, who uses them, and what it costs
 order: 6
-lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

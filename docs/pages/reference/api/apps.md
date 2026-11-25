@@ -2,7 +2,6 @@
 title: Apps and Connections
 description: Manage apps, connectors, connection setups, and integration credentials
 order: 7
-lastUpdated: 2026-11-04
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

@@ -1,5 +1,5 @@
 {
-  "id": "94e9c15b-b427-435c-a0a7-db36966cb782",
+  "id": "fda1715f-10b8-4d3a-bb74-beab04398931",
   "prevId": "db064bb3-fade-4cc1-87dd-1ab82638950e",
   "version": "7",
   "dialect": "postgresql",
@@ -12327,24 +12327,6 @@
           "primaryKey": true,
           "notNull": true
         },
-        "mode": {
-          "name": "mode",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "person_approval": {
-          "name": "person_approval",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "enforced_marks": {
-          "name": "enforced_marks",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": false
-        },
         "enabled": {
           "name": "enabled",
           "type": "boolean",
@@ -24225,6 +24207,12 @@
         },
         "default_member_role": {
           "name": "default_member_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "departing_member_owner_id": {
+          "name": "departing_member_owner_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false

@@ -15,7 +15,12 @@ export type AuthSettingsFormValues = {
   sessionCustomLifetimeSeconds: number;
   requireTwoFactor: boolean;
   defaultMemberRole: string;
+  /** A member's user id, or LONGEST_STANDING_ADMIN when none is set. */
+  departingMemberOwnerId: string;
 };
+
+/** Picker value for "no one set": the longest-standing admin takes over. */
+export const LONGEST_STANDING_ADMIN = "longest-standing-admin";
 
 export const CUSTOM_LIFETIME_VALUE = "custom";
 export const NO_SESSION_LIMIT_VALUE = "none";
@@ -42,6 +47,7 @@ type AuthSettingsSource = {
   sessionMaxAgeSeconds?: number | null;
   requireTwoFactor?: boolean | null;
   defaultMemberRole?: string | null;
+  departingMemberOwnerId?: string | null;
 };
 
 export function getServerOauthLifetimeSeconds(
@@ -118,5 +124,7 @@ export function buildAuthSettingsFormValues(
     requireTwoFactor: organization?.requireTwoFactor ?? false,
     // Null column means "fall back to member", so surface member as selected.
     defaultMemberRole: organization?.defaultMemberRole ?? MEMBER_ROLE_NAME,
+    departingMemberOwnerId:
+      organization?.departingMemberOwnerId ?? LONGEST_STANDING_ADMIN,
   };
 }

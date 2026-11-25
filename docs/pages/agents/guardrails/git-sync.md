@@ -3,7 +3,6 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

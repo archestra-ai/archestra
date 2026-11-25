@@ -2,7 +2,6 @@
 title: MCP Gateway
 description: Send MCP protocol requests and connect MCP Apps to clients
 order: 3
-lastUpdated: 2026-11-04
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

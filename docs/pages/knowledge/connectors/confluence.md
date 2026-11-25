@@ -2,7 +2,6 @@
 title: Confluence
 description: Connect Confluence documents to Knowledge and configure source access
 order: 2
-lastUpdated: 2026-10-06
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

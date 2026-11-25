@@ -2,7 +2,6 @@
 title: Reference
 description: Look up environment variables, permissions, API endpoints, built-in MCP tools, and the Apps SDK
 order: 11
-lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -2,7 +2,6 @@
 title: Projects
 description: Keep chats, agent runs, files, instructions, and schedules in one shared project
 order: 1
-lastUpdated: 2026-10-15
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

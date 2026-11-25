@@ -169,7 +169,6 @@ export function useCreateInternalMcpCatalogItem() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
-      toast.success("Catalog item created successfully");
     },
     onError: (error) => {
       // The network-policy error is shown inline on the Server URL field, and

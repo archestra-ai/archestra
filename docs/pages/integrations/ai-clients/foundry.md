@@ -2,7 +2,6 @@
 title: Microsoft Foundry
 description: Connect a Foundry agent to Archestra MCP Gateway tools
 order: 3
-lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

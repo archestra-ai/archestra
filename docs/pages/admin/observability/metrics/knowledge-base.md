@@ -2,7 +2,6 @@
 title: Knowledge Base Metrics
 description: Look up connector sync, ingestion, embedding, search, and permission metrics.
 order: 5
-lastUpdated: 2026-10-28
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

@@ -2,7 +2,6 @@
 title: Tracing
 description: Send OpenTelemetry traces and logs for every LLM call, tool call, and agent run to your collector
 order: 2
-lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

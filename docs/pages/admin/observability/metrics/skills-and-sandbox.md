@@ -2,7 +2,6 @@
 title: Skill and Sandbox Metrics
 description: Look up skill activations, context tokens, sandbox commands, and runtime status.
 order: 6
-lastUpdated: 2026-10-28
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

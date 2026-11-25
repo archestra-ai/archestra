@@ -2,7 +2,6 @@
 title: Identity Providers
 description: Connect workplace sign-in and per-user tool access
 order: 4
-lastUpdated: 2026-11-09
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

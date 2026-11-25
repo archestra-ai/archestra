@@ -2,7 +2,6 @@
 title: MCP Metrics
 description: Look up MCP tool calls, payload sizes, latency, and server deployment status.
 order: 3
-lastUpdated: 2026-10-31
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

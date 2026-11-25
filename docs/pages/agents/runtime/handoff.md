@@ -3,7 +3,6 @@ title: Remote Agents
 description: Hand a task from your coding agent to a Remote Agent in Archestra, then bring the result back
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

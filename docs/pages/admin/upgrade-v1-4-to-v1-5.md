@@ -3,7 +3,6 @@ title: Upgrade from v1.4 to v1.5
 description: What v1.5 changes for your deployment, and the steps to upgrade from v1.4 with Helm or Docker
 order: 11
 draft: true
-lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

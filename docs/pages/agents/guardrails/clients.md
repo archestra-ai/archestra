@@ -4,7 +4,6 @@ sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

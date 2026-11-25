@@ -2,7 +2,6 @@
 title: Observability
 description: Connect your monitoring stack and install dashboards
 order: 9
-lastUpdated: 2026-11-03
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

@@ -1620,12 +1620,23 @@ export async function evaluateToolCalls(
       }
       // Denied calls return as notices; other calls in the batch stand.
       const outcome = refusalOutcomeOf(decision);
+      // A denial for a fact the runtime could not obtain decided nothing, and
+      // the runtime kept no record of the call: the proxy answers it, and its
+      // notice says itself whether to retry. A call that already ran is never
+      // asked for again.
+      const unjudged =
+        decision.decision === "deny_call" && outcome?.kind === "missing_fact"
+          ? (options.executed ? withheldOutputGuidance : refusalGuidance)(
+              refusalAction({ outcome, offers: undefined, review: undefined }),
+            )
+          : undefined;
       return {
         kind: "deny" as const,
         ...(outcome ? { outcome } : {}),
-        feedback: unofferedAttestation(decision, declaration)
-          ? `No plan for this call returns through \`${ATTEST_SCHEMA_SANITIZER}\`, so \`return_schema\` is not enforced: a return declared by a plan below crosses unchecked against it. Call the subagent again without \`return_schema\`.\n\n${decisionMessage(decision)}`
-          : decisionMessage(decision),
+        feedback:
+          (unofferedAttestation(decision, declaration)
+            ? `No plan for this call returns through \`${ATTEST_SCHEMA_SANITIZER}\`, so \`return_schema\` is not enforced: a return declared by a plan below crosses unchecked against it. Call the subagent again without \`return_schema\`.\n\n${decisionMessage(decision)}`
+            : decisionMessage(decision)) + (unjudged ?? ""),
         offers:
           decision.decision === "deny_call"
             ? decision.offers
@@ -1639,7 +1650,9 @@ export async function evaluateToolCalls(
               : undefined
             : undefined,
         ...(decision.decision === "deny_call"
-          ? { recorded: true as const }
+          ? unjudged !== undefined
+            ? { proxyNotice: true as const }
+            : { recorded: true as const }
           : {}),
       };
     }),

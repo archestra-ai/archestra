@@ -1499,6 +1499,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const decision: AppaHostedCallDecision = decisions[index];
       return decision.kind === "hold" ? [{ call, ...decision }] : [];
     });
+    await forgetUnansweredNotices(
+      this.governedSession(binding),
+      calls.flatMap((call, index) =>
+        decisions[index]?.kind === "hold" ? [] : [call.id],
+      ),
+    );
     if (held.length === 0) return { decision: "release" };
     // As for a proposed call, the runtime holds no record of a call refused
     // before any ruling, so the notice's result is answered from here.
@@ -1864,6 +1870,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           notice: decision.feedback,
         });
     }
+    // A notice an earlier refusal of an id left must not answer the result of
+    // the call now admitted under it.
+    await forgetUnansweredNotices(
+      session,
+      [...decisionById].flatMap(([id, decision]) =>
+        decision.kind === "allow" || decision.kind === "control" ? [id] : [],
+      ),
+    );
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
     }
@@ -3057,6 +3071,20 @@ async function retainUnansweredNotice(params: {
     );
   } catch (err) {
     logger.warn({ err }, "OpenAPPA could not retain a denial's reason");
+  }
+}
+
+async function forgetUnansweredNotices(
+  session: OpenAppaSession,
+  callIds: readonly string[],
+): Promise<void> {
+  if (callIds.length === 0) return;
+  try {
+    await cacheManager.getAndDeleteMany(
+      callIds.map((callId) => unansweredNoticeKey({ session, callId })),
+    );
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not drop superseded denial reasons");
   }
 }
 

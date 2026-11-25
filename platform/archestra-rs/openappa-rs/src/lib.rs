@@ -48,7 +48,7 @@ use crate::{
         cancelled_call, claim_operation, claim_result, expected_actor, finish_operation,
         finish_remedy, operation_semantic, proposed, read_operation_state,
         recorded_call_presentation, recorded_declaration, remedy_binding, required_arguments,
-        tool_call_context,
+        result_untracked, tool_call_context,
     },
     remedy::{
         OutputSource, RemedyAct, authoritative_unexecuted_response, decision_text,
@@ -75,7 +75,7 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, DeclaredReturn, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling,
+    Actor, DeclaredReturn, HookDecision, HookEvent, OutcomeBody, Outcomes, ProposedCall, Ruling,
     SessionSettings, SpawnKind, SpawnRef, ToolOutcome, TrajectoryId,
 };
 use futures_util::FutureExt;
@@ -296,6 +296,24 @@ async fn run(
         Ok(Err(error)) => Err(error),
         Err(_) => Err(panicked("OpenAPPA panicked; operation was not released")),
     }
+}
+
+/// A re-driven call's answer: completed, or not judged and left pending.
+enum Recovery {
+    Completed(CompletedOperation),
+    Unjudged(Value),
+}
+
+/// Whether the runtime decided `decision`: a denial for a fact it could not obtain decided
+/// nothing, so its receipt is not kept and the same request is judged afresh.
+fn judged(decision: &HookDecision) -> bool {
+    !matches!(
+        decision,
+        HookDecision::DenyCall {
+            outcomes: Some(Outcomes::MissingFact(_)),
+            ..
+        }
+    )
 }
 
 async fn initialized() -> napi::Result<State> {
@@ -1111,7 +1129,7 @@ impl State {
         {
             return Ok(decision);
         }
-        let decision = if let Some((reporting, args, endpoint)) = report {
+        let (decision, judged) = if let Some((reporting, args, endpoint)) = report {
             let result = appa_runtime::yell::embedded::send(
                 &self.runtime,
                 appa_runtime::yell::embedded::Request {
@@ -1128,9 +1146,12 @@ impl State {
                 Ok(receipt) => (false, format!("[appa] Reported. Receipt {receipt}.")),
                 Err(reason) => (true, format!("[appa] Not reported: {reason}")),
             };
-            json!({ "decision": "mcp_result", "result": { "isError": is_error, "content": [{ "type": "text", "text": message }] } })
+            (
+                json!({ "decision": "mcp_result", "result": { "isError": is_error, "content": [{ "type": "text", "text": message }] } }),
+                true,
+            )
         } else if input.event == HookEventKind::ChildAddress {
-            self.address_child(pg, &input, &actor).await?
+            (self.address_child(pg, &input, &actor).await?, true)
         } else {
             let event = match input.event {
                 HookEventKind::ToolCall => HookEvent::ToolCall {
@@ -1196,13 +1217,22 @@ impl State {
                 presentation_options(&input),
             )
             .await;
-            self.decided(
-                &actor,
-                &operation,
-                input.declares.as_ref(),
-                &outcome.decision,
-            )?
+            (
+                self.decided(
+                    &actor,
+                    &operation,
+                    input.declares.as_ref(),
+                    &outcome.decision,
+                )?,
+                judged(&outcome.decision),
+            )
         };
+        if !judged {
+            return match receipts.discard().map_err(sql_failure)? {
+                lease::Guarded::Finished(()) => Ok(decision),
+                lease::Guarded::Lost => Err(lease_lost()),
+            };
+        }
         finish_operation(
             &self.store,
             receipts,
@@ -1298,6 +1328,14 @@ impl State {
             return Ok(withheld);
         }
         let key = processed_result_key(input, call_id.clone());
+        let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
+        // A replayed result of a call nobody recorded answers the same each time, so it is
+        // answered without claiming a receipt for it.
+        if result_untracked(pg, &key, &operation)?
+            && inherited_result(pg, input, &call_id)?.is_none()
+        {
+            return Ok(unknown_result_response());
+        }
         // A recovered receipt is this same result, claimed by a dispatch that
         // stopped mid-processing. It is driven again and completed.
         if let ResultClaim::Complete(decision) =
@@ -1305,7 +1343,6 @@ impl State {
         {
             return Ok(decision);
         }
-        let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
         let released = match read_operation_state(pg, &operation)? {
             OperationState::Complete(completed) => completed,
             OperationState::Pending {
@@ -1336,15 +1373,33 @@ impl State {
                         decision: completed,
                     }
                 } else {
-                    self.recover_call(input, actor, receipts, &operation, recorded, context)
+                    match self
+                        .recover_call(input, actor, receipts, &operation, recorded, context)
                         .await?
+                    {
+                        Recovery::Completed(completed) => completed,
+                        // Neither the call nor its result is decided: both are asked again.
+                        Recovery::Unjudged(decision) => {
+                            let response = authoritative_unexecuted_response(decision)?;
+                            return match receipts.discard().map_err(sql_failure)? {
+                                lease::Guarded::Finished(()) => Ok(response),
+                                lease::Guarded::Lost => Err(lease_lost()),
+                            };
+                        }
+                    }
                 }
             }
             OperationState::Absent => {
                 // A fork replays the history of the session it forks: a result from before the
                 // fork comes back as that session processed it, never as an unknown call.
-                let response =
-                    inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
+                let Some(response) = inherited_result(pg, input, &call_id)? else {
+                    // No call holds this id yet, and one judged under it later must not find
+                    // this answer, as a call the runtime could not judge would.
+                    return match receipts.discard().map_err(sql_failure)? {
+                        lease::Guarded::Finished(()) => Ok(unknown_result_response()),
+                        lease::Guarded::Lost => Err(lease_lost()),
+                    };
+                };
                 let approved = decision_text(&response)?;
                 self.store
                     .complete_processed_result(key, approved, response.clone(), receipts.owner())
@@ -1540,7 +1595,8 @@ impl State {
     /// Re-drives a call whose receipt an interrupted dispatch left pending,
     /// then completes that receipt with the answer. The runtime replays a
     /// decision it committed and decides afresh one it never recorded, so the
-    /// completed receipt holds exactly the answer the first dispatch owed.
+    /// completed receipt holds exactly the answer the first dispatch owed. A
+    /// call the runtime could not judge comes back unjudged, uncompleted.
     async fn recover_call(
         &self,
         input: &Input,
@@ -1549,7 +1605,7 @@ impl State {
         operation: &OperationKey,
         recorded: Value,
         context: Option<Value>,
-    ) -> napi::Result<CompletedOperation> {
+    ) -> napi::Result<Recovery> {
         let call = recorded_call(context.clone(), recorded.clone())?;
         let declares = recorded_declaration(&recorded)?;
         let event = HookEvent::ToolCall {
@@ -1573,14 +1629,17 @@ impl State {
             declares.as_ref(),
             &outcome.decision,
         )?;
+        if !judged(&outcome.decision) {
+            return Ok(Recovery::Unjudged(decision));
+        }
         self.store
             .complete_operation(operation.clone(), decision.clone(), receipts.owner())
             .map_err(receipt_failure)?;
-        Ok(CompletedOperation {
+        Ok(Recovery::Completed(CompletedOperation {
             input: recorded,
             context,
             decision,
-        })
+        }))
     }
 }
 

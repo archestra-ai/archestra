@@ -1570,10 +1570,12 @@ describe("APPA feature boundary", () => {
         retry: "later",
       },
       outcome: { kind: "missing_fact", retry: "later" },
+      record: { proxyNotice: true },
     },
     {
       stated: { outcomes: ["hard_block"], deciding: "hard_block" },
       outcome: { kind: "hard_block" },
+      record: { recorded: true },
     },
     {
       stated: { outcomes: ["waivable_gap", "consent"], deciding: "consent" },
@@ -1583,11 +1585,13 @@ describe("APPA feature boundary", () => {
         deciding: "consent",
         held: ["waivable_gap", "consent"],
       },
+      record: { recorded: true },
     },
   ])("a denied call carries the outcome its ruling states: $outcome.kind", async ({
     stated,
     offers,
     outcome,
+    record,
   }) => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({
@@ -1602,7 +1606,7 @@ describe("APPA feature boundary", () => {
       [{ id: "call", name: "read_file", arguments: {} }],
       { canonicalize: (name) => name },
     );
-    expect(decision).toMatchObject({ kind: "deny", recorded: true, outcome });
+    expect(decision).toMatchObject({ kind: "deny", ...record, outcome });
   });
 
   const denial = { decision: "deny_call", feedback: "[appa] Blocked" };

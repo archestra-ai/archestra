@@ -212,9 +212,10 @@ const LINE_CHECKS_AT_ONCE = 4;
 /** How long a settings save waits on its line check before it answers. */
 const LINE_CHECK_DEADLINE_MS = 5_000;
 
-export const LINE_CHECK_UNAVAILABLE =
+const LINE_CHECK_UNAVAILABLE =
   "The settings are saved, but whether every organization's policy can carry them could not be checked. See the backend log.";
 
+/** @public — exported for testability */
 export const LINE_CHECK_INCOMPLETE =
   "The settings are saved, but not every organization's policy was checked before the response was due. The warnings above may not be all of them.";
 
@@ -223,6 +224,8 @@ export const LINE_CHECK_INCOMPLETE =
  * organization's served policy, so those sessions follow Enforce instead. The
  * settings are already saved, so a check that fails says so and fails nothing,
  * and one still running at the deadline answers with what it gathered.
+ *
+ * @public — exported for testability
  */
 export async function lineWarnings(
   settings: GuardrailsSettings,

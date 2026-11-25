@@ -34,10 +34,6 @@ import type { LimitViolationResponse } from "@/models/limit";
 import RoutingDecisionModel from "@/models/routing-decision";
 import { followAppaSessionHeader } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import {
-  canReachMember,
-  providerChatWire,
-} from "@/routes/proxy/model-pool-transport";
-import {
   type ModelRouterAuth,
   type ModelRouterEndpoint,
   ModelRouterEndpointSchema,
@@ -60,6 +56,7 @@ import {
   type RoutingPlan,
   type RoutingSessionKey,
 } from "@/types/auto-routing";
+import { canReachMember, providerChatWire } from "@/utils/model-pool-wire";
 import {
   checkAutoTierEligibility,
   type EligibleTier,

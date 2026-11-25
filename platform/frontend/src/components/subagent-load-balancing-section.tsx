@@ -183,7 +183,7 @@ export function SubagentLoadBalancingSection({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Label htmlFor={enableSwitchId}>
-                <span>Agent Runtime load balancing &amp; failover</span>
+                <span>Load Balancing</span>
               </Label>
               <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
                 Beta
@@ -195,7 +195,7 @@ export function SubagentLoadBalancingSection({
           </div>
           <Switch
             id={enableSwitchId}
-            aria-label="Enable Agent Runtime load balancing & failover"
+            aria-label="Enable Load Balancing"
             checked={isEnabled}
             disabled={readOnly}
             onCheckedChange={handleToggleEnabled}

@@ -64,7 +64,7 @@ describe("SubagentLoadBalancingSection", () => {
     const { onChange } = renderSection(null);
 
     const toggle = screen.getByRole("switch", {
-      name: "Enable Agent Runtime load balancing & failover",
+      name: "Enable Load Balancing",
     });
     expect(toggle).not.toBeChecked();
 
@@ -166,9 +166,7 @@ describe("SubagentLoadBalancingSection", () => {
       { isGateway: false, isAllSubagentsMode: true },
     );
 
-    expect(
-      screen.getByText("Agent Runtime load balancing & failover"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Load Balancing")).toBeInTheDocument();
     expect(
       screen.getByText(
         "When this agent delegates to Agent Runtime subagents, choose how to split runs and handle failures. Other subagents run directly.",

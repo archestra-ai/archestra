@@ -96,6 +96,9 @@ describe("LlmConnectSteps", () => {
     } as unknown as ReturnType<typeof useSession>);
     server.use(
       http.get(`${API_ORIGIN}/api/llm-models`, () => HttpResponse.json([])),
+      http.get(`${API_ORIGIN}/api/llm-models/key-model-ids`, () =>
+        HttpResponse.json([]),
+      ),
       http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
         HttpResponse.json([]),
       ),
@@ -263,17 +266,25 @@ describe("LlmConnectSteps", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "New virtual key for Jev",
     });
-    // The provider picker is already expanded; both keys are offered, but a
-    // virtual key maps only one per provider.
+    const providers = within(dialog).getByRole("region", { name: "Providers" });
+    expect(providers).toHaveTextContent("TypeSafe");
+    expect(providers).not.toHaveTextContent("Via OpenRouter");
     await user.click(
-      await within(dialog).findByRole("combobox", { name: "Jev key" }),
+      within(providers).getByRole("button", { name: "Stop using Jev" }),
+    );
+    await user.click(
+      within(dialog).getByRole("combobox", {
+        name: "Add a provider, model pool or auto router",
+      }),
     );
     expect(
-      await screen.findByRole("option", { name: /^TypeSafe/ }),
-    ).toHaveAttribute("aria-selected", "true");
-    expect(
-      screen.getByRole("option", { name: /^Via OpenRouter/ }),
-    ).toHaveAttribute("aria-selected", "false");
+      await screen.findByRole("option", { name: /^Jev\s*TypeSafe/ }),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("option", { name: /^Jev\s*Via OpenRouter/ }),
+    );
+    expect(providers).toHaveTextContent("Via OpenRouter");
+    expect(providers).not.toHaveTextContent("TypeSafe");
   });
 
   it("fills a key created here into the request", async () => {

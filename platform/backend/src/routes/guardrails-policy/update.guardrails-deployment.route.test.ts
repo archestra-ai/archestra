@@ -499,6 +499,14 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     });
   });
 
+  test("the switch turns Guardrails back on in Enforce after an older replica turned them off", async () => {
+    await saved({ mode: "observe", personApproval: "ask" });
+    await GuardrailsDeploymentModel.set({ enabled: false });
+    expect(await read()).toMatchObject({ mode: "off" });
+    await saved({ enabled: true });
+    expect(await read()).toMatchObject({ mode: "enforce", active: true });
+  });
+
   test("an older replica's soft-block refusal under Observe reads as Enforce", async () => {
     await saved({ mode: "observe", personApproval: "auto_unattended" });
     await GuardrailsDeploymentModel.set({ unapprovableBlockMode: "refuse" });

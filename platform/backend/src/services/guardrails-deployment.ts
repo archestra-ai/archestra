@@ -627,11 +627,14 @@ function intendedSettings(
   update: GuardrailsDeploymentUpdate,
 ): DeploymentSettings {
   const current = canonicalOf(row);
+  // The switch turns Guardrails on in Enforce, and leaves a mode already on.
   const modeFromSwitch =
     update.enabled === undefined
       ? undefined
       : update.enabled
-        ? GuardrailsDeploymentModel.mode({ ...row, enabled: true })
+        ? current.mode === "off"
+          ? "enforce"
+          : current.mode
         : "off";
   const mode = update.mode ?? modeFromSwitch ?? current.mode;
   // Under Observe the legacy approval column is Observe's own value: it

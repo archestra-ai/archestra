@@ -169,11 +169,12 @@ describe("turnOnForFirstPolicy", () => {
       enabled: true,
       turnedOn: true,
     });
-    // Only the switch is written: the other legacy settings stay as stored.
+    // The switch is written with Enforce's waiver column, so an older replica
+    // waives nothing; the other legacy settings stay as stored.
     expect(await GuardrailsDeploymentModel.get()).toMatchObject({
       mode: "enforce",
       enabled: true,
-      unapprovableBlockMode: "allow",
+      unapprovableBlockMode: "refuse",
       humanApprovalMode: "unattended",
       breakTheGlassEnabled: false,
     });

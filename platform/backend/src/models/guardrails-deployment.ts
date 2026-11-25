@@ -88,7 +88,12 @@ class GuardrailsDeploymentModel {
    * in one conditional write. Whether it wrote.
    */
   static async turnOnIfNeverSet(): Promise<boolean> {
-    const set = { mode: "enforce" as const, enabled: true };
+    // The legacy waiver column as Enforce writes it, for an older replica.
+    const set = {
+      mode: "enforce" as const,
+      enabled: true,
+      unapprovableBlockMode: "refuse" as const,
+    };
     const written = await db
       .insert(table)
       .values({ id, ...set })

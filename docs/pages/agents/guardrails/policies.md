@@ -3,7 +3,7 @@ title: Managing the Policy
 description: Change the Guardrails policy with the APPA Keeper, include batteries, and validate it
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-21
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,6 +35,8 @@ A change that cannot be applied never turns Guardrails off. The last working pol
 A [battery](https://www.openappa.com/batteries) is a ready-made set of rules for one MCP server, such as GitHub, Linear, or Google Workspace. Include one, and that server's tools are covered without writing rules.
 
 Ask the APPA Keeper, for example "Cover my GitHub server with a battery". It proposes the batteries that fit your MCP servers, and you approve the change.
+
+On the **Batteries** tab, open a battery to attach it to your MCP servers, see what it checks, and preview its source. With [Git sync](/docs/agents/guardrails/git-sync), **Save** asks the APPA Keeper for all your changes at once, as one pull request.
 
 Some batteries call an API to decide, for example to check if a repository is public. Such a battery needs a token: the APPA Keeper asks you to set one up in the chat. You can also add it on the **Batteries** tab: open the battery and set its token under **Credentials**.
 

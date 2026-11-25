@@ -3,7 +3,7 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-14
+lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -53,7 +53,7 @@ Git sync also pulls at once, without waiting for the schedule, when:
 - you save a Git sync or self-service setting;
 - you open **Edit** or **Finish setup**, or close a Git sync wizard with **Done**;
 - the APPA Keeper finds that a pull request it opened for a policy, validation, or MCP server rules change has merged;
-- the GitHub App merges a self-service pull request (see [Auto-merge](#auto-merge));
+- the GitHub App merges a pull request Archestra opened (see [Auto-merge](#auto-merge));
 - you turn Guardrails enforcement on again.
 
 ## Repository Checks
@@ -122,12 +122,18 @@ What to know:
 - Turning self-service off leaves the ruleset in place. Archestra keeps posting the check, so pull requests still merge once it passes. The Git sync card names the rule.
 - Moving Git sync to another repository or branch, or stopping it, is refused while the rule is still there. Remove the rule first.
 
-### Auto-merge
+### Server Batteries
 
-MCP owners need no access to the policy repository: the GitHub App merges their pull requests itself. Turn on **Auto-merge pull requests** in the Self-service step of Git sync setup, or by editing the source later. The Git sync card then says that admitted self-service pull requests merge automatically.
+Server editors can also attach a bundled [battery](/docs/agents/guardrails/policies#batteries) to their servers, or detach one: ask the APPA Keeper, or use the **Batteries** tab, which takes [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read). One request covers several servers in one pull request. The pull request changes `appa.toml` only in which batteries govern those servers, and the check accepts it when the requester may edit every server it touches.
 
-- A pull request merges within about a minute once every check on it passes, and Git sync then applies it. The APPA Keeper opens it without asking you to approve it first. The Keeper then follows it in the chat and reports when the change applies, or what holds it.
-- Only rules pull requests opened from Archestra for an MCP server merge this way. Pull requests people open on GitHub keep the repository's own review.
+A battery that checks every tool call in the organization still needs [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update).
+
+## Auto-merge
+
+With auto-merge on, a change you approve in Archestra applies without anyone merging it on GitHub. Turn on **Auto-merge pull requests** on the Repository step of Git sync setup, or later with **Edit**. It needs a repository connected through a GitHub App.
+
+- It covers every pull request Archestra opens for a change: the APPA Keeper's policy and validation changes, and each MCP server's rules and batteries. Pull requests people open on GitHub keep the repository's own review.
+- A pull request merges once every check on it passes, usually within a minute, and Git sync then applies it. The APPA Keeper follows it in the chat and reports when the change applies, or what holds it.
 - A conflict or a draft holds the pull request until someone resolves it on GitHub. If GitHub refuses a merge for another reason, the App tries again a minute later, then every 15 minutes.
 - If the branch ruleset takes the check from another GitHub App, **Finish setup** shows the fix. The App merges the pull request within a minute of that fix.
 

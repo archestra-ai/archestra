@@ -13,6 +13,13 @@ ignore = [
   # it needs those crates to move to jiff or time first. Remove this entry
   # once `cargo tree -i chrono` is empty.
   { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained with no fixed release; rmcp and schemars still depend on it" },
+  # url 2.5.8 overflows the stack in Url::origin() on deeply nested blob: URLs.
+  # Nothing in this workspace, or in the crates that pull url in (reqwest,
+  # rig-core, graphql_client, opentelemetry-http), calls Url::origin(). The
+  # fixed release (2.5.9) was published on 2026-11-20, inside the 7-day Cargo
+  # release-age rule. Remove this entry and run `cargo update -p url` on or
+  # after 2026-11-28.
+  { id = "RUSTSEC-2026-0592", reason = "Url::origin() is never called here; the fixed url release is younger than the release-age rule until 2026-11-28" },
 ]
 
 [bans]

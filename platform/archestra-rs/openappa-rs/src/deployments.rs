@@ -197,25 +197,14 @@ impl Deployments {
         let pinned = self
             .pinned(runtime, store, line, policy, agent_yell)
             .await?;
-        // A session meant for this line dispatches on it, which checks the marks. One
-        // sent to Enforce for life is sent only on the marks the settings hold and the
-        // composition the organization stores, which a save may have replaced with one
+        // A session meant for this line dispatches on it, which checks what it was composed
+        // from. One sent to Enforce for life is sent only on the marks the settings hold and
+        // the composition the organization stores, which a save may have replaced with one
         // the line carries.
         if pinned.fallback.is_none() {
             return Ok(false);
         }
         current(store, line, policy, pinned).await?;
-        if let Some(composition) = policy.composition.clone() {
-            let (store, organization_id) = (store.clone(), line.organization_id.clone());
-            let stored = tokio::task::spawn_blocking(move || {
-                stored_composition(&store, &organization_id, &composition)
-            })
-            .await
-            .map_err(panicked)??;
-            if !stored {
-                return Err(DeploymentError::Superseded);
-            }
-        }
         Ok(true)
     }
 
@@ -259,7 +248,7 @@ impl Deployments {
         let (runtime, store) = (runtime.clone(), store.clone());
         let name = line.name();
         let (key, prepared) = (pinned.key.clone(), pinned.prepared.clone());
-        let marks = marked(line, policy).then(|| policy.guardrails.enforced_marks.clone());
+        let basis = Basis::of(line, policy);
         let head = tokio::task::spawn_blocking(move || -> Result<_, Fault> {
             let Some(head) = store.head(&name).map_err(storage)? else {
                 return Ok(None);
@@ -268,7 +257,7 @@ impl Deployments {
                 return Ok(None);
             }
             let published = pin_existing(&runtime, &name, &prepared, &head)?;
-            Ok(fresh(&store, marks.as_deref())?.then_some(published))
+            Ok(fresh(&store, basis.as_ref())?.then_some(published))
         })
         .await
         .map_err(panicked)??;
@@ -410,7 +399,7 @@ fn prepare(
     let head = store.head(&name).map_err(storage)?;
     // A line with approvers is also composed from the enforced marks: one composed from
     // marks a settings save has since replaced is neither published nor served.
-    let marks = marked(line, policy).then_some(&*policy.guardrails.enforced_marks);
+    let basis = Basis::of(line, policy);
     let published = match head {
         // The head already serves this file: pinning it advances nothing.
         Some(head) if head.key.as_str() == key => pin_existing(runtime, &name, &prepared, &head)?,
@@ -420,13 +409,13 @@ fn prepare(
             {
                 return Err(DeploymentError::Superseded);
             }
-            if !fresh(store, marks)? {
+            if !fresh(store, basis.as_ref())? {
                 return Err(DeploymentError::Superseded);
             }
             publish(runtime, &name, &prepared, head.map(|head| head.revision))?
         }
     };
-    if !fresh(store, marks)? {
+    if !fresh(store, basis.as_ref())? {
         return Err(DeploymentError::Superseded);
     }
     let pinned = Pinned {
@@ -511,44 +500,67 @@ fn publish(
         })
 }
 
-/// Whether `line` serves approvers composed from the enforced marks `policy` carries.
-fn marked(line: &Line, policy: &HostedPolicy) -> bool {
-    policy.composition.is_some()
-        && matches!(line.variant, Variant::Observe | Variant::EnforceApproved)
+/// What a line with approvers is composed from besides its policy text: the enforced
+/// marks and the organization's stored composition. No other line's publication moves
+/// its head, so a dispatch on it checks both itself.
+struct Basis {
+    organization_id: String,
+    composition: String,
+    enforced_marks: Arc<BTreeSet<String>>,
 }
 
-/// Whether the Guardrails settings still hold `enforced_marks`, when a line is composed
-/// from them. A dispatch that read the settings before a save then fails as moved, and
-/// the host's retry reads them again. Each check is one short read: no connection or lock
-/// is held while a deployment is pinned or published.
-fn fresh(store: &LogStore, enforced_marks: Option<&BTreeSet<String>>) -> Result<bool, Fault> {
-    let Some(marks) = enforced_marks.cloned() else {
+impl Basis {
+    fn of(line: &Line, policy: &HostedPolicy) -> Option<Basis> {
+        match (line.variant, &policy.composition) {
+            (Variant::Observe | Variant::EnforceApproved, Some(composition)) => Some(Basis {
+                organization_id: line.organization_id.clone(),
+                composition: composition.clone(),
+                enforced_marks: policy.guardrails.enforced_marks.clone(),
+            }),
+            _ => None,
+        }
+    }
+}
+
+/// Whether the Guardrails settings still hold the enforced marks and the organization
+/// still stores the composition a line was composed from. A dispatch that read either
+/// before a save then fails as moved, and the host's retry reads them again. Each check
+/// is one short read: no connection or lock is held while a deployment is pinned or
+/// published.
+fn fresh(store: &LogStore, basis: Option<&Basis>) -> Result<bool, Fault> {
+    let Some(basis) = basis else {
         return Ok(true);
     };
-    let stored = crate::Sql(store).with_client(move |client| {
-        Ok(client
-            .query_opt(
-                "SELECT enforced_marks FROM guardrails_deployment LIMIT 1",
-                &[],
-            )?
-            .and_then(|row| row.get::<_, Option<Vec<String>>>(0))
-            .unwrap_or_default())
+    let organization_id = basis.organization_id.clone();
+    let (marks, composition) = crate::Sql(store).with_client(move |client| {
+        let row = client.query_one(
+            "SELECT (SELECT enforced_marks FROM guardrails_deployment LIMIT 1), \
+             (SELECT content_hash FROM openappa_effective_policies WHERE organization_id = $1)",
+            &[&organization_id],
+        )?;
+        Ok((
+            row.get::<_, Option<Vec<String>>>(0).unwrap_or_default(),
+            row.get::<_, Option<String>>(1),
+        ))
     })?;
-    Ok(stored.into_iter().collect::<BTreeSet<_>>() == marks)
+    Ok(
+        marks.into_iter().collect::<BTreeSet<_>>() == *basis.enforced_marks
+            && composition.is_none_or(|stored| stored == basis.composition),
+    )
 }
 
-/// `pinned` when the settings still hold the marks its line was composed from.
+/// `pinned` when its line still stands on what it was composed from.
 async fn current(
     store: &Arc<LogStore>,
     line: &Line,
     policy: &HostedPolicy,
     pinned: Pinned,
 ) -> Result<Pinned, DeploymentError> {
-    if !marked(line, policy) {
+    let Some(basis) = Basis::of(line, policy) else {
         return Ok(pinned);
-    }
-    let (store, marks) = (store.clone(), pinned.enforced_marks.clone());
-    match tokio::task::spawn_blocking(move || fresh(&store, Some(&*marks)))
+    };
+    let store = store.clone();
+    match tokio::task::spawn_blocking(move || fresh(&store, Some(&basis)))
         .await
         .map_err(panicked)??
     {

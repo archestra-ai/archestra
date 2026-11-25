@@ -1200,6 +1200,38 @@ describe("conversation settings reach the wire", () => {
     );
   });
 
+  it.each([
+    "project-1",
+    null,
+  ])("refreshes only the relevant Project Recents when creating a chat in %s", async (projectId) => {
+    const saved = { ...makeConversation(), projectId };
+    vi.mocked(archestraApiSdk.createChatConversation).mockResolvedValue({
+      data: saved,
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.createChatConversation>>);
+    const queryClient = new QueryClient();
+    const recents = ["projects", "project-1", "conversations"];
+    const unrelatedRecents = ["projects", "project-2", "conversations"];
+    queryClient.setQueryData(recents, []);
+    queryClient.setQueryData(unrelatedRecents, []);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useCreateConversation(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        agentId: "agent-a",
+        projectId: projectId ?? undefined,
+      });
+    });
+
+    expect(queryClient.getQueryState(recents)?.isInvalidated).toBe(!!projectId);
+    expect(queryClient.getQueryState(unrelatedRecents)?.isInvalidated).toBe(
+      false,
+    );
+  });
+
   it("sends the effort when creating a conversation", async () => {
     vi.mocked(archestraApiSdk.createChatConversation).mockResolvedValue({
       data: { ...makeConversation(), thinkingEffort: "high" },

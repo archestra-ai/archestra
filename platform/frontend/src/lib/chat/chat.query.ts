@@ -596,6 +596,11 @@ export function useCreateConversation() {
         storeEncryptedChatKey(newConversation.id, variables.encryptedChatKey);
       }
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      if (newConversation.projectId) {
+        queryClient.invalidateQueries({
+          queryKey: ["projects", newConversation.projectId, "conversations"],
+        });
+      }
       // Immediately populate the individual conversation cache to avoid loading state
       queryClient.setQueryData(
         ["conversation", newConversation.id],

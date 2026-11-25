@@ -36,24 +36,15 @@ import {
   useMcpServerCategories,
 } from "@/lib/mcp/external-mcp-catalog.query";
 import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
+import {
+  catalogServersForType,
+  isDemoCategory,
+  MCP_APPS_DEMO_CATEGORY,
+  type ServerType,
+} from "./archestra-catalog-tab.utils";
 import type { SelectedCategory } from "./catalog-filters";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformExternalCatalogToFormValues } from "./mcp-catalog-form.utils";
-
-// "mcp-apps-demo" is a pseudo-type: demo servers are marked with the
-// MCP_APPS_DEMO_CATEGORY catalog category, hidden from every other type view,
-// and revealed only by picking this type explicitly.
-type ServerType = "all" | "remote" | "local" | "desktop" | "mcp-apps-demo";
-
-// Catalog category reserved for servers that only exist to exercise the MCP
-// Apps feature. Surfaced in the UI as the "MCP Apps Demo" type, not as a
-// selectable category.
-const MCP_APPS_DEMO_CATEGORY = "MCP Apps Demo";
-
-// Typed to accept a plain string so it composes with both the generated
-// category union and the server manifest's nullable category without casts.
-const isDemoCategory = (category: string | null | undefined) =>
-  category === MCP_APPS_DEMO_CATEGORY;
 
 export function ArchestraCatalogTab({
   onSelectServer,
@@ -111,22 +102,10 @@ export function ArchestraCatalogTab({
   }, [data]);
 
   // Apply client-side type filter (categories are filtered backend-side).
-  const filteredServers = useMemo(() => {
-    // The demo pseudo-type shows only MCP Apps demo servers.
-    if (filters.type === "mcp-apps-demo") {
-      return servers.filter((server) => isDemoCategory(server.category));
-    }
-
-    // Demo servers are hidden from every other type view, including "all".
-    let filtered = servers.filter((server) => !isDemoCategory(server.category));
-    if (filters.type !== "all") {
-      filtered = filtered.filter(
-        (server) => server.server.type === filters.type,
-      );
-    }
-
-    return filtered;
-  }, [servers, filters.type]);
+  const filteredServers = useMemo(
+    () => catalogServersForType(servers, filters.type),
+    [servers, filters.type],
+  );
 
   // The demo marker is surfaced as a type, so keep it out of the category list.
   const visibleCategories = useMemo(

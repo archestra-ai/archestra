@@ -92,11 +92,21 @@ vi.mock("@/components/ai-elements/tool", () => ({
   ToolInput: ({ input }: { input: unknown }) => (
     <pre>{JSON.stringify(input)}</pre>
   ),
-  ToolOutput: ({ output }: { output: unknown }) => (
-    <pre>{JSON.stringify(output)}</pre>
+  // Like the real one: a failed call's error text and its result, in one section.
+  ToolOutput: ({
+    output,
+    errorText,
+  }: {
+    output: unknown;
+    errorText?: string;
+  }) => (
+    <div>
+      {errorText ? <div>{errorText}</div> : null}
+      <pre>{JSON.stringify(output)}</pre>
+    </div>
   ),
-  ToolErrorDetails: ({ errorText }: { errorText: string }) => (
-    <div>{errorText}</div>
+  SectionLabel: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
   ),
 }));
 
@@ -321,7 +331,7 @@ describe("ChatMessages", () => {
     ["update_guardrails_policy", false],
     ["preview_guardrails_policy_change", true],
     ["update_guardrails_policy", true],
-  ] as const)("keeps arguments reachable in the full %s card (wrapped: %s)", (shortName, wrapped) => {
+  ] as const)("shows the request in the full %s card, as for any tool (wrapped: %s)", (shortName, wrapped) => {
     const toolName = `sparky__${wrapped ? "run_tool" : shortName}`;
     const args = {
       expectedRevision: 3,
@@ -361,11 +371,10 @@ describe("ChatMessages", () => {
       />,
     );
     expect(screen.getByLabelText("Policy diff")).toBeVisible();
-    const toggle = screen.getByRole("button", { name: "Arguments" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText(/expectedRevision/)).not.toBeInTheDocument();
-    fireEvent.click(toggle);
     expect(screen.getByText(/expectedRevision/)).toHaveTextContent("3");
+    expect(
+      screen.queryByRole("button", { name: "Arguments" }),
+    ).not.toBeInTheDocument();
   });
 
   beforeEach(() => {

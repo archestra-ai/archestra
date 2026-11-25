@@ -422,6 +422,74 @@ describe("archestra annotator", () => {
     ]);
   });
 
+  test("answers a session with its user's own subscription when that is the organization default", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Ignore credentials inherited from a developer's .env.
+    for (const entry of Object.values(config.chat)) {
+      if (entry && typeof entry === "object" && "apiKey" in entry)
+        entry.apiKey = "";
+    }
+    const owner = (await makeOrganization()).id;
+    const ownerAgent = await makeAgent({
+      organizationId: owner,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, owner);
+    // A personal subscription: its key is released only to its owner.
+    const secret = await makeSecret({
+      secret: { apiKey: "chatgpt-oauth:example-subscription" },
+    });
+    const key = await makeLlmProviderApiKey(owner, secret.id, {
+      provider: "openai",
+      name: "ChatGPT Subscription",
+      userId: user.id,
+    });
+    const model = await ModelModel.create({
+      externalId: "openai/gpt-subscription-test",
+      provider: "openai",
+      modelId: "gpt-subscription-test",
+      contextLength: 128_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    await db
+      .update(schema.organizationsTable)
+      .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
+      .where(eq(schema.organizationsTable.id, owner));
+    const session = `user:${user.id}|conversation`;
+    await openSession({
+      organizationId: owner,
+      callerId: `user:${user.id}`,
+      sessionId: session,
+    });
+    const sent = answerAt(`/v1/openai/${ownerAgent.id}/chat/completions`, () =>
+      completion('{"rank":"trusted"}'),
+    );
+
+    const response = await annotate(bearer(), {
+      ...request,
+      attribution: { root: ROOT, trajectory: ROOT, call_id: "toolu_1" },
+    });
+
+    // With no user in the key lookup, the subscription was released to no
+    // one: every consult ended "unconfigured" (409) and its call was refused.
+    expect(response.json()).toEqual({ rank: "trusted" });
+    expect(sent.map(({ user }) => user)).toEqual([user.id]);
+  });
+
   test("files a validation replay's consult under the organization and user running it, only while it runs", async ({
     makeOrganization,
     makeAgent,

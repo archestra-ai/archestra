@@ -6,8 +6,10 @@ import {
   getDefaultEnabledToolIds,
   getHumanRulingDisplay,
   getToolErrorText,
+  getToolHeaderState,
   getToolNameFromPart,
   hasToolAuthPrompt,
+  hasToolRequest,
   isCompactEligible,
 } from "./chat-tools-display.utils";
 
@@ -391,6 +393,161 @@ describe("tool display helpers", () => {
         toolResultPart: null,
       }),
     ).toBe("denied");
+  });
+});
+
+describe("a result its tool marked as an error", () => {
+  const failed = (output: unknown) =>
+    ({
+      type: "tool-fixtures__fail_with_error",
+      toolCallId: "call-1",
+      state: "output-available",
+      input: {},
+      output,
+    }) as never;
+
+  it("reads as an error with the tool's own words, not as completed", () => {
+    const part = failed({ content: "Out of quota", isError: true });
+
+    expect(getToolErrorText({ part, toolResultPart: null })).toBe(
+      "Out of quota",
+    );
+    expect(getCompactToolState({ part, toolResultPart: null })).toBe("error");
+  });
+
+  it("still reads as an error when the tool sent no words", () => {
+    const part = failed({ content: "", isError: true });
+
+    expect(getToolErrorText({ part, toolResultPart: null })).toBe(
+      "The tool reported an error and returned no details.",
+    );
+  });
+
+  it("leaves a result without the mark completed, whatever its text says", () => {
+    const part = failed({ content: "Error: nothing to do" });
+
+    expect(getToolErrorText({ part, toolResultPart: null })).toBeUndefined();
+    expect(getCompactToolState({ part, toolResultPart: null })).toBe(
+      "completed",
+    );
+  });
+
+  it("leaves a Guardrails refusal that offers a way to continue as a step, not a failure", () => {
+    const part = failed({
+      content:
+        '[appa] Blocked: this message cannot be read yet.\n  - archestra__execute_remedy_plan(offer_id: "0a0a")',
+      isError: true,
+    });
+
+    expect(getToolErrorText({ part, toolResultPart: null })).toBeUndefined();
+    expect(getCompactToolState({ part, toolResultPart: null })).toBe(
+      "completed",
+    );
+  });
+
+  it("keeps a reviewed call on its ruling", () => {
+    const part = failed({
+      content: "[appa] Denied: the human reviewer refused this call.",
+      isError: true,
+      _meta: { archestraHumanRuling: "deny" },
+    });
+
+    expect(getCompactToolState({ part, toolResultPart: null })).toBe("denied");
+    expect(getHumanRulingDisplay({ part, toolResultPart: null })?.label).toBe(
+      "Denied by you",
+    );
+  });
+});
+
+describe("a call that did not finish", () => {
+  const running = {
+    type: "tool-fixtures__wait_then_reply",
+    toolCallId: "call-1",
+    state: "input-available",
+    input: { seconds: 60 },
+  } as never;
+  const stopped = {
+    type: "tool-fixtures__wait_then_reply",
+    toolCallId: "call-1",
+    state: "output-available",
+    input: { seconds: 60 },
+    output: {
+      content: "The run was stopped before this call finished.",
+      _meta: {
+        archestraError: {
+          type: "cancelled",
+          message: "The run was stopped before this call finished.",
+        },
+      },
+    },
+  } as never;
+
+  it("runs while its turn runs, and is cancelled once the turn has ended", () => {
+    expect(getCompactToolState({ part: running, toolResultPart: null })).toBe(
+      "running",
+    );
+    expect(
+      getCompactToolState({
+        part: running,
+        toolResultPart: null,
+        turnActive: false,
+      }),
+    ).toBe("cancelled");
+    expect(
+      getToolHeaderState({
+        state: "input-available",
+        toolResultPart: null,
+        errorText: undefined,
+        turnActive: false,
+      }),
+    ).toBe("output-cancelled");
+  });
+
+  it("stays cancelled after a reload, from the result the stop left on it", () => {
+    // Not an error: stopping a call is the user's choice, not a failure.
+    expect(
+      getToolErrorText({ part: stopped, toolResultPart: null }),
+    ).toBeUndefined();
+    expect(getCompactToolState({ part: stopped, toolResultPart: null })).toBe(
+      "cancelled",
+    );
+    expect(
+      getToolHeaderState({
+        state: "output-available",
+        toolResultPart: null,
+        errorText: undefined,
+        output: (stopped as { output: unknown }).output,
+      }),
+    ).toBe("output-cancelled");
+  });
+
+  it("keeps an answered approval running: it is on its way to run", () => {
+    expect(
+      getCompactToolState({
+        part: { ...(running as object), state: "approval-responded" } as never,
+        toolResultPart: null,
+        turnActive: false,
+      }),
+    ).toBe("running");
+  });
+
+  it("keeps a call waiting for approval as it is after its turn ends", () => {
+    expect(
+      getCompactToolState({
+        part: { ...(running as object), state: "approval-requested" } as never,
+        toolResultPart: null,
+        turnActive: false,
+      }),
+    ).toBe("approval-requested");
+  });
+});
+
+describe("hasToolRequest", () => {
+  it("counts a call with no arguments as a request, and waits for arguments still on their way", () => {
+    expect(hasToolRequest({})).toBe(true);
+    expect(hasToolRequest({ id: 7 })).toBe(true);
+    expect(hasToolRequest(undefined)).toBe(false);
+    expect(hasToolRequest(null)).toBe(false);
   });
 });
 

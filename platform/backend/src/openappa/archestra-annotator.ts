@@ -111,9 +111,13 @@ class OpenAppaArchestraAnnotator {
     // default; never a model someone pinned on the configuration agent.
     const { annotatorModelId, annotatorLlmApiKeyId } =
       await GuardrailsDeploymentModel.get();
+    // Resolved for the person the session runs for: a per-user credential (a
+    // personal subscription set as the organization default) is released only
+    // to its owner, so a lookup with no user finds no key at all.
     const selection = await resolveAgentLlmOrDefault({
       agent: { modelId: annotatorModelId, llmApiKeyId: annotatorLlmApiKeyId },
       organizationId: organization.id,
+      userId: ownerIdentity(owner).userId,
     });
     if (isApiKeyRequired(selection.provider, selection.apiKey))
       return {

@@ -42,6 +42,7 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
 }));
 
 import { CompactToolGroup } from "./compact-tool-call";
+import { McpTaskProvider } from "./mcp-task-context";
 import {
   collectPreviewedChanges,
   PreviewedChangesProvider,
@@ -84,7 +85,7 @@ describe("CompactToolGroup", () => {
     ["update_guardrails_policy", false],
     ["preview_guardrails_policy_change", true],
     ["update_guardrails_policy", true],
-  ] as const)("opens %s with collapsed arguments (wrapped: %s)", (shortName, wrapped) => {
+  ] as const)("shows the request of %s as for any tool, above its result (wrapped: %s)", (shortName, wrapped) => {
     mockGetToolShortName.mockImplementation((name: string) =>
       name.replace(/^archestra__/, ""),
     );
@@ -128,17 +129,27 @@ describe("CompactToolGroup", () => {
         />
       </QueryClientProvider>,
     );
-    const toggle = screen.getByRole("button", { name: "Arguments" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText(/"expectedRevision":/)).not.toBeInTheDocument();
-    if (shortName.startsWith("preview")) {
-      expect(screen.getByLabelText("Policy diff")).toBeVisible();
-    } else {
-      expect(screen.getByText("Opened PR #7")).toBeVisible();
-    }
-    fireEvent.click(toggle);
-    expect(screen.getByText(/"expectedRevision":/)).toHaveTextContent("3");
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    // The card differs from another tool's only in how its result reads: a
+    // diff or one line, in place of the raw result.
+    const request = screen.getByText("Request");
+    const result = screen.getByText("Result");
+    const special = shortName.startsWith("preview")
+      ? screen.getByLabelText("Policy diff")
+      : screen.getByText("Opened PR #7");
+    expect(screen.getByText(/"expectedRevision":/)).toBeVisible();
+    expect(special).toBeVisible();
+    expect(
+      request.compareDocumentPosition(result) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      result.compareDocumentPosition(special) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByText(/"delivery":/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Arguments" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the latest policy result instead of an earlier preview", () => {
@@ -329,14 +340,10 @@ describe("CompactToolGroup", () => {
     expect(screen.getByLabelText("Policy diff")).toBeVisible();
     expect(screen.getByText(added)).toBeVisible();
     expect(screen.getByText("mcp/helpdesk.toml")).toBeVisible();
-    // Neither the raw result nor the raw file stands in for the diff.
-    expect(screen.queryByText("Result")).not.toBeInTheDocument();
+    // The raw result does not stand in for the diff; the request shows as
+    // for any tool.
     expect(screen.queryByText(/"stage":/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Arguments" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-    expect(screen.queryByText(/"mcpServerId":/)).not.toBeInTheDocument();
+    expect(screen.getByText("mcpServerId")).toBeVisible();
   });
 
   it("opens a rules preview on its diff for a reader who cannot open tool calls", () => {
@@ -408,21 +415,25 @@ describe("CompactToolGroup", () => {
     return onToolApprovalResponse;
   };
 
-  it("asks the person to approve a proposed file by pointing at its preview, printing neither the diff nor the file again, and opens no pull request before they do", () => {
+  it("asks the person to approve a proposed file by pointing at its preview, printing no second diff, and opens no pull request before they do", () => {
     const onToolApprovalResponse = renderProposal(RULES_AFTER);
     // Both the preview's diff and the pending approval card open automatically
-    // under their circles in order; the proposal carries no duplicate diff and
-    // no raw file.
+    // under their circles in order; the proposal carries no duplicate diff,
+    // and its request shows as for any tool.
     expect(
       screen.getByRole("button", {
         name: "propose guardrails server rules change (approval required)",
       }),
     ).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByLabelText("Policy diff")).toHaveLength(1);
-    expect(screen.queryByText(/"content":/)).not.toBeInTheDocument();
     expect(
-      screen.getByText("Adds a note to the Helpdesk rules."),
-    ).toBeVisible();
+      screen.queryByRole("button", { name: "Arguments" }),
+    ).not.toBeInTheDocument();
+    // One request per card: the preview's and the proposal's.
+    expect(screen.getAllByText("expectedCommit")).toHaveLength(2);
+    expect(
+      screen.getAllByText("Adds a note to the Helpdesk rules.").length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("The change previewed above")).toBeVisible();
     expect(screen.getAllByText("mcp/helpdesk.toml")).toHaveLength(2);
     expect(
@@ -864,6 +875,7 @@ describe("CompactToolGroup", () => {
 
     rerender(
       <CompactToolGroup
+        turnActive
         tools={[
           {
             ...entry,
@@ -1267,5 +1279,215 @@ describe("CompactToolGroup", () => {
     fireEvent.click(circle);
     expect(circle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Authentication expired")).toBeVisible();
+  });
+
+  it("shows the request of a call that takes no arguments, like any other call", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "no-args",
+              toolName: "github__get_me",
+              part: {
+                type: "tool-github__get_me",
+                state: "output-available",
+                toolCallId: "call-no-args",
+                input: {},
+                output: { content: "octocat" },
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "get me" }));
+    const request = screen.getByText("Request");
+    expect(request).toBeVisible();
+    expect(
+      request.compareDocumentPosition(screen.getByText("Result")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it.each([
+    { turnActive: true, name: "wait then reply (running)", pulses: true },
+    { turnActive: false, name: "wait then reply (cancelled)", pulses: false },
+  ])("reads a call without a result as $name (turn active: $turnActive)", ({
+    turnActive,
+    name,
+    pulses,
+  }) => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          turnActive={turnActive}
+          tools={[
+            {
+              kind: "tool",
+              key: "slow",
+              toolName: "fixtures__wait_then_reply",
+              part: {
+                type: "tool-fixtures__wait_then_reply",
+                state: "input-available",
+                toolCallId: "call-slow",
+                input: { seconds: 60 },
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    // Nothing runs once the turn has ended, so the circle must not keep
+    // pulsing as if the call were still on its way.
+    const circle = screen.getByRole("button", { name });
+    const dot = circle.querySelector("span.absolute");
+    expect(dot?.className.includes("animate-pulse")).toBe(pulses);
+    fireEvent.click(circle);
+    expect(
+      screen.getByText(turnActive ? "Running" : "Cancelled"),
+    ).toBeVisible();
+  });
+
+  it("keeps a waiting call queued after it became a background task, until it starts", () => {
+    const entry = {
+      kind: "tool" as const,
+      key: "waits",
+      toolName: "fixtures__waits",
+      part: {
+        type: "tool-fixtures__waits",
+        state: "input-available",
+        toolCallId: "waits",
+        input: { seconds: 30 },
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    };
+    // The task's clock covers the wait for a free place, so the task can be
+    // "working" before the call has reached its server.
+    const task = {
+      taskId: "task-1",
+      toolCallId: "waits",
+      toolName: "fixtures__waits",
+      status: "working" as const,
+      startedAt: Date.now(),
+    };
+    const group = (queued: boolean) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <McpTaskProvider
+          value={{
+            byToolCallId: new Map([["waits", task]]),
+            cancel: () => {},
+            cancelRequestedTaskIds: new Set(),
+            queuedToolCallIds: new Set(queued ? ["waits"] : []),
+          }}
+        >
+          <CompactToolGroup turnActive tools={[entry]} />
+        </McpTaskProvider>
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(group(true));
+    expect(
+      screen.getByRole("button", { name: "waits (queued)" }),
+    ).toBeInTheDocument();
+
+    rerender(group(false));
+    expect(
+      screen.getByRole("button", {
+        name: "waits (running in the background)",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "a result the tool marked as an error",
+      {
+        state: "output-available",
+        output: { content: "Error: disk is full", isError: true },
+      },
+    ],
+    [
+      "a call that threw",
+      { state: "output-error", errorText: "Error: disk is full" },
+    ],
+  ])("shows the error of %s once on its card", (_case, outcome) => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "failed",
+              toolName: "fixtures__fail_with_error",
+              part: {
+                type: "tool-fixtures__fail_with_error",
+                toolCallId: "call-failed",
+                input: { message: "disk is full" },
+                ...outcome,
+              } as never,
+              toolResultPart: null,
+              errorText: "Error: disk is full",
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "fail with error (error)" }),
+    );
+    // It used to appear twice: in a red box, and again as the Error section.
+    expect(screen.getAllByText("Error: disk is full")).toHaveLength(1);
+  });
+
+  it("reads a call that waits for its turn on its server as queued, not running", () => {
+    const call = (id: string) => ({
+      kind: "tool" as const,
+      key: id,
+      toolName: `fixtures__${id}`,
+      part: {
+        type: `tool-fixtures__${id}`,
+        state: "input-available",
+        toolCallId: id,
+        input: { seconds: 5 },
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <McpTaskProvider
+          value={{
+            byToolCallId: new Map(),
+            cancel: () => {},
+            cancelRequestedTaskIds: new Set(),
+            queuedToolCallIds: new Set(["waits"]),
+          }}
+        >
+          <CompactToolGroup turnActive tools={[call("runs"), call("waits")]} />
+        </McpTaskProvider>
+      </QueryClientProvider>,
+    );
+
+    const running = screen.getByRole("button", { name: "runs (running)" });
+    const queued = screen.getByRole("button", { name: "waits (queued)" });
+    expect(running.querySelector("span.absolute")?.className).toContain(
+      "animate-pulse",
+    );
+    // A waiting call does not pulse: nothing is happening to it yet.
+    expect(queued.querySelector("span.absolute")?.className).not.toContain(
+      "animate-pulse",
+    );
+    fireEvent.click(queued);
+    expect(screen.getByText("Queued")).toBeVisible();
   });
 });

@@ -85,7 +85,20 @@ function useTwoFactorEnrollmentRedirect(enabled: boolean): boolean {
   return shouldRedirect;
 }
 
-export function AppShell({
+export function AppShell(props: AppShellProps) {
+  return (
+    <>
+      <AppShellSurface {...props} />
+      {/* One toaster for every surface. Each surface used to render its own,
+          so a toast raised on one (the sign-in callback page) was dropped
+          when the app moved to the next (the page the person came from). */}
+      <Toaster />
+      <ImpersonationExpiry />
+    </>
+  );
+}
+
+function AppShellSurface({
   children,
   initialSidebarOpen = null,
 }: AppShellProps) {
@@ -141,8 +154,6 @@ export function AppShell({
       <>
         <MaintenanceModeOverlay />
         {children}
-        <Toaster />
-        <ImpersonationExpiry />
       </>
     );
   }
@@ -155,8 +166,6 @@ export function AppShell({
       <>
         <MaintenanceModeOverlay />
         <AuthSurfaceFrame>{children}</AuthSurfaceFrame>
-        <Toaster />
-        <ImpersonationExpiry />
       </>
     );
   }
@@ -269,8 +278,6 @@ export function AppShell({
                 !isPolicySource && <Version />}
             </div>
           </main>
-          <Toaster />
-          <ImpersonationExpiry />
           <ConversationSearchProvider />
           <AfterIdle>
             <OnboardingSurveyDialog />

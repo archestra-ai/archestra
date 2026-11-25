@@ -2,6 +2,8 @@ import {
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
   type McpTaskStatus,
+  TOOL_QUEUE_PART_TYPE,
+  type ToolQueuePartData,
 } from "@archestra/shared";
 import type { UIMessageChunk } from "ai";
 import logger from "@/logging";
@@ -46,6 +48,12 @@ export type ChatTaskBridge = {
     abortSignal?: AbortSignal;
     execute: (signal: AbortSignal) => Promise<T>;
   }) => Promise<T>;
+  /**
+   * Tell the chat that a tool call waits for its turn on its server, or has
+   * stopped waiting. Its circle then reads "queued" instead of "running".
+   * Sent transiently: the state describes the moment and is never persisted.
+   */
+  reportQueued: (data: ToolQueuePartData) => void;
   /** Parts collected this turn, for splicing into the assistant message. */
   collected: () => ChatMessagePart[];
 };
@@ -185,6 +193,15 @@ export function createChatTaskBridge(): ChatTaskBridge {
         ],
         isError: !cancelled,
       } as never;
+    },
+
+    reportQueued(data) {
+      writer?.write({
+        type: TOOL_QUEUE_PART_TYPE,
+        id: data.toolCallId,
+        data,
+        transient: true,
+      } as UIMessageChunk);
     },
 
     collected() {

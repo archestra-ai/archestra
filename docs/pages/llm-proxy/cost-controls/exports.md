@@ -2,7 +2,6 @@
 title: Export Costs
 description: Get LLM spend and usage into spreadsheets, scripts, and FinOps tools as one-off downloads, API queries, or scheduled FOCUS files in your own bucket
 order: 2
-lastUpdated: 2026-11-24
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

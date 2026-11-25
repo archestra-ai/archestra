@@ -3,7 +3,6 @@ title: Knowledge Connectors
 sidebarTitle: Connectors
 description: Supported knowledge connectors, their setup, and how each one syncs source permissions
 order: 1
-lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

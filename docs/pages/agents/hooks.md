@@ -3,7 +3,6 @@ title: Hooks
 beta: "Hooks are on whenever the [code sandbox](/docs/agents#code-sandbox) is on, which is the default."
 description: Scripts that run in the sandbox when an agent lifecycle event fires
 order: 6
-lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

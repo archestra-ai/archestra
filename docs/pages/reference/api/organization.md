@@ -2,7 +2,6 @@
 title: Organization and Access
 description: Manage organizations, teams, members, roles, API keys, and identity settings
 order: 6
-lastUpdated: 2026-11-04
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

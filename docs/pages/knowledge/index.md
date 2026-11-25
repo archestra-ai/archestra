@@ -2,7 +2,6 @@
 title: Knowledge (RAG)
 description: Give agents and MCP clients cited answers from connected sources and uploaded documents
 order: 5
-lastUpdated: 2026-11-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

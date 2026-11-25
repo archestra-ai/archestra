@@ -2,7 +2,6 @@
 title: Cost Controls
 description: How Archestra prices every model call, and how to cap spend or export costs
 order: 7
-lastUpdated: 2026-11-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

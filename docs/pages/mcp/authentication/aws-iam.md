@@ -2,7 +2,6 @@
 title: AWS IAM (SigV4)
 description: Let each agent call MCP servers behind AWS as its own IAM role session, with no AWS keys stored
 order: 5
-lastUpdated: 2026-11-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -2,7 +2,6 @@
 title: Environments
 description: Separate staging and production resources and workload networks
 order: 3
-lastUpdated: 2026-11-25
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

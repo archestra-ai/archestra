@@ -2,7 +2,6 @@
 title: Limit Metrics
 description: Identify exhausted budgets and rate limits, their targets, and enforcement behavior.
 order: 2
-lastUpdated: 2026-10-31
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

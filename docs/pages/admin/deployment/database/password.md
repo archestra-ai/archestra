@@ -2,7 +2,6 @@
 title: Connect with a Password
 description: Connect Archestra to any PostgreSQL with a password kept in a Kubernetes Secret, and verify the server's TLS certificate
 order: 4
-lastUpdated: 2026-11-14
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

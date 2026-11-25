@@ -2,7 +2,6 @@
 title: Developer Quickstart
 description: Run Archestra from source with Tilt and a local Kubernetes cluster
 order: 1
-lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

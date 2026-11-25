@@ -2,7 +2,6 @@
 title: Performance Benchmarks
 description: Compare Archestra and LiteLLM latency and requests per second on the same hardware.
 order: 10
-lastUpdated: 2026-11-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

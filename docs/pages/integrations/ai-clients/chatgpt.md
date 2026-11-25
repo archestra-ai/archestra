@@ -2,7 +2,6 @@
 title: ChatGPT
 description: Bring your gateway and skills into ChatGPT, and check the desktop app's tool calls with Guardrails
 order: 4
-lastUpdated: 2026-11-03
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

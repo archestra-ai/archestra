@@ -3,7 +3,6 @@ title: Knowledge Settings
 sidebarTitle: Settings
 description: Set the embedding model, search ranking, contextual retrieval, and OCR for Knowledge Bases
 order: 3
-lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

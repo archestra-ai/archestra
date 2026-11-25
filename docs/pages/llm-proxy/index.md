@@ -2,7 +2,6 @@
 title: LLM Proxy
 description: See and control every model call your company makes, from coding agents to your own apps
 order: 4
-lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

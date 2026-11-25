@@ -2,7 +2,6 @@
 title: Linear
 description: Connect Linear documents to Knowledge and configure source access
 order: 12
-lastUpdated: 2026-10-05
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

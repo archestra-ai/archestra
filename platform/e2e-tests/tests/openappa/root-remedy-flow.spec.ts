@@ -350,7 +350,7 @@ test("denies a tool call, rules on it, and releases it after the model executes 
       page.getByRole("button", { name: "OpenAPPA status" }),
     ).toHaveCount(0);
 
-    await expectOnePeelForGuardedCall(page);
+    await expectGuardedCallCircles(page);
   } finally {
     for (const mappingId of wireMockMappingIds) {
       await request
@@ -591,7 +591,7 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     expect(assistantText(events)).toContain(finalAnswer);
 
     await goToPage(page, `/chat/${conversationId}`);
-    await expectOnePeelForGuardedCall(page);
+    await expectGuardedCallCircles(page);
   } finally {
     for (const mappingId of wireMockMappingIds) {
       await request
@@ -632,23 +632,40 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
 // === Chat UI ================================================================
 
 /**
- * Chat folds the negotiation into the guarded call: one circle named after
- * the target, and the notice and remedy appear only inside its expanded card,
- * in order.
+ * Chat shows the guarded call as three circles, in order: the attempt the
+ * policy blocked, the remedy, then the released call. The blocked attempt's
+ * card holds the ruling the notice call returned.
  */
-async function expectOnePeelForGuardedCall(page: Page): Promise<void> {
-  const peel = page.getByRole("button", { name: "list skills", exact: true });
-  await expect(peel).toHaveCount(1);
-  await expect(
-    page.getByRole("button", {
-      name: /^(Checked what's allowed|Guardrails step)/,
-    }),
-  ).toHaveCount(0);
+async function expectGuardedCallCircles(page: Page): Promise<void> {
+  const circles = page.getByRole("button", {
+    name: /^(list skills \(blocked\)|execute remedy plan|list skills)$/,
+  });
+  await expect(circles).toHaveCount(3);
+  expect(
+    await circles.evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label")),
+    ),
+  ).toEqual(["list skills (blocked)", "execute remedy plan", "list skills"]);
 
-  await peel.click();
-  await expect(page.getByText("Guardrails", { exact: true })).toBeVisible();
-  const steps = page.getByText(/^(Checked what's allowed|Guardrails step)$/);
-  await expect(steps).toHaveText(["Checked what's allowed", "Guardrails step"]);
+  // The blocked attempt's card holds the ruling under a "Blocked" field, next
+  // to the card's own "Blocked" state. The ruling's own text is left out of
+  // the count: it starts with the same word. The notice call the ruling came
+  // from is not a second call on screen.
+  const blockedLabels = page
+    .getByText("Blocked", { exact: true })
+    .and(page.locator(":not(pre *)"));
+  await page
+    .getByRole("button", { name: "list skills (blocked)", exact: true })
+    .click();
+  await expect(blockedLabels).toHaveCount(2);
+  await expect(
+    page.locator("pre").filter({ hasText: "cannot run" }).first(),
+  ).toBeVisible();
+  await expect(page.getByText(/__get_remedy_plans$/)).toHaveCount(0);
+
+  // The released call's card holds its own request and result only.
+  await page.getByRole("button", { name: "list skills", exact: true }).click();
+  await expect(blockedLabels).toHaveCount(0);
 }
 
 // === The scripted provider turns =============================================

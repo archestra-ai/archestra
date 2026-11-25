@@ -790,8 +790,9 @@ function ModeCard({
 
 /**
  * Adds an auto router, a model pool or one provider key. Grouped by kind;
- * under Providers, every key of each provider not listed yet. Closes after
- * each pick; anything already added is left out.
+ * under Providers, every key of each provider not listed yet, under that
+ * provider's name. Closes after each pick; anything already added is left
+ * out.
  */
 function AccessPicker({ model }: { model: AccessModel }) {
   const label = "Add a provider, model pool or auto router";
@@ -806,6 +807,17 @@ function AccessPicker({ model }: { model: AccessModel }) {
   const providers = model.pickerProviders;
   const nothingLeft =
     routers.length === 0 && pools.length === 0 && providers.length === 0;
+  // Each provider is its own group, so its keys stay under its name while
+  // the search filters. The first one still showing carries the kind label.
+  const firstShownProvider = providers.find((entry) =>
+    entry.keys.some((option) =>
+      matchesEveryWord(
+        `key:${option.key.id}`,
+        search,
+        keyKeywords(entry, option),
+      ),
+    ),
+  )?.provider;
 
   return (
     <Popover open={open} onOpenChange={changeOpen}>
@@ -879,54 +891,51 @@ function AccessPicker({ model }: { model: AccessModel }) {
                 ))}
               </CommandGroup>
             )}
-            {providers.length > 0 && (
-              <CommandGroup heading="Providers">
-                {providers.flatMap((entry) =>
-                  entry.keys.map((option) => (
-                    <CommandItem
-                      key={option.key.id}
-                      value={`key:${option.key.id}`}
-                      keywords={[
-                        entry.label,
-                        entry.provider,
-                        option.name,
-                        option.owner,
-                        isSubscriptionKey(option.key)
-                          ? "subscription"
-                          : "metered",
-                      ]}
-                      onSelect={() => {
-                        model.addKey(entry.provider, option.key.id);
-                        changeOpen(false);
-                      }}
-                    >
-                      <span aria-hidden className="shrink-0">
-                        <ProviderIcon provider={entry.provider} size={16} />
+            {providers.map((entry) => (
+              <CommandGroup
+                key={entry.provider}
+                heading={
+                  <>
+                    {entry.provider === firstShownProvider && (
+                      <span className="block pb-2">Providers</span>
+                    )}
+                    <span className="flex items-center gap-2 text-sm text-foreground">
+                      <ProviderIcon provider={entry.provider} size={16} />
+                      <span>{entry.label}</span>
+                    </span>
+                  </>
+                }
+              >
+                {entry.keys.map((option) => (
+                  <CommandItem
+                    key={option.key.id}
+                    value={`key:${option.key.id}`}
+                    keywords={keyKeywords(entry, option)}
+                    className="pl-8"
+                    onSelect={() => {
+                      model.addKey(entry.provider, option.key.id);
+                      changeOpen(false);
+                    }}
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="sr-only">{entry.label} </span>
+                        <span className="truncate text-sm">{option.name}</span>
+                        {option.key.isPrimary && <PrimaryBadge />}
                       </span>
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="shrink-0 text-sm">
-                            {entry.label}
-                          </span>
-                          <span className="truncate text-sm text-muted-foreground">
-                            {option.name}
-                          </span>
-                          {option.key.isPrimary && <PrimaryBadge />}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {option.replaces
-                            ? `${option.detail} · replaces ${option.replaces}`
-                            : option.detail}
-                        </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {option.replaces
+                          ? `${option.detail} · replaces ${option.replaces}`
+                          : option.detail}
                       </span>
-                      {option.modelIds !== null && (
-                        <ModelCount count={option.modelIds.length} />
-                      )}
-                    </CommandItem>
-                  )),
-                )}
+                    </span>
+                    {option.modelIds !== null && (
+                      <ModelCount count={option.modelIds.length} />
+                    )}
+                  </CommandItem>
+                ))}
               </CommandGroup>
-            )}
+            ))}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -1039,6 +1048,17 @@ function RouterSummary({
       </span>
     </span>
   );
+}
+
+/** What a provider key is found by in the picker's search. */
+function keyKeywords(entry: PickerProvider, option: KeyOption): string[] {
+  return [
+    entry.label,
+    entry.provider,
+    option.name,
+    option.owner,
+    isSubscriptionKey(option.key) ? "subscription" : "metered",
+  ];
 }
 
 function matchesEveryWord(

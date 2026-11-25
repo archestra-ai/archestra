@@ -167,7 +167,7 @@ export function SubagentLoadBalancingSection({
         </SettingIcon>
         <div className="min-w-0 flex-1 space-y-1">
           <Label htmlFor={modeSelectId}>
-            <span>Load Balancing</span>
+            <span>Subagents Load Balancing</span>
           </Label>
           <FieldDescription>
             <span>{sectionDescription}</span>
@@ -180,7 +180,7 @@ export function SubagentLoadBalancingSection({
         >
           <SelectTrigger
             id={modeSelectId}
-            aria-label="Load Balancing"
+            aria-label="Subagents Load Balancing"
             className="col-start-2 w-full sm:w-[240px]"
           >
             <SelectValue />

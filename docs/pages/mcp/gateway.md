@@ -42,7 +42,7 @@ Give the client every tool its person can use, or only the ones you pick. Set it
 | **All tools** | Every tool the signed-in person can use. New servers show up by themselves. | A person's own coding agent |
 | **Manual** | Only the tools you pick. For each, pick a shared account, or **Resolve at call time** to use each person's own. | A team, an app, or a script |
 
-- **Subagents** go here too. The client gets one `agent__<name>` tool for each [subagent](/docs/agents/subagents), to hand it a task.
+- **Subagents** go here too. The client gets one `agent__<name>` tool for each [subagent](/docs/agents/subagents), to hand it a task. When multiple assigned agents have dedicated runtimes, set **Agent Runtime Delegation** under **Settings → Agents** to distribute runs across them; see [Agent Runtime Delegation](/docs/agents/subagents#agent-runtime-delegation).
 - **Progressive tool loading** is on by default: the client gets [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool). Turn it off in Manual mode when the client needs the full list up front.
 - **Better tool search** runs automatically when your organization has a default LLM key. Archestra sends each MCP tool's name, description, and input schema to that provider once to generate search keywords, and the cost appears in the LLM logs.
 - A service-account key acts with the account's granted access, not the personal access of the person who created the key. Legacy team and organization tokens migrate to these accounts.

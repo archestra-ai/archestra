@@ -182,16 +182,18 @@ function CompactCircle({
   const { task, isQueued: waitsForItsTurn } = useMcpTaskFor(toolCallId);
   // A call a background task still runs outlives its turn, so the turn's end
   // does not make it a stopped call.
-  const isBackground =
+  const isWorkingTask =
     task?.status === "working" &&
     (state === "running" || state === "cancelled");
   // A cancelled task still reports a tool result, so the underlying state
   // reads as completed. It wasn't — the user stopped it.
   const isCancelled =
-    task?.status === "cancelled" || (state === "cancelled" && !isBackground);
+    task?.status === "cancelled" || (state === "cancelled" && !isWorkingTask);
   // A server runs a few calls at a time. The rest of a batch waits, and must
-  // not read as running while it does.
-  const isQueued = waitsForItsTurn && state === "running" && !isBackground;
+  // not read as running while it does. A waiting call can become a background
+  // task before it starts (the task's clock covers the wait): it still waits.
+  const isQueued = waitsForItsTurn && state === "running";
+  const isBackground = isWorkingTask && !isQueued;
   const elapsed = useElapsedSince(task?.startedAt ?? 0, Boolean(isBackground));
   const stateSuffix = isCancelled
     ? " (cancelled)"

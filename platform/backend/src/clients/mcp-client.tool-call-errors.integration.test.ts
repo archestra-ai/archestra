@@ -11,6 +11,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
   AgentModel,
@@ -75,11 +76,55 @@ describe("what a failed tool call says", () => {
   });
 });
 
+describe("a question the server asks during a call", () => {
+  let upstream: Awaited<ReturnType<typeof startUpstream>> | undefined;
+
+  afterEach(async () => {
+    await mcpClient.disconnectAll();
+    await upstream?.close();
+    upstream = undefined;
+  });
+
+  test("reaches the call's own handler when the call is a resource read", async ({
+    makeUser,
+  }) => {
+    upstream = await startUpstream({ askOnResourceRead: true });
+    const install = await installServer({ makeUser, url: upstream.url });
+    const questions: string[] = [];
+
+    // A tool the platform made from a resource is served by resources/read,
+    // not tools/call. Its questions must be routed like a tool call's: with
+    // no handler in place the question is cancelled and never shown.
+    const result = await mcpClient.executeToolCallForOwner(
+      { id: `call_${randomUUID()}`, name: "errors__read_notes", arguments: {} },
+      agentOwner(install.agentId),
+      {
+        tokenId: "token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: install.userId,
+      },
+      {
+        conversationId: "conversation-1",
+        elicitationHandler: async (request) => {
+          questions.push(request.params.message);
+          return { action: "accept", content: { confirm: true } };
+        },
+      },
+    );
+
+    expect(questions).toEqual(["Read the notes?"]);
+    expect(result.isError).toBe(false);
+    expect(JSON.stringify(result.content)).toContain("notes after accept");
+  });
+});
+
 // =============================================================================
 // Helpers
 // =============================================================================
 
 const TOOLS = ["ok", "refuse", "limited"] as const;
+const NOTES_URI = "notes://all";
 
 const RATE_LIMIT_PAGE = `<!doctype html>
 <html lang="en">
@@ -117,6 +162,17 @@ async function installServer(params: {
     });
     await AgentToolModel.create(agent.id, tool.id, { mcpServerId: server.id });
   }
+  // A tool the platform synthesizes for a resource-only server.
+  const resourceTool = await ToolModel.createToolIfNotExists({
+    name: "errors__read_notes",
+    description: "Read the notes resource",
+    parameters: {},
+    catalogId: catalog.id,
+    meta: { _meta: { archestraResourceUri: NOTES_URI } },
+  });
+  await AgentToolModel.create(agent.id, resourceTool.id, {
+    mcpServerId: server.id,
+  });
   return { agentId: agent.id, userId: user.id };
 }
 
@@ -146,7 +202,7 @@ function callTool(params: {
  * error of code -32000, and `limited` is cut off by an HTTP 429 with an HTML
  * page, the way a proxy in front of a server answers a rate limit.
  */
-async function startUpstream() {
+async function startUpstream(options: { askOnResourceRead?: boolean } = {}) {
   const sessions = new Map<string, StreamableHTTPServerTransport>();
   const activity = { initializations: 0 };
 
@@ -175,15 +231,34 @@ async function startUpstream() {
         activity.initializations += 1;
         const created = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
-          enableJsonResponse: true,
+          // A question travels on the request's event stream.
+          enableJsonResponse: !options.askOnResourceRead,
           onsessioninitialized: (id) => {
             sessions.set(id, created);
           },
         });
         const mcp = new McpSdkServer(
           { name: "errors", version: "1.0.0" },
-          { capabilities: { tools: {} } },
+          { capabilities: { tools: {}, resources: {} } },
         );
+        mcp.setRequestHandler(ReadResourceRequestSchema, async (_, extra) => {
+          const answer = await mcp.elicitInput(
+            {
+              message: "Read the notes?",
+              requestedSchema: {
+                type: "object",
+                properties: { confirm: { type: "boolean" } },
+                required: ["confirm"],
+              },
+            },
+            { relatedRequestId: extra.requestId },
+          );
+          return {
+            contents: [
+              { uri: NOTES_URI, text: `notes after ${answer.action}` },
+            ],
+          };
+        });
         mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
           tools: TOOLS.map((name) => ({
             name,

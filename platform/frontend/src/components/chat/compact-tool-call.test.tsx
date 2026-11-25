@@ -1632,6 +1632,57 @@ describe("CompactToolGroup", () => {
     ).toBeVisible();
   });
 
+  it("keeps a waiting call queued after it became a background task, until it starts", () => {
+    const entry = {
+      kind: "tool" as const,
+      key: "waits",
+      toolName: "fixtures__waits",
+      part: {
+        type: "tool-fixtures__waits",
+        state: "input-available",
+        toolCallId: "waits",
+        input: { seconds: 30 },
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    };
+    // The task's clock covers the wait for a free place, so the task can be
+    // "working" before the call has reached its server.
+    const task = {
+      taskId: "task-1",
+      toolCallId: "waits",
+      toolName: "fixtures__waits",
+      status: "working" as const,
+      startedAt: Date.now(),
+    };
+    const group = (queued: boolean) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <McpTaskProvider
+          value={{
+            byToolCallId: new Map([["waits", task]]),
+            cancel: () => {},
+            cancelRequestedTaskIds: new Set(),
+            queuedToolCallIds: new Set(queued ? ["waits"] : []),
+          }}
+        >
+          <CompactToolGroup turnActive tools={[entry]} />
+        </McpTaskProvider>
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(group(true));
+    expect(
+      screen.getByRole("button", { name: "waits (queued)" }),
+    ).toBeInTheDocument();
+
+    rerender(group(false));
+    expect(
+      screen.getByRole("button", {
+        name: "waits (running in the background)",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it.each([
     [
       "a result the tool marked as an error",

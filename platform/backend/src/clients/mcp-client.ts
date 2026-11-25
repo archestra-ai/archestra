@@ -1258,14 +1258,26 @@ class McpClient {
             }
           }
 
+          // The server's questions during this call go to this call's handler,
+          // whatever else runs on the connection. Every request the call makes
+          // for itself runs under it: a resource read can ask a question as a
+          // tool call can.
+          const elicitationHandler = options?.elicitationHandler;
+          const askingThisCall = <T>(request: () => Promise<T>): Promise<T> =>
+            elicitationHandler
+              ? this.elicitationRouter.run(client, elicitationHandler, request)
+              : request();
+
           const resourceUri = getSyntheticResourceToolUri(tool.meta);
           if (resourceUri) {
-            const result = await client.readResource(
-              { uri: resourceUri },
-              {
-                signal: options?.abortSignal,
-                timeout: config.mcpGateway.toolCallTimeoutMs,
-              },
+            const result = await askingThisCall(() =>
+              client.readResource(
+                { uri: resourceUri },
+                {
+                  signal: options?.abortSignal,
+                  timeout: config.mcpGateway.toolCallTimeoutMs,
+                },
+              ),
             );
             await clearStaleOAuthRefreshError();
             return await this.createSuccessResult({
@@ -1292,11 +1304,13 @@ class McpClient {
           // Resolve the actual tool name from the server (preserving original casing).
           // Tool names in the DB are lowercased by slugifyName(), but remote MCP servers
           // may use camelCase or mixed-case names (e.g., "atlassianUserInfo" vs "atlassianuserinfo").
-          targetToolName = await this.resolveActualToolName(
-            client,
-            connectionKey,
-            targetToolName,
-            options?.abortSignal,
+          targetToolName = await askingThisCall(() =>
+            this.resolveActualToolName(
+              client,
+              connectionKey,
+              targetToolName,
+              options?.abortSignal,
+            ),
           );
 
           // A detached task answers its client immediately, so the
@@ -1310,8 +1324,8 @@ class McpClient {
               client,
               timeoutMs: upstreamTimeoutMs,
               signal: options?.abortSignal,
-              request: (signal) => {
-                const callTool = () =>
+              request: (signal) =>
+                askingThisCall(() =>
                   client.callTool(
                     {
                       name: targetToolName,
@@ -1319,17 +1333,8 @@ class McpClient {
                     },
                     undefined,
                     { signal, timeout: upstreamTimeoutMs },
-                  );
-                // The server's questions during this call go to this call's
-                // handler, whatever else runs on the connection.
-                return options?.elicitationHandler
-                  ? this.elicitationRouter.run(
-                      client,
-                      options.elicitationHandler,
-                      callTool,
-                    )
-                  : callTool();
-              },
+                  ),
+                ),
             }),
           );
 

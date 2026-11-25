@@ -1970,7 +1970,8 @@ describe("AgentForm delegation state", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows inline weights only on assigned runtime pills in Weighted mode without duplicating the list", async () => {
+  it("shows weight share triggers on assigned runtime pills in Weighted mode and edits weight via popover without changing pill layout", async () => {
+    const user = userEvent.setup();
     const weightedAgent = {
       ...baseAgent,
       accessAllSubagents: false,
@@ -2008,34 +2009,50 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="agent" agent={weightedAgent} />);
 
-    // Runtime rows get weight inputs; local non-runtime row shows Direct with no weight input.
-    const claudeWeight = await screen.findByLabelText(
-      "Weight for Lobster Claude Code",
-    );
-    const codexWeight = screen.getByLabelText("Weight for Lobster Codex");
-    expect(claudeWeight).toHaveValue(1);
-    expect(codexWeight).toHaveValue(1);
+    // Runtime pills get compact share triggers; local non-runtime pill stays plain Local.
+    const claudeShareButton = await screen.findByRole("button", {
+      name: "Weight for Lobster Claude Code: 1 (50%)",
+    });
+    const codexShareButton = screen.getByRole("button", {
+      name: "Weight for Lobster Codex: 1 (50%)",
+    });
+    expect(claudeShareButton).toHaveTextContent("50%");
+    expect(codexShareButton).toHaveTextContent("50%");
     expect(
-      screen.queryByLabelText(`Weight for ${targetAgent.name}`),
+      screen.queryByRole("button", {
+        name: new RegExp(`Weight for ${targetAgent.name}`),
+      }),
     ).not.toBeInTheDocument();
-    const localRow = screen
-      .getByRole("button", { name: /Target AgentLocal/ })
-      .closest("li");
-    expect(localRow).toHaveTextContent("Direct");
+    expect(
+      screen.getByRole("button", { name: /Target AgentLocal/ }),
+    ).toBeInTheDocument();
 
-    // Only the two runtime rows split 100% (50% / 50%); no duplicate list or redundant hint.
-    expect(screen.getAllByText("50%")).toHaveLength(2);
+    // No table, no duplicate list, and no redundant helper copy.
     expect(screen.queryByText(/Subagent weights/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/higher gets more runs/i),
     ).not.toBeInTheDocument();
 
-    // Clearing the weight input lets a user type a new value without snapping back to 1.
+    // Opening the weight popover lets the user adjust weight with stepper, presets, or draft-safe typing.
+    await user.click(claudeShareButton);
+    const claudeWeight = screen.getByLabelText(
+      "Weight for Lobster Claude Code",
+    );
+    expect(claudeWeight).toHaveValue(1);
     fireEvent.change(claudeWeight, { target: { value: "" } });
     expect(claudeWeight).toHaveValue(null);
     fireEvent.change(claudeWeight, { target: { value: "3" } });
-    expect(screen.getByText("75%")).toBeInTheDocument();
-    expect(screen.getByText("25%")).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", {
+        name: "Weight for Lobster Claude Code: 3 (75%)",
+      }),
+    ).toHaveTextContent("75%");
+    expect(
+      screen.getByRole("button", {
+        name: "Weight for Lobster Codex: 1 (25%)",
+      }),
+    ).toHaveTextContent("25%");
   });
 
   it("does not replace external assignments after their read fails", async () => {

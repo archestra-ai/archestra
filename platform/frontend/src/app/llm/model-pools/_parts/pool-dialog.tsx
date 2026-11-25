@@ -47,13 +47,10 @@ export function PoolDialog({
   pool,
   initialSection = "pool",
   onOpenChange,
-  onCreated,
 }: {
   pool: ModelPool | null;
   initialSection?: PoolDialogSection;
   onOpenChange: (open: boolean) => void;
-  /** Called with a new pool once it is saved. */
-  onCreated?: (pool: ModelPool) => void;
 }) {
   const [activeSection, setActiveSection] = useState<PoolDialogSection>(
     !pool && initialSection === "connect" ? "pool" : initialSection,
@@ -77,17 +74,11 @@ export function PoolDialog({
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (!pool) {
-      const created = await createPool.mutateAsync(toPoolInput(values));
-      // A new pool has no member cooling down yet.
-      if (created)
-        onCreated?.({
-          ...created,
-          members: created.members.map((member) => ({
-            ...member,
-            benchedUntil: null,
-            benchReason: null,
-          })),
-        });
+      createPool.mutate(toPoolInput(values), {
+        onSuccess: (created) => {
+          if (created) onOpenChange(false);
+        },
+      });
       return;
     }
     const saved = await updatePool.mutateAsync({

@@ -16,7 +16,7 @@ vi.mock("next/image", () => ({
 }));
 vi.mock("@/lib/model-pools.query", () => ({
   useModelPools: vi.fn(),
-  useCreateModelPool: () => ({ mutateAsync: createPool, isPending: false }),
+  useCreateModelPool: () => ({ mutate: createPool, isPending: false }),
   useUpdateModelPool: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
@@ -95,7 +95,8 @@ describe("PoolDialog", () => {
     vi.mocked(useModelPools).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useModelPools>);
-    render(<PoolDialog pool={null} onOpenChange={() => {}} />);
+    const onOpenChange = vi.fn();
+    render(<PoolDialog pool={null} onOpenChange={onOpenChange} />);
     await user.click(screen.getByRole("combobox", { name: "Model name" }));
     await user.type(
       screen.getByPlaceholderText("Search or type a model name"),
@@ -131,8 +132,19 @@ describe("PoolDialog", () => {
     expect(
       screen.getByRole("combobox", { name: "Model name" }),
     ).toHaveTextContent("glm-5");
+    // A rejected request does not call the success handler. The form stays
+    // open with its values so the user can correct the problem and retry.
     await user.click(submit);
-    expect(createPool).toHaveBeenCalledWith(
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await user.click(failover);
+    expect(screen.getByLabelText("Stream timeout")).toHaveValue("45");
+
+    createPool.mockImplementationOnce((_input, { onSuccess }) => {
+      onSuccess(pool(null));
+    });
+    await user.click(submit);
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    expect(createPool).toHaveBeenLastCalledWith(
       expect.objectContaining({
         name: "glm-5",
         streamTimeoutSeconds: 45,
@@ -144,6 +156,7 @@ describe("PoolDialog", () => {
           }),
         ],
       }),
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
   });
 

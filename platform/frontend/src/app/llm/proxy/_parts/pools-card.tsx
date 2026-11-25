@@ -171,7 +171,6 @@ export function PoolsCard() {
           onOpenChange={(open) => {
             if (!open) setCreating(null);
           }}
-          onCreated={() => setCreating(null)}
         />
       )}
       {creating === "router" && (

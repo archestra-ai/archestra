@@ -4,6 +4,12 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type TextSearchLanguageInput = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
+
+export type ContextualRetrievalModeInput = 'disabled' | 'document' | 'chunk';
+
+export type EmbeddingDimensionsInput = 3072 | 1536 | 1408 | 1024 | 768 | 384;
+
 export type LogContentNotStoredInput = {
     __redacted: 'log_content_policy';
     isError?: boolean;
@@ -32,12 +38,6 @@ export type LogContentNotStoredInput = {
         callerUserId: string | null;
     };
 };
-
-export type TextSearchLanguageInput = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
-
-export type ContextualRetrievalModeInput = 'disabled' | 'document' | 'chunk';
-
-export type EmbeddingDimensionsInput = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
 
@@ -7803,6 +7803,12 @@ export type InteractionVirtualKeyInput = {
     createdByUserName: string | null;
 };
 
+export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
+
+export type ContextualRetrievalMode = 'disabled' | 'document' | 'chunk';
+
+export type EmbeddingDimensions = 3072 | 1536 | 1408 | 1024 | 768 | 384;
+
 export type LogContentNotStored = {
     __redacted: 'log_content_policy';
     isError?: boolean;
@@ -7831,12 +7837,6 @@ export type LogContentNotStored = {
         callerUserId: string | null;
     };
 };
-
-export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
-
-export type ContextualRetrievalMode = 'disabled' | 'document' | 'chunk';
-
-export type EmbeddingDimensions = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefault = string | number | boolean;
 
@@ -115090,6 +115090,113 @@ export type GetMembersResponses = {
 
 export type GetMembersResponse = GetMembersResponses[keyof GetMembersResponses];
 
+export type GetMemberOwnedResourcesData = {
+    body?: never;
+    path: {
+        userId: string;
+    };
+    query?: never;
+    url: '/api/members/{userId}/owned-resources';
+};
+
+export type GetMemberOwnedResourcesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMemberOwnedResourcesError = GetMemberOwnedResourcesErrors[keyof GetMemberOwnedResourcesErrors];
+
+export type GetMemberOwnedResourcesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Resources others use. They move to the new owner.
+         */
+        shared: Array<{
+            id: string;
+            kind: 'agent' | 'mcpGateway' | 'skill' | 'plugin' | 'catalog' | 'app' | 'remoteAgent';
+            name: string;
+            sharedWith: {
+                organization: boolean;
+                teams: Array<string>;
+                people: number;
+            };
+        }>;
+        /**
+         * Resources only this member can reach, by kind. They are deleted with the member.
+         */
+        personal: Array<{
+            kind: 'agent' | 'mcpGateway' | 'skill' | 'plugin' | 'catalog' | 'app' | 'remoteAgent';
+            count: number;
+        }>;
+    };
+};
+
+export type GetMemberOwnedResourcesResponse = GetMemberOwnedResourcesResponses[keyof GetMemberOwnedResourcesResponses];
+
 export type BulkDeleteMembersData = {
     body: {
         /**
@@ -115102,6 +115209,10 @@ export type BulkDeleteMembersData = {
             kind: 'pendingSignup';
             id: string;
         }>;
+        /**
+         * User id of an active member who becomes the owner of everything the removed members shared with others (agents, MCP gateways, skills, plugins, MCP registry entries, apps, remote agents). Defaults to you.
+         */
+        newOwnerId?: string;
     };
     path?: never;
     query?: never;

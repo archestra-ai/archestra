@@ -227,6 +227,68 @@ describe("DELETE /api/members/bulk", () => {
     }
   });
 
+  test("gives the removed member's shared items to the chosen new owner", async ({
+    makeAccount,
+    makeAgent,
+    makeMember,
+    makeTeam,
+    makeUser,
+  }) => {
+    const departing = await makeUser();
+    const departingMember = await makeMember(departing.id, organizationId);
+    await makeAccount(departing.id);
+    const newOwner = await makeUser();
+    await makeMember(newOwner.id, organizationId);
+    const team = await makeTeam(organizationId, user.id);
+    const teamAgent = await makeAgent({
+      organizationId,
+      authorId: departing.id,
+      access: { teams: [team.id] },
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/members/bulk",
+      payload: {
+        targets: [{ kind: "member", id: departingMember.id }],
+        newOwnerId: newOwner.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [row] = await db
+      .select({ authorId: schema.agentsTable.authorId })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, teamAgent.id));
+    expect(row?.authorId).toBe(newOwner.id);
+  });
+
+  test("refuses a new owner outside the organization or one being removed, and removes nobody", async ({
+    makeAccount,
+    makeMember,
+    makeUser,
+  }) => {
+    const departing = await makeUser();
+    const departingMember = await makeMember(departing.id, organizationId);
+    await makeAccount(departing.id);
+    const outsider = await makeUser();
+
+    for (const newOwnerId of [outsider.id, departing.id]) {
+      const response = await app.inject({
+        method: "DELETE",
+        url: "/api/members/bulk",
+        payload: {
+          targets: [{ kind: "member", id: departingMember.id }],
+          newOwnerId,
+        },
+      });
+      expect(response.statusCode).toBe(400);
+    }
+    expect(
+      await MemberModel.getByUserId(departing.id, organizationId),
+    ).toBeDefined();
+  });
+
   test("requires member delete permission", () => {
     expect(requiredEndpointPermissionsMap[RouteId.BulkDeleteMembers]).toEqual({
       member: ["delete"],

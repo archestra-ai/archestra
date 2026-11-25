@@ -29,6 +29,8 @@ type MemberRemovalResult =
 export async function removeMemberTarget(params: {
   organizationId: string;
   actorUserId?: string;
+  /** Receives the member's shared resources; defaults to the actor. */
+  newOwnerId?: string;
   target: MemberRemovalTarget;
 }): Promise<MemberRemovalResult> {
   const { organizationId, target } = params;
@@ -97,7 +99,7 @@ export async function removeMemberTarget(params: {
   await cleanupAfterMembershipRemoval({
     userId: member.userId,
     organizationId,
-    recipientId: params.actorUserId,
+    recipientId: params.newOwnerId ?? params.actorUserId,
     deleteUserIfNoMemberships: !accountAfterRemoval || target.kind === "member",
   });
   return { status: "removed" };

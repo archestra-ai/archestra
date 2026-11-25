@@ -58,7 +58,6 @@ import {
   useCancelInvitationMutation,
   useInvitationsPaginated,
   useMembersPaginated,
-  useRemoveMember,
   useUpdateMemberRole,
 } from "@/lib/member.query";
 import {
@@ -70,6 +69,7 @@ import {
 import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
 import { useSetSettingsAction } from "../layout";
+import { RemoveUserDialog } from "./_parts/remove-user-dialog";
 import {
   deactivatedUserNote,
   pendingSignupLabel,
@@ -309,7 +309,6 @@ function MembersTab({
 
   const updateMemberRole = useUpdateMemberRole();
   const bulkDeleteMembers = useBulkDeleteMembers();
-  const removeMember = useRemoveMember();
   const pageMemberIds = membersResponse?.data?.map((member) => member.userId);
   const { data: signupStatus } = useMemberSignupStatus({
     userIds: pageMemberIds ?? [],
@@ -760,18 +759,9 @@ function MembersTab({
       )}
 
       {removingMember && (
-        <DeleteConfirmDialog
-          open={!!removingMember}
+        <RemoveUserDialog
+          member={removingMember}
           onOpenChange={(open) => !open && setRemovingMember(null)}
-          title="Remove User"
-          description={`Are you sure you want to remove ${removingMember.name || removingMember.email} from the organization? This action cannot be undone.`}
-          isPending={removeMember.isPending}
-          onConfirm={async () => {
-            await removeMember.mutateAsync(removingMember.id);
-            setRemovingMember(null);
-          }}
-          confirmLabel="Remove"
-          pendingLabel="Removing..."
         />
       )}
     </BulkActionsScope>

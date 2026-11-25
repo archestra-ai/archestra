@@ -1,3 +1,4 @@
+import type { ScopedResource } from "@archestra/shared";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
@@ -5,8 +6,10 @@ import MemberModel from "@/models/member";
 import OwnedResourceModel, {
   type OwnedResourceKind,
 } from "@/models/owned-resource";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
+import { ApiError } from "@/types";
 import { handOffAgentOwnership } from "./agent-ownership";
 import { handOffResourceOwnership } from "./resource-ownership";
 
@@ -110,9 +113,118 @@ export async function handOffSharedResources(params: {
   }
 }
 
+/**
+ * What a member owns, as the Remove user dialog shows it: the resources others
+ * use (which move to the new owner) with who uses each, and how many personal
+ * resources of each kind are deleted with the member.
+ */
+export async function describeOwnedResources(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<{
+  shared: Array<{
+    id: string;
+    kind: OwnedResourceKind;
+    name: string;
+    sharedWith: { organization: boolean; teams: string[]; people: number };
+  }>;
+  personal: Array<{ kind: OwnedResourceKind; count: number }>;
+}> {
+  const owned = await OwnedResourceModel.findByOwner(params);
+  const shared = owned.filter((resource) => resource.shared);
+  const personal = new Map<OwnedResourceKind, number>();
+  for (const resource of owned)
+    if (!resource.shared && DELETED_WITH_OWNER.has(resource.kind))
+      personal.set(resource.kind, (personal.get(resource.kind) ?? 0) + 1);
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const resources = [
+    ...new Set(shared.map((resource) => SCOPED_RESOURCES[resource.kind])),
+  ];
+  const scopes = shared.map((resource) => resource.id);
+  const policies = await ResourcePermissionPolicyModel.findObjectPolicies({
+    resources,
+    scopes,
+  });
+  const recipients =
+    await ResourcePermissionPolicyModel.findReadRecipientDetails({
+      resources,
+      scopes,
+      policies,
+      excludeUserIds: new Map(scopes.map((scope) => [scope, params.userId])),
+    });
+  const organizationWide = new Set(
+    policies
+      .filter(
+        (policy) =>
+          ResourcePermissionPolicyModel.audienceOfGrants(policy.grants)
+            .audience === "org",
+      )
+      .map((policy) => policy.scope),
+  );
+  // SPDX-SnippetEnd
+
+  return {
+    shared: shared.map((resource) => {
+      const reach = recipients.get(resource.id);
+      return {
+        id: resource.id,
+        kind: resource.kind,
+        name: resource.name,
+        sharedWith: {
+          organization: organizationWide.has(resource.id),
+          teams: (reach?.teams ?? []).map((team) => team.name),
+          people: reach?.users.length ?? 0,
+        },
+      };
+    }),
+    personal: [...personal].map(([kind, count]) => ({ kind, count })),
+  };
+}
+
+/**
+ * Refuse a new owner who could not take over: someone outside the
+ * organization, a service account, or a deactivated user. Returns their
+ * membership id so a caller can refuse a new owner it is also removing.
+ */
+export async function assertEligibleNewOwner(params: {
+  candidateId: string;
+  organizationId: string;
+}): Promise<string> {
+  const member = isServiceAccountUserId(params.candidateId)
+    ? undefined
+    : await MemberModel.getByUserId(params.candidateId, params.organizationId);
+  if (!member || (await UserModel.getSoftDeleted(params.candidateId)))
+    throw new ApiError(
+      400,
+      "The new owner must be an active member of this organization",
+    );
+  return member.id;
+}
+
 // ===================================================================
 // Internal helpers
 // ===================================================================
+
+/** Personal resources of these kinds are deleted when their owner leaves. */
+const DELETED_WITH_OWNER = new Set<OwnedResourceKind>([
+  "agent",
+  "mcpGateway",
+  "skill",
+  "app",
+]);
+
+const SCOPED_RESOURCES: Record<OwnedResourceKind, ScopedResource> = {
+  agent: "agent",
+  mcpGateway: "mcpGateway",
+  skill: "skill",
+  plugin: "plugin",
+  catalog: "mcpRegistry",
+  app: "app",
+  remoteAgent: "externalAgent",
+};
 
 async function isEligibleRecipient(params: {
   candidateId: string;

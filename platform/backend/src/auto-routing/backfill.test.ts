@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   AUTO_ROUTING_BACKFILL_SCORER_CALLS,
   logContentNotStored,
+  SecretsManagerType,
 } from "@archestra/shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
@@ -14,12 +15,21 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AutoRouterModel from "@/models/auto-router";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingHistoryModel from "@/models/routing-history";
 import RoutingPlanModel from "@/models/routing-plan";
+import { secretManager, secretManagerCoordinator } from "@/secrets-manager";
 import { autoRoutingDispatcher } from "@/task-queue/handlers/auto-routing-dispatch-handler";
 import { handleAutoRoutingFit } from "@/task-queue/handlers/auto-routing-fit-handler";
-import { beforeEach, describe, expect, type TestFixtures, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestFixtures,
+  test,
+} from "@/test";
 import {
   autoRouterId,
   configureAutoRouting,
@@ -27,6 +37,7 @@ import {
   makeScorerVersion,
   plannedDecision,
   setAutoRoutingEnabled,
+  tiersBody,
 } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useMswServer } from "@/test/msw";
@@ -39,14 +50,18 @@ import {
   startBackfillScan,
   startBackfillScoring,
 } from "./backfill";
+import { diagnoseAutoRouting } from "./diagnostics";
 import {
   completeFit,
   prepareFit,
   readFitHistory,
   readFitWindow,
   runFit,
+  simulateFit,
 } from "./fit";
 import {
+  createAutoRouter,
+  getAutoRouter,
   setAutoRoutingEnabled as setAutoRoutingEnabledViaService,
   updateAutoRouter,
 } from "./settings";
@@ -79,6 +94,7 @@ describe("auto routing backfill", () => {
   let profileId: string;
   let makeInteraction: MakeInteraction;
   let prompts: string[];
+  let organizationKeyId: string;
 
   beforeEach(
     async ({
@@ -95,9 +111,11 @@ describe("auto routing backfill", () => {
       routerId = await autoRouterId(organizationId);
       profileId = (await AgentModel.getOrgLlmProxy(organizationId)).id;
       const secret = await makeSecret({ secret: { apiKey: "sk-typesafe" } });
-      await makeLlmProviderApiKey(organizationId, secret.id, {
-        provider: "jev",
-      });
+      organizationKeyId = (
+        await makeLlmProviderApiKey(organizationId, secret.id, {
+          provider: "jev",
+        })
+      ).id;
       makeInteraction = fixture;
       prompts = [];
       answerJev();
@@ -160,6 +178,45 @@ describe("auto routing backfill", () => {
   async function scan() {
     await startBackfillScan(organizationId, userId);
     await runBackfill();
+  }
+
+  /** Stops the organization's newest backfill, as the Stop button next to it does. */
+  async function cancelLatest() {
+    const latest = await RoutingBackfillModel.findLatest(organizationId);
+    if (!latest) throw new Error("No backfill to cancel");
+    await cancelBackfill(organizationId, latest.id, latest.phase);
+  }
+
+  /** Leaves `apiKeyId` with every grant but the one sharing it with the whole organization. */
+  async function revokeOrganizationUse(apiKeyId: string) {
+    const key = {
+      organizationId,
+      resource: "llmProviderApiKey",
+      scope: apiKeyId,
+    } as const;
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    if (!policy) throw new Error("The key has no permission policy");
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy.revision,
+      grants: policy.grants.filter(
+        (grant) => grant.subject.type !== "organization",
+      ),
+    });
+  }
+
+  /** Moves the newest backfill on, so diagnostics rebuild their basis instead of reusing a cached one. */
+  async function forgetDiagnosticsBasis() {
+    await db.execute(sql`
+      update routing_backfills set updated_at = updated_at + interval '1 second'
+      where id = ${(await RoutingBackfillModel.findLatest(organizationId))?.id}`);
+  }
+
+  async function latestFrameId() {
+    const scanned =
+      await RoutingBackfillModel.findLatestScanned(organizationId);
+    if (!scanned) throw new Error("No finished scan");
+    return scanned.id;
   }
 
   /** Starts scoring what the organization is offered, as an admin confirming it would. */
@@ -591,7 +648,7 @@ describe("auto routing backfill", () => {
     let cancelled: Promise<void> | null = null;
     answerJev({
       respond: async () => {
-        cancelled ??= cancelBackfill(organizationId);
+        cancelled ??= cancelLatest();
         await cancelled;
       },
     });
@@ -662,6 +719,7 @@ describe("auto routing backfill", () => {
       organizationId,
       windowStart: new Date(0),
       cutoff: new Date(),
+      frameId: await latestFrameId(),
       maxSessions: 1,
       scorerVersionId,
       limit: 1,
@@ -771,6 +829,7 @@ describe("auto routing backfill", () => {
       id: waiting?.id ?? "",
       organizationId,
       scorerVersionId: previous.id,
+      scorerApiKeyId: organizationKeyId,
       maxSessions: 4,
       maxCostUsd: 10,
       startedBy: userId,
@@ -793,6 +852,7 @@ describe("auto routing backfill", () => {
       organizationId,
       windowStart: new Date(0),
       cutoff: new Date(),
+      frameId: await latestFrameId(),
       maxSessions: 4,
       scorerVersionId: previous.id,
       limit: 1,
@@ -884,7 +944,7 @@ describe("auto routing backfill", () => {
     const own = await reading(await liveRouter());
     const other = await reading(cold);
 
-    expect(cold.usesPastSessions).toBe(false);
+    expect(cold.learnFromPastSessions).toBe(false);
     expect(own.window).toMatchObject({ sessions: 3, pastSessions: 3 });
     expect(own.history.sample).toHaveLength(3);
     expect(other.window).toMatchObject({ sessions: 0, pastSessions: 0 });
@@ -894,12 +954,503 @@ describe("auto routing backfill", () => {
   test("a scan is refused while no router learns from past sessions", async () => {
     await db
       .update(schema.autoRoutersTable)
-      .set({ usesPastSessions: false })
+      .set({ learnFromPastSessions: false })
       .where(eq(schema.autoRoutersTable.id, routerId));
 
     await expect(
       startBackfillScan(organizationId, userId),
     ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  /** A router of the organization that learns from past sessions but decides with another model than the default one. */
+  async function customModelRouter(name: string) {
+    const router = await ensureAutoRouter(organizationId, name, {
+      learnFromPastSessions: true,
+    });
+    await db
+      .update(schema.autoRoutersTable)
+      .set({ scorerModel: "jev-custom-test" })
+      .where(eq(schema.autoRoutersTable.id, router.id));
+    return router.id;
+  }
+
+  test("a router reads past sessions only while it learns from them and decides with the default model", async () => {
+    await sessions(3);
+    await scanAndScore({});
+    const learner = await ensureAutoRouter(organizationId, "auto:learner", {
+      learnFromPastSessions: true,
+    });
+    const custom = await customModelRouter("auto:custom");
+    const off = await ensureAutoRouter(organizationId, "auto:off");
+    const reading = async (id: string) => {
+      const router = await AutoRouterModel.find(id);
+      if (!router) throw new Error("router does not exist");
+      const window = await readFitWindow({
+        router,
+        scorerVersionId: (await activeSourceVersion(router.scorerModel)).id,
+        inputWatermark: new Date(),
+      });
+      const described = await getAutoRouter(organizationId, id);
+      return {
+        pastSessions: window.pastSessions,
+        learns: described.learnFromPastSessions,
+        reads: described.readsPastSessions,
+      };
+    };
+
+    expect(
+      await Promise.all([routerId, learner.id, custom, off.id].map(reading)),
+    ).toEqual([
+      { pastSessions: 3, learns: true, reads: true },
+      { pastSessions: 3, learns: true, reads: true },
+      { pastSessions: 0, learns: true, reads: false },
+      { pastSessions: 0, learns: false, reads: false },
+    ]);
+  });
+
+  test("a scoring run's completion asks a fit of every router reading past sessions, and of no other", async () => {
+    await sessions(2);
+    await scan();
+    const learner = await ensureAutoRouter(organizationId, "auto:learner", {
+      learnFromPastSessions: true,
+    });
+    const ids = [
+      routerId,
+      learner.id,
+      await customModelRouter("auto:custom"),
+      (await ensureAutoRouter(organizationId, "auto:off")).id,
+    ];
+    const generations = () =>
+      Promise.all(
+        ids.map(
+          async (id) => (await AutoRouterModel.find(id))?.generation ?? 0,
+        ),
+      );
+    const before = await generations();
+    await db
+      .delete(schema.tasksTable)
+      .where(eq(schema.tasksTable.taskType, "auto_routing_fit"));
+
+    await startScoring();
+    await runBackfill();
+
+    const after = await generations();
+    expect(after.map((generation, i) => generation - before[i])).toEqual([
+      1, 1, 0, 0,
+    ]);
+    const fits = await db
+      .select({ payload: schema.tasksTable.payload })
+      .from(schema.tasksTable)
+      .where(eq(schema.tasksTable.taskType, "auto_routing_fit"));
+    expect(
+      fits
+        .map(({ payload }) => (payload as { routerId: string }).routerId)
+        .sort(),
+    ).toEqual([routerId, learner.id].sort());
+  });
+
+  test("a scoring run pays only with the organization key it pinned at admission; once that key is gone the run fails and keeps its scores", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await sessions(10);
+    await scan();
+    const secret = await makeSecret({ secret: { apiKey: "sk-another" } });
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "jev",
+      isPrimary: false,
+    });
+    const authorizations: (string | null)[] = [];
+    server.use(
+      http.post(JEV_ENDPOINT, async ({ request }) => {
+        authorizations.push(request.headers.get("authorization"));
+        await db
+          .delete(schema.llmProviderApiKeysTable)
+          .where(eq(schema.llmProviderApiKeysTable.id, organizationKeyId));
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+
+    const started = await startScoring({ maxSessions: 10 });
+    expect(started.scorerApiKeyId).toBe(organizationKeyId);
+    await runBackfill();
+
+    expect((await describeBackfill(organizationId)).backfill?.status).toBe(
+      "failed",
+    );
+    expect(authorizations.length).toBeGreaterThan(0);
+    expect(new Set(authorizations)).toEqual(new Set(["Bearer sk-typesafe"]));
+    const statuses = Object.values(await readings());
+    expect(statuses).toContain("scored");
+    expect(statuses).toContain("unscored");
+  });
+
+  test("a scoring run stops paying once the key it pinned is no longer shared with the whole organization", async () => {
+    await sessions(10);
+    await scan();
+    const authorizations: (string | null)[] = [];
+    server.use(
+      http.post(JEV_ENDPOINT, async ({ request }) => {
+        authorizations.push(request.headers.get("authorization"));
+        await revokeOrganizationUse(organizationKeyId);
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+
+    await startScoring({ maxSessions: 10 });
+    await runBackfill();
+
+    expect((await describeBackfill(organizationId)).backfill?.status).toBe(
+      "failed",
+    );
+    expect(authorizations.length).toBeGreaterThan(0);
+    expect(authorizations.length).toBeLessThan(10);
+    const statuses = Object.values(await readings());
+    expect(statuses).toContain("scored");
+    expect(statuses).toContain("unscored");
+  });
+
+  test("admission pins the first organization-wide Jev key that resolves", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await sessions(2);
+    await scan();
+    // The primary key's secret is gone, so it no longer resolves.
+    await db
+      .update(schema.llmProviderApiKeysTable)
+      .set({ secretId: null })
+      .where(eq(schema.llmProviderApiKeysTable.id, organizationKeyId));
+    const secret = await makeSecret({ secret: { apiKey: "sk-secondary" } });
+    const secondary = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "jev",
+      isPrimary: false,
+    });
+
+    expect((await startScoring()).scorerApiKeyId).toBe(secondary.id);
+  });
+
+  test("a wildcard grant to everyone never makes a member's personal Jev key the payer", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await sessions(2);
+    await scan();
+    const everyKey = {
+      organizationId,
+      resource: "llmProviderApiKey",
+      scope: "*",
+    } as const;
+    const policy = await ResourcePermissionPolicyModel.find(everyKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...everyKey,
+      revision: policy?.revision ?? 0,
+      grants: [
+        ...(policy?.grants ?? []),
+        {
+          subject: { type: "organization", id: "*" },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-personal" } });
+    const personal = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "jev",
+      userId,
+      isPrimary: true,
+    });
+    // Ranked ahead of the organization's key.
+    await db
+      .update(schema.llmProviderApiKeysTable)
+      .set({ createdAt: new Date(0) })
+      .where(eq(schema.llmProviderApiKeysTable.id, personal.id));
+
+    expect((await startScoring()).scorerApiKeyId).toBe(organizationKeyId);
+  });
+
+  test("a run whose payer loses its grant during the round that scores the last sessions still completes and refits", async () => {
+    await sessions(3);
+    await scan();
+    server.use(
+      http.post(JEV_ENDPOINT, async () => {
+        await revokeOrganizationUse(organizationKeyId);
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+
+    await startScoring({ maxSessions: 3 });
+    await runBackfill();
+
+    expect(
+      (await describeBackfill(organizationId, routerId)).backfill,
+    ).toMatchObject({ status: "done", awaitingFit: true });
+    expect(Object.values(await readings())).toEqual([
+      "scored",
+      "scored",
+      "scored",
+    ]);
+  });
+
+  describe("with Vault holding the key values", () => {
+    const VAULT_SECRET =
+      "http://vault.example.test/v1/secret/data/archestra/:name";
+    const enterprise = config.enterpriseFeatures.core;
+    let values: Map<string, string>;
+    let vaultDown: boolean;
+
+    beforeEach(async () => {
+      config.enterpriseFeatures.core = true;
+      vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_ADDR", "http://vault.example.test");
+      vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_TOKEN", "example-vault-token");
+      vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD", "TOKEN");
+      vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_KV_VERSION", "2");
+      values = new Map();
+      vaultDown = false;
+      server.use(
+        http.post(VAULT_SECRET, async ({ params, request }) => {
+          const body = (await request.json()) as { data: { value: string } };
+          values.set(String(params.name), body.data.value);
+          return HttpResponse.json({ data: {} });
+        }),
+        http.get(VAULT_SECRET, ({ params }) => {
+          if (vaultDown) return new HttpResponse(null, { status: 500 });
+          const value = values.get(String(params.name));
+          return value === undefined
+            ? HttpResponse.json({ errors: [] }, { status: 404 })
+            : HttpResponse.json({ data: { data: { value } } });
+        }),
+      );
+      await secretManagerCoordinator.initialize(SecretsManagerType.Vault);
+    });
+    afterEach(async () => {
+      await secretManagerCoordinator.initialize(SecretsManagerType.DB);
+      vi.unstubAllEnvs();
+      config.enterpriseFeatures.core = enterprise;
+    });
+
+    /** Gives the organization's key a Vault secret, then drops its value: the metadata row stays. */
+    async function loseOrganizationKeyValue() {
+      const secret = await secretManager().createSecret(
+        { apiKey: "sk-gone" },
+        "jev-primary",
+      );
+      await db
+        .update(schema.llmProviderApiKeysTable)
+        .set({ secretId: secret.id })
+        .where(eq(schema.llmProviderApiKeysTable.id, organizationKeyId));
+      values.clear();
+    }
+
+    test("admission passes over a key whose Vault value is gone to the next one that resolves", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      await sessions(2);
+      await scan();
+      await loseOrganizationKeyValue();
+      const secret = await secretManager().createSecret(
+        { apiKey: "sk-secondary" },
+        "jev-secondary",
+      );
+      const secondary = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "jev",
+        isPrimary: false,
+      });
+
+      expect((await startScoring()).scorerApiKeyId).toBe(secondary.id);
+    });
+
+    test("admission fails while Vault itself fails, rather than passing over every key", async () => {
+      await sessions(2);
+      await scan();
+      await loseOrganizationKeyValue();
+      vaultDown = true;
+
+      await expect(startScoring()).rejects.toMatchObject({ statusCode: 503 });
+    });
+  });
+
+  test("a running job's description leaves the payer unread; an idle one reads it", async () => {
+    await sessions(2);
+    await scan();
+    await startScoring();
+
+    expect((await describeBackfill(organizationId)).payer).toBeNull();
+    await runBackfill();
+    expect((await describeBackfill(organizationId)).payer).toBe("ready");
+  });
+
+  test("scoring is refused without an organization-wide Jev key, even with a personal one", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await sessions(2);
+    await scan();
+    await db
+      .delete(schema.llmProviderApiKeysTable)
+      .where(eq(schema.llmProviderApiKeysTable.id, organizationKeyId));
+    const secret = await makeSecret({ secret: { apiKey: "sk-personal" } });
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "jev",
+      userId,
+    });
+    expect((await describeBackfill(organizationId)).payer).toBe("no_jev_key");
+    await expect(startScoring()).rejects.toMatchObject({ statusCode: 400 });
+    expect((await describeBackfill(organizationId)).backfill?.status).toBe(
+      "scanned",
+    );
+    expect(prompts).toEqual([]);
+  });
+
+  test("a stop names the phase it saw, so it never cancels the scoring that took over the scan", async () => {
+    await sessions(2);
+    await scan();
+    const scanned = await RoutingBackfillModel.findLatest(organizationId);
+    if (!scanned) throw new Error("No backfill");
+    await startScoring();
+
+    await expect(
+      cancelBackfill(organizationId, scanned.id, "scan"),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect((await describeBackfill(organizationId)).backfill?.status).toBe(
+      "running",
+    );
+    await cancelBackfill(organizationId, scanned.id, "score");
+    expect((await describeBackfill(organizationId)).backfill?.status).toBe(
+      "cancelled",
+    );
+  });
+
+  test("the expected traffic factor scales past traffic once, in fits, presets and budget checks alike", async ({
+    makeOrganization,
+  }) => {
+    config.autoRouting.minSessions = 3;
+    // Six sessions started over five days, each costing about $5 on the fast tier.
+    for (let i = 0; i < 6; i++) {
+      await turn(`heavy-${i}`, `Task number ${i}`, {
+        createdAt: new Date(Date.now() - (2 + i) * DAY_MS),
+        inputTokens: 5_000_000,
+      });
+    }
+    await scanAndScore({});
+    const perDay = 6 / 5;
+    await AutoRouterModel.update(routerId, {
+      budgetUsdPerDay: "1000.00",
+      expectedTrafficFactor: 3,
+    });
+
+    const run = await runFit(routerId);
+    expect(run?.published.plan.summary?.sessions_per_day).toBeCloseTo(
+      3 * perDay,
+    );
+    const outcome = await RoutingPlanModel.findLatestOutcome(routerId);
+    expect({
+      factor: Number(outcome?.volumeFactor),
+      source: outcome?.volumeSource,
+    }).toEqual({ factor: 3, source: "history" });
+
+    const simulated = async (body: Parameters<typeof simulateFit>[1]) => {
+      const result = await simulateFit(routerId, body);
+      if (result.status !== "feasible") {
+        throw new Error(`The simulation is ${result.status}`);
+      }
+      return result.summary.sessions_per_day;
+    };
+    expect(
+      await simulated({ budgetUsdPerDay: 1000, expectedTrafficFactor: 2 }),
+    ).toBeCloseTo(2 * perDay);
+    expect(
+      await simulated({ budgetPreset: "balanced", expectedTrafficFactor: 2 }),
+    ).toBeCloseTo(2 * perDay);
+    // A raw multiplier stands in for the factor instead of compounding it.
+    expect(
+      await simulated({ budgetUsdPerDay: 1000, volumeMultiplier: 2 }),
+    ).toBeCloseTo(2 * perDay);
+
+    // About $6/day at the past rate, $18/day at three times it.
+    const budget = { budgetUsdPerDay: 10 };
+    await expect(
+      updateAutoRouter(organizationId, routerId, budget),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    await updateAutoRouter(organizationId, routerId, {
+      ...budget,
+      expectedTrafficFactor: 1,
+    });
+
+    const settings = await liveRouter();
+    const tiers = await tiersBody(organizationId, {
+      fast: { id: settings.fastModelId ?? "", provider: "openai" },
+      normal: { id: settings.normalModelId ?? "", provider: "openai" },
+      smart: { id: settings.smartModelId ?? "", provider: "openai" },
+    });
+    const create = (name: string, learnFromPastSessions: boolean) =>
+      createAutoRouter(organizationId, {
+        name,
+        tiers,
+        budgetUsdPerDay: 10,
+        expectedTrafficFactor: 3,
+        learnFromPastSessions,
+      });
+    await expect(create("auto:busy", true)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    // Checked as if routing were on, so it cannot be created over budget while it is off.
+    await setAutoRoutingEnabled(organizationId, false);
+    await expect(create("auto:busy-off", true)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    await setAutoRoutingEnabled(organizationId, true);
+    expect(await create("auto:cold", false)).toMatchObject({
+      fit: { status: "cold_start" },
+    });
+    // Without past sessions to check it on, a router is created cold.
+    const empty = (await makeOrganization()).id;
+    await configureAutoRouting(empty);
+    const emptySettings = await AutoRouterModel.find(await autoRouterId(empty));
+    expect(
+      await createAutoRouter(empty, {
+        name: "auto:new",
+        budgetUsdPerDay: 0.01,
+        expectedTrafficFactor: 3,
+        tiers: await tiersBody(empty, {
+          fast: { id: emptySettings?.fastModelId ?? "", provider: "openai" },
+          normal: {
+            id: emptySettings?.normalModelId ?? "",
+            provider: "openai",
+          },
+          smart: { id: emptySettings?.smartModelId ?? "", provider: "openai" },
+        }),
+      }),
+    ).toMatchObject({ fit: { status: "cold_start" } });
+  });
+
+  test("an unrequested fit names the backfill when it reads another frame than the last fit did", async () => {
+    config.autoRouting.minSessions = 3;
+    await sessions(4, "early");
+    await scanAndScore({});
+    const [early] = await scanFrames();
+    expect((await runFit(routerId))?.inputs).toMatchObject({
+      trigger: "backfill",
+      history: { frameId: early.id },
+    });
+
+    await AutoRouterModel.update(routerId, { budgetUsdPerDay: "45.00" });
+    expect((await runFit(routerId))?.inputs.trigger).toBe("settings");
+
+    await sessions(8, "late");
+    await scanAndScore({});
+    const [, late] = await scanFrames();
+    expect((await runFit(routerId))?.inputs).toMatchObject({
+      trigger: "backfill",
+      history: { frameId: late.id },
+    });
+
+    // An outcome recorded before fits stored their frame says nothing about it.
+    await db
+      .update(schema.routingPlansTable)
+      .set({ volumeSource: null, historyFrameId: null })
+      .where(eq(schema.routingPlansTable.routerId, routerId));
+    await AutoRouterModel.update(routerId, { budgetUsdPerDay: "46.00" });
+    expect((await runFit(routerId))?.inputs.trigger).toBe("settings");
   });
 
   test("a fit after the backfill learns from it at the population's volume; one started before cannot publish", async () => {
@@ -1153,7 +1704,9 @@ describe("auto routing backfill", () => {
 
     const after = await AutoRouterModel.find(routerId);
     expect(after?.generation).toBe((before?.generation ?? 0) + 1);
-    expect((await describeBackfill(organizationId)).backfill).toMatchObject({
+    expect(
+      (await describeBackfill(organizationId, routerId)).backfill,
+    ).toMatchObject({
       status: "done",
       awaitingFit: true,
     });
@@ -1168,9 +1721,23 @@ describe("auto routing backfill", () => {
       .where(eq(schema.tasksTable.taskType, "auto_routing_fit"));
     expect(fits).toHaveLength(1);
     await runFit(routerId);
-    expect((await describeBackfill(organizationId)).backfill?.awaitingFit).toBe(
-      false,
-    );
+    expect(
+      (await describeBackfill(organizationId, routerId)).backfill?.awaitingFit,
+    ).toBe(false);
+  });
+
+  test("a router still awaits the fit its scoring asked for after a later scan becomes the backfill shown", async () => {
+    await sessions(3);
+    await scanAndScore({});
+    await sessions(2, "later");
+    await scan();
+
+    const { backfill } = await describeBackfill(organizationId, routerId);
+    expect(backfill).toMatchObject({ phase: "scan", awaitingFit: true });
+    await runFit(routerId);
+    expect(
+      (await describeBackfill(organizationId, routerId)).backfill?.awaitingFit,
+    ).toBe(false);
   });
 
   test("finds the opening past a page of auxiliary rows and decodes it by its own request shape", async () => {
@@ -1239,30 +1806,265 @@ describe("auto routing backfill", () => {
     expect(prompts).toHaveLength(0);
   });
 
-  test("a fit learns from one frame: the gap-free rank prefix of the latest scan, at its population's weight", async () => {
+  /** The scan publications, oldest first. */
+  async function scanFrames() {
+    return db
+      .select({ id: schema.routingBackfillsTable.id })
+      .from(schema.routingBackfillsTable)
+      .where(eq(schema.routingBackfillsTable.organizationId, organizationId))
+      .orderBy(schema.routingBackfillsTable.createdAt);
+  }
+
+  /** The gap-free run of scored sessions, in rank order, among those the scans up to `frameId` found. */
+  async function scoredPrefix(frameId: string) {
+    const ranked = await db.execute<{ attempted: boolean }>(sql`
+      select exists (
+        select 1 from routing_history_scores sc where sc.history_session_id = s.id
+      ) as attempted
+      from routing_history_sessions s
+      join routing_backfills b on b.id = s.backfill_id
+      where s.organization_id = ${organizationId}
+        and b.scanned_at <= (select scanned_at from routing_backfills where id = ${frameId})
+      order by s.sample_rank, s.id`);
+    const gap = ranked.rows.findIndex((row) => !row.attempted);
+    return gap === -1 ? ranked.rows.length : gap;
+  }
+
+  /** Ranks the sessions the newest scan found `where` the organization's others are: ahead of or behind every one. */
+  async function rankLatestScan(where: "ahead" | "behind") {
+    const rank =
+      where === "ahead"
+        ? sql`(select min(sample_rank) - 1 from routing_history_sessions)`
+        : sql`(select max(sample_rank) + 1 from routing_history_sessions)`;
+    await db.execute(sql`
+      update routing_history_sessions set sample_rank = ${rank}
+      where backfill_id = ${await latestFrameId()}`);
+  }
+
+  async function pastSample() {
+    const inputs = await prepareFit(routerId);
+    if (!inputs) throw new Error("Auto routing is not configured");
+    const weights = inputs.history.sample.map((row) => row.weight);
+    return {
+      frameId: inputs.history.frameId,
+      sessions: inputs.history.pastSessions,
+      sample: weights.length,
+      weight: weights.reduce((total, weight) => total + weight, 0),
+    };
+  }
+
+  test("a fit learns from one frame: the scan with the longest gap-free rank prefix, the newest on a tie, at its population's weight", async () => {
     await sessions(4, "early");
     await scanAndScore({ maxSessions: 4 });
     await sessions(8, "late");
     await scan();
-    await startScoring({ maxSessions: 3 });
-    await runBackfill();
+    await rankLatestScan("behind");
+    const [early, late] = await scanFrames();
+    expect(await scoredPrefix(early.id)).toBe(4);
+    expect(await scoredPrefix(late.id)).toBe(4);
 
-    const ranked = await db.execute<{ key: string; attempted: boolean }>(sql`
-      select s.session_key as key, exists (
-        select 1 from routing_history_scores sc where sc.history_session_id = s.id
-      ) as attempted
-      from routing_history_sessions s
-      where s.organization_id = ${organizationId}
-      order by s.sample_rank, s.id`);
-    const gap = ranked.rows.findIndex((row) => !row.attempted);
-    const prefix = gap === -1 ? ranked.rows.length : gap;
-    const inputs = await prepareFit(routerId);
-    const weights = inputs?.history.sample.map((row) => row.weight) ?? [];
-    expect(weights).toHaveLength(prefix);
-    expect(weights.reduce((total, weight) => total + weight, 0)).toBeCloseTo(
-      12,
+    expect(await pastSample()).toEqual({
+      frameId: late.id,
+      sessions: 4,
+      sample: 4,
+      weight: expect.closeTo(12),
+    });
+  });
+
+  test("a rescan keeps the scored frame until its own scored prefix is as long", async () => {
+    await sessions(4, "early");
+    await scanAndScore({ maxSessions: 4 });
+    const [early] = await scanFrames();
+    expect(await pastSample()).toMatchObject({
+      frameId: early.id,
+      sessions: 4,
+    });
+
+    await sessions(8, "late");
+    await scan();
+    await rankLatestScan("ahead");
+    const [, late] = await scanFrames();
+    expect(await scoredPrefix(late.id)).toBe(0);
+    expect(await pastSample()).toMatchObject({
+      frameId: early.id,
+      sessions: 4,
+    });
+
+    await startScoring({ maxSessions: 12 });
+    await runBackfill();
+    expect(await scoredPrefix(late.id)).toBe(12);
+    expect(await pastSample()).toEqual({
+      frameId: late.id,
+      sessions: 12,
+      sample: 12,
+      weight: expect.closeTo(12),
+    });
+  });
+
+  test("a router keeps the frame its plan was fitted on through more unscored rescans than the newest frames a fit compares", async () => {
+    config.autoRouting.minSessions = 3;
+    await sessions(4, "early");
+    await scanAndScore({ maxSessions: 4 });
+    const [early] = await scanFrames();
+    await runFit(routerId);
+    expect((await RoutingPlanModel.findActive(routerId))?.historyFrameId).toBe(
+      early.id,
     );
-    expect(inputs?.history.pastSessions).toBe(prefix);
+
+    for (let rescan = 0; rescan < 6; rescan++) {
+      await sessions(1, `rescan-${rescan}`);
+      await scan();
+      // Ranked ahead of every scored session, so no later frame has a scored prefix.
+      await rankLatestScan("ahead");
+    }
+    const frames = await scanFrames();
+    expect(frames).toHaveLength(7);
+    expect(await scoredPrefix(frames[6].id)).toBe(0);
+
+    expect(await pastSample()).toMatchObject({
+      frameId: early.id,
+      sessions: 4,
+    });
+  });
+
+  test("diagnostics replay the past sessions the active plan read, whatever the router reads now, and say so once they are gone", async () => {
+    config.autoRouting.minSessions = 3;
+    await sessions(4, "early");
+    await scanAndScore({ maxSessions: 4 });
+    const [early] = await scanFrames();
+    await runFit(routerId);
+    expect(await RoutingPlanModel.findActive(routerId)).toMatchObject({
+      historyFrameId: early.id,
+      volumeSource: "history",
+    });
+    const fitted = await diagnoseAutoRouting(
+      await liveRouter(),
+      undefined,
+      true,
+    );
+    expect(fitted.status).toBe("ready");
+
+    await db
+      .update(schema.autoRoutersTable)
+      .set({ learnFromPastSessions: false })
+      .where(eq(schema.autoRoutersTable.id, routerId));
+    await forgetDiagnosticsBasis();
+    expect(
+      await diagnoseAutoRouting(await liveRouter(), undefined, true),
+    ).toEqual(fitted);
+
+    await db
+      .delete(schema.routingBackfillsTable)
+      .where(eq(schema.routingBackfillsTable.id, early.id));
+    expect(
+      await diagnoseAutoRouting(await liveRouter(), undefined, true),
+    ).toEqual({
+      status: "basis_unavailable",
+    });
+  });
+
+  test("diagnostics show past sessions one by one only to a caller who may read the organization's logs", async () => {
+    config.autoRouting.minSessions = 3;
+    await sessions(4);
+    await scanAndScore({ maxSessions: 4 });
+    await runFit(routerId);
+
+    const shown = await diagnoseAutoRouting(
+      await liveRouter(),
+      undefined,
+      true,
+    );
+    const hidden = await diagnoseAutoRouting(
+      await liveRouter(),
+      undefined,
+      false,
+    );
+
+    if (shown.status !== "ready") throw new Error(shown.status);
+    expect(shown.sessions).toHaveLength(4);
+    expect(hidden).toEqual({ ...shown, sessions: [] });
+  });
+
+  test("diagnostics say the basis is gone once retention drops part of the past sessions the plan read", async () => {
+    config.autoRouting.minSessions = 3;
+    await sessions(4);
+    await scanAndScore({ maxSessions: 4 });
+    await runFit(routerId);
+    expect(
+      (await diagnoseAutoRouting(await liveRouter(), undefined, true)).status,
+    ).toBe("ready");
+
+    // The oldest of them started five days ago.
+    await RoutingHistoryModel.purgeExpired({
+      windowStart: new Date(Date.now() - 4.5 * DAY_MS),
+      keepScorerVersionId: (await activeSourceVersion()).id,
+    });
+    await forgetDiagnosticsBasis();
+
+    expect(
+      await diagnoseAutoRouting(await liveRouter(), undefined, true),
+    ).toEqual({
+      status: "basis_unavailable",
+    });
+  });
+
+  test("diagnostics replay a plan fitted on the router's own sessions after the frame it saw is gone", async () => {
+    config.autoRouting.minSessions = 10;
+    await sessions(3);
+    await scanAndScore({});
+    const settings = await AutoRouterModel.find(routerId);
+    await seedFitHistory({
+      organizationId,
+      routerId,
+      modelId: settings?.normalModelId ?? "",
+      scorerVersionId: (await activeSourceVersion()).id,
+      sessions: 10,
+    });
+    await runFit(routerId);
+    expect(await RoutingPlanModel.findActive(routerId)).toMatchObject({
+      historyFrameId: await latestFrameId(),
+      volumeSource: "live",
+      diagnostics: { history: { past_sessions: 0 } },
+    });
+    const fitted = await diagnoseAutoRouting(
+      await liveRouter(),
+      undefined,
+      true,
+    );
+    expect(fitted.status).toBe("ready");
+
+    await db
+      .delete(schema.routingBackfillsTable)
+      .where(eq(schema.routingBackfillsTable.organizationId, organizationId));
+
+    expect(
+      await diagnoseAutoRouting(await liveRouter(), undefined, true),
+    ).toEqual(fitted);
+  });
+
+  test("a frame never takes in sessions a later scan found, even ones that started inside its window", async () => {
+    await sessions(4, "early");
+    await scanAndScore({ maxSessions: 4 });
+    const [early] = await scanFrames();
+    // Ingested after the first scan, but started before its newest session.
+    await sessions(8, "late");
+    await scan();
+
+    const frame = await RoutingBackfillModel.findScanFrame(
+      organizationId,
+      early.id,
+    );
+    if (!frame) throw new Error("The first scan is not a frame");
+    const snapshot = await RoutingHistoryModel.findFitSnapshot({
+      organizationId,
+      scorerVersionId: (await activeSourceVersion()).id,
+      longContextThreshold: null,
+      frame,
+      windowStart: new Date(0),
+      withSample: true,
+    });
+    expect(snapshot.population.sessions).toBe(4);
+    expect(snapshot.scored).toBe(4);
   });
 
   test("a capped live sample and the past sample each stand for their whole window", async () => {
@@ -1359,11 +2161,11 @@ describe("auto routing backfill", () => {
     ).toEqual([waiting?.id]);
   });
 
-  test("score cleanup retains current, organization and active-backfill scorers across batches", async ({
+  test("score cleanup retains the default and active-backfill scorers across batches, not routers' own", async ({
     makeOrganization,
   }) => {
     await sessions(1);
-    await scanAndScore({});
+    await scan();
     const keep = (await activeSourceVersion()).id;
     const [own, foreign, unused, anotherUnused, active] = await Promise.all(
       Array.from({ length: 5 }, () => makeScorerVersion()),
@@ -1382,16 +2184,24 @@ describe("auto routing backfill", () => {
       .select()
       .from(schema.routingHistorySessionsTable);
     await db.insert(schema.routingHistoryScoresTable).values(
-      [own, foreign, unused, anotherUnused, active].map((scorer) => ({
-        historySessionId: session.id,
-        scorerVersionId: scorer.id,
-        status: "no_text" as const,
-      })),
+      [{ id: keep }, own, foreign, unused, anotherUnused, active].map(
+        (scorer) => ({
+          historySessionId: session.id,
+          scorerVersionId: scorer.id,
+          status: "no_text" as const,
+        }),
+      ),
     );
-    await db
-      .update(schema.routingBackfillsTable)
-      .set({ status: "scanned", scorerVersionId: active.id })
-      .where(eq(schema.routingBackfillsTable.id, session.backfillId));
+    const running = await RoutingBackfillModel.startScore({
+      id: session.backfillId,
+      organizationId,
+      scorerVersionId: active.id,
+      scorerApiKeyId: organizationKeyId,
+      maxSessions: 1,
+      maxCostUsd: 1,
+      startedBy: null,
+    });
+    expect(running?.status).toBe("running");
 
     expect(
       await RoutingHistoryModel.purgeExpired({
@@ -1399,10 +2209,10 @@ describe("auto routing backfill", () => {
         keepScorerVersionId: keep,
         batchSize: 1,
       }),
-    ).toEqual({ sessions: 0, scores: 3, backfills: 0 });
+    ).toEqual({ sessions: 0, scores: 4, backfills: 0 });
     const remaining = await db.select().from(schema.routingHistoryScoresTable);
     expect(remaining.map((score) => score.scorerVersionId).sort()).toEqual(
-      [keep, own.id, active.id].sort(),
+      [keep, active.id].sort(),
     );
   });
 
@@ -1517,14 +2327,16 @@ describe("auto routing backfill", () => {
     beforeEach(async () => {
       await sessions(2);
       await scanAndScore({});
-      expect((await describeBackfill(organizationId)).backfill).toMatchObject({
+      expect(
+        (await describeBackfill(organizationId, routerId)).backfill,
+      ).toMatchObject({
         awaitingFit: true,
         fitBlockedReason: null,
       });
     });
 
     const fitState = async () => {
-      const { backfill } = await describeBackfill(organizationId);
+      const { backfill } = await describeBackfill(organizationId, routerId);
       return {
         awaitingFit: backfill?.awaitingFit,
         blocked: backfill?.fitBlockedReason !== null,
@@ -1586,6 +2398,48 @@ describe("auto routing backfill", () => {
     });
   });
 
+  test("the fit a completion requested stays awaited until a fit plans its generation, whenever an older one recorded its outcome", async () => {
+    await sessions(2);
+    await scan();
+    await startScoring();
+    const older = await prepareFit(routerId);
+    if (!older) throw new Error("Auto routing is not configured");
+    expect(await completeFit(older)).toMatchObject({ kind: "recorded" });
+    await runBackfill();
+    const outcome = await RoutingPlanModel.findLatestOutcome(routerId);
+    if (!outcome) throw new Error("The older fit recorded no outcome");
+    // The completion's stamp is its transaction's start, which can precede
+    // an outcome the older generation's fit recorded while holding the lock.
+    await db
+      .update(schema.routingBackfillsTable)
+      .set({ completedAt: new Date(outcome.createdAt.getTime() - 1000) })
+      .where(eq(schema.routingBackfillsTable.organizationId, organizationId));
+    expect(
+      (await describeBackfill(organizationId, routerId)).backfill,
+    ).toMatchObject({ awaitingFit: true });
+
+    await handleAutoRoutingFit({ routerId });
+    expect(
+      (await describeBackfill(organizationId, routerId)).backfill,
+    ).toMatchObject({ awaitingFit: false });
+  });
+
+  test("the score offer counts the sample as it is now, not as the scan found it", async () => {
+    await sessions(2);
+    await scanAndScore({});
+    expect((await describeBackfill(organizationId)).scoreOffer).toBeNull();
+    const [oldest] = await db
+      .select({ id: schema.routingHistorySessionsTable.id })
+      .from(schema.routingHistorySessionsTable)
+      .orderBy(schema.routingHistorySessionsTable.startedAt)
+      .limit(1);
+    await db
+      .delete(schema.routingHistorySessionsTable)
+      .where(eq(schema.routingHistorySessionsTable.id, oldest.id));
+
+    expect((await describeBackfill(organizationId)).scoreOffer).toBeNull();
+  });
+
   test("the score offer carries the window of the scan it names, not of a newer job", async () => {
     await sessions(2);
     await scan();
@@ -1596,7 +2450,7 @@ describe("auto routing backfill", () => {
       .set({ windowStart: olderWindow })
       .where(eq(schema.routingBackfillsTable.id, older?.id ?? ""));
     await startBackfillScan(organizationId, userId);
-    await cancelBackfill(organizationId);
+    await cancelLatest();
 
     const { backfill, scoreOffer } = await describeBackfill(organizationId);
 

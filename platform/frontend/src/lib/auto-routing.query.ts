@@ -34,7 +34,6 @@ export type AutoRouter =
 type AutoRouterChange = archestraApiTypes.UpdateAutoRouterResponses["200"];
 export type AvailableAutoRouter =
   archestraApiTypes.GetAvailableAutoRoutersResponses["200"][number];
-export type AutoRoutingScorerState = AutoRouter["status"]["scorer"];
 export type AutoRouterCreate = archestraApiTypes.CreateAutoRouterData["body"];
 export type AutoRouterUpdate = archestraApiTypes.UpdateAutoRouterData["body"];
 export type AutoRoutingUsage =
@@ -47,6 +46,9 @@ export type AutoRoutingSimulation =
   archestraApiTypes.SimulateAutoRoutingResponses["200"];
 export type AutoRoutingBackfillState =
   archestraApiTypes.GetAutoRoutingBackfillResponses["200"];
+type AutoRoutingBackfillPhase = NonNullable<
+  AutoRoutingBackfillState["backfill"]
+>["phase"];
 type AutoRoutingScoreBackfillBody =
   archestraApiTypes.ScoreAutoRoutingBackfillData["body"];
 
@@ -67,7 +69,9 @@ const autoRoutingKeys = {
     [...autoRoutingKeys.router(routerId), "simulate"] as const,
   simulation: (routerId: string | null, body: AutoRoutingSimulateBody | null) =>
     [...autoRoutingKeys.simulations(routerId), body] as const,
-  backfill: () => [...autoRoutingKeys.all, "backfill"] as const,
+  backfills: () => [...autoRoutingKeys.all, "backfill"] as const,
+  backfill: (routerId: string | null) =>
+    [...autoRoutingKeys.backfills(), routerId] as const,
 };
 
 /**
@@ -269,7 +273,7 @@ async function applyFit(
     queryClient.invalidateQueries({
       queryKey: autoRoutingKeys.router(data.id),
     }),
-    queryClient.invalidateQueries({ queryKey: autoRoutingKeys.backfill() }),
+    queryClient.invalidateQueries({ queryKey: autoRoutingKeys.backfills() }),
     queryClient.invalidateQueries({
       queryKey: organizationKeys.defaultModel(),
     }),
@@ -325,18 +329,22 @@ const SIMULATION_RETRY_DELAY_MS = 1000;
 const BACKFILL_POLL_MS = 5000;
 
 /**
- * The organization's latest historical backfill, polled while it runs and
- * then until the fit its completion requested has an outcome.
+ * The organization's latest historical backfill, which every router reading
+ * past sessions shares, polled while it runs and then until the current
+ * router's fit its completion requested has an outcome.
  */
 export function useAutoRoutingBackfill() {
   const queryClient = useQueryClient();
+  const routerId = useAutoRouterId();
   return useQuery({
-    queryKey: autoRoutingKeys.backfill(),
+    queryKey: autoRoutingKeys.backfill(routerId),
     queryFn: async () => {
-      const { data, error } = await getAutoRoutingBackfill();
+      const { data, error } = await getAutoRoutingBackfill({
+        query: routerId ? { routerId } : undefined,
+      });
       throwOnApiError(error, { toastOnError: false });
       const previous = queryClient.getQueryData<AutoRoutingBackfillState>(
-        autoRoutingKeys.backfill(),
+        autoRoutingKeys.backfill(routerId),
       );
       if (
         previous?.backfill &&
@@ -368,8 +376,33 @@ export function useScanAutoRoutingBackfill() {
       throwOnApiError(error);
       return data;
     },
-    onSuccess: (data) =>
-      queryClient.setQueryData(autoRoutingKeys.backfill(), data),
+    onSuccess: (data) => {
+      // Shown until the refetch lands, so a failed one never leaves the old job up.
+      // The scan answers for no router, so each view keeps its own fit state.
+      queryClient.setQueriesData<AutoRoutingBackfillState | null>(
+        { queryKey: autoRoutingKeys.backfills() },
+        (old) =>
+          data && {
+            ...data,
+            backfill: data.backfill && {
+              ...data.backfill,
+              awaitingFit: old?.backfill?.awaitingFit ?? false,
+              fitBlockedReason: old?.backfill?.fitBlockedReason ?? null,
+            },
+          },
+      );
+      return queryClient.invalidateQueries({ queryKey: autoRoutingKeys.all });
+    },
+  });
+}
+
+/**
+ * Refetches every router's view of the pool after a job change: each one
+ * answers for its own router, which the organization-level response does not.
+ */
+function refetchBackfills(queryClient: ReturnType<typeof useQueryClient>) {
+  return queryClient.invalidateQueries({
+    queryKey: autoRoutingKeys.backfills(),
   });
 }
 
@@ -381,25 +414,30 @@ export function useScoreAutoRoutingBackfill() {
       throwOnApiError(error);
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(autoRoutingKeys.backfill(), data);
+    onSuccess: () => {
       toast.success("Scoring past sessions");
+      return refetchBackfills(queryClient);
     },
     // A refused offer is stale: show the current one.
-    onError: () =>
-      queryClient.invalidateQueries({ queryKey: autoRoutingKeys.backfill() }),
+    onError: () => refetchBackfills(queryClient),
   });
 }
 
+/** Stops the backfill the card shows, in the phase it shows, and no job started since. */
 export function useCancelAutoRoutingBackfill() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await cancelAutoRoutingBackfill();
+    mutationFn: async (backfill: {
+      id: string;
+      phase: AutoRoutingBackfillPhase;
+    }) => {
+      const { data, error } = await cancelAutoRoutingBackfill({
+        path: { id: backfill.id },
+        query: { phase: backfill.phase },
+      });
       throwOnApiError(error);
       return data;
     },
-    onSuccess: (data) =>
-      queryClient.setQueryData(autoRoutingKeys.backfill(), data),
+    onSuccess: () => refetchBackfills(queryClient),
   });
 }

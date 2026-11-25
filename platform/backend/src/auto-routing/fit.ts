@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
   coreVersion,
@@ -9,7 +10,9 @@ import config from "@/config";
 import logger from "@/logging";
 import AutoRouterModel from "@/models/auto-router";
 import ModelModel from "@/models/model";
-import RoutingBackfillModel from "@/models/routing-backfill";
+import RoutingBackfillModel, {
+  type ScanFrame,
+} from "@/models/routing-backfill";
 import RoutingHistoryModel, {
   type HistoryFitRow,
   type PastWindow,
@@ -29,13 +32,18 @@ import {
   type RoutingPlan,
   type RoutingPlanTrigger,
   type RoutingPublishResult,
+  type RoutingVolumeSource,
 } from "@/types/auto-routing";
 import type {
   AutoRoutingFitResult,
   AutoRoutingSimulateResponse,
   SimulatedTraffic,
 } from "@/types/auto-routing-api";
-import { activeSourceVersion, routerFeatures } from "./signals";
+import {
+  activeSourceVersion,
+  routerFeatures,
+  scoresAsDefault,
+} from "./signals";
 import {
   fingerprintMatches,
   loadTrio,
@@ -139,26 +147,31 @@ export async function fitReadiness(
  * The cheapest routing's USD/day when `settings` cannot be met on the current
  * usage, from a fit that publishes nothing; null when they can be, or no fit
  * would run on them. A preset is always met: it never resolves below the
- * cheapest routing.
+ * cheapest routing. Checked as if routing were on, so a budget saved while
+ * it is off is met once it is on. Admitted with the simulations under the
+ * process-wide limit alone, so concurrent saves never refuse each other.
  */
 export async function infeasibleBudget(
   settings: AutoRouter,
 ): Promise<number | null> {
   if (settings.budgetPreset) return null;
-  const inputs = await readFitInputs({
-    settings,
-    scorerVersionId: (await activeSourceVersion(settings.scorerModel)).id,
-    requestedTrigger: "settings",
+  return simulationAdmission(`budget check ${randomUUID()}`, async () => {
+    const inputs = await readFitInputs({
+      settings: { ...settings, enabled: true },
+      scorerVersionId: (await activeSourceVersion(settings.scorerModel)).id,
+      requestedTrigger: "settings",
+    });
+    if (!inputs) return null;
+    const { outcome } = await fit(inputs);
+    return outcome.status === "failed" ? cheapestBudget(outcome.error) : null;
   });
-  if (!inputs) return null;
-  const { outcome } = await fit(inputs);
-  return outcome.status === "failed" ? cheapestBudget(outcome.error) : null;
 }
 
 /**
  * What a fit at `budgetUsdPerDay`, or at the budget `budgetPreset` resolves
- * to, would plan if the fitted usage window's
- * sessions and tokens per day were `volumeMultiplier` times what they were.
+ * to, would plan: at an `expectedTrafficFactor` applied as a fit applies the
+ * router's own, or with the fitted usage window's sessions and tokens per
+ * day `volumeMultiplier` times what they were, in place of that factor.
  * Runs regardless of the enabled switch and publishes nothing. Each one reads
  * and fits the whole usage window, so a router runs one at a time and
  * the process at most `MAX_SIMULATIONS`; excess calls are refused with a 429.
@@ -198,8 +211,8 @@ export function fitAdmission(kind: string, maxInFlight: number) {
 
 /**
  * Whether a fit started now would read exactly what `plan` was fitted on:
- * the same settings generation and scorer version, the same tier prices and
- * the same usage window.
+ * the same settings generation and scorer version, the same tier prices,
+ * the same past-sessions frame and the same usage window.
  */
 export async function fitInputsUnchanged(
   settings: AutoRouter,
@@ -226,7 +239,10 @@ export async function fitInputsUnchanged(
     scorerVersionId: scorerVersion.id,
     inputWatermark: new Date(),
   });
-  return isDeepStrictEqual(plan.diagnostics?.history, volumeDocument(window));
+  return (
+    plan.historyFrameId === window.frameId &&
+    isDeepStrictEqual(plan.diagnostics?.history, volumeDocument(window))
+  );
 }
 
 /**
@@ -237,6 +253,7 @@ export async function readFitWindow(params: {
   router: FitScope;
   scorerVersionId: string;
   inputWatermark: Date;
+  pastReads?: PastReads;
 }): Promise<FitWindowSummary> {
   const [live, past] = await Promise.all([
     RoutingUsageModel.findFitVolume({
@@ -246,7 +263,41 @@ export async function readFitWindow(params: {
     }),
     readPastSessions({ ...params, longContextThreshold: null }, false),
   ]);
-  return summarizeWindow(live, past);
+  return summarizeWindow(live, past, params.router);
+}
+
+/**
+ * The organization's past-window reads, shared by the routers described in
+ * one request at one watermark: every router reading past sessions reads the
+ * same frames with the same scorer version.
+ */
+export type PastReads = {
+  frames: Map<string, Promise<ScanFrame[]>>;
+  snapshots: Map<string, Promise<PastWindow & { sample: HistoryFitRow[] }>>;
+};
+
+export function pastReads(): PastReads {
+  return { frames: new Map(), snapshots: new Map() };
+}
+
+/**
+ * A fit's past-sessions read as its plan recorded it, replayed as is: its
+ * frame and volume source stand whatever the router's settings are now.
+ */
+type RecordedPastRead = {
+  frameId: string | null;
+  volumeSource: RoutingVolumeSource;
+  volumeFactor: number;
+};
+
+/**
+ * Whether the router learns from the organization's past sessions: it is set
+ * to, and its decision model has the scorer version that scores them.
+ */
+export function readsPastSessions(
+  router: Pick<AutoRouter, "learnFromPastSessions" | "scorerModel">,
+): boolean {
+  return router.learnFromPastSessions && scoresAsDefault(router.scorerModel);
 }
 
 /**
@@ -274,6 +325,9 @@ function publish(
         ? inputs.tiers.tiers
         : inputs.tiers.fingerprint,
     scorerVersionId: inputs.scorerVersionId,
+    historyFrameId: inputs.history.frameId,
+    volumeFactor: inputs.history.volumeFactor,
+    volumeSource: inputs.history.volumeSource,
     ...fitted,
   });
 }
@@ -287,22 +341,26 @@ type FitRun = { inputs: FitInputs; published: RoutingPublishResult };
  * plan describes the traffic it routes; until then scored past sessions join
  * them. `sessions` is what the cold-start minimum `minSessions` counts.
  * Volume is the live window's once it spans a week; before that, the
- * backfill population's, which estimates it from all eligible traffic.
+ * backfill population's, which estimates it from all eligible traffic, scaled
+ * by `volumeFactor`. `frameId` is the scan whose past sessions it read, with
+ * their unscaled population `pastVolume`.
  */
 type FitWindowSummary = {
   sessions: number;
   minSessions: number;
   pastSessions: number;
   volume: FitVolume;
-  volumeSource: "live" | "history";
+  volumeSource: RoutingVolumeSource;
+  volumeFactor: number;
+  frameId: string | null;
+  pastVolume: FitVolume;
 };
 
-/** How many sessions a fit read for a scorer version: the cold-start progress. */
-export type FitSessions = {
-  scorerVersionId: string;
-  sessions: number;
-  minSessions: number;
-};
+/** What a fit read for a scorer version: the cold-start progress and the volume it plans for. */
+export type FitSessions = Pick<
+  FitWindowSummary,
+  "sessions" | "minSessions" | "volumeSource" | "frameId" | "pastVolume"
+> & { scorerVersionId: string };
 
 /**
  * Prepares, fits and publishes; one fit at a time per router in this
@@ -357,10 +415,11 @@ export async function fitNow(
         return { fit: fitResult(run.published.plan), sessions };
       if (run.published.reason === "stale_watermark") break;
     }
+    // Another fit's outcome stands, so these inputs say nothing about it.
     const latest = await RoutingPlanModel.findLatestOutcome(routerId);
     return {
       fit: latest ? fitResult(latest) : { status: "cold_start", planId: null },
-      sessions,
+      sessions: null,
     };
   } catch (error) {
     logger.error({ err: error, routerId }, "[AutoRouting] Plan fit threw");
@@ -380,17 +439,21 @@ export async function fitNow(
 const MAX_SIMULATIONS = 4;
 const simulationAdmission = fitAdmission("simulation", MAX_SIMULATIONS);
 
-type SimulateParams = { volumeMultiplier: number } & (
-  | { budgetUsdPerDay: number; budgetPreset?: undefined }
-  | { budgetPreset: AutoRoutingBudgetPreset; budgetUsdPerDay?: undefined }
-);
+type SimulateParams = (
+  | { volumeMultiplier: number; expectedTrafficFactor?: undefined }
+  | { expectedTrafficFactor: number; volumeMultiplier?: undefined }
+) &
+  (
+    | { budgetUsdPerDay: number; budgetPreset?: undefined }
+    | { budgetPreset: AutoRoutingBudgetPreset; budgetUsdPerDay?: undefined }
+  );
 
 async function simulate(
   routerId: string,
   params: SimulateParams,
 ): Promise<AutoRoutingSimulateResponse> {
   const settings = await AutoRouterModel.find(routerId);
-  const inputs =
+  const read =
     settings &&
     (await readFitInputs({
       settings: {
@@ -402,20 +465,27 @@ async function simulate(
               budgetPreset: null,
               budgetUsdPerDay: params.budgetUsdPerDay.toFixed(2),
             }),
+        expectedTrafficFactor:
+          params.expectedTrafficFactor ?? settings.expectedTrafficFactor,
       },
       scorerVersionId: (await activeSourceVersion(settings.scorerModel)).id,
       requestedTrigger: "manual",
     }));
-  if (!inputs) {
+  if (!read) {
     throw new ApiError(
       400,
       "Configure every tier model before simulating auto routing.",
     );
   }
-  const { outcome, budgetUsdPerDay } = await fit(
-    inputs,
-    params.volumeMultiplier,
-  );
+  // A raw multiplier stands in for the factor the router's settings apply.
+  const inputs =
+    params.volumeMultiplier === undefined
+      ? read
+      : {
+          ...read,
+          history: { ...read.history, volumeFactor: params.volumeMultiplier },
+        };
+  const { outcome, budgetUsdPerDay } = await fit(inputs);
   switch (outcome.status) {
     case "active":
       if (!outcome.summary) throw new Error("An active fit has no summary");
@@ -446,28 +516,32 @@ async function simulate(
   }
 }
 
-/** Why a fit nobody requested runs: what moved since the router's last fit outcome. */
-async function scheduledTrigger(params: {
+/**
+ * Why a fit nobody requested runs: what moved since the router's last fit
+ * outcome. Past sessions moved when the fit reads a frame and its last
+ * recorded outcome, if any, read another; an outcome recorded before fits
+ * stored their frame says nothing.
+ */
+function scheduledTrigger(params: {
   settings: AutoRouter;
   scorerVersionId: string;
   latestScorerVersionId: string | null;
-}): Promise<RoutingPlanTrigger> {
-  const { settings, latestScorerVersionId } = params;
+  lastOutcome: RoutingPlan | null;
+  frameId: string | null;
+}): RoutingPlanTrigger {
+  const { settings, latestScorerVersionId, lastOutcome, frameId } = params;
   if (
     latestScorerVersionId !== null &&
     latestScorerVersionId !== params.scorerVersionId
   )
     return "scorer_change";
   const unplanned = settings.generation > settings.plannedGeneration;
-  if (
-    unplanned &&
-    settings.usesPastSessions &&
-    (await RoutingBackfillModel.bumpedGeneration(
-      settings.organizationId,
-      settings.generation,
-    ))
-  )
-    return "backfill";
+  const frameMoved =
+    frameId !== null &&
+    (lastOutcome === null ||
+      (lastOutcome.volumeSource !== null &&
+        lastOutcome.historyFrameId !== frameId));
+  if (unplanned && frameMoved) return "backfill";
   if (unplanned) return "settings";
   return latestScorerVersionId === null ? "initial" : "nightly";
 }
@@ -482,7 +556,10 @@ async function readFitInputs(params: {
   const readiness = await fitReadiness(settings);
   if (readiness.kind !== "ready") return null;
   const tiers = fitTiers(readiness.trio);
-  const [latest] = await RoutingPlanModel.findHistory(settings.id, 1);
+  const [[latest], lastOutcome] = await Promise.all([
+    RoutingPlanModel.findHistory(settings.id, 1),
+    RoutingPlanModel.findLatestOutcome(settings.id),
+  ]);
   const inputWatermark = new Date();
   const history =
     tiers.kind === "ok"
@@ -498,11 +575,13 @@ async function readFitInputs(params: {
       : EMPTY_HISTORY;
   const trigger =
     params.requestedTrigger ??
-    (await scheduledTrigger({
+    scheduledTrigger({
       settings,
       scorerVersionId,
       latestScorerVersionId: latest?.plan.scorerVersionId ?? null,
-    }));
+      lastOutcome,
+      frameId: history.frameId,
+    });
   return {
     organizationId: settings.organizationId,
     routerId: settings.id,
@@ -514,6 +593,41 @@ async function readFitInputs(params: {
     scorerVersionId,
     history,
   };
+}
+
+const RecordedPastSchema = z.object({
+  past_sessions: z.number(),
+  tokens: z.number(),
+  first_created_at: z.string().nullable(),
+  last_created_at: z.string().nullable(),
+});
+
+/**
+ * Whether `history` replays the past sessions `plan` recorded its fit read:
+ * as many and, when they sized the plan, the same volume. The router's own
+ * sessions settle usage after the fit, so they are not compared.
+ */
+export function matchesRecordedHistory(
+  plan: RoutingPlan,
+  history: FitWindowSummary,
+): boolean {
+  const recorded = RecordedPastSchema.safeParse(plan.diagnostics?.history);
+  if (!recorded.success) return false;
+  if (recorded.data.past_sessions !== history.pastSessions) return false;
+  switch (history.volumeSource) {
+    case "live":
+      return true;
+    case "history": {
+      const { volume } = history;
+      return (
+        recorded.data.tokens === volume.tokens &&
+        recorded.data.first_created_at ===
+          (volume.firstCreatedAt?.toISOString() ?? null) &&
+        recorded.data.last_created_at ===
+          (volume.lastCreatedAt?.toISOString() ?? null)
+      );
+    }
+  }
 }
 
 /** The fitted window, stored with an active plan so a re-plan can tell whether usage moved. */
@@ -530,9 +644,10 @@ function volumeDocument(window: FitWindowSummary): RouterDocument {
 }
 
 /**
- * The router's live sessions and, for the router that uses them, the
+ * The router's live sessions and, for a router that reads them, the
  * organization's scored past sessions, each weighted by how many sessions of
- * its window it stands for.
+ * its window it stands for. `recorded` replays a plan's read; by default the
+ * fit chooses the frame and the volume source.
  */
 export async function readFitHistory(
   params: {
@@ -540,6 +655,7 @@ export async function readFitHistory(
     scorerVersionId: string;
     inputWatermark: Date;
     longContextThreshold: number | null;
+    recorded?: RecordedPastRead;
   },
   maxSessions?: number,
 ): Promise<FitHistory> {
@@ -554,61 +670,184 @@ export async function readFitHistory(
     ),
     readPastSessions(params, true),
   ]);
-  const window = summarizeWindow(live.volume, past);
+  const window = summarizeWindow(
+    live.volume,
+    past,
+    params.router,
+    params.recorded,
+  );
   // The live sample is capped while its volume counts the whole window.
   const liveWeight =
     live.sample.length === 0 ? 1 : live.volume.sessions / live.sample.length;
   return {
     ...window,
     sample: [
-      ...live.sample.map((row) => ({ ...row, weight: liveWeight })),
-      ...(window.pastSessions === 0 ? [] : past.sample),
+      ...live.sample.map((row) => ({
+        ...row,
+        weight: liveWeight,
+        past: false,
+      })),
+      ...(window.pastSessions === 0
+        ? []
+        : past.sample.map((row) => ({ ...row, past: true }))),
     ],
   };
 }
 
-/** Which sessions a fit reads: the router's own, plus the organization's past ones when it uses them. */
-type FitScope = Pick<AutoRouter, "id" | "organizationId" | "usesPastSessions">;
+/**
+ * Which sessions a fit reads, and at what volume: the router's own, plus the
+ * organization's past ones when it learns from them.
+ */
+type FitScope = Pick<
+  AutoRouter,
+  "id" | "organizationId" | "learnFromPastSessions" | "expectedTrafficFactor"
+>;
 
-/** A router created after its organization could have several starts cold: it reads no past sessions. */
+type PastSessions = PastWindow & {
+  frameId: string | null;
+  sample: HistoryFitRow[];
+};
+
+/**
+ * The organization's past sessions, for a router that learns from them and
+ * reads them with the scorer version that scores them. The frame is the one
+ * with the most of its sample scored, the newest on a tie, among the latest
+ * scan publications and the one the router's active plan read: a newer scan
+ * takes over once scored as far, so a rescan never sets a warm router back.
+ * A recorded read replays its frame regardless of the router's settings.
+ */
 async function readPastSessions(
   params: {
     router: FitScope;
     scorerVersionId: string;
     inputWatermark: Date;
     longContextThreshold: number | null;
+    recorded?: RecordedPastRead;
+    pastReads?: PastReads;
   },
   withSample: boolean,
-): Promise<PastWindow & { sample: HistoryFitRow[] }> {
-  const none = { scored: 0, population: EMPTY_HISTORY.volume, sample: [] };
-  if (!params.router.usesPastSessions) return none;
+): Promise<PastSessions> {
+  const none: PastSessions = {
+    frameId: null,
+    scored: 0,
+    population: EMPTY_HISTORY.volume,
+    sample: [],
+  };
   const { organizationId } = params.router;
-  const frame = await RoutingBackfillModel.findLatestScanned(organizationId);
-  if (!frame) return none;
-  return RoutingHistoryModel.findFitSnapshot({
-    organizationId,
-    scorerVersionId: params.scorerVersionId,
-    longContextThreshold: params.longContextThreshold,
-    frame,
-    windowStart: new Date(params.inputWatermark.getTime() - HISTORY_MS),
-    withSample,
-  });
+  const reads = params.pastReads ?? pastReads();
+  const windowStart = new Date(params.inputWatermark.getTime() - HISTORY_MS);
+  const snapshot = async (frame: ScanFrame, sample: boolean) => {
+    const key = [
+      params.scorerVersionId,
+      frame.id,
+      windowStart.getTime(),
+      params.longContextThreshold,
+      sample,
+    ].join("|");
+    const read =
+      reads.snapshots.get(key) ??
+      RoutingHistoryModel.findFitSnapshot({
+        organizationId,
+        scorerVersionId: params.scorerVersionId,
+        longContextThreshold: params.longContextThreshold,
+        frame,
+        windowStart,
+        withSample: sample,
+      });
+    reads.snapshots.set(key, read);
+    return { frameId: frame.id, ...(await read) };
+  };
+  if (params.recorded) {
+    const { frameId } = params.recorded;
+    const frame =
+      frameId &&
+      (await RoutingBackfillModel.findScanFrame(organizationId, frameId));
+    return frame ? snapshot(frame, withSample) : none;
+  }
+  if (
+    !params.router.learnFromPastSessions ||
+    params.scorerVersionId !== (await activeSourceVersion()).id
+  ) {
+    return none;
+  }
+  const framesKey = `${organizationId}|${windowStart.getTime()}`;
+  const latestFrames =
+    reads.frames.get(framesKey) ??
+    RoutingBackfillModel.findScanFrames({
+      organizationId,
+      since: windowStart,
+      limit: FIT_FRAME_CANDIDATES,
+    });
+  reads.frames.set(framesKey, latestFrames);
+  const [latest, incumbent] = await Promise.all([
+    latestFrames,
+    incumbentFrame(params.router),
+  ]);
+  const frames = [
+    ...latest,
+    ...(incumbent && !latest.some((frame) => frame.id === incumbent.id)
+      ? [incumbent]
+      : []),
+  ].toSorted(
+    (a, b) =>
+      b.scannedAt.getTime() - a.scannedAt.getTime() || b.id.localeCompare(a.id),
+  );
+  const counted = await Promise.all(
+    frames.map(async (frame) => ({
+      frame,
+      past: await snapshot(frame, false),
+    })),
+  );
+  // Newest first, so a strictly larger prefix is needed to pick an older frame.
+  const best = counted
+    .filter(({ past }) => past.population.sessions > 0)
+    .reduce<(typeof counted)[number] | null>(
+      (chosen, candidate) =>
+        chosen === null || candidate.past.scored > chosen.past.scored
+          ? candidate
+          : chosen,
+      null,
+    );
+  if (best === null) return none;
+  return withSample ? snapshot(best.frame, true) : best.past;
 }
 
-function summarizeWindow(live: FitVolume, past: PastWindow): FitWindowSummary {
+/** The still retained frame the router's active plan was fitted on. */
+async function incumbentFrame(router: FitScope): Promise<ScanFrame | null> {
+  const frameId = (await RoutingPlanModel.findActive(router.id))
+    ?.historyFrameId;
+  return frameId
+    ? RoutingBackfillModel.findScanFrame(router.organizationId, frameId)
+    : null;
+}
+
+function summarizeWindow(
+  live: FitVolume,
+  past: PastSessions,
+  router: FitScope,
+  recorded?: RecordedPastRead,
+): FitWindowSummary {
   const span =
     (live.lastCreatedAt?.getTime() ?? 0) -
     (live.firstCreatedAt?.getTime() ?? 0);
-  const fromHistory =
-    span < LIVE_VOLUME_MIN_SPAN_MS && past.population.sessions > 0;
+  const volumeSource: RoutingVolumeSource =
+    recorded?.volumeSource ??
+    (span < LIVE_VOLUME_MIN_SPAN_MS && past.population.sessions > 0
+      ? "history"
+      : "live");
+  const factor = recorded?.volumeFactor ?? router.expectedTrafficFactor;
   const liveMin = liveMinSessions();
   const pastSessions = live.sessions >= liveMin ? 0 : past.scored;
   return {
     sessions: live.sessions + pastSessions,
     minSessions: pastSessions === 0 ? liveMin : config.autoRouting.minSessions,
     pastSessions,
-    volume: fromHistory ? past.population : live,
-    volumeSource: fromHistory ? "history" : "live",
+    volume: volumeSource === "history" ? past.population : live,
+    volumeSource,
+    // The one place the factor is chosen: it scales past traffic only.
+    volumeFactor: volumeSource === "history" ? factor : 1,
+    frameId: past.frameId,
+    pastVolume: past.population,
   };
 }
 
@@ -653,11 +892,15 @@ async function prepareAndComplete(
 
 /** Unknown when the tiers could not be priced: no history was read. */
 function fitSessions(inputs: FitInputs): FitSessions | null {
+  const { history } = inputs;
   return inputs.tiers.kind === "ok"
     ? {
         scorerVersionId: inputs.scorerVersionId,
-        sessions: inputs.history.sessions,
-        minSessions: inputs.history.minSessions,
+        sessions: history.sessions,
+        minSessions: history.minSessions,
+        volumeSource: history.volumeSource,
+        frameId: history.frameId,
+        pastVolume: history.pastVolume,
       }
     : null;
 }
@@ -698,22 +941,31 @@ function fitTiers(trio: Trio): FitTiers {
   }
 }
 
-type FitHistoryRow = HistoryFitRow;
+/** `past` when it is one of the organization's past sessions, not the router's own. */
+type FitHistoryRow = HistoryFitRow & { past: boolean };
 export type FitHistory = FitWindowSummary & { sample: FitHistoryRow[] };
+
+const EMPTY_VOLUME: FitVolume = {
+  sessions: 0,
+  tokens: 0,
+  firstCreatedAt: null,
+  lastCreatedAt: null,
+};
 
 const EMPTY_HISTORY: FitHistory = {
   sample: [],
   sessions: 0,
   minSessions: 0,
   pastSessions: 0,
-  volume: {
-    sessions: 0,
-    tokens: 0,
-    firstCreatedAt: null,
-    lastCreatedAt: null,
-  },
+  volume: EMPTY_VOLUME,
   volumeSource: "live",
+  volumeFactor: 1,
+  frameId: null,
+  pastVolume: EMPTY_VOLUME,
 };
+
+/** Scan publications a fit weighs against each other for the most scored sample. */
+const FIT_FRAME_CANDIDATES = 5;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Live auto traffic sizes the plan once its window spans this long. */
@@ -757,10 +1009,7 @@ export const CodedErrorSchema = z.object({
   message: z.string(),
 });
 
-async function fit(
-  inputs: FitInputs,
-  volumeMultiplier = 1,
-): Promise<{
+async function fit(inputs: FitInputs): Promise<{
   coreVersion: string;
   planFormatVersion: number;
   /** The budget planned for; a preset's only once a plan resolved it. */
@@ -795,9 +1044,7 @@ async function fit(
     };
   }
   try {
-    const planAt = routerPlanAt(
-      planInput(inputs.history, tiers, 0, volumeMultiplier),
-    );
+    const planAt = routerPlanAt(planInput(inputs.history, tiers, 0));
     const { plan, budgetUsdPerDay } =
       inputs.budget.kind === "usd"
         ? {
@@ -966,7 +1213,7 @@ function infeasibleError(error: unknown): number | null {
  * The window's arrival rate: sessions and tokens per day over the span it
  * covers (at least a day, so a burst does not read as an extreme rate).
  */
-function dailyVolume(volume: FitVolume): SimulatedTraffic {
+export function dailyVolume(volume: FitVolume): SimulatedTraffic {
   const span =
     (volume.lastCreatedAt?.getTime() ?? 0) -
     (volume.firstCreatedAt?.getTime() ?? 0);
@@ -979,15 +1226,14 @@ function dailyVolume(volume: FitVolume): SimulatedTraffic {
 
 /**
  * router-core `PlanInput`: the per-session models fit on the sample, while
- * volume is flat at the whole window's arrival rate times `volumeMultiplier`.
+ * volume is flat at the whole window's arrival rate times `volumeFactor`.
  */
 export function planInput(
-  history: Pick<FitHistory, "sample" | "volume">,
+  history: Pick<FitHistory, "sample" | "volume" | "volumeFactor">,
   tiers: RouterTierSet,
   budgetUsdPerDay: number,
-  volumeMultiplier = 1,
 ) {
-  const { sample, volume } = history;
+  const { sample, volume, volumeFactor } = history;
   const { sessionsPerDay, tokensPerDay } = dailyVolume(volume);
   return {
     history: sample.map((row) => ({
@@ -1001,8 +1247,8 @@ export function planInput(
     budget: budgetUsdPerDay,
     volume: {
       kind: "flat",
-      sessions_per_day: sessionsPerDay * volumeMultiplier,
-      tokens_per_day: tokensPerDay * volumeMultiplier,
+      sessions_per_day: sessionsPerDay * volumeFactor,
+      tokens_per_day: tokensPerDay * volumeFactor,
     },
     baseline_source: mostFrequentSource(sample),
   };

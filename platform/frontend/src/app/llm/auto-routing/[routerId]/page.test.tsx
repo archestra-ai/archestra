@@ -76,6 +76,7 @@ function makeState(
         apiKeys: [],
       },
     ],
+    defaultDecisionModel: "jev-1.13.0",
     ...overrides,
   };
 }
@@ -86,7 +87,10 @@ function makeSettings(overrides: Partial<AutoRouter> = {}): AutoRouter {
     name: "auto",
     enabled: true,
     decisionModel: { apiKeyId: null, model: "jev-1.13.0" },
-    usesPastSessions: true,
+    learnFromPastSessions: true,
+    readsPastSessions: true,
+    expectedTrafficFactor: 1,
+    traffic: { volumeSource: "live", pastBaseline: null },
     virtualApiKeyIds: [],
     budgetUsdPerDay: 20,
     budgetPreset: null,
@@ -221,6 +225,7 @@ const server = setupServer(
     HttpResponse.json({
       backfill: null,
       scoreOffer: null,
+      payer: "ready",
       history: [],
     } satisfies AutoRoutingBackfillState),
   ),
@@ -257,6 +262,76 @@ afterAll(() => {
 });
 
 describe("AutoRoutingOverviewPage", () => {
+  it("saves the expected traffic and learning from past sessions only when edited", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await openConfigure(user);
+    const factor = screen.getByLabelText("Expected traffic");
+    await user.clear(factor);
+    await user.type(factor, "3");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updates).toEqual([{ expectedTrafficFactor: 3 }]),
+    );
+
+    await openConfigure(user);
+    await user.click(screen.getByLabelText("Learn from past sessions"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updates).toEqual([
+        { expectedTrafficFactor: 3 },
+        { learnFromPastSessions: false },
+      ]),
+    );
+  });
+
+  it("ignores the hidden traffic factor once learning from past sessions is off", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await openConfigure(user);
+    const factor = screen.getByLabelText("Expected traffic");
+    await user.clear(factor);
+    await user.type(factor, "0");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    await user.click(screen.getByLabelText("Learn from past sessions"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updates).toEqual([{ learnFromPastSessions: false }]),
+    );
+  });
+
+  it("shows no split for a draft that reads past sessions differently from the saved router", async () => {
+    settings = makeSettings({
+      status: {
+        ...makeSettings().status,
+        coldStart: { ...makeSettings().status.coldStart, sessions: 120 },
+      },
+    });
+    server.use(
+      http.post(`${ROUTER_URL}/simulate`, () =>
+        HttpResponse.json(feasibleSimulation(0.9)),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await openConfigure(user);
+    expect(
+      await screen.findByTestId("auto-routing-budget-split"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Learn from past sessions"));
+    expect(
+      screen.queryByTestId("auto-routing-budget-split"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("auto-routing-budget-note")).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Learn from past sessions"));
+    expect(
+      await screen.findByTestId("auto-routing-budget-split"),
+    ).toBeInTheDocument();
+  });
+
   it("saves only the edited budget", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -388,8 +463,8 @@ describe("AutoRoutingOverviewPage", () => {
       "50% fast30% normal20% smart",
     );
     expect(simulated).toEqual([
-      { budgetUsdPerDay: 20, volumeMultiplier: 1 },
-      { budgetPreset: "intelligence", volumeMultiplier: 1 },
+      { budgetUsdPerDay: 20, expectedTrafficFactor: 1 },
+      { budgetPreset: "intelligence", expectedTrafficFactor: 1 },
     ]);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
@@ -435,7 +510,7 @@ describe("AutoRoutingOverviewPage", () => {
     await waitFor(() =>
       expect(simulated).toContainEqual({
         budgetUsdPerDay: 35,
-        volumeMultiplier: 1,
+        expectedTrafficFactor: 1,
       }),
     );
     await waitFor(() =>
@@ -937,6 +1012,7 @@ describe("past sessions", () => {
           return HttpResponse.json({
             backfill: scanned({ status: "running", phase: "score" }),
             scoreOffer: null,
+            payer: "ready",
             history: [],
           } satisfies AutoRoutingBackfillState);
         },
@@ -954,6 +1030,7 @@ describe("past sessions", () => {
         return HttpResponse.json({
           backfill: scanned({ status: "running" }),
           scoreOffer: null,
+          payer: "ready",
           history: [],
         } satisfies AutoRoutingBackfillState);
       }),
@@ -998,6 +1075,7 @@ describe("past sessions", () => {
     serveBackfill({
       backfill: scanned({ status: "done" }),
       scoreOffer: null,
+      payer: "ready",
       history: [],
     });
     renderPage();
@@ -1011,7 +1089,10 @@ describe("past sessions", () => {
   });
 
   it("leaves out past sessions for a router that does not learn from them", async () => {
-    settings = makeSettings({ usesPastSessions: false });
+    settings = makeSettings({
+      learnFromPastSessions: false,
+      readsPastSessions: false,
+    });
     renderPage();
 
     expect(
@@ -1019,6 +1100,164 @@ describe("past sessions", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("auto-routing-past-sessions"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("auto-routing-past-sessions-unreadable"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("explains instead of the card why a router with a custom decision model reads no past sessions", async () => {
+    settings = makeSettings({ readsPastSessions: false });
+    renderPage();
+
+    expect(
+      await screen.findByTestId("auto-routing-past-sessions-unreadable"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("auto-routing-past-sessions"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers scoring past sessions from the evaluating notice while some are left to score", async () => {
+    serveBackfill({
+      backfill: scanned(),
+      scoreOffer: offer,
+      payer: "ready",
+      history: [],
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    const notice = await screen.findByTestId("auto-routing-evaluating");
+    await user.click(
+      await within(notice).findByRole("button", {
+        name: "Score past sessions",
+      }),
+    );
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("keeps the dialog the evaluating notice opened while the count it starts hides the notice's action", async () => {
+    const stale = scanned({ cutoff: "2026-09-01T00:00:00.000Z" });
+    serveBackfill(
+      { backfill: stale, scoreOffer: offer, payer: "ready", history: [] },
+      {
+        backfill: scanned({ status: "running" }),
+        scoreOffer: null,
+        payer: "ready",
+        history: [],
+      },
+    );
+    const scans = serveScan();
+    const user = userEvent.setup();
+    renderPage();
+
+    const notice = await screen.findByTestId("auto-routing-evaluating");
+    await user.click(
+      await within(notice).findByRole("button", {
+        name: "Score past sessions",
+      }),
+    );
+
+    await waitFor(() => expect(scans.count).toBe(1));
+    await waitFor(() =>
+      expect(within(notice).queryByRole("button")).not.toBeInTheDocument(),
+    );
+    expect(
+      within(screen.getByRole("dialog")).getByText(
+        "Looking for past sessions in the interaction log…",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no scoring from the evaluating notice without a key to pay for it", async () => {
+    serveBackfill({
+      backfill: scanned(),
+      scoreOffer: offer,
+      payer: "no_jev_key",
+      history: [],
+    });
+    renderPage();
+
+    await screen.findByTestId("auto-routing-past-sessions");
+    expect(
+      within(screen.getByTestId("auto-routing-evaluating")).queryByRole(
+        "button",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("follows the count the dialog started even when the read right after it fails", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let counted = false;
+      let failedReads = 0;
+      let failing = false;
+      server.use(
+        http.get(`${API_ORIGIN}/api/auto-routing/backfill`, () => {
+          if (failing) {
+            failedReads++;
+            return HttpResponse.json(
+              { error: { message: "unavailable", type: "api_error" } },
+              { status: 500 },
+            );
+          }
+          return HttpResponse.json({
+            backfill: counted
+              ? scanned()
+              : scanned({ cutoff: "2026-09-01T00:00:00.000Z" }),
+            scoreOffer: offer,
+            payer: "ready",
+            history: [],
+          } satisfies AutoRoutingBackfillState);
+        }),
+      );
+      server.use(
+        http.post(`${API_ORIGIN}/api/auto-routing/backfill/scan`, () => {
+          failing = true;
+          return HttpResponse.json({
+            backfill: scanned({ status: "running" }),
+            scoreOffer: null,
+            payer: "ready",
+            history: [],
+          } satisfies AutoRoutingBackfillState);
+        }),
+      );
+      const user = userEvent.setup({
+        advanceTimers: vi.advanceTimersByTime,
+      });
+      renderPage();
+      await openScore(user);
+      await waitFor(() => expect(failedReads).toBeGreaterThan(0));
+      counted = true;
+      failing = false;
+
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(
+        await within(await screen.findByRole("dialog")).findByRole("button", {
+          name: "Score 240 sessions",
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("offers no scoring from the evaluating notice once the sample is scored", async () => {
+    serveBackfill({
+      backfill: scanned({ status: "done", phase: "score" }),
+      scoreOffer: { ...offer, remaining: 0 },
+      payer: "ready",
+      history: [],
+    });
+    renderPage();
+
+    await screen.findByTestId("auto-routing-past-sessions");
+    expect(
+      within(screen.getByTestId("auto-routing-evaluating")).queryByRole(
+        "button",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -1030,9 +1269,15 @@ describe("past sessions", () => {
           fitBlockedReason: "No daily budget is set.",
         }),
         scoreOffer: null,
+        payer: "ready",
         history: [],
       },
-      { backfill: scanned({ status: "done" }), scoreOffer: null, history: [] },
+      {
+        backfill: scanned({ status: "done" }),
+        scoreOffer: null,
+        payer: "ready",
+        history: [],
+      },
     );
     server.use(
       http.put(ROUTER_URL, () =>
@@ -1064,6 +1309,7 @@ describe("past sessions", () => {
     serveBackfill({
       backfill: scanned({ status: "running", phase: "score" }),
       scoreOffer: null,
+      payer: "ready",
       history: [
         job({
           status: "running",
@@ -1115,26 +1361,45 @@ describe("past sessions", () => {
     ]);
   });
 
-  it("turns Score into Stop while a job runs, and stops it", async () => {
-    settings = withActivePlan(makeSettings());
-    serveBackfill({
+  /** Serves a running scoring job until a Stop for it, then the stopped one; returns the stops. */
+  function serveStoppableJob() {
+    let state: AutoRoutingBackfillState = {
       backfill: scanned({ status: "running", phase: "score" }),
       scoreOffer: null,
+      payer: "ready",
       history: [job({ status: "running", phase: "score", scoredSessions: 30 })],
-    });
-    let cancels = 0;
+    };
+    const cancels: { id: string; phase: string | null }[] = [];
     server.use(
-      http.delete(`${API_ORIGIN}/api/auto-routing/backfill`, () => {
-        cancels++;
-        return HttpResponse.json({
-          backfill: scanned({ status: "cancelled", phase: "score" }),
-          scoreOffer: offer,
-          history: [
-            job({ status: "cancelled", phase: "score", scoredSessions: 30 }),
-          ],
-        } satisfies AutoRoutingBackfillState);
-      }),
+      http.get(`${API_ORIGIN}/api/auto-routing/backfill`, () =>
+        HttpResponse.json(state),
+      ),
+      http.delete(
+        `${API_ORIGIN}/api/auto-routing/backfill/:id`,
+        ({ params, request }) => {
+          cancels.push({
+            id: String(params.id),
+            phase: new URL(request.url).searchParams.get("phase"),
+          });
+          state = {
+            backfill: scanned({ status: "cancelled", phase: "score" }),
+            scoreOffer: offer,
+            payer: "ready",
+            history: [
+              job({ status: "cancelled", phase: "score", scoredSessions: 30 }),
+            ],
+          };
+          // The organization-level answer; each router's view refetches its own.
+          return HttpResponse.json({ ...state, backfill: null });
+        },
+      ),
     );
+    return cancels;
+  }
+
+  it("turns Score into Stop while a job runs, and stops it in the phase it shows", async () => {
+    settings = withActivePlan(makeSettings());
+    const cancels = serveStoppableJob();
     const user = userEvent.setup();
     renderPage();
 
@@ -1150,13 +1415,35 @@ describe("past sessions", () => {
       await within(section).findByRole("button", { name: "Score" }),
     ).toBeEnabled();
     expect(section).toHaveTextContent("Stopped after 30 sessions");
-    expect(cancels).toBe(1);
+    expect(cancels).toEqual([{ id: scanned().id, phase: "score" }]);
+  });
+
+  it("lets a router that reads no past sessions stop the organization's running job", async () => {
+    settings = withActivePlan(
+      makeSettings({ learnFromPastSessions: false, readsPastSessions: false }),
+    );
+    const cancels = serveStoppableJob();
+    const user = userEvent.setup();
+    renderPage();
+
+    const section = await screen.findByTestId("auto-routing-past-sessions");
+    await user.click(
+      await within(section).findByRole("button", { name: "Stop" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("auto-routing-past-sessions"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(cancels).toEqual([{ id: scanned().id, phase: "score" }]);
   });
 
   it("says Up to date, and offers nothing, once every past session is scored", async () => {
     serveBackfill({
       backfill: scanned({ status: "done", phase: "score" }),
       scoreOffer: null,
+      payer: "ready",
       history: [job({ status: "done", phase: "score", scoredSessions: 240 })],
     });
     renderPage();
@@ -1174,6 +1461,7 @@ describe("past sessions", () => {
     serveBackfill({
       backfill: scanned({ status }),
       scoreOffer: null,
+      payer: "ready",
       history: [job({ status })],
     });
     const scans = serveScan();
@@ -1216,6 +1504,7 @@ describe("past sessions", () => {
         ],
       }),
       scoreOffer: offer,
+      payer: "ready",
       history: [job({})],
     });
     const user = userEvent.setup();
@@ -1243,7 +1532,12 @@ describe("past sessions", () => {
   });
 
   it("accepts a spending limit up to the API's bound and no further", async () => {
-    serveBackfill({ backfill: scanned(), scoreOffer: offer, history: [] });
+    serveBackfill({
+      backfill: scanned(),
+      scoreOffer: offer,
+      payer: "ready",
+      history: [],
+    });
     const user = userEvent.setup();
     renderPage();
     const dialog = await openScore(user);
@@ -1264,10 +1558,11 @@ describe("past sessions", () => {
     const replaced = "00000000-0000-4000-8000-000000000302";
     let refused = 0;
     serveBackfill(
-      { backfill: scanned(), scoreOffer: offer, history: [] },
+      { backfill: scanned(), scoreOffer: offer, payer: "ready", history: [] },
       {
         backfill: scanned({ id: replaced }),
         scoreOffer: { ...offer, backfillId: replaced, remaining: 90 },
+        payer: "ready",
         history: [],
       },
     );
@@ -1300,18 +1595,21 @@ describe("past sessions", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const done = scanned({ status: "done", phase: "score" });
-      serveBackfill(
-        {
-          backfill: { ...done, awaitingFit: true },
-          scoreOffer: null,
-          history: [],
-        },
-        {
-          backfill: { ...done, awaitingFit: true },
-          scoreOffer: null,
-          history: [],
-        },
-        { backfill: done, scoreOffer: null, history: [] },
+      let routerReads = 0;
+      // Only a read for a router answers whether that router awaits its fit.
+      server.use(
+        http.get(`${API_ORIGIN}/api/auto-routing/backfill`, ({ request }) => {
+          const forRouter = new URL(request.url).searchParams.has("routerId");
+          return HttpResponse.json({
+            backfill: {
+              ...done,
+              awaitingFit: forRouter && routerReads++ < 2,
+            },
+            scoreOffer: null,
+            payer: "ready",
+            history: [],
+          } satisfies AutoRoutingBackfillState);
+        }),
       );
       renderPage();
       await screen.findByTestId("auto-routing-past-sessions");
@@ -1339,6 +1637,7 @@ describe("past sessions", () => {
           fitBlockedReason: "No daily budget is set.",
         }),
         scoreOffer: null,
+        payer: "ready",
         history: [],
       };
       server.use(
@@ -1372,6 +1671,7 @@ describe("past sessions", () => {
         windowStart: "2026-08-01T00:00:00.000Z",
         cutoff: "2026-09-01T00:00:00.000Z",
       },
+      payer: "ready",
       history: [],
     });
     const user = userEvent.setup();
@@ -1393,6 +1693,7 @@ describe("past sessions", () => {
     const scores = serveBackfill({
       backfill: scanned(),
       scoreOffer: offer,
+      payer: "ready",
       history: [],
     });
     const user = userEvent.setup();
@@ -1427,6 +1728,7 @@ describe("past sessions", () => {
         scorerCurrent: false,
       }),
       scoreOffer: { ...offer, rescore: true },
+      payer: "ready",
       history: [],
     });
     const user = userEvent.setup();
@@ -1461,7 +1763,12 @@ describe("past sessions", () => {
         scorerApiKey: null,
       },
     });
-    serveBackfill({ backfill: scanned(), scoreOffer: offer, history: [] });
+    serveBackfill({
+      backfill: scanned(),
+      scoreOffer: offer,
+      payer: "no_jev_key",
+      history: [],
+    });
     renderPage();
 
     const section = await screen.findByTestId("auto-routing-past-sessions");
@@ -1481,11 +1788,31 @@ describe("past sessions", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers no score the organization's Jev key cannot pay for, even when the router's decision key works", async () => {
+    settings = withActivePlan(makeSettings());
+    serveBackfill({
+      backfill: scanned(),
+      scoreOffer: offer,
+      payer: "no_jev_key",
+      history: [],
+    });
+    renderPage();
+
+    const section = await screen.findByTestId("auto-routing-past-sessions");
+    expect(
+      await within(section).findByTestId("auto-routing-add-jev-key"),
+    ).toBeInTheDocument();
+    expect(
+      within(section).queryByRole("button", { name: /^Score/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps the card beside an active plan and scores from it in one step", async () => {
     settings = withActivePlan(makeSettings());
     const scores = serveBackfill({
       backfill: scanned(),
       scoreOffer: offer,
+      payer: "ready",
       history: [job({})],
     });
     const user = userEvent.setup();
@@ -1519,6 +1846,7 @@ describe("past sessions", () => {
     serveBackfill({
       backfill: scanned({ status: "done", cutoff: "2026-10-26T00:00:00.000Z" }),
       scoreOffer: null,
+      payer: "ready",
       history: [job({ status: "done" })],
     });
     const scans = serveScan();
@@ -1540,6 +1868,7 @@ describe("past sessions", () => {
     serveBackfill({
       backfill: scanned(),
       scoreOffer: offer,
+      payer: "ready",
       history: [job({ status: "done" })],
     });
     renderPage();

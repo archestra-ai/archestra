@@ -65,7 +65,9 @@ describe("POST and PUT /api/auto-routing/routers", () => {
       name: "auto:support",
       enabled: true,
       budgetUsdPerDay: 12.5,
-      usesPastSessions: false,
+      learnFromPastSessions: true,
+      readsPastSessions: true,
+      expectedTrafficFactor: 1,
       tiers: {
         fast: { id: fast.id },
         normal: { id: normal.id },
@@ -243,6 +245,20 @@ describe("POST and PUT /api/auto-routing/routers", () => {
     });
     expect(atMinimum.statusCode, atMinimum.body).toBe(200);
     expect(atMinimum.json().fit).toMatchObject({ status: "active" });
+  });
+
+  test("an infeasible budget is refused while organization routing is off too", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    const routerId = await autoRouterId(ctx.organizationId);
+    await seedHistory(routerId, trio[2].id);
+    await setAutoRoutingEnabled(ctx.organizationId, false);
+
+    const response = await putRouter(routerId, { budgetUsdPerDay: 0.01 });
+
+    expect(response.statusCode, response.body).toBe(400);
+    expect((await AutoRouterModel.find(routerId))?.budgetUsdPerDay).not.toBe(
+      "0.01",
+    );
   });
 
   test("concurrent changes leave one active plan on the latest settings", async () => {

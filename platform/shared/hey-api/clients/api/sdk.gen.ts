@@ -2564,7 +2564,7 @@ export const updateAutoRoutingState = <ThrowOnError extends boolean = false>(opt
 export const getAutoRouters = <ThrowOnError extends boolean = false>(options?: Options<GetAutoRoutersData, ThrowOnError>) => (options?.client ?? client).get<GetAutoRoutersResponses, GetAutoRoutersErrors, ThrowOnError>({ url: '/api/auto-routing/routers', ...options });
 
 /**
- * Create an auto router with its tiers, budget and decision model. It learns from its own sessions only
+ * Create an auto router with its tiers, budget and decision model. Unless `learnFromPastSessions` is false, it also learns from the organization's past sessions
  *
  * Authentication:
  *
@@ -2748,20 +2748,7 @@ export const simulateAutoRouting = <ThrowOnError extends boolean = false>(option
 export const getAutoRoutingDiagnostics = <ThrowOnError extends boolean = false>(options: Options<GetAutoRoutingDiagnosticsData, ThrowOnError>) => (options.client ?? client).get<GetAutoRoutingDiagnosticsResponses, GetAutoRoutingDiagnosticsErrors, ThrowOnError>({ url: '/api/auto-routing/routers/{id}/diagnostics', ...options });
 
 /**
- * Cancel the running historical backfill
- *
- * Authentication:
- *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
- *
- * Authorization:
- *
- * [`llmProxy:update`](/docs/reference/permissions#llmProxy:update): Modify LLM Proxy configuration
- */
-export const cancelAutoRoutingBackfill = <ThrowOnError extends boolean = false>(options?: Options<CancelAutoRoutingBackfillData, ThrowOnError>) => (options?.client ?? client).delete<CancelAutoRoutingBackfillResponses, CancelAutoRoutingBackfillErrors, ThrowOnError>({ url: '/api/auto-routing/backfill', ...options });
-
-/**
- * Get the newest historical backfill and what scoring past sessions would take, for the organization's first auto router
+ * Get the newest historical backfill of the organization's past sessions, which every auto router reading them shares, and what scoring them would take; with routerId, also whether that router's fit after the newest scoring run is still to come
  *
  * Authentication:
  *
@@ -2805,6 +2792,19 @@ export const scoreAutoRoutingBackfill = <ThrowOnError extends boolean = false>(o
         ...options.headers
     }
 });
+
+/**
+ * Cancel the historical backfill with this id while it is running or waits to be scored in the given phase
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * [`llmProxy:update`](/docs/reference/permissions#llmProxy:update): Modify LLM Proxy configuration
+ */
+export const cancelAutoRoutingBackfill = <ThrowOnError extends boolean = false>(options: Options<CancelAutoRoutingBackfillData, ThrowOnError>) => (options.client ?? client).delete<CancelAutoRoutingBackfillResponses, CancelAutoRoutingBackfillErrors, ThrowOnError>({ url: '/api/auto-routing/backfill/{id}', ...options });
 
 /**
  * Authentication:

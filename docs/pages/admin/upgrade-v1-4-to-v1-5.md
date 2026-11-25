@@ -19,6 +19,11 @@ A v1.4 values file renders with the v1.5 chart, but these keys need changes:
 
 ## APIs
 
+Auto Routing's past sessions now serve every router that reads them, so two calls changed:
+
+- [`DELETE /api/auto-routing/backfill/{id}`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/DELETE/api/auto-routing/backfill/{id}) replaces `DELETE /api/auto-routing/backfill`. Pass the id of the job to stop and, as the `phase` query parameter, the phase you saw it in (`scan` or `score`); a call for a job that is no longer running in that phase returns `404`. [`POST /api/auto-routing/backfill/score`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/POST/api/auto-routing/backfill/score) pays with the organization-wide Jev key and refuses a run, with `400`, while there is none.
+- Router responses carry `learnFromPastSessions` and `readsPastSessions` in place of `usesPastSessions`. The upgrade keeps learning on for the router that read past sessions before, and off for the others. Routers created through the API learn from past sessions unless `learnFromPastSessions: false` is passed; a router a v1.4 process creates while the upgrade runs starts with learning off.
+
 If a script reads the member list from the Adoption API, switch it to the new endpoint:
 
 - [`GET /api/connected-clients/adoption`](/docs/reference/api/apps#tag/connection-setups/GET/api/connected-clients/adoption) now returns `memberCount` and only the members with an agent or traffic. Members who have connected nothing are counted but not listed.

@@ -22,6 +22,7 @@ import { ApiError } from "@/types";
 import type {
   AutoRouter,
   RoutingBackfill,
+  RoutingBackfillPhase,
   RoutingHistorySession,
 } from "@/types/auto-routing";
 import type {
@@ -29,10 +30,14 @@ import type {
   AutoRoutingScoreBackfillBody,
 } from "@/types/auto-routing-api";
 import { firstUserText } from "./first-user-text";
-import { fitReadiness } from "./fit";
+import { fitReadiness, readsPastSessions } from "./fit";
 import { scoringContext } from "./scoring-context";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
-import { type JevSessionReading, scorerState } from "./signals/jev-session";
+import {
+  isOrganizationScorerKey,
+  type JevSessionReading,
+  organizationScorerKey,
+} from "./signals/jev-session";
 import { SignalSourceError } from "./signals/types";
 
 /**
@@ -52,7 +57,7 @@ export async function startBackfillScan(
   organizationId: string,
   startedBy: string | null,
 ): Promise<RoutingBackfill> {
-  await requirePastSessionsRouter(organizationId);
+  await requirePastSessionsReader(organizationId);
   const cutoff = new Date();
   const backfill = await withDbTransaction(async (tx) => {
     await RoutingBackfillModel.supersedeWaiting(organizationId, tx);
@@ -71,7 +76,10 @@ export async function startBackfillScan(
   return backfill;
 }
 
-/** Scans once on the first enable; later scans are an admin's call. */
+/**
+ * Scans once, the first time a router of the organization can read past
+ * sessions while routing is on; later scans are an admin's call.
+ */
 export async function scanOnFirstEnable(organizationId: string) {
   if (await RoutingBackfillModel.findLatest(organizationId)) return;
   await startBackfillScan(organizationId, null).catch((error: unknown) => {
@@ -85,26 +93,25 @@ export async function scanOnFirstEnable(organizationId: string) {
  * with the scorer version they were offered: in place when the scan waits for
  * it, else as a new backfill over its stored sessions (a re-score after a
  * scorer change). Refused when either is no longer what an offer would name.
+ * The run belongs to the organization: it scores with the default scorer
+ * version, which every router reading past sessions reads with, and pays
+ * with the organization-wide Jev key it pins at admission.
  */
 export async function startBackfillScoring(
   organizationId: string,
   startedBy: string | null,
   body: AutoRoutingScoreBackfillBody,
 ): Promise<RoutingBackfill> {
-  const router = await requirePastSessionsRouter(organizationId);
-  if (
-    (await activeSourceVersion(router.scorerModel)).id !== body.scorerVersionId
-  ) {
+  await requirePastSessionsReader(organizationId);
+  if ((await activeSourceVersion()).id !== body.scorerVersionId) {
     throw new ApiError(409, STALE_OFFER_MESSAGE);
   }
-  if (
-    (await scorerState(organizationId, router.scorerApiKeyId)) === "no_jev_key"
-  ) {
-    throw new ApiError(400, NO_JEV_KEY_MESSAGE);
-  }
+  const scorerApiKeyId = await organizationScorerKey(organizationId);
+  if (scorerApiKeyId === null) throw new ApiError(400, NO_JEV_KEY_MESSAGE);
   const params = {
     organizationId,
     scorerVersionId: body.scorerVersionId,
+    scorerApiKeyId,
     maxSessions: body.maxSessions,
     maxCostUsd: body.maxCostUsd,
     startedBy,
@@ -128,25 +135,45 @@ export async function startBackfillScoring(
   return started;
 }
 
-/** Cancels the active backfill; scores already committed stay. */
-export async function cancelBackfill(organizationId: string): Promise<void> {
-  const cancelled = await RoutingBackfillModel.cancel(organizationId);
-  if (!cancelled) throw new ApiError(404, "No backfill is running");
+/** Cancels the backfill `backfillId` while it is active in `phase`; scores already committed stay. */
+export async function cancelBackfill(
+  organizationId: string,
+  backfillId: string,
+  phase: RoutingBackfillPhase,
+): Promise<void> {
+  const cancelled = await RoutingBackfillModel.cancel(
+    organizationId,
+    backfillId,
+    phase,
+  );
+  if (!cancelled) throw new ApiError(404, "This backfill is not running");
   if (cancelled.scannedAt === null) {
     await RoutingHistoryModel.deleteBackfillSessions(cancelled.id);
   }
 }
 
+/**
+ * The organization's pool of past sessions: its newest backfill, what
+ * scoring with the default scorer version would take, and the job history.
+ * With `routerId`, also whether that router's fit after the newest scoring
+ * run is still to come.
+ */
 export async function describeBackfill(
   organizationId: string,
+  routerId?: string,
 ): Promise<AutoRoutingBackfillResponse> {
-  const [latest, scan, settings, history] = await Promise.all([
+  const [latest, scan, router, history, scorer] = await Promise.all([
     RoutingBackfillModel.findLatest(organizationId),
     RoutingBackfillModel.findLatestScanned(organizationId),
-    AutoRouterModel.findPastSessionsRouter(organizationId),
+    routerId === undefined
+      ? null
+      : AutoRouterModel.findInOrganization(organizationId, routerId),
     describeHistory(organizationId),
+    activeSourceVersion(),
   ]);
-  const scorer = await activeSourceVersion(settings?.scorerModel);
+  if (routerId !== undefined && router === null) {
+    throw new ApiError(404, "Auto router not found");
+  }
   const offerable = latest?.status === "running" ? null : scan;
   const scanned = offerable && (await scanSample(offerable, scorer.id));
   const progress =
@@ -174,7 +201,7 @@ export async function describeBackfill(
       progress,
       error: latest.error,
       completedAt: latest.completedAt,
-      ...(await fitState(latest, settings)),
+      ...(await fitState(router)),
     },
     scoreOffer:
       offerable && scanned
@@ -185,6 +212,12 @@ export async function describeBackfill(
             latest,
           })
         : null,
+    payer:
+      latest?.status === "running"
+        ? null
+        : (await organizationScorerKey(organizationId)) === null
+          ? "no_jev_key"
+          : "ready",
     history,
   };
 }
@@ -269,22 +302,41 @@ export async function runBackfill(params?: {
 
 // === Internal ===
 
-const NO_ROUTER_MESSAGE =
-  "Past sessions are read only by the organization's first auto router, which no longer exists. Other auto routers learn from their own sessions.";
+const NO_READER_MESSAGE =
+  "No auto router learns from past sessions. Turn on learning from past sessions for a router that uses the default decision model.";
 
-/** The router that learns from the organization's past sessions; the only one a backfill serves. */
-async function requirePastSessionsRouter(
+async function hasPastSessionsReader(organizationId: string): Promise<boolean> {
+  const learning =
+    await AutoRouterModel.listLearningFromPastSessions(organizationId);
+  return learning.some(readsPastSessions);
+}
+
+/** A backfill serves the routers that read past sessions; without one it has no reader. */
+async function requirePastSessionsReader(
   organizationId: string,
-): Promise<AutoRouter> {
-  const router = await AutoRouterModel.findPastSessionsRouter(organizationId);
-  if (!router) throw new ApiError(409, NO_ROUTER_MESSAGE);
-  return router;
+): Promise<void> {
+  if (!(await hasPastSessionsReader(organizationId))) {
+    throw new ApiError(409, NO_READER_MESSAGE);
+  }
+}
+
+/**
+ * The key a scoring run pays with: the one it pinned at admission, while the
+ * organization at large may still use it. Null once it may not, and for a
+ * run that pinned none, which migration 0664 ended.
+ */
+async function runPayer(backfill: RoutingBackfill): Promise<string | null> {
+  const pinned = backfill.scorerApiKeyId;
+  return pinned !== null &&
+    (await isOrganizationScorerKey(backfill.organizationId, pinned))
+    ? pinned
+    : null;
 }
 
 const BUSY_MESSAGE =
   "A backfill is already running for this organization; wait for it or cancel it.";
 const NO_JEV_KEY_MESSAGE =
-  "No Jev API key is configured for this organization; add one on the Model Providers page before scoring.";
+  "No Jev API key is shared with the whole organization; add one on the Model Providers page before scoring.";
 const STALE_OFFER_MESSAGE =
   "The past sessions or the session scorer changed since this offer was shown; review the new offer.";
 const WORKER_ID = `${hostname()}#${process.pid}`;
@@ -313,11 +365,16 @@ async function enqueueRun(): Promise<void> {
   }
 }
 
+/** The sample of the scan publication a finished scan, or a scoring run over it, reads. */
 function sampleOf(backfill: RoutingBackfill, maxSessions: number) {
+  if (backfill.scannedAt === null) {
+    throw new Error(`Backfill ${backfill.id} has no finished scan`);
+  }
   return {
     organizationId: backfill.organizationId,
     windowStart: backfill.windowStart,
     cutoff: backfill.cutoff,
+    frameId: backfill.id,
     maxSessions,
   };
 }
@@ -333,16 +390,17 @@ async function scoringProgress(
   });
 }
 
-/** The sample a score of `scan` would take, and how much of it `scorerVersionId` already read. */
+/**
+ * The sample a score of `scan` would take, counted now rather than when the
+ * scan finished, as sessions age out of it, and how much of it
+ * `scorerVersionId` already read.
+ */
 async function scanSample(scan: RoutingBackfill, scorerVersionId: string) {
-  const sessions = Math.min(scan.populationSessions, DEFAULT_BACKFILL_SESSIONS);
-  return {
-    sessions,
-    progress: await RoutingHistoryModel.sampleProgress({
-      ...sampleOf(scan, sessions),
-      scorerVersionId,
-    }),
-  };
+  const progress = await RoutingHistoryModel.sampleProgress({
+    ...sampleOf(scan, DEFAULT_BACKFILL_SESSIONS),
+    scorerVersionId,
+  });
+  return { sessions: progress.sample, progress };
 }
 
 function scoreOffer(params: {
@@ -370,19 +428,24 @@ function scoreOffer(params: {
   };
 }
 
-/** Whether the fit the backfill's completion requested is still to come, or why it will not run. */
+/**
+ * Whether the fit the scoring run's completion requested of `router` is
+ * still to come, or why it will not run: no outcome has planned the
+ * generation completion raised it to.
+ */
 async function fitState(
-  backfill: RoutingBackfill,
-  settings: AutoRouter | null,
+  router: AutoRouter | null,
 ): Promise<{ awaitingFit: boolean; fitBlockedReason: string | null }> {
-  if (
-    backfill.fitGeneration === null ||
-    settings === null ||
-    settings.plannedGeneration >= backfill.fitGeneration
-  ) {
+  const requested =
+    router &&
+    (await RoutingBackfillModel.findRequestedFitGeneration(
+      router.organizationId,
+      router.id,
+    ));
+  if (!router || requested === null || router.plannedGeneration >= requested) {
     return { awaitingFit: false, fitBlockedReason: null };
   }
-  const readiness = await fitReadiness(settings);
+  const readiness = await fitReadiness(router);
   switch (readiness.kind) {
     case "ready":
       return { awaitingFit: true, fitBlockedReason: null };
@@ -477,7 +540,8 @@ type ScoreOutcome =
 /** Why a run stops early, in the order they are reported. */
 const STOP_MESSAGES = {
   lost: null,
-  no_credentials: "No Jev API key is configured for the organization.",
+  no_credentials:
+    "The organization's Jev key this run paid with is no longer available. Start scoring again to use the current one.",
   ceiling: "Stopped at the spending limit.",
   attempts: "Stopped after too many failed scorer calls.",
 } as const satisfies Record<Exclude<ScoreOutcome, "continue">, string | null>;
@@ -494,14 +558,9 @@ async function score(
   const maxAttempts = Math.ceil(maxSessions * ATTEMPTS_PER_SESSION);
   // At least one round per claim, so every run makes progress.
   do {
-    const router = await AutoRouterModel.findPastSessionsRouter(
-      backfill.organizationId,
-    );
-    // The router is gone, or its decision model changed: these scores have no reader.
-    if (
-      !router ||
-      (await activeSourceVersion(router.scorerModel)).id !== scorerVersionId
-    ) {
+    // Past sessions are read with the default scorer version alone: scores
+    // of another have no reader.
+    if ((await activeSourceVersion()).id !== scorerVersionId) {
       await RoutingBackfillModel.finish(lease, { status: "superseded" });
       return true;
     }
@@ -511,7 +570,15 @@ async function score(
       limit: SCORE_BATCH_SIZE,
     });
     if (batch.length === 0) {
-      await complete(backfill, lease);
+      await complete(backfill, lease, scorerVersionId);
+      return true;
+    }
+    const payer = await runPayer(backfill);
+    if (payer === null) {
+      await RoutingBackfillModel.finish(lease, {
+        status: "failed",
+        error: STOP_MESSAGES.no_credentials,
+      });
       return true;
     }
     // Settled, not raced: a failure surfaces only once every call of the
@@ -520,7 +587,7 @@ async function score(
       batch.map((session) =>
         scoreSession({
           backfill,
-          router,
+          payer,
           lease,
           scorerVersionId,
           maxAttempts,
@@ -550,7 +617,7 @@ async function score(
         return true;
       case "ceiling":
       case "attempts":
-        await complete(backfill, lease, STOP_MESSAGES[stop]);
+        await complete(backfill, lease, scorerVersionId, STOP_MESSAGES[stop]);
         return true;
     }
     await RoutingBackfillModel.renew(lease, LEASE_TTL_SECONDS);
@@ -560,48 +627,53 @@ async function score(
 
 /**
  * Done, possibly stopped short (`error`), in one commit with the generation
- * bump that makes the next fit read the new history and keeps a fit already
- * running from standing in for it. The dispatcher fits any generation above
- * the planned one, so the enqueue here only saves its wait.
+ * bump of every router reading past sessions, which makes each one's next
+ * fit read the new history and keeps a fit already running from standing in
+ * for it. Locks the run, then the routers by id, each rechecked under its
+ * plan lock, and records the generation each was raised to. The round that
+ * ends here checked `scorerVersionId` is the default one. The dispatcher fits
+ * any generation above the planned one, so the enqueue here only saves its
+ * wait.
  */
 async function complete(
   backfill: RoutingBackfill,
   lease: BackfillLease,
+  scorerVersionId: string,
   error?: string,
 ) {
   const finished = await withDbTransaction(async (tx) => {
-    if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return false;
-    if (backfill.scorerVersionId) {
-      await RoutingHistoryModel.failExhausted(
-        {
-          organizationId: backfill.organizationId,
-          scorerVersionId: backfill.scorerVersionId,
-        },
-        tx,
-      );
-    }
-    const router = await AutoRouterModel.findPastSessionsRouter(
+    if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return null;
+    await RoutingHistoryModel.failExhausted(
+      { organizationId: backfill.organizationId, scorerVersionId },
+      tx,
+    );
+    const learning = await AutoRouterModel.listLearningFromPastSessions(
       backfill.organizationId,
       tx,
     );
-    const fitGeneration = router
-      ? await AutoRouterModel.bumpGeneration(router.id, tx)
-      : null;
+    const fitGenerations: Record<string, number> = {};
+    for (const router of learning.filter(readsPastSessions)) {
+      const generation = await AutoRouterModel.bumpGenerationIf(
+        router.id,
+        readsPastSessions,
+        tx,
+      );
+      if (generation !== null) fitGenerations[router.id] = generation;
+    }
     const done = await RoutingBackfillModel.finish(
       lease,
-      { status: "done", error, fitGeneration },
+      { status: "done", error, fitGenerations },
       tx,
     );
-    return done && { routerId: router?.id ?? null };
+    return done ? Object.keys(fitGenerations) : null;
   });
   if (!finished) return;
-  await AutoRoutingDispatchModel.enqueueFits(
-    finished.routerId ? [finished.routerId] : [],
-  ).catch((enqueueError: unknown) =>
-    logger.warn(
-      { err: enqueueError, backfillId: backfill.id },
-      "[AutoRouting] Could not enqueue the fit after a backfill; the dispatcher runs it",
-    ),
+  await AutoRoutingDispatchModel.enqueueFits(finished).catch(
+    (enqueueError: unknown) =>
+      logger.warn(
+        { err: enqueueError, backfillId: backfill.id },
+        "[AutoRouting] Could not enqueue the fit after a backfill; the dispatcher runs it",
+      ),
   );
   logger.info(
     { backfillId: backfill.id, organizationId: backfill.organizationId },
@@ -611,7 +683,7 @@ async function complete(
 
 async function scoreSession(params: {
   backfill: RoutingBackfill;
-  router: Pick<AutoRouter, "scorerModel" | "scorerApiKeyId">;
+  payer: string;
   lease: BackfillLease;
   scorerVersionId: string;
   maxAttempts: number;
@@ -677,10 +749,12 @@ async function scoreSession(params: {
     });
     if (reservation.kind !== "reserved") return reservation.kind;
     let reserved = reservation.amount;
-    reading = await preRunSource(params.router.scorerModel)
+    // The run scores with the default scorer version, so with its model.
+    reading = await preRunSource()
       .read(input, {
         organizationId: backfill.organizationId,
-        apiKeyId: params.router.scorerApiKeyId,
+        apiKeyId: params.payer,
+        exactApiKey: true,
         timeoutMs: SCORER_TIMEOUT_MS,
       })
       .then(

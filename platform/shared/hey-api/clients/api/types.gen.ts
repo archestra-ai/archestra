@@ -35646,6 +35646,7 @@ export type GetAutoRoutingStateResponses = {
                 name: string;
             }>;
         }>;
+        defaultDecisionModel: string;
     };
 };
 
@@ -35746,6 +35747,7 @@ export type UpdateAutoRoutingStateResponses = {
                 name: string;
             }>;
         }>;
+        defaultDecisionModel: string;
     };
 };
 
@@ -35869,7 +35871,16 @@ export type GetAutoRoutersResponses = {
             apiKeyId: string | null;
             model: string;
         };
-        usesPastSessions: boolean;
+        learnFromPastSessions: boolean;
+        readsPastSessions: boolean;
+        expectedTrafficFactor: number;
+        traffic: {
+            volumeSource: 'live' | 'history';
+            pastBaseline: {
+                sessionsPerDay: number;
+                tokensPerDay: number;
+            } | null;
+        };
         virtualApiKeyIds: Array<string>;
         usage: {
             agentCount: number;
@@ -35922,6 +35933,8 @@ export type CreateAutoRouterData = {
             apiKeyId: string | null;
             model: string;
         };
+        learnFromPastSessions?: boolean;
+        expectedTrafficFactor?: number;
     };
     path?: never;
     query?: never;
@@ -36039,7 +36052,16 @@ export type CreateAutoRouterResponses = {
             apiKeyId: string | null;
             model: string;
         };
-        usesPastSessions: boolean;
+        learnFromPastSessions: boolean;
+        readsPastSessions: boolean;
+        expectedTrafficFactor: number;
+        traffic: {
+            volumeSource: 'live' | 'history';
+            pastBaseline: {
+                sessionsPerDay: number;
+                tokensPerDay: number;
+            } | null;
+        };
         virtualApiKeyIds: Array<string>;
         usage: {
             agentCount: number;
@@ -36379,7 +36401,16 @@ export type GetAutoRouterResponses = {
             apiKeyId: string | null;
             model: string;
         };
-        usesPastSessions: boolean;
+        learnFromPastSessions: boolean;
+        readsPastSessions: boolean;
+        expectedTrafficFactor: number;
+        traffic: {
+            volumeSource: 'live' | 'history';
+            pastBaseline: {
+                sessionsPerDay: number;
+                tokensPerDay: number;
+            } | null;
+        };
         virtualApiKeyIds: Array<string>;
         usage: {
             agentCount: number;
@@ -36432,6 +36463,8 @@ export type UpdateAutoRouterData = {
             apiKeyId: string | null;
             model: string;
         };
+        learnFromPastSessions?: boolean;
+        expectedTrafficFactor?: number;
     };
     path: {
         id: string;
@@ -36551,7 +36584,16 @@ export type UpdateAutoRouterResponses = {
             apiKeyId: string | null;
             model: string;
         };
-        usesPastSessions: boolean;
+        learnFromPastSessions: boolean;
+        readsPastSessions: boolean;
+        expectedTrafficFactor: number;
+        traffic: {
+            volumeSource: 'live' | 'history';
+            pastBaseline: {
+                sessionsPerDay: number;
+                tokensPerDay: number;
+            } | null;
+        };
         virtualApiKeyIds: Array<string>;
         usage: {
             agentCount: number;
@@ -37044,7 +37086,16 @@ export type ReplanAutoRoutingResponses = {
             apiKeyId: string | null;
             model: string;
         };
-        usesPastSessions: boolean;
+        learnFromPastSessions: boolean;
+        readsPastSessions: boolean;
+        expectedTrafficFactor: number;
+        traffic: {
+            volumeSource: 'live' | 'history';
+            pastBaseline: {
+                sessionsPerDay: number;
+                tokensPerDay: number;
+            } | null;
+        };
         virtualApiKeyIds: Array<string>;
         usage: {
             agentCount: number;
@@ -37207,10 +37258,28 @@ export type PreviewAutoRoutingResponse = PreviewAutoRoutingResponses[keyof Previ
 export type SimulateAutoRoutingData = {
     body: {
         budgetUsdPerDay: number;
+        /**
+         * Scales the fitted usage window's unscaled volume; the router's expected traffic factor is not applied on top
+         */
         volumeMultiplier: number;
     } | {
         budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence';
+        /**
+         * Scales the fitted usage window's unscaled volume; the router's expected traffic factor is not applied on top
+         */
         volumeMultiplier: number;
+    } | {
+        budgetUsdPerDay: number;
+        /**
+         * An expected traffic factor to simulate in place of the router's, applied as a fit applies it: only while past sessions size the plan
+         */
+        expectedTrafficFactor: number;
+    } | {
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence';
+        /**
+         * An expected traffic factor to simulate in place of the router's, applied as a fit applies it: only while past sessions size the plan
+         */
+        expectedTrafficFactor: number;
     };
     path: {
         id: string;
@@ -37469,152 +37538,19 @@ export type GetAutoRoutingDiagnosticsResponses = {
         minBudgetUsdPerDay: number;
     } | {
         status: 'cold_start';
+    } | {
+        status: 'basis_unavailable';
     };
 };
 
 export type GetAutoRoutingDiagnosticsResponse = GetAutoRoutingDiagnosticsResponses[keyof GetAutoRoutingDiagnosticsResponses];
 
-export type CancelAutoRoutingBackfillData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/auto-routing/backfill';
-};
-
-export type CancelAutoRoutingBackfillErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CancelAutoRoutingBackfillError = CancelAutoRoutingBackfillErrors[keyof CancelAutoRoutingBackfillErrors];
-
-export type CancelAutoRoutingBackfillResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        backfill: {
-            id: string;
-            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
-            phase: 'scan' | 'score';
-            windowStart: string;
-            cutoff: string;
-            eligibleSessions: number;
-            eligibleTokens: number;
-            breakdown: Array<{
-                apiShape: 'chat_completions' | 'responses' | 'messages';
-                client: string;
-                sessions: number;
-            }>;
-            scorerCurrent: boolean | null;
-            maxSessions: number | null;
-            maxCostUsd: number | null;
-            spentCostUsd: number;
-            progress: {
-                sample: number;
-                scored: number;
-                noText: number;
-                failed: number;
-            } | null;
-            error: string | null;
-            completedAt: string | null;
-            awaitingFit: boolean;
-            fitBlockedReason: string | null;
-        } | null;
-        scoreOffer: {
-            backfillId: string;
-            scorerVersionId: string;
-            windowStart: string;
-            cutoff: string;
-            sessions: number;
-            remaining: number;
-            estimatedCostUsd: number;
-            suggestedMaxCostUsd: number;
-            rescore: boolean;
-        } | null;
-        history: Array<{
-            id: string;
-            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
-            phase: 'scan' | 'score';
-            createdAt: string;
-            completedAt: string | null;
-            startedByName: string | null;
-            foundSessions: number;
-            scoredSessions: number | null;
-            spentCostUsd: number;
-            maxCostUsd: number | null;
-            error: string | null;
-        }>;
-    };
-};
-
-export type CancelAutoRoutingBackfillResponse = CancelAutoRoutingBackfillResponses[keyof CancelAutoRoutingBackfillResponses];
-
 export type GetAutoRoutingBackfillData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        routerId?: string;
+    };
     url: '/api/auto-routing/backfill';
 };
 
@@ -37730,6 +37666,7 @@ export type GetAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        payer: 'ready' | 'no_jev_key' | null;
         history: Array<{
             id: string;
             status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
@@ -37867,6 +37804,7 @@ export type ScanAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        payer: 'ready' | 'no_jev_key' | null;
         history: Array<{
             id: string;
             status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
@@ -38012,6 +37950,7 @@ export type ScoreAutoRoutingBackfillResponses = {
             suggestedMaxCostUsd: number;
             rescore: boolean;
         } | null;
+        payer: 'ready' | 'no_jev_key' | null;
         history: Array<{
             id: string;
             status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
@@ -38029,6 +37968,148 @@ export type ScoreAutoRoutingBackfillResponses = {
 };
 
 export type ScoreAutoRoutingBackfillResponse = ScoreAutoRoutingBackfillResponses[keyof ScoreAutoRoutingBackfillResponses];
+
+export type CancelAutoRoutingBackfillData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query: {
+        phase: 'scan' | 'score';
+    };
+    url: '/api/auto-routing/backfill/{id}';
+};
+
+export type CancelAutoRoutingBackfillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CancelAutoRoutingBackfillError = CancelAutoRoutingBackfillErrors[keyof CancelAutoRoutingBackfillErrors];
+
+export type CancelAutoRoutingBackfillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        backfill: {
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            windowStart: string;
+            cutoff: string;
+            eligibleSessions: number;
+            eligibleTokens: number;
+            breakdown: Array<{
+                apiShape: 'chat_completions' | 'responses' | 'messages';
+                client: string;
+                sessions: number;
+            }>;
+            scorerCurrent: boolean | null;
+            maxSessions: number | null;
+            maxCostUsd: number | null;
+            spentCostUsd: number;
+            progress: {
+                sample: number;
+                scored: number;
+                noText: number;
+                failed: number;
+            } | null;
+            error: string | null;
+            completedAt: string | null;
+            awaitingFit: boolean;
+            fitBlockedReason: string | null;
+        } | null;
+        scoreOffer: {
+            backfillId: string;
+            scorerVersionId: string;
+            windowStart: string;
+            cutoff: string;
+            sessions: number;
+            remaining: number;
+            estimatedCostUsd: number;
+            suggestedMaxCostUsd: number;
+            rescore: boolean;
+        } | null;
+        payer: 'ready' | 'no_jev_key' | null;
+        history: Array<{
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            createdAt: string;
+            completedAt: string | null;
+            startedByName: string | null;
+            foundSessions: number;
+            scoredSessions: number | null;
+            spentCostUsd: number;
+            maxCostUsd: number | null;
+            error: string | null;
+        }>;
+    };
+};
+
+export type CancelAutoRoutingBackfillResponse = CancelAutoRoutingBackfillResponses[keyof CancelAutoRoutingBackfillResponses];
 
 export type AzureListFilesData = {
     body?: never;

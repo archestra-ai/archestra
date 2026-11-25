@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import {
   AUTO_ROUTER_NAME,
@@ -64,6 +65,8 @@ type FormValues = {
   decision: DecisionValue;
   budgetMode: BudgetMode;
   budgetUsdPerDay: string;
+  learnFromPastSessions: boolean;
+  expectedTrafficFactor: string;
   tiers: Record<TierName, TierValue>;
 };
 
@@ -99,6 +102,7 @@ const TIER_HINTS: Record<TierName, string> = {
 /** The key a router scores with when none is picked: the organization's own. */
 const DEFAULT_DECISION_KEY = "default";
 const NAME_SUFFIX_PATTERN = /^[a-z0-9][a-z0-9._-]{0,62}$/;
+const MAX_TRAFFIC_FACTOR = 100;
 
 /**
  * Everything one auto router needs, in one place: its name, the model and key
@@ -166,6 +170,10 @@ function ConfigureForm({
     values.budgetMode === "custom"
       ? validateBudget(values.budgetUsdPerDay)
       : null;
+  // The factor is hidden, and goes out unchanged, while learning is off.
+  const factorError = values.learnFromPastSessions
+    ? validateFactor(values.expectedTrafficFactor)
+    : null;
   // The tiers are saved together, so an edited one needs the other two.
   const tiersEdited = !router || !!form.formState.dirtyFields.tiers;
   const nameError = validateName(values.nameSuffix, router, existingNames);
@@ -177,7 +185,7 @@ function ConfigureForm({
         ? `Share "${unsharedKey.name}" with the whole organization, or pick another key.`
         : !values.decision.model
           ? "Choose a decision model."
-          : budgetError);
+          : (budgetError ?? factorError));
   const isDirty = form.formState.isDirty;
 
   const onSubmit = form.handleSubmit((submitted) => {
@@ -263,8 +271,16 @@ function ConfigureForm({
           <BudgetSection
             form={form}
             settings={router}
+            defaultDecisionModel={state.defaultDecisionModel}
             disabled={isPending}
             budgetError={budgetError}
+            factorError={factorError}
+          />
+          <PastSessionsSection
+            form={form}
+            settings={router}
+            disabled={isPending}
+            factorError={factorError}
           />
           <DecisionSection
             form={form}
@@ -469,21 +485,40 @@ const DECISION_PROVIDER_LABELS: Record<string, string> = { jev: "Jev" };
 function BudgetSection({
   form,
   settings,
+  defaultDecisionModel,
   disabled,
   budgetError,
+  factorError,
 }: {
   form: UseFormReturn<FormValues>;
   settings: AutoRouter | null;
+  defaultDecisionModel: string;
   disabled: boolean;
   budgetError: string | null;
+  factorError: string | null;
 }) {
   const mode = form.watch("budgetMode");
   const hint = BUDGET_MODES.find((option) => option.value === mode)?.hint;
+  const factorText = form.watch("expectedTrafficFactor");
+  const learn = form.watch("learnFromPastSessions");
+  // The estimate runs on the saved router, so it says nothing of a draft
+  // that reads past sessions differently.
+  const eligibilityEdited =
+    settings !== null &&
+    (learn !== settings.learnFromPastSessions ||
+      form.watch("decision.model") !== settings.decisionModel.model);
   const estimate = useBudgetEstimate(
     mode,
     form.watch("budgetUsdPerDay"),
+    !learn
+      ? (settings?.expectedTrafficFactor ?? 1)
+      : factorError === null
+        ? Number(factorText)
+        : null,
     settings,
     !!form.formState.dirtyFields.tiers,
+    eligibilityEdited,
+    learn && form.watch("decision.model") === defaultDecisionModel,
   );
   return (
     <section className="space-y-3">
@@ -564,6 +599,92 @@ function BudgetSection({
   );
 }
 
+/**
+ * Whether the router also learns from the organization's past sessions, and
+ * how much busier than them it is expected to be while its own traffic is
+ * too young to size the plan.
+ */
+function PastSessionsSection({
+  form,
+  settings,
+  disabled,
+  factorError,
+}: {
+  form: UseFormReturn<FormValues>;
+  settings: AutoRouter | null;
+  disabled: boolean;
+  factorError: string | null;
+}) {
+  const learn = form.watch("learnFromPastSessions");
+  const baseline = settings?.traffic.pastBaseline ?? null;
+  return (
+    <section className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <Label
+            htmlFor="auto-routing-learn-past-sessions"
+            className="text-sm font-medium"
+          >
+            Learn from past sessions
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Starts the router from the organization's scored past sessions
+            instead of waiting for its own. Only the default decision model can
+            read them.
+          </p>
+        </div>
+        <Controller
+          control={form.control}
+          name="learnFromPastSessions"
+          render={({ field }) => (
+            <Switch
+              id="auto-routing-learn-past-sessions"
+              checked={field.value}
+              onCheckedChange={field.onChange}
+              disabled={disabled}
+            />
+          )}
+        />
+      </div>
+      {learn && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <Label
+              htmlFor="auto-routing-traffic-factor"
+              className="text-sm font-medium"
+            >
+              Expected traffic
+            </Label>
+            <div className="flex items-center gap-1.5 text-sm">
+              <Input
+                id="auto-routing-traffic-factor"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                className="h-8 w-20"
+                disabled={disabled}
+                aria-invalid={factorError !== null}
+                {...form.register("expectedTrafficFactor")}
+              />
+              <span className="text-muted-foreground">× past traffic</span>
+            </div>
+          </div>
+          <p
+            className="text-xs text-muted-foreground"
+            data-testid="auto-routing-traffic-baseline"
+          >
+            {baseline
+              ? `Past traffic across the organization: ~${Math.round(baseline.sessionsPerDay).toLocaleString("en-US")} sessions/day, ~${Math.round(baseline.tokensPerDay).toLocaleString("en-US")} tokens/day. `
+              : ""}
+            The plan is sized for this multiple of it until the router's own
+            traffic spans a week.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 type BudgetSplit = {
   budgetUsdPerDay: number;
   shares: readonly [number, number, number];
@@ -577,25 +698,40 @@ type BudgetSplit = {
 function useBudgetEstimate(
   mode: BudgetMode,
   budgetText: string,
+  /** The factor being edited; null while it is invalid. */
+  expectedTrafficFactor: number | null,
   settings: AutoRouter | null,
   tiersEdited: boolean,
+  /** Whether the draft learns from past sessions or decides with another model than the saved router. */
+  eligibilityEdited: boolean,
+  draftReadsPastSessions: boolean,
 ): { split: BudgetSplit | null; stale: boolean; note: string | null } {
   const tiersSaved =
     settings !== null &&
     TIER_NAMES.every((tier) => settings.tiers[tier] !== null);
   const coldStart = settings?.status.coldStart ?? { sessions: 0, required: 1 };
   const ready =
-    tiersSaved && !tiersEdited && coldStart.sessions >= coldStart.required;
+    tiersSaved &&
+    !tiersEdited &&
+    !eligibilityEdited &&
+    coldStart.sessions >= coldStart.required;
   const budget = Number(budgetText);
   const debouncedBudget = useDebouncedValue(budget, 400);
+  const debouncedFactor = useDebouncedValue(expectedTrafficFactor, 400);
   const customValid = validateBudget(budgetText) === null;
-  const body: Parameters<typeof useSimulateAutoRouting>[0] = !ready
-    ? null
-    : mode !== "custom"
-      ? { budgetPreset: mode, volumeMultiplier: 1 }
-      : customValid && debouncedBudget === budget
-        ? { budgetUsdPerDay: budget, volumeMultiplier: 1 }
-        : null;
+  // At the factor as typed, applied as a fit applies it: to past traffic only.
+  const factor =
+    expectedTrafficFactor !== null && debouncedFactor === expectedTrafficFactor
+      ? expectedTrafficFactor
+      : null;
+  const body: Parameters<typeof useSimulateAutoRouting>[0] =
+    !ready || factor === null
+      ? null
+      : mode !== "custom"
+        ? { budgetPreset: mode, expectedTrafficFactor: factor }
+        : customValid && debouncedBudget === budget
+          ? { budgetUsdPerDay: budget, expectedTrafficFactor: factor }
+          : null;
   const { data, isFetching, isError } = useSimulateAutoRouting(body);
   const summary =
     body && data?.status === "feasible" ? parsePlanSummary(data.summary) : null;
@@ -615,7 +751,9 @@ function useBudgetEstimate(
     return {
       split: null,
       stale: false,
-      note: "A new router starts cold: every session runs on the normal model until it has scored enough of its own.",
+      note: draftReadsPastSessions
+        ? "A new router starts from the organization's scored past sessions. Save to see where sessions would land."
+        : "A new router starts cold: every session runs on the normal model until it has scored enough of its own.",
     };
   }
   if (!tiersSaved || tiersEdited) {
@@ -623,6 +761,13 @@ function useBudgetEstimate(
       split: null,
       stale: false,
       note: "Save the models to see where sessions would land.",
+    };
+  }
+  if (eligibilityEdited) {
+    return {
+      split: null,
+      stale: false,
+      note: "Save to see where sessions would land with these past sessions.",
     };
   }
   if (coldStart.sessions < coldStart.required) {
@@ -816,6 +961,8 @@ function toFormValues(
       router?.budgetPreset ??
       (router?.budgetUsdPerDay == null ? "balanced" : "custom"),
     budgetUsdPerDay: router?.budgetUsdPerDay?.toString() ?? "",
+    learnFromPastSessions: router?.learnFromPastSessions ?? true,
+    expectedTrafficFactor: (router?.expectedTrafficFactor ?? 1).toString(),
     tiers: { fast: tier("fast"), normal: tier("normal"), smart: tier("smart") },
     decision: toDecisionValue(router, state),
   };
@@ -873,6 +1020,19 @@ function validateBudget(value: string): string | null {
   return null;
 }
 
+function validateFactor(value: string): string | null {
+  const parsed = Number(value);
+  if (
+    !value.trim() ||
+    !Number.isFinite(parsed) ||
+    parsed <= 0 ||
+    parsed > MAX_TRAFFIC_FACTOR
+  ) {
+    return `Enter an expected traffic multiple above 0 and up to ${MAX_TRAFFIC_FACTOR}.`;
+  }
+  return null;
+}
+
 function toDecisionBody(decision: DecisionValue) {
   return {
     apiKeyId:
@@ -889,6 +1049,10 @@ function toCreateBody(values: FormValues): AutoRouterCreate {
       : { budgetPreset: values.budgetMode }),
     tiers: values.tiers,
     decisionModel: toDecisionBody(values.decision),
+    learnFromPastSessions: values.learnFromPastSessions,
+    ...(values.learnFromPastSessions && {
+      expectedTrafficFactor: Number(values.expectedTrafficFactor),
+    }),
   };
 }
 
@@ -924,6 +1088,13 @@ function changedFields(
     ...(values.decision.apiKeyId !== saved.decision.apiKeyId ||
     values.decision.model !== saved.decision.model
       ? { decisionModel: toDecisionBody(values.decision) }
+      : {}),
+    ...(values.learnFromPastSessions !== saved.learnFromPastSessions
+      ? { learnFromPastSessions: values.learnFromPastSessions }
+      : {}),
+    ...(values.learnFromPastSessions &&
+    Number(values.expectedTrafficFactor) !== Number(saved.expectedTrafficFactor)
+      ? { expectedTrafficFactor: Number(values.expectedTrafficFactor) }
       : {}),
   };
 }

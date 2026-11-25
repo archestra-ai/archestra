@@ -1,14 +1,20 @@
 "use client";
 
-import { AlertTriangle, Hourglass } from "lucide-react";
+import { AlertTriangle, Hourglass, Info } from "lucide-react";
+import { useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { type AutoRouter, useAutoRouter } from "@/lib/auto-routing.query";
+import {
+  type AutoRouter,
+  useAutoRouter,
+  useAutoRoutingBackfill,
+} from "@/lib/auto-routing.query";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import { BUDGET_PRESET_LABELS } from "../_parts/budget-presets";
-import { PastSessions } from "../_parts/past-sessions";
+import { PastSessions, ScorePastSessionsDialog } from "../_parts/past-sessions";
 import { describeFitError } from "../_parts/plan-document";
 import { RouterFigures } from "../_parts/router-figures";
 import { isAutoRoutingSetUp, SetupCards } from "../_parts/setup-cards";
@@ -19,6 +25,8 @@ export default function AutoRoutingOverviewPage() {
   const { data: canUpdate = false } = useHasPermissions({
     llmProxy: ["update"],
   });
+  // Owned here, so the dialog outlives the notice action that opened it.
+  const [scoring, setScoring] = useState(false);
   if (settingsQuery.isLoadingError) {
     return (
       <QueryLoadError
@@ -31,13 +39,8 @@ export default function AutoRoutingOverviewPage() {
   const settings = settingsQuery.data;
   if (!settings) return null;
 
-  // The same card in every state, so scoring is always found in one place.
-  const pastSessions = settings.usesPastSessions && (
-    <PastSessions
-      routingEnabled={settings.enabled}
-      canUpdate={canUpdate}
-      scorer={settings.status.scorer}
-    />
+  const pastSessions = (
+    <PastSessionsCard settings={settings} canUpdate={canUpdate} />
   );
 
   if (!isAutoRoutingSetUp(settings)) {
@@ -51,16 +54,29 @@ export default function AutoRoutingOverviewPage() {
 
   return (
     <div className="space-y-4">
-      <StateNotice settings={settings} />
+      <StateNotice
+        settings={settings}
+        canUpdate={canUpdate}
+        onScore={() => setScoring(true)}
+      />
       <RouterDetails settings={settings} />
       <RouterFigures settings={settings} />
       {pastSessions}
+      <ScorePastSessionsDialog open={scoring} onOpenChange={setScoring} />
     </div>
   );
 }
 
 /** Why the figures below are empty, or why the last fit did not replace them. */
-function StateNotice({ settings }: { settings: AutoRouter }) {
+function StateNotice({
+  settings,
+  canUpdate,
+  onScore,
+}: {
+  settings: AutoRouter;
+  canUpdate: boolean;
+  onScore: () => void;
+}) {
   const { activePlan, lastFitError } = settings.status;
   if (lastFitError) {
     const fitError = describeFitError(lastFitError);
@@ -85,6 +101,65 @@ function StateNotice({ settings }: { settings: AutoRouter }) {
       <InlineNoticeText>
         Spend and quality figures appear once enough sessions are scored. Until
         then, sessions use the normal model.
+      </InlineNoticeText>
+      {canUpdate && settings.readsPastSessions && (
+        <ScoreOfferAction onScore={onScore} />
+      )}
+    </InlineNotice>
+  );
+}
+
+/**
+ * The same card in every state, so scoring is always found in one place. A
+ * router that does not read past sessions shows it while the organization's
+ * job runs, so the job can be stopped from any router.
+ */
+function PastSessionsCard({
+  settings,
+  canUpdate,
+}: {
+  settings: AutoRouter;
+  canUpdate: boolean;
+}) {
+  const { data } = useAutoRoutingBackfill();
+  if (settings.readsPastSessions || data?.backfill?.status === "running") {
+    return (
+      <PastSessions routingEnabled={settings.enabled} canUpdate={canUpdate} />
+    );
+  }
+  return settings.learnFromPastSessions && <PastSessionsUnreadable />;
+}
+
+/** Scoring past sessions warms the router up while there are some left to score and a key to pay. */
+function ScoreOfferAction({ onScore }: { onScore: () => void }) {
+  const { data } = useAutoRoutingBackfill();
+  const offer = data?.scoreOffer;
+  if (
+    !offer ||
+    offer.remaining === 0 ||
+    data.backfill?.status === "running" ||
+    data.payer !== "ready"
+  ) {
+    return null;
+  }
+  return (
+    <span className="ml-auto">
+      <Button size="xs" onClick={onScore}>
+        Score past sessions
+      </Button>
+    </span>
+  );
+}
+
+/** Set to learn from past sessions, but its decision model scores them differently. */
+function PastSessionsUnreadable() {
+  return (
+    <InlineNotice data-testid="auto-routing-past-sessions-unreadable">
+      <Info />
+      <span className="font-medium">Past sessions are not used</span>
+      <InlineNoticeText>
+        Past sessions are scored with the default decision model, so a router
+        with a custom one learns from its own sessions only.
       </InlineNoticeText>
     </InlineNotice>
   );

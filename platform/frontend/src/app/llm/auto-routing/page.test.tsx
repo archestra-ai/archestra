@@ -56,7 +56,10 @@ function makeRouter(overrides: Partial<AutoRouter>): AutoRouter {
       smart: tier("claude-opus", 3),
     },
     decisionModel: { apiKeyId: null, model: "jev-1.13.0" },
-    usesPastSessions: true,
+    learnFromPastSessions: true,
+    readsPastSessions: true,
+    expectedTrafficFactor: 1,
+    traffic: { volumeSource: "live", pastBaseline: null },
     virtualApiKeyIds: [],
     usage: { agentCount: 0, organizationDefault: false },
     generation: 1,
@@ -89,6 +92,7 @@ const state: AutoRoutingState = {
   enabled: true,
   eligibleApiKeyIds: [KEY.id],
   decisionProviders: [],
+  defaultDecisionModel: "jev-1.13.0",
 };
 
 const deleted: string[] = [];

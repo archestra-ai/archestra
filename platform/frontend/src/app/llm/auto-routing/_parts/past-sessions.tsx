@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/table";
 import {
   type AutoRoutingBackfillState,
-  type AutoRoutingScorerState,
   useAutoRoutingBackfill,
   useCancelAutoRoutingBackfill,
   useScanAutoRoutingBackfill,
@@ -54,21 +53,20 @@ type HistoryRow = AutoRoutingBackfillState["history"][number];
 /**
  * Past sessions from the interaction log the plan can learn from, in one
  * place whatever the router's state: what scanning and scoring did so far,
- * and one button that starts scoring or stops the job that runs.
+ * and one button that starts scoring or stops the job that runs. The
+ * organization has one pool of them, shared by every router that reads it.
  */
 export function PastSessions({
   routingEnabled,
   canUpdate,
-  scorer,
 }: {
   routingEnabled: boolean;
   canUpdate: boolean;
-  scorer: AutoRoutingScorerState;
 }) {
   const { data } = useAutoRoutingBackfill();
   const [scoring, setScoring] = useState(false);
   if (!data) return null;
-  const { backfill, scoreOffer, history } = data;
+  const { backfill, scoreOffer, history, payer } = data;
 
   return (
     <Card className="gap-3 py-4" data-testid="auto-routing-past-sessions">
@@ -76,14 +74,15 @@ export function PastSessions({
         <CardTitle className="text-sm">Past sessions</CardTitle>
         <CardDescription>
           Scoring sessions from before routing lets the plan learn without
-          waiting for new traffic.
+          waiting for new traffic. Every router that learns from past sessions
+          shares them.
         </CardDescription>
         {canUpdate && (
           <CardAction>
             <PastSessionsAction
               backfill={backfill}
               scoreOffer={scoreOffer}
-              scorer={scorer}
+              payer={payer}
               onScore={() => setScoring(true)}
             />
           </CardAction>
@@ -111,18 +110,13 @@ export function PastSessions({
             <InlineNoticeText>{backfill.fitBlockedReason}</InlineNoticeText>
           </InlineNotice>
         )}
-        {!canUpdate && scorer === "no_jev_key" && scoreOffer && (
+        {!canUpdate && payer === "no_jev_key" && scoreOffer && (
           <AddJevKeyLink />
         )}
         <PastSessionsHistory history={history} />
       </CardContent>
       <Dialog open={scoring} onOpenChange={setScoring}>
-        {scoring && (
-          <PastSessionsDialog
-            scorer={scorer}
-            onClose={() => setScoring(false)}
-          />
-        )}
+        {scoring && <PastSessionsDialog onClose={() => setScoring(false)} />}
       </Dialog>
     </Card>
   );
@@ -135,12 +129,12 @@ export function PastSessions({
 function PastSessionsAction({
   backfill,
   scoreOffer,
-  scorer,
+  payer,
   onScore,
 }: {
   backfill: Backfill | null;
   scoreOffer: ScoreOffer | null;
-  scorer: AutoRoutingScorerState;
+  payer: AutoRoutingBackfillState["payer"];
   onScore: () => void;
 }) {
   const cancel = useCancelAutoRoutingBackfill();
@@ -150,14 +144,14 @@ function PastSessionsAction({
         size="sm"
         variant="outline"
         disabled={cancel.isPending}
-        onClick={() => cancel.mutate()}
+        onClick={() => cancel.mutate(backfill)}
       >
         {cancel.isPending ? <Loader2 className="animate-spin" /> : <Square />}
         <span>{cancel.isPending ? "Stopping…" : "Stop"}</span>
       </Button>
     );
   }
-  if (scorer === "no_jev_key") return <AddJevKeyLink />;
+  if (payer === "no_jev_key") return <AddJevKeyLink />;
   if (!scoreOffer && backfill !== null && !isScanStale(backfill)) {
     return (
       <Button size="sm" variant="outline" disabled>
@@ -169,6 +163,21 @@ function PastSessionsAction({
     <Button size="sm" onClick={onScore}>
       Score
     </Button>
+  );
+}
+
+/** The same scoring dialog as the Past sessions card, opened from elsewhere on the page. */
+export function ScorePastSessionsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open && <PastSessionsDialog onClose={() => onOpenChange(false)} />}
+    </Dialog>
   );
 }
 
@@ -311,14 +320,9 @@ function isScanStale(backfill: Backfill): boolean {
  * log when the last count is stale (it is free), then offers to score what it
  * found at an estimated cost under a spending limit.
  */
-function PastSessionsDialog({
-  scorer,
-  onClose,
-}: {
-  scorer: AutoRoutingScorerState;
-  onClose: () => void;
-}) {
+function PastSessionsDialog({ onClose }: { onClose: () => void }) {
   const { data } = useAutoRoutingBackfill();
+  const payer = data?.payer;
   const scan = useScanAutoRoutingBackfill();
   // A ref, not state: Strict Mode runs the effect twice before a state update lands.
   const scanRequested = useRef(false);
@@ -343,7 +347,7 @@ function PastSessionsDialog({
     (backfill?.status === "running" && backfill.phase === "scan");
 
   if (scoreOffer && !scanning && backfill?.status !== "running") {
-    if (scorer !== "no_jev_key") {
+    if (payer === "ready") {
       return (
         <ScoreDialog
           offer={scoreOffer}
@@ -379,7 +383,7 @@ function PastSessionsDialog({
         ) : (
           <>
             {backfill && <ScanFindings backfill={backfill} />}
-            {scoreOffer && scorer === "no_jev_key" ? (
+            {scoreOffer && payer === "no_jev_key" ? (
               <AddJevKeyLink />
             ) : (
               <p>

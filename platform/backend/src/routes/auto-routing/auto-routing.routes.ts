@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import {
   cancelBackfill,
@@ -36,7 +37,9 @@ import {
 import {
   AutoRouterChangeResponseSchema,
   AutoRouterResponseSchema,
+  AutoRoutingBackfillQuerySchema,
   AutoRoutingBackfillResponseSchema,
+  AutoRoutingCancelBackfillQuerySchema,
   AutoRoutingDiagnosticsQuerySchema,
   AutoRoutingDiagnosticsResponseSchema,
   AutoRoutingPlanDetailSchema,
@@ -144,7 +147,7 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CreateAutoRouter,
         description:
-          "Create an auto router with its tiers, budget and decision model. It learns from its own sessions only",
+          "Create an auto router with its tiers, budget and decision model. Unless `learnFromPastSessions` is false, it also learns from the organization's past sessions",
         tags: TAGS,
         body: CreateAutoRouterBodySchema,
         response: constructResponseSchema(AutoRouterChangeResponseSchema),
@@ -348,10 +351,21 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async ({ organizationId, params, query }, reply) => {
+    async ({ organizationId, user, params, query }, reply) => {
       const router = await loadAutoRouter(organizationId, params.id);
+      // Past sessions come from the whole organization's logs.
+      const showPastSessions = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
       return reply.send(
-        await diagnoseAutoRouting(router, query.budgetUsdPerDay),
+        await diagnoseAutoRouting(
+          router,
+          query.budgetUsdPerDay,
+          showPastSessions,
+        ),
       );
     },
   );
@@ -362,13 +376,14 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAutoRoutingBackfill,
         description:
-          "Get the newest historical backfill and what scoring past sessions would take, for the organization's first auto router",
+          "Get the newest historical backfill of the organization's past sessions, which every auto router reading them shares, and what scoring them would take; with routerId, also whether that router's fit after the newest scoring run is still to come",
         tags: TAGS,
+        querystring: AutoRoutingBackfillQuerySchema,
         response: constructResponseSchema(AutoRoutingBackfillResponseSchema),
       },
     },
-    async ({ organizationId }, reply) =>
-      reply.send(await describeBackfill(organizationId)),
+    async ({ organizationId, query }, reply) =>
+      reply.send(await describeBackfill(organizationId, query.routerId)),
   );
 
   fastify.post(
@@ -407,17 +422,20 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.delete(
-    "/api/auto-routing/backfill",
+    "/api/auto-routing/backfill/:id",
     {
       schema: {
         operationId: RouteId.CancelAutoRoutingBackfill,
-        description: "Cancel the running historical backfill",
+        description:
+          "Cancel the historical backfill with this id while it is running or waits to be scored in the given phase",
         tags: TAGS,
+        params: z.object({ id: UuidIdSchema }),
+        querystring: AutoRoutingCancelBackfillQuerySchema,
         response: constructResponseSchema(AutoRoutingBackfillResponseSchema),
       },
     },
-    async ({ organizationId }, reply) => {
-      await cancelBackfill(organizationId);
+    async ({ organizationId, params, query }, reply) => {
+      await cancelBackfill(organizationId, params.id, query.phase);
       return reply.send(await describeBackfill(organizationId));
     },
   );

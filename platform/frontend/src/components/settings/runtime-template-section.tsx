@@ -299,47 +299,57 @@ export function RuntimeTemplateSection({
             .
           </p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              variant="outline"
-              className="shrink-0"
-              disabled={!editable}
-            >
-              <Plus />
-              <span>Add runtime</span>
-              <ChevronDown />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
-            {removedRows.length > 0 && (
-              <>
-                <DropdownMenuLabel>Removed runtimes</DropdownMenuLabel>
-                {removedRows.map((row) => (
-                  <DropdownMenuItem
-                    key={row.id}
-                    onSelect={() => setAvailable(row, true)}
-                  >
-                    <RuntimeMark row={row} />
-                    <span className="min-w-0 flex-1 truncate" title={row.name}>
-                      {row.name}
-                    </span>
-                    <Plus className="ml-auto size-3.5" />
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-              </>
-            )}
-            <DropdownMenuItem
-              disabled={state.templates.length >= 100}
-              onSelect={() => setEditing("new")}
-            >
-              <Plus />
-              <span>Create custom runtime…</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {removedRows.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                disabled={!editable}
+              >
+                <Plus />
+                <span>Add runtime</span>
+                <ChevronDown />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Removed runtimes</DropdownMenuLabel>
+              {removedRows.map((row) => (
+                <DropdownMenuItem
+                  key={row.id}
+                  onSelect={() => setAvailable(row, true)}
+                >
+                  <RuntimeMark row={row} />
+                  <span className="min-w-0 flex-1 truncate" title={row.name}>
+                    {row.name}
+                  </span>
+                  <Plus className="ml-auto size-3.5" />
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={state.templates.length >= 100}
+                onSelect={() => setEditing("new")}
+              >
+                <Plus />
+                <span>Create custom runtime…</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          // With nothing to restore, the only choice is a custom runtime.
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            disabled={!editable || state.templates.length >= 100}
+            onClick={() => setEditing("new")}
+          >
+            <Plus />
+            <span>Create custom runtime</span>
+          </Button>
+        )}
       </div>
       {organizationError || settings.isError ? (
         <QueryLoadError

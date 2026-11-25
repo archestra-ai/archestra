@@ -5102,6 +5102,19 @@ export function AgentForm({
                           ) : null
                         }
                       />
+                      {/* Only a choice for Manual: All agents is always loaded
+                          progressively, which its own footnote says. It sits
+                          right under the mode it belongs to, above the list. */}
+                      {!accessAllSubagents && (
+                        <div className="border-b pb-4">
+                          <AgentSubagentLoadingSetting
+                            progressive={progressiveSubagentLoading}
+                            onProgressiveChange={setProgressiveSubagentLoading}
+                            readOnly={readOnly}
+                            noun={isInternalAgent ? "subagent" : "agent"}
+                          />
+                        </div>
+                      )}
                       <SubagentsEditor
                         agentId={agent?.id}
                         readOnly={readOnly}
@@ -5141,18 +5154,6 @@ export function AgentForm({
                         agentsPending={a2aRemoteAgents.isPending}
                         agentsError={!!a2aRemoteAgents.isError}
                       />
-                      {/* Only a choice for Manual: All agents is always loaded
-                          progressively, which its own footnote says. */}
-                      {!accessAllSubagents && (
-                        <div className="border-t pt-4">
-                          <AgentSubagentLoadingSetting
-                            progressive={progressiveSubagentLoading}
-                            onProgressiveChange={setProgressiveSubagentLoading}
-                            readOnly={readOnly}
-                            noun={isInternalAgent ? "subagent" : "agent"}
-                          />
-                        </div>
-                      )}
                     </div>
                   )}
                 </SettingsSection>

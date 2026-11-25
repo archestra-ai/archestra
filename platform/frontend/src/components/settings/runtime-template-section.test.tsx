@@ -543,10 +543,9 @@ describe("RuntimeTemplateSection", () => {
     settings.popularAgentOverrides = { codex: { hidden: true, position: 3 } };
     // The organization query deliberately holds an older snapshot.
     const view = mount();
-    const add = await screen.findByRole("button", {
-      name: "Add runtime",
-    });
-    await waitFor(() => expect(add).toBeEnabled());
+    // Loaded, Add runtime turns into a menu of the removed runtimes.
+    await saved();
+    const add = screen.getByRole("button", { name: "Add runtime" });
     await user.click(add);
     await user.click(
       screen.getByRole("menuitem", { name: "Create custom runtime…" }),
@@ -676,8 +675,8 @@ describe("RuntimeTemplateSection", () => {
     );
     view.unmount();
     mount();
-    const add = await screen.findByRole("button", { name: "Add runtime" });
-    await waitFor(() => expect(add).toBeEnabled());
+    await saved();
+    const add = screen.getByRole("button", { name: "Add runtime" });
     expect(
       screen.queryByRole("button", { name: "Actions for Review workspace" }),
     ).not.toBeInTheDocument();
@@ -708,8 +707,8 @@ describe("RuntimeTemplateSection", () => {
     );
     mount();
     const user = userEvent.setup();
-    const add = await screen.findByRole("button", { name: "Add runtime" });
-    await waitFor(() => expect(add).toBeEnabled());
+    await saved();
+    const add = screen.getByRole("button", { name: "Add runtime" });
     expect(
       screen.getByText("No runtimes offered. Add a runtime to get started."),
     ).toBeInTheDocument();
@@ -738,12 +737,17 @@ describe("RuntimeTemplateSection", () => {
       expect(overrides?.["custom-image"]).toEqual({ hidden: true }),
     );
     await saved();
-    // Not a runtime, so it is not offered beside the removed ones.
+    // Not a runtime, so it is nothing to restore: Add runtime still goes
+    // straight to the custom runtime form.
     await user.click(screen.getByRole("button", { name: "Add runtime" }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("menuitem", { name: /Custom image/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("dialog", { name: "Add custom runtime" }),
+    ).toBeInTheDocument();
     await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     screen.getByRole("button", { name: "Reorder Codex" }).focus();
     await user.keyboard("{ArrowDown}");
     await waitFor(() => expect(overrides?.codex?.position).toBeGreaterThan(0));
@@ -759,6 +763,64 @@ describe("RuntimeTemplateSection", () => {
     await waitFor(() =>
       expect(overrides?.["custom-image"]).toEqual({ hidden: false }),
     );
+  });
+
+  it("opens the custom runtime form from Add runtime while nothing is removed", async () => {
+    mount();
+    const user = userEvent.setup();
+    const add = await screen.findByRole("button", { name: "Add runtime" });
+    await waitFor(() => expect(add).toBeEnabled());
+    await user.click(add);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Add custom runtime" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers removed runtimes from Add runtime, and opens the form directly again once the last is restored", async () => {
+    mount();
+    const user = userEvent.setup();
+    const actions = await screen.findByRole("button", {
+      name: "Actions for Codex",
+    });
+    await waitFor(() => expect(actions).toBeEnabled());
+    await user.click(actions);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Remove from list" }),
+    );
+    await saved();
+    await user.click(screen.getByRole("button", { name: "Add runtime" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Create custom runtime…" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: /Codex/ }));
+    await waitFor(() => expect(overrides?.codex?.hidden).toBe(false));
+    await saved();
+    await user.click(screen.getByRole("button", { name: "Add runtime" }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Add custom runtime" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not add a custom runtime past the limit of 100", async () => {
+    settings.templates = Array.from({ length: 100 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      name: `Workspace ${index}`,
+      description: "",
+      icon: null,
+      hidden: false,
+      position: index,
+      runtime: {
+        ...buildCustomAgentRuntime({ image: "registry.example.com/dev:v1" }),
+        privileged: false as const,
+      },
+    }));
+    mount();
+    expect(
+      await screen.findByRole("button", { name: "Actions for Workspace 99" }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add runtime" })).toBeDisabled();
   });
 
   it("appends new templates after existing choices when saved positions contain gaps", async () => {
@@ -783,9 +845,6 @@ describe("RuntimeTemplateSection", () => {
     });
     await waitFor(() => expect(add).toBeEnabled());
     await user.click(add);
-    await user.click(
-      screen.getByRole("menuitem", { name: "Create custom runtime…" }),
-    );
     await user.type(
       screen.getByRole("textbox", { name: "Name" }),
       "New workspace",

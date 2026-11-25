@@ -3,7 +3,7 @@ title: Custom Images
 description: Run your own coding agent image in Agent Runtime
 order: 3
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-16
+lastUpdated: 2026-11-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,7 +30,7 @@ Give teammates a named starting point, such as Engineering workspace, with your 
 
 Requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
-1. Go to **Settings → Agents → Runtimes** and choose **Add runtime → Create custom runtime…**.
+1. Go to **Settings → Agents → Runtimes** and choose **Add runtime**. If you removed runtimes from the list, **Add runtime** opens a menu of them instead: choose **Create custom runtime…** there.
 2. Enter a **Name** and **Description**, and optionally choose a **Display icon**.
 3. Under **Container**, set the **Container image** and **Command**. Open **Inference API**, **Follow-up messages**, **Environment**, and **Limits** to change those settings; each row shows its current value while closed.
 4. Click **Add runtime**. The runtime is saved and appears among the choices when creating an agent.

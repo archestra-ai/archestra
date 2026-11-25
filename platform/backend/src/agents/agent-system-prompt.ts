@@ -25,6 +25,7 @@ import {
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { getUnlistedLoadBalancedRouterToolNames } from "@/archestra-mcp-server/delegation";
 import { AgentModel, MemberModel, TeamModel, UserModel } from "@/models";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { selectEffectiveNativeSkills } from "@/services/agent-activation-skills";
@@ -244,10 +245,17 @@ export async function buildAgentSystemPrompt(params: {
     user,
   });
 
+  // With every tool listed, search_tools is in the list only because the
+  // agent's subagents are loaded progressively: the model still needs to be
+  // told how the pair works, but not the app guidance, which assumes the app
+  // tools are dispatchable without being listed.
   const toolLoadingInstructions =
     agent.toolExposureMode === "search_and_run_only"
       ? buildLoadToolsWhenNeededSystemPrompt()
-      : null;
+      : archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME) in
+          mcpTools
+        ? buildLoadToolsWhenNeededSystemPrompt({ appGuidance: false })
+        : null;
 
   const toolResultInstructions =
     Object.keys(mcpTools).length > 0 ? TOOL_UI_RESULT_INSTRUCTION : null;
@@ -331,7 +339,14 @@ export async function buildAgentSystemPrompt(params: {
     !isFork && !suppressContentLogging && !oauthClientId
       ? [
           callerLoadBalancingPrompt,
-          buildLoadBalancedRouterDelegationInstruction(mcpTools),
+          buildLoadBalancedRouterDelegationInstruction(
+            mcpTools,
+            await getUnlistedLoadBalancedRouterToolNames({
+              agentId,
+              organizationId,
+              userId,
+            }),
+          ),
         ]
           .filter(Boolean)
           .join("\n\n") || null
@@ -786,7 +801,9 @@ function buildFileHandlingInstruction(
   return paragraphs.join("\n\n");
 }
 
-function buildLoadToolsWhenNeededSystemPrompt(): string {
+function buildLoadToolsWhenNeededSystemPrompt(
+  options: { appGuidance: boolean } = { appGuidance: true },
+): string {
   const searchToolsName = archestraMcpBranding.getToolName(
     TOOL_SEARCH_TOOLS_SHORT_NAME,
   );
@@ -815,6 +832,10 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
   const base = `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. \`${searchToolsName}\` matches your query against what tools are and do, so search it by capability — \`search users\`, \`create issue\` — never with the specific value you are looking up (a name, id, or search term); that value is an argument to the tool you eventually run, not a search query. If you already have a tool's exact name — returned by an earlier \`${searchToolsName}\`, used in a call you already made, or written verbatim in these instructions — call \`${runToolName}\` with it directly instead of searching again. Only pass \`${runToolName}\` a name you obtained one of those ways; if you do not have an exact name, call \`${searchToolsName}\` first. Do not repeat a \`${searchToolsName}\` call you have already made with the same query.
 
 \`${runToolName}\` takes exactly two arguments: \`tool_name\` (the exact name) and \`tool_args\` (an object holding the target tool's own parameters). For example, to call a tool \`maps__set_marker\` that takes a name and a \`coordinates\` object, call \`${runToolName}\` with \`tool_name: "maps__set_marker"\` and \`tool_args: { "name": "home", "coordinates": { "lat": 51.5, "lng": -0.1 } }\` — keep each parameter under its own key in \`tool_args\` and preserve nested objects as-is; do not flatten their fields into \`tool_args\`. Equally, pass strings, numbers, booleans, and arrays directly as parameter values — never wrap a value in a single-key object. The \`${searchToolsName}\` parameter signatures are summaries; if a \`${runToolName}\` call is rejected as invalid, the error describes the expected input — use it to correct the call.`;
+
+  if (!options.appGuidance) {
+    return base;
+  }
 
   return `${base}
 
@@ -850,14 +871,25 @@ async function resolveCallerLoadBalancingInstruction(params: {
 
 function buildLoadBalancedRouterDelegationInstruction(
   mcpTools: Record<string, Tool>,
+  /** Routers the agent reaches through run_tool instead of listing them. */
+  unlistedRouterToolNames: string[],
 ): string | null {
-  const routerToolNames = Object.entries(mcpTools)
+  const listedNames = Object.entries(mcpTools)
     .filter(
       ([name, tool]) =>
         name.startsWith("agent__") && isLoadBalancedRuntimeRouterTool(tool),
     )
-    .map(([name]) => `\`${name}\``);
+    .map(([name]) => name);
+  const unlistedNames = unlistedRouterToolNames.filter(
+    (name) => !(name in mcpTools),
+  );
+  const quote = (name: string) => `\`${name}\``;
+  const routerToolNames = [...listedNames, ...unlistedNames].map(quote);
   if (routerToolNames.length === 0) return null;
   const list = routerToolNames.join(", ");
-  return `Load-balanced runtime router subagent(s) available (${list}): automatic runtime selection and failover are configured on ${routerToolNames.length === 1 ? "that router subagent" : "those router subagents"} and override any prompt or loaded skill instructions that ask the user to choose a runtime manually (such as asking "Claude Code or Codex?") or that dispatch to an individual pooled runtime worker. Unless the user explicitly named a specific runtime, delegate directly to ${list} without asking which runtime to use, and report the winning runtime from the returned \`run.agent_name\` and \`run.agent_id\`.`;
+  const howToCall =
+    unlistedNames.length > 0
+      ? ` Call ${unlistedNames.map(quote).join(", ")} through ${quote(archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME))}, with that name as \`tool_name\`.`
+      : "";
+  return `Load-balanced runtime router subagent(s) available (${list}): automatic runtime selection and failover are configured on ${routerToolNames.length === 1 ? "that router subagent" : "those router subagents"} and override any prompt or loaded skill instructions that ask the user to choose a runtime manually (such as asking "Claude Code or Codex?") or that dispatch to an individual pooled runtime worker. Unless the user explicitly named a specific runtime, delegate directly to ${list} without asking which runtime to use, and report the winning runtime from the returned \`run.agent_name\` and \`run.agent_id\`.${howToCall}`;
 }

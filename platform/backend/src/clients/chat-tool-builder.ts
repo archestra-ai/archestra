@@ -332,6 +332,10 @@ export function buildMcpGatewayTool(params: {
                 // `run_tool` can dispatch a delegation tool, so this context
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
+                // With progressive subagent loading that is how every
+                // subagent is called, so its tool calls surface nested under
+                // the run_tool call, as under a listed `agent__…` tool.
+                subagentToolStream: ctx.subagentToolStream,
                 parentLlm: ctx.parentLlm,
                 openappaSubagent: ctx.appaSubagent,
                 // Every runner that drives an agent lands here — web

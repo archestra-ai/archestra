@@ -63186,6 +63186,9 @@
                                   "accessAllSubagents": {
                                     "type": "boolean"
                                   },
+                                  "progressiveSubagentLoading": {
+                                    "type": "boolean"
+                                  },
                                   "subagentLoadBalancing": {
                                     "nullable": true,
                                     "type": "object",
@@ -63655,6 +63658,7 @@
                                   "activationSkillMode",
                                   "activationSkillPolicyRevision",
                                   "accessAllSubagents",
+                                  "progressiveSubagentLoading",
                                   "builtInAgentConfig",
                                   "builtIn",
                                   "latestVersion",
@@ -65047,6 +65051,9 @@
                           "accessAllSubagents": {
                             "type": "boolean"
                           },
+                          "progressiveSubagentLoading": {
+                            "type": "boolean"
+                          },
                           "subagentLoadBalancing": {
                             "nullable": true,
                             "type": "object",
@@ -65516,6 +65523,7 @@
                           "activationSkillMode",
                           "activationSkillPolicyRevision",
                           "accessAllSubagents",
+                          "progressiveSubagentLoading",
                           "builtInAgentConfig",
                           "builtIn",
                           "latestVersion",
@@ -66201,6 +66209,9 @@
                     "type": "boolean"
                   },
                   "accessAllSubagents": {
+                    "type": "boolean"
+                  },
+                  "progressiveSubagentLoading": {
                     "type": "boolean"
                   },
                   "subagentLoadBalancing": {
@@ -67204,6 +67215,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -67656,6 +67670,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -72717,6 +72732,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -73181,6 +73199,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -74267,6 +74286,9 @@
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
+                        "progressiveSubagentLoading": {
+                          "type": "boolean"
+                        },
                         "subagentLoadBalancing": {
                           "nullable": true,
                           "type": "object",
@@ -74719,6 +74741,7 @@
                         "activationSkillMode",
                         "activationSkillPolicyRevision",
                         "accessAllSubagents",
+                        "progressiveSubagentLoading",
                         "builtInAgentConfig",
                         "builtIn",
                         "latestVersion",
@@ -75490,6 +75513,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -75942,6 +75968,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -76624,6 +76651,9 @@
                   "accessAllSubagents": {
                     "type": "boolean"
                   },
+                  "progressiveSubagentLoading": {
+                    "type": "boolean"
+                  },
                   "subagentLoadBalancing": {
                     "nullable": true,
                     "type": "object",
@@ -77287,6 +77317,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -77739,6 +77772,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -79662,6 +79696,10 @@
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
+                        "progressiveSubagentLoading": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "activationSkillMode": {
                           "default": "all",
                           "type": "string",
@@ -80033,6 +80071,7 @@
                         "missingCredentialBehavior",
                         "accessAllTools",
                         "accessAllSubagents",
+                        "progressiveSubagentLoading",
                         "activationSkillMode",
                         "passthroughHeaders",
                         "incomingEmailEnabled",
@@ -80825,6 +80864,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -81277,6 +81319,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -82192,6 +82235,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -82644,6 +82690,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -90343,6 +90390,9 @@
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
+                    "progressiveSubagentLoading": {
+                      "type": "boolean"
+                    },
                     "subagentLoadBalancing": {
                       "nullable": true,
                       "type": "object",
@@ -90795,6 +90845,7 @@
                     "activationSkillMode",
                     "activationSkillPolicyRevision",
                     "accessAllSubagents",
+                    "progressiveSubagentLoading",
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
@@ -174639,6 +174690,9 @@
                             "accessAllSubagents": {
                               "type": "boolean"
                             },
+                            "progressiveSubagentLoading": {
+                              "type": "boolean"
+                            },
                             "subagentLoadBalancing": {
                               "nullable": true,
                               "type": "object",
@@ -175091,6 +175145,7 @@
                             "activationSkillMode",
                             "activationSkillPolicyRevision",
                             "accessAllSubagents",
+                            "progressiveSubagentLoading",
                             "builtInAgentConfig",
                             "builtIn",
                             "latestVersion",
@@ -178113,6 +178168,9 @@
                                 "accessAllSubagents": {
                                   "type": "boolean"
                                 },
+                                "progressiveSubagentLoading": {
+                                  "type": "boolean"
+                                },
                                 "subagentLoadBalancing": {
                                   "nullable": true,
                                   "type": "object",
@@ -178565,6 +178623,7 @@
                                 "activationSkillMode",
                                 "activationSkillPolicyRevision",
                                 "accessAllSubagents",
+                                "progressiveSubagentLoading",
                                 "builtInAgentConfig",
                                 "builtIn",
                                 "latestVersion",

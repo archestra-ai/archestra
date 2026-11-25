@@ -208,7 +208,13 @@ function EndpointRequest({
                   id={`${ids.credential}-model`}
                   className="w-full"
                 >
-                  <SelectValue placeholder="Pick a credential first" />
+                  <SelectValue
+                    placeholder={
+                      keyWithoutAccess
+                        ? "No models available"
+                        : "Pick a credential first"
+                    }
+                  />
                 </SelectTrigger>
               </Select>
             </Field>
@@ -307,7 +313,7 @@ function CredentialField({
     ? connection.canCreateOauth
     : auth === "standard" && connection.canCreateKey;
   const allowNone = auth === "passthrough" && connection.allowsUnauthenticated;
-  const { options, picked } = connection;
+  const { options, picked, createdWithoutEndpointAccess } = connection;
   const groups: Array<{ heading: string; items: typeof options }> = [];
   for (const option of options) {
     const last = groups.at(-1);
@@ -318,7 +324,11 @@ function CredentialField({
   return (
     <Field id={id} label={label}>
       <Select
-        value={picked?.id ?? (allowNone ? NONE_VALUE : "")}
+        value={
+          picked?.id ??
+          createdWithoutEndpointAccess?.id ??
+          (allowNone ? NONE_VALUE : "")
+        }
         onValueChange={(value) => {
           if (value === CREATE_VALUE) {
             if (isOauth) connection.setOauthCreateOpen(true);
@@ -335,14 +345,35 @@ function CredentialField({
         >
           <KeyRound />
           <SelectValue
+            className="min-w-0"
             placeholder={
               options.length === 0 ? `No ${label.toLowerCase()} yet` : label
             }
-          />
+          >
+            {createdWithoutEndpointAccess ? (
+              <>
+                <span className="truncate">
+                  {createdWithoutEndpointAccess.name}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  No access yet
+                </span>
+              </>
+            ) : undefined}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {allowNone && (
             <SelectItem value={NONE_VALUE}>No passthrough key</SelectItem>
+          )}
+          {createdWithoutEndpointAccess && (
+            <SelectItem
+              value={createdWithoutEndpointAccess.id}
+              description="No access yet"
+              disabled
+            >
+              {createdWithoutEndpointAccess.name}
+            </SelectItem>
           )}
           {groups.map((group) => (
             <SelectGroup key={group.heading}>
@@ -360,7 +391,9 @@ function CredentialField({
           ))}
           {canCreate && (
             <>
-              {(options.length > 0 || allowNone) && <SelectSeparator />}
+              {(options.length > 0 ||
+                allowNone ||
+                createdWithoutEndpointAccess) && <SelectSeparator />}
               <SelectItem value={CREATE_VALUE} icon={<Plus />}>
                 Create new {label.toLowerCase()}
               </SelectItem>

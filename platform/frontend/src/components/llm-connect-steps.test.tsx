@@ -435,7 +435,7 @@ describe("LlmConnectSteps", () => {
       expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
       expect(
         screen.getByRole("combobox", { name: "Virtual key" }),
-      ).not.toHaveTextContent(existing.name);
+      ).toHaveTextContent(/Fresh key\s*No access yet/);
       expect(
         screen.getByRole("link", { name: "Edit key to add access" }),
       ).toHaveAttribute(

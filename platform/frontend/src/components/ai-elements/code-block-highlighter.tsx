@@ -35,6 +35,9 @@ export function CodeBlockHighlighter({
       className={cn("[&_.token]:inline", className)}
       codeTagProps={{
         className: "font-mono text-sm",
+        // A wrapped block breaks inside a word with no break point (a URL, a
+        // token, a long name), so nothing runs past the block's edge.
+        style: wrapLongLines ? { overflowWrap: "anywhere" } : undefined,
       }}
       customStyle={{
         margin: 0,

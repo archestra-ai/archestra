@@ -14,7 +14,12 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { EndpointCard } from "@/app/llm/proxy/_parts/endpoint-card";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useProviderBaseUrls } from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
@@ -322,6 +327,96 @@ describe("LlmConnectSteps", () => {
         "Authorization: Bearer arch_fresh_secret_value",
       );
     });
+  });
+
+  it.each([
+    true,
+    false,
+  ])("shows the outcome of creating an automatic key from Endpoint (shared primary: %s)", async (hasSharedPrimary) => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "llmProviderApiKey", action: "use", scope: "*" }],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    const created = {
+      ...JUDGE_KEY,
+      id: "vk-new",
+      name: "Fresh key",
+      authorId: "user-1",
+      includeFutureProviders: true,
+      providerApiKeys: [],
+    };
+    let keys: (typeof created)[] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          {
+            ...JEV_PROVIDER_KEY,
+            id: "pk-openai",
+            name: hasSharedPrimary ? "Shared OpenAI" : "Personal OpenAI",
+            provider: "openai",
+            isPrimary: true,
+            scope: hasSharedPrimary ? "org" : "personal",
+            userId: hasSharedPrimary ? null : "user-1",
+          },
+        ]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
+        HttpResponse.json(page(keys)),
+      ),
+      http.post(`${API_ORIGIN}/api/llm-virtual-keys`, async ({ request }) => {
+        expect(await request.json()).toMatchObject({
+          includeFutureProviders: true,
+          providerApiKeys: [],
+        });
+        keys = [created];
+        return HttpResponse.json({
+          ...created,
+          value: "arch_fresh_secret_value",
+        });
+      }),
+      http.get(`${API_ORIGIN}/api/model-pools`, () => HttpResponse.json([])),
+      http.get(`${API_ORIGIN}/api/auto-routers`, () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EndpointCard baseUrl="http://localhost:3000/v1" />
+      </QueryClientProvider>,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Virtual key" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Create new virtual key" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "New virtual key for Unified Model API",
+    });
+    await user.click(
+      within(dialog).getByRole("radio", {
+        name: /Current and future providers/,
+      }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create key" }),
+    );
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+
+    if (hasSharedPrimary) {
+      await waitFor(() =>
+        expect(
+          screen.getByRole("combobox", { name: "Virtual key" }),
+        ).toHaveTextContent("Fresh key"),
+      );
+      expect(
+        screen.queryByText("Pick a credential first"),
+      ).not.toBeInTheDocument();
+    } else {
+      expect(await screen.findByText(/was created, but/)).toHaveTextContent(
+        "Fresh key was created, but it can’t call this endpoint yet.",
+      );
+      expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
+    }
   });
 
   it("lists and picks the reader's own keys before anyone else's", async () => {

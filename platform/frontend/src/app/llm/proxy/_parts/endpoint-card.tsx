@@ -212,12 +212,27 @@ function EndpointRequest({
               </Select>
             </Field>
           </div>
-          <NotReadyHint
-            auth={auth}
-            connection={connection}
-            targetLabel={targetLabel}
-          />
+          {!connection.createdWithoutEndpointAccess && (
+            <NotReadyHint
+              auth={auth}
+              connection={connection}
+              targetLabel={targetLabel}
+            />
+          )}
         </>
+      )}
+      {connection.createdWithoutEndpointAccess && (
+        <output className="block text-[12.5px] text-muted-foreground">
+          <strong>{connection.createdWithoutEndpointAccess}</strong> was
+          created, but it can’t call this endpoint yet. Add access in{" "}
+          <Link
+            href="/llm/proxy/virtual-keys"
+            className="text-primary underline underline-offset-2"
+          >
+            Virtual keys
+          </Link>
+          .
+        </output>
       )}
       {connection.ready && auth === "oauth" && connection.picked?.oauth && (
         <div className="space-y-2">

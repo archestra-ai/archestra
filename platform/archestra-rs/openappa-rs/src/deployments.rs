@@ -194,12 +194,18 @@ impl Deployments {
         policy: &HostedPolicy,
         agent_yell: bool,
     ) -> Result<bool, DeploymentError> {
-        // This picks the line a new session opens on; its dispatch checks the marks.
-        Ok(self
+        let pinned = self
             .pinned(runtime, store, line, policy, agent_yell)
-            .await?
-            .fallback
-            .is_some())
+            .await?;
+        // A session meant for this line dispatches on it, which checks the marks; one
+        // sent to Enforce for life is sent only on the marks the settings hold.
+        Ok(match pinned.fallback {
+            Some(_) => current(store, line, policy, pinned)
+                .await?
+                .fallback
+                .is_some(),
+            None => false,
+        })
     }
 
     /// After a dispatch pinned to `stale` found that its line moved on: the

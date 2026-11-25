@@ -604,24 +604,18 @@ export const SHOTS: Shot[] = [
           }
         `,
       });
-      await page
-        .getByRole("heading", { name: "Hooks", exact: true })
-        .scrollIntoViewIfNeeded();
+      await hooksHeading(page).scrollIntoViewIfNeeded();
       await page.getByText("pre-tool-use.py").waitFor();
       await page.getByRole("button", { name: "Edit pre-tool-use.py" }).click();
       // Other wizard steps keep their editors mounted but hidden.
       await page
         .locator("section")
-        .filter({
-          has: page.getByRole("heading", { name: "Hooks", exact: true }),
-        })
+        .filter({ has: hooksHeading(page) })
         .locator(".monaco-editor")
         .waitFor();
     },
     target: (page) =>
-      page.locator("section").filter({
-        has: page.getByRole("heading", { name: "Hooks", exact: true }),
-      }),
+      page.locator("section").filter({ has: hooksHeading(page) }),
   },
   {
     asset:
@@ -737,6 +731,11 @@ export const SHOTS: Shot[] = [
     },
   },
 ];
+
+// The Beta badge sits inside the Hooks section's heading.
+function hooksHeading(page: Page) {
+  return page.getByRole("heading", { name: /^Hooks\s*Beta$/ });
+}
 
 async function showRuntimeTierSettings(page: Page) {
   await page.route(/\/api\/(config|bootstrap)$/, async (route) => {

@@ -4,8 +4,10 @@
  * member is rate limited, the second answers.
  */
 
+import { createHash } from "node:crypto";
 import {
   CHAT_API_KEY_ID_HEADER,
+  LLM_PROXY_OAUTH_SCOPE,
   MODEL_POOL_ID_HEADER,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -18,10 +20,18 @@ import type OpenAI from "openai";
 import { vi } from "vitest";
 import { internalCallHeader } from "@/clients/internal-call";
 import db, { schema } from "@/database";
-import { ModelModel, ModelPoolModel, VirtualApiKeyModel } from "@/models";
+import {
+  AgentModel,
+  ModelModel,
+  ModelPoolModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import LimitModel from "@/models/limit";
 import LlmThroughputModel from "@/models/llm-throughput";
 import ModelPoolUsageModel from "@/models/model-pool-usage";
+import * as gatewayUtils from "@/routes/mcp-gateway/utils";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
@@ -80,6 +90,136 @@ describe("Model pools - LLM Proxy", () => {
     vi.restoreAllMocks();
     await app.close();
   });
+
+  for (const authMethod of ["jwks", "oauth_user"] as const) {
+    test(`${authMethod} can route by pool name only with a usable member key`, async ({
+      makeIdentityProvider,
+      makeLlmProviderApiKey,
+      makeMember,
+      makeSecret,
+      makeUser,
+    }) => {
+      const organizationId = proxy.organizationId;
+      const user = await makeUser();
+      await makeMember(user.id, organizationId);
+      const makeKey = async (name: string, preset: "use" | "view") =>
+        makeLlmProviderApiKey(
+          organizationId,
+          (await makeSecret({ secret: { apiKey: name } })).id,
+          {
+            provider: "openai",
+            name,
+            access: { users: [user.id], preset },
+            isPrimary: false,
+          },
+        );
+      const defaultKey = await makeLlmProviderApiKey(
+        organizationId,
+        (await makeSecret({ secret: { apiKey: "sk-direct" } })).id,
+        { provider: "openai", userId: user.id, isPrimary: true },
+      );
+      const members = [
+        { name: "allowed-pool", key: await makeKey("sk-pool", "use") },
+        {
+          name: "restricted-pool",
+          key: await makeKey("sk-restricted", "view"),
+        },
+      ];
+      for (const { name, key } of members) {
+        await ModelPoolModel.create({
+          organizationId,
+          input: {
+            name,
+            members: [
+              {
+                providerApiKeyId: key.id,
+                modelId: "gpt-4o-mini",
+                priority: 0,
+                weight: 1,
+                enabled: true,
+              },
+            ],
+          },
+        });
+      }
+      let agentId = proxy.id;
+      let accessToken: string;
+      if (authMethod === "jwks") {
+        const idp = await makeIdentityProvider(organizationId);
+        agentId = (
+          await AgentModel.setOrgLlmProxyIdentityProvider({
+            organizationId,
+            identityProviderId: idp.id,
+          })
+        ).id;
+        vi.spyOn(gatewayUtils, "validateExternalIdpToken").mockResolvedValue({
+          tokenId: "test-idp-token",
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId,
+          userId: user.id,
+        });
+        accessToken = "valid.test.jwt";
+      } else {
+        const clientId = `https://example.test/${crypto.randomUUID()}/client.json`;
+        await OAuthClientModel.upsertFromCimd({
+          id: crypto.randomUUID(),
+          clientId,
+          name: "Pool OAuth App",
+          redirectUris: ["http://localhost:3107/callback"],
+          grantTypes: ["authorization_code"],
+          responseTypes: ["code"],
+          scopes: [LLM_PROXY_OAUTH_SCOPE],
+          tokenEndpointAuthMethod: "none",
+          isPublic: true,
+          metadata: {},
+        });
+        accessToken = `pool-oauth-${crypto.randomUUID()}`;
+        await OAuthAccessTokenModel.create({
+          tokenHash: createHash("sha256")
+            .update(accessToken)
+            .digest("base64url"),
+          clientId,
+          userId: user.id,
+          expiresAt: new Date(Date.now() + 60_000),
+          scopes: [LLM_PROXY_OAUTH_SCOPE],
+        });
+      }
+      const send = (model: string) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${agentId}/chat/completions`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { model, messages: [{ role: "user", content: "Hello" }] },
+        });
+      const createClient = vi.mocked(openaiAdapterFactory.createClient);
+      const allowed = await send("allowed-pool");
+      expect(allowed.statusCode, allowed.body).toBe(200);
+      expect(createClient.mock.lastCall?.[0]).toBe("sk-pool");
+
+      createClient.mockClear();
+      const restricted = await send("restricted-pool");
+      expect(restricted.statusCode, restricted.body).toBe(200);
+      expect(createClient.mock.lastCall?.[0]).toBe("sk-direct");
+      expect(createClient.mock.calls.map(([key]) => key)).not.toContain(
+        "sk-restricted",
+      );
+
+      const interactions = await db.select().from(schema.interactionsTable);
+      expect(interactions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            authMethod,
+            providerApiKeyId: members[0].key.id,
+          }),
+          expect.objectContaining({
+            authMethod,
+            providerApiKeyId: defaultKey.id,
+          }),
+        ]),
+      );
+    });
+  }
 
   for (const stream of [false, true]) {
     for (const { cappedModel, minute } of [

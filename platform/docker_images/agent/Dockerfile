@@ -413,14 +413,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=cf08714037f2e2eb76f766a1c7cd39e3a690a82f6116abe356d28e3b3344b6ea ;; \
-      arm64) grok_arch=arm64; checksum=864757973551ae5ad38188594cf57afef896342c83387494caba104288ea64a1 ;; \
+      amd64) grok_arch=x64; checksum=4cef43ce2b62cccdb39acb216d8042f91d78d7fb022375b31dd7a3e8d747fc5c ;; \
+      arm64) grok_arch=arm64; checksum=c5139d8fb6fe050e5519cd1abc41e957366cf31a24983537627849c34f2bf5cd ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.89" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.89.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.90" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.90.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \

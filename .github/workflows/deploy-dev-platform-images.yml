@@ -122,8 +122,8 @@ jobs:
       # Release images (build-platform-release-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
       # Match the 16-core E2E builder; build arm64 natively.
-      amd64_runner: ubuntu-24.04-16core
-      arm64_runner: ubuntu-24.04-arm-32core
+      amd64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core' || 'ubuntu-24.04-16core' }}
+      arm64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-32core-arm' || 'ubuntu-24.04-arm-32core' }}
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
       # The Sentry source-map token lives in the staging-build environment,
       # which only main may use. Dispatches from other branches build without
@@ -163,8 +163,8 @@ jobs:
       # As above: amd64 only for the automated staging deploy.
       amd64_only: ${{ github.event_name == 'push' }}
       # Match the 16-core E2E builder; build arm64 natively.
-      amd64_runner: ubuntu-24.04-16core
-      arm64_runner: ubuntu-24.04-arm-32core
+      amd64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core' || 'ubuntu-24.04-16core' }}
+      arm64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-32core-arm' || 'ubuntu-24.04-arm-32core' }}
       cache_image_name: platform
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
       environment: ${{ github.ref == 'refs/heads/main' && 'staging-build' || '' }}

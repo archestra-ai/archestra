@@ -4203,6 +4203,9 @@ export function AgentForm({
                           onChangeTemplate={onChangeRuntimeTemplate}
                           modelBlock={showsModelControl ? modelBlock : null}
                           modelSummary={modelSummary}
+                          modelCollapsedSummary={
+                            noAccountWay ? "None selected" : undefined
+                          }
                           modelAttention={modelAttention}
                         />
                       </div>

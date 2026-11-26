@@ -52,6 +52,7 @@ export function AgentRuntimePicker({
   onChange,
   modelBlock,
   modelSummary,
+  modelCollapsedSummary,
   modelAttention,
   lockedBy,
   accountsLeftToAgent = false,
@@ -67,6 +68,8 @@ export function AgentRuntimePicker({
   onChange: (value: AgentRuntimeConfig) => void;
   modelBlock: ReactNode;
   modelSummary: string;
+  /** Short bar summary shown for a runtime only while the row is collapsed. */
+  modelCollapsedSummary?: string;
   modelAttention?: string;
   /** The locked Agent Runtime that sets this runtime's settings, if any. */
   lockedBy?: string | null;
@@ -260,9 +263,15 @@ export function AgentRuntimePicker({
           id={`${id}-model`}
           value="model"
           title={value ? "Credentials to use" : "Model"}
-          // A runtime's row lists its credentials below; a summary of them
-          // on the bar adds nothing.
-          summary={value ? undefined : modelSummary}
+          // A runtime's row lists its credentials below; omit the bar summary
+          // while open, and only surface an explicit collapsed summary when closed.
+          summary={
+            value
+              ? expandedRows.includes("model")
+                ? undefined
+                : modelCollapsedSummary
+              : modelSummary
+          }
           attention={modelAttention}
         >
           {modelBlock}

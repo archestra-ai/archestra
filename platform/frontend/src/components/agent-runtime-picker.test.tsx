@@ -113,6 +113,30 @@ describe("AgentRuntimePicker", () => {
     );
   });
 
+  it("shows modelCollapsedSummary on a runtime credentials bar only while collapsed", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentRuntimePicker
+        selectedId="claude-code"
+        value={runtimeFor("claude-code")}
+        onSelect={vi.fn()}
+        onChange={vi.fn()}
+        modelBlock={<div>Model settings content</div>}
+        modelSummary="Each person's Claude subscription"
+        modelCollapsedSummary="None selected"
+      />,
+      { wrapper: QueryWrapper },
+    );
+    const bar = await screen.findByRole("button", {
+      name: /^Credentials to use/,
+    });
+    expect(bar).toHaveTextContent(/^Credentials to use$/);
+    await user.click(bar);
+    expect(bar).toHaveTextContent("None selected");
+    await user.click(bar);
+    expect(bar).toHaveTextContent(/^Credentials to use$/);
+  });
+
   it("starts a maintained runtime from the administrator's settings", async () => {
     let served = false;
     server.use(

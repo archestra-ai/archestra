@@ -9,7 +9,7 @@ import {
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { beforeEach } from "vitest";
+import { beforeEach, vi } from "vitest";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import { canUseAgent, mayUseCatalog } from "@/auth/permission-gated";
@@ -24,6 +24,7 @@ import {
   ToolModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import TeamModel from "@/models/team";
 import agentRoutes from "@/routes/agent";
 import agentToolRoutes from "@/routes/agent-tool";
 import chatRoutes from "@/routes/chat/routes";
@@ -63,7 +64,25 @@ describe("the SRE agent and its tools follow object grants", () => {
       organizationId,
     };
     expect(await canUseAgent(SRE_AGENT_ID, caller)).toBe(true);
-    expect(await mayUseCatalog(SRE_CATALOG_ID, caller)).toBe(true);
+    const queries = vi.spyOn(db.$client, "query");
+    try {
+      expect(await mayUseCatalog(SRE_CATALOG_ID, caller)).toBe(true);
+      const statements = queries.mock.calls.flatMap(([statement]) =>
+        typeof statement === "string" ? [statement] : [],
+      );
+      expect(
+        statements.filter((statement) =>
+          statement.includes('from "resource_permission_policies"'),
+        ),
+      ).toHaveLength(2);
+      expect(
+        statements.filter((statement) =>
+          statement.includes('from "team_member"'),
+        ),
+      ).toHaveLength(1);
+    } finally {
+      queries.mockRestore();
+    }
 
     const key = {
       organizationId,
@@ -98,6 +117,67 @@ describe("the SRE agent and its tools follow object grants", () => {
     });
     expect(await canUseAgent(SRE_AGENT_ID, caller)).toBe(true);
     expect(await mayUseCatalog(SRE_CATALOG_ID, caller)).toBe(false);
+  });
+
+  test("combines grants from matching subjects and reloads membership on the next check", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const { organizationId, admin } = await seedSreAgent({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId);
+    const team = await makeTeam(organizationId, admin.id);
+    await makeTeamMember(team.id, member.id);
+    for (const target of [
+      { resource: "agent" as const, scope: SRE_AGENT_ID },
+      { resource: "mcpRegistry" as const, scope: SRE_CATALOG_ID },
+    ]) {
+      const key = { organizationId, ...target };
+      const policy = mustExist(await ResourcePermissionPolicyModel.find(key));
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy.revision,
+        grants:
+          target.resource === "agent"
+            ? [
+                {
+                  subject: { type: "user", id: member.id },
+                  actions: ["read"],
+                },
+                { subject: { type: "team", id: team.id }, actions: ["use"] },
+              ]
+            : [
+                {
+                  subject: { type: "user", id: member.id },
+                  actions: ["read", "use"],
+                },
+              ],
+      });
+    }
+    const caller = {
+      kind: "caller" as const,
+      userId: member.id,
+      organizationId,
+    };
+    expect(await mayUseCatalog(SRE_CATALOG_ID, caller)).toBe(true);
+    await TeamModel.removeMember(team.id, member.id);
+    expect(await canUseAgent(SRE_AGENT_ID, caller)).toBe(true);
+    expect(await mayUseCatalog(SRE_CATALOG_ID, caller)).toBe(false);
+    await makeTeamMember(team.id, member.id);
+    expect(await mayUseCatalog(SRE_CATALOG_ID, caller)).toBe(true);
+    expect(
+      await mayUseCatalog(SRE_CATALOG_ID, {
+        ...caller,
+        organizationId: (await makeOrganization()).id,
+      }),
+    ).toBe(false);
   });
 
   test.for([

@@ -77,6 +77,11 @@ on:
         required: false
         type: string
         default: "ubuntu-24.04-arm-32core"
+      cache_image_name:
+        description: "Optional image whose registry build cache this build reads instead of its own (e.g. platform for platform-slim, which shares its build stages). When set, this build exports no cache."
+        required: false
+        type: string
+        default: ""
       cache_compression:
         description: "Registry cache compression: gzip (default) or zstd"
         required: false
@@ -186,12 +191,13 @@ jobs:
         id: cache-refs
         shell: bash
         env:
-          CACHE_REF: ${{ inputs.image_registry }}/${{ inputs.image_name }}:buildcache-${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}
+          CACHE_REF: ${{ inputs.image_registry }}/${{ inputs.cache_image_name || inputs.image_name }}:buildcache-${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}
           USE_REGISTRY_CACHE: ${{ inputs.auth_provider != 'dockerhub' }}
           # The merge queue's release builds read this cache. Only builds of
           # main and release/*, which take reviewed code, write it; a build
-          # dispatched from any other branch reads it and leaves it alone.
-          CAN_EXPORT_CACHE: ${{ inputs.push_image && inputs.auth_provider != 'none' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+          # dispatched from any other branch reads it and leaves it alone. A
+          # build reading another image's cache leaves that cache to its owner.
+          CAN_EXPORT_CACHE: ${{ inputs.push_image && inputs.auth_provider != 'none' && inputs.cache_image_name == '' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
           CACHE_COMPRESSION: ${{ inputs.cache_compression }}
         run: |
           if [ "${USE_REGISTRY_CACHE}" != "true" ]; then

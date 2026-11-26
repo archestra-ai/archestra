@@ -328,6 +328,20 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const conditions = JSON.parse(process.argv[1]);
 for (const [job, condition] of Object.entries(conditions)) {
+  // Job ids contain hyphens, so rewrite needs.<id> as an index.
+  const indexed = condition.replace(/needs\.([\w-]+)/g, "needs['$1']");
+  const pullRequest = (login, ref, headRepo, validate) => vm.runInNewContext(indexed, {
+    github: {event_name: 'pull_request', repository: 'archestra-ai/archestra', event: {pull_request: {user: {login}, head: {ref, repo: {full_name: headRepo}}}}},
+    needs: {'release-pr-generated-head': {outputs: validate === undefined ? {} : {validate}}},
+    startsWith: (value, prefix) => value.startsWith(prefix), always: () => true, cancelled: () => false});
+  if (job === 'platform-lint-and-unit-tests') {
+    const release = ['archestra-releaser[bot]', 'release-please--branches--main--components--platform', 'archestra-ai/archestra'];
+    // The generated head validates; the raw release-please push it supersedes does not.
+    assert.equal(pullRequest(...release, 'true'), true, job);
+    assert.equal(pullRequest(...release, 'false'), false, job);
+    // A failed head lookup still validates.
+    assert.equal(pullRequest(...release, undefined), true, job);
+  }
   for (const [login, ref, headRepo, expected] of [
     ['archestra-automation-prs[bot]', 'backport/release-1.3/pr-42', 'archestra-ai/archestra', false],
     ['archestra-automation-prs[bot]', 'release-please--branches--main', 'archestra-ai/archestra', false],
@@ -338,9 +352,7 @@ for (const [job, condition] of Object.entries(conditions)) {
     ['contributor', 'chore/openappa-v1.2.4', 'archestra-ai/archestra', false],
     ['openappa-archestra-updater[bot]', 'other/change', 'archestra-ai/archestra', false],
   ]) {
-    const context = {github: {event_name: 'pull_request', repository: 'archestra-ai/archestra', event: {pull_request: {user: {login}, head: {ref, repo: {full_name: headRepo}}}}},
-      startsWith: (value, prefix) => value.startsWith(prefix), always: () => true, cancelled: () => false};
-    assert.equal(vm.runInNewContext(condition, context), expected, job);
+    assert.equal(pullRequest(login, ref, headRepo, 'true'), expected, job);
   }
   // Queue jobs additionally wait on the input check reporting a change for
   // their family. Job ids contain hyphens, so rewrite needs.<id> as an index.

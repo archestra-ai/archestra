@@ -1,7 +1,9 @@
 "use client";
 
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ItemNameLinks } from "@/components/item-name-links";
 import { useDeletePlugins } from "@/lib/plugins/plugin.query";
+import { pluginDetailHref } from "./plugin-page-config";
 
 /**
  * The one confirmation for deleting plugins. A row's delete button, the bulk
@@ -32,8 +34,21 @@ export function DeletePluginsDialog({
           ? "Delete plugin?"
           : `Delete ${plugins.length} plugins?`
       }
-      // The title asks the question; the text says what it leaves behind.
-      description="Installed copies stay on developer machines until you uninstall them."
+      // The title asks the question; the text names what is deleted and says
+      // what it leaves behind.
+      description={
+        <>
+          <span>Installed copies of </span>
+          <ItemNameLinks
+            items={plugins.map((plugin) => ({
+              href: pluginDetailHref(plugin.id),
+              name: plugin.displayName,
+            }))}
+            onNavigate={() => onOpenChange(false)}
+          />
+          <span> stay on developer machines until you uninstall them.</span>
+        </>
+      }
       isPending={deletePlugins.isPending}
       onConfirm={async () => {
         const { succeeded } = await deletePlugins.mutateAsync(

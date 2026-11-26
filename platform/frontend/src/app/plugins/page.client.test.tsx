@@ -425,8 +425,12 @@ describe("PluginsPage", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Delete plugin?" });
     expect(dialog).toHaveTextContent(
-      "Installed copies stay on developer machines until you uninstall them.",
+      "Installed copies of Policy Runtime stay on developer machines until you uninstall them.",
     );
+    // Named as a link to the plugin's own page.
+    expect(
+      within(dialog).getByRole("link", { name: "Policy Runtime" }),
+    ).toHaveAttribute("href", "/plugins/plugin-1");
     expect(dialog).not.toHaveTextContent('Delete "Policy Runtime"?');
   });
 
@@ -454,7 +458,7 @@ describe("PluginsPage", () => {
     await user.click(bulkDelete());
     const one = screen.getByRole("dialog", { name: "Delete plugin?" });
     expect(one).toHaveTextContent(
-      "Installed copies stay on developer machines until you uninstall them.",
+      "Installed copies of Policy Runtime stay on developer machines until you uninstall them.",
     );
     expect(one).not.toHaveTextContent("Delete 1 plugin");
     expect(within(one).getByRole("button", { name: "Delete" })).toBeVisible();
@@ -484,7 +488,7 @@ describe("PluginsPage", () => {
     await user.click(bulkDelete());
     const two = screen.getByRole("dialog", { name: "Delete 2 plugins?" });
     expect(two).toHaveTextContent(
-      "Installed copies stay on developer machines until you uninstall them.",
+      "Installed copies of Policy Runtime and Second plugin stay on developer machines until you uninstall them.",
     );
     expect(within(two).getByRole("button", { name: "Delete" })).toBeVisible();
   });

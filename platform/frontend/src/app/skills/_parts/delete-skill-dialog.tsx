@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ItemNameLinks } from "@/components/item-name-links";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDeleteSkill } from "@/lib/skills/skill.query";
+import { skillDetailHref } from "./skill-page-config";
 import { useSingleFlight } from "./use-single-flight";
 
 export function DeleteSkillDialog({
@@ -40,9 +42,9 @@ export function DeleteSkillDialog({
       title="Delete skill"
       description={
         <SkillDeleteDescription
-          count={1}
+          skills={[skill]}
           canOpenDeletedView={canOpenDeletedView === true}
-          onOpenDeletedView={() => onOpenChange(false)}
+          onNavigate={() => onOpenChange(false)}
         />
       }
       isPending={deleteSkill.isPending}
@@ -66,34 +68,45 @@ export function DeleteSkillDialog({
  * they are spans laid out as blocks.
  */
 export function SkillDeleteDescription({
-  count,
+  skills,
   canOpenDeletedView,
-  onOpenDeletedView,
+  onNavigate,
 }: {
-  count: number;
+  /** The skills about to be deleted, named in the text. */
+  skills: ReadonlyArray<{ id: string; name: string }>;
   canOpenDeletedView: boolean;
-  /** The link was followed: the dialog it sits in should close. */
-  onOpenDeletedView?: () => void;
+  /** A link in the text was followed: the dialog it sits in should close. */
+  onNavigate?: () => void;
 }) {
-  const deletedView = useDeletedSkillsView();
+  const isSkillsList = usePathname() === "/skills";
   return (
     <>
       <span className="block">
-        Agents will no longer be able to use {count === 1 ? "it" : "them"}.
+        <span>Agents will no longer be able to use </span>
+        <ItemNameLinks
+          items={skills.map((skill) => ({
+            href: skillDetailHref(skill.id),
+            name: skill.name,
+          }))}
+          onNavigate={onNavigate}
+        />
+        <span>.</span>
       </span>
-      <span className="mt-3 block">
+      {/* Closer to the row above than that row is to the title (8px): the
+          two rows are one text, and the title heads both. */}
+      <span className="mt-1.5 block">
         {canOpenDeletedView ? (
           <>
             <span>You can restore deleted skills from the </span>
             <Link
-              href={deletedView.href}
-              onClick={onOpenDeletedView}
+              href={DELETED_SKILLS_HREF}
+              onClick={onNavigate}
               className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
             >
               Deleted
             </Link>
             <span>
-              {deletedView.isThisPage
+              {isSkillsList
                 ? " filter on this page."
                 : " filter on the Skills page."}
             </span>
@@ -107,17 +120,7 @@ export function SkillDeleteDescription({
 }
 
 /**
- * Where the deleted skills are listed. From the skills list it is the list as
- * it stands, every filter and the page kept, with the Deleted status added;
- * from anywhere else it is the list with only that status.
+ * Every deleted skill, from the first page: the list's current search and
+ * filters are left behind, since the skill just deleted may not match them.
  */
-function useDeletedSkillsView(): { href: string; isThisPage: boolean } {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const isThisPage = pathname === SKILLS_LIST_PATH;
-  const params = new URLSearchParams(isThisPage ? searchParams.toString() : "");
-  params.set("status", "deleted");
-  return { href: `${SKILLS_LIST_PATH}?${params.toString()}`, isThisPage };
-}
-
-const SKILLS_LIST_PATH = "/skills";
+const DELETED_SKILLS_HREF = "/skills?page=1&status=deleted";

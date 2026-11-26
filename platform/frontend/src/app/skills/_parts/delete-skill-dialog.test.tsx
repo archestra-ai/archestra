@@ -6,7 +6,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/skills/skill.query", () => ({ useDeleteSkill: vi.fn() }));
 
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDeleteSkill } from "@/lib/skills/skill.query";
 import { DeleteSkillDialog } from "./delete-skill-dialog";
@@ -34,11 +34,8 @@ function renderDialog() {
 }
 
 /** The page the dialog is opened on. */
-function mockLocation(pathname: string, query = "") {
+function mockLocation(pathname: string) {
   vi.mocked(usePathname).mockReturnValue(pathname);
-  vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams(query) as ReturnType<typeof useSearchParams>,
-  );
 }
 
 describe("DeleteSkillDialog", () => {
@@ -57,9 +54,14 @@ describe("DeleteSkillDialog", () => {
     renderDialog();
 
     const dialog = screen.getByRole("dialog");
-    expect(
-      screen.getByText("Agents will no longer be able to use it."),
-    ).toBeVisible();
+    expect(dialog).toHaveTextContent(
+      "Agents will no longer be able to use pdf-tools.",
+    );
+    // Named as a link to the skill's own page, to look before deciding.
+    expect(screen.getByRole("link", { name: "pdf-tools" })).toHaveAttribute(
+      "href",
+      "/skills/skill-1",
+    );
     expect(dialog).toHaveTextContent(
       "You can restore deleted skills from the Deleted filter on this page.",
     );
@@ -69,16 +71,13 @@ describe("DeleteSkillDialog", () => {
     expect(dialog).not.toHaveTextContent("cannot be undone");
   });
 
-  it("links Deleted to the list as it stands, every parameter kept, with the Deleted filter on", async () => {
+  it("links Deleted to the plain deleted view, leaving the list's filters behind", async () => {
     mockCanOpenDeletedView(true);
-    mockLocation("/skills", "search=pdf&labels=team%3Adocs&page=2");
     renderDialog();
 
     const link = screen.getByRole("link", { name: "Deleted" });
-    expect(link).toHaveAttribute(
-      "href",
-      "/skills?search=pdf&labels=team%3Adocs&page=2&status=deleted",
-    );
+    // The skill just deleted may not match the search it was found with.
+    expect(link).toHaveAttribute("href", "/skills?page=1&status=deleted");
     // Following it leaves the question behind.
     await userEvent.click(link);
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -86,12 +85,12 @@ describe("DeleteSkillDialog", () => {
 
   it("links to the Skills list from a skill's own page, and says so", () => {
     mockCanOpenDeletedView(true);
-    mockLocation("/skills/skill-1", "section=settings");
+    mockLocation("/skills/skill-1");
     renderDialog();
 
     expect(screen.getByRole("link", { name: "Deleted" })).toHaveAttribute(
       "href",
-      "/skills?status=deleted",
+      "/skills?page=1&status=deleted",
     );
     expect(screen.getByRole("dialog")).toHaveTextContent(
       "You can restore deleted skills from the Deleted filter on the Skills page.",

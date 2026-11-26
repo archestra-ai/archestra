@@ -1356,9 +1356,9 @@ function SkillsList() {
           }
           description={
             <SkillDeleteDescription
-              count={selectedSkills.length}
+              skills={selectedSkills}
               canOpenDeletedView={isSkillAdmin === true}
-              onOpenDeletedView={() => setBulkDeleteOpen(false)}
+              onNavigate={() => setBulkDeleteOpen(false)}
             />
           }
           isPending={bulkDeleteSkills.isPending}

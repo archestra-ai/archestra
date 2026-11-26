@@ -178,8 +178,7 @@ const SYNC_INTERVAL_LABELS: Record<string, string> = {
   "1d": "Synced once a day",
 };
 
-const SKILLS_DESCRIPTION =
-  "Skills teach your agents reusable expertise — a SKILL.md instruction set plus optional resource files, loaded on demand and invocable in chat as slash commands.";
+const SKILLS_DESCRIPTION = "Specific task instructions for your agents.";
 
 export default function SkillsPage() {
   return (
@@ -752,6 +751,15 @@ function SkillsList() {
             disabledTooltip: canModify ? "Restoring…" : notYours,
             onClick: () => handleRestore(skill.id),
           },
+          // On the row, not in a menu: it would be the menu's only item.
+          permanentDeleteRowAction({
+            admin,
+            onClick: () => setPermanentlyDeletingSkill(skill),
+            disabledReason:
+              skill.sourceType === "built_in"
+                ? "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart"
+                : undefined,
+          }),
         ]
       : [
           {
@@ -770,16 +778,7 @@ function SkillsList() {
           },
         ];
     const dropdownActions: TableRowAction[] = isDeletedView
-      ? [
-          permanentDeleteRowAction({
-            admin,
-            onClick: () => setPermanentlyDeletingSkill(skill),
-            disabledReason:
-              skill.sourceType === "built_in"
-                ? "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart"
-                : undefined,
-          }),
-        ]
+      ? []
       : [
           {
             icon: <ChartColumn className="h-4 w-4" />,

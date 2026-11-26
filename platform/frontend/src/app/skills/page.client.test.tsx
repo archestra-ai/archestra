@@ -821,7 +821,7 @@ describe("SkillsPage rows", () => {
     );
   });
 
-  it("keeps permanent delete in the trash row's menu, not beside Restore", async () => {
+  it("puts permanent delete on the trash row beside Restore, with no one-item menu", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("status=deleted") as ReturnType<
         typeof useSearchParams
@@ -831,10 +831,10 @@ describe("SkillsPage rows", () => {
     render(<SkillsPage />);
 
     expect(screen.getByLabelText("Restore pdf-tools")).toBeInTheDocument();
-    await openRowMenu("pdf-tools");
     expect(
-      screen.getByRole("menuitem", { name: /Delete permanently/ }),
+      screen.getByLabelText("Delete permanently pdf-tools"),
     ).toBeInTheDocument();
+    expect(screen.queryByLabelText("More actions pdf-tools")).toBeNull();
   });
 
   it("takes a reader who may not list deleted skills off ?status=deleted without asking for them", () => {

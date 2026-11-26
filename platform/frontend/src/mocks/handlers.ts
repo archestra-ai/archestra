@@ -2,7 +2,7 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
-import { AGENT_CATALOG_IDS } from "@archestra/shared";
+import { AGENT_CATALOG_IDS, type archestraApiTypes } from "@archestra/shared";
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
@@ -425,6 +425,9 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/api/guardrails-deployment", {
+    mode: "off",
+    personApproval: "ask",
+    enforcedMarks: [],
     enabled: false,
     featureEnabled: false,
     active: false,
@@ -433,7 +436,9 @@ export const handlers: HttpHandler[] = [
     humanApprovalMode: "block",
     unapprovableBlockMode: "refuse",
     environmentOverrides: [],
-  }),
+    annotatorModelId: null,
+    annotatorLlmApiKeyId: null,
+  } satisfies archestraApiTypes.GetGuardrailsDeploymentResponses[200]),
   ...getJson("/health", healthSeed),
   ...getJson("/ready", {
     ...healthSeed,

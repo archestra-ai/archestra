@@ -2,6 +2,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import {
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  MCP_FILES_SERVER_EXTENSION_CAPABILITIES,
   MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
   MCP_SKILLS_SERVER_EXTENSION_CAPABILITIES,
 } from "@archestra/shared";
@@ -264,6 +265,12 @@ export function buildGatewayServerCapabilities(
       // way, so a legacy client is not shown an extension it cannot invoke.
       ...(revision === STATELESS_MCP_PROTOCOL_REVISION
         ? { [MCP_TASKS_EXTENSION_ID]: {} }
+        : {}),
+      // File Uploads is defined from 2026-07-28 on only. Advertised for the
+      // gateway as a whole: a tool whose server lacks it fails its call with
+      // a reason, rather than every caller probing each server first.
+      ...(revision === STATELESS_MCP_PROTOCOL_REVISION
+        ? MCP_FILES_SERVER_EXTENSION_CAPABILITIES
         : {}),
       ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
       ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,

@@ -1597,6 +1597,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { tools, catalogIdsByName } = await buildAgentMcpToolList({
         agent,
         tokenAuth: { userId: user.id, organizationId },
+        // A harness that takes files is offered every tool.
+        includeFileTools: true,
       });
       const organization = await OrganizationModel.getById(organizationId);
       const serverName = resolveMcpClientServerName({

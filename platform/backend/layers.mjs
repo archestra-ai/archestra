@@ -872,6 +872,7 @@ const layerTable = [
           "src/routes/chat/errors.ts",
           "src/routes/chat/token-bucket-refit.ts",
           "src/routes/mcp-gateway/cursor-forms.ts",
+          "src/routes/mcp-gateway/files.ts",
           "src/routes/mcp-gateway/mrtr.ts",
           "src/routes/mcp-gateway/reauth-elicitation.ts",
           "src/routes/mcp-gateway/skills.ts",

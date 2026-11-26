@@ -88,6 +88,11 @@ import mcpClient, {
   McpServerStoppedError,
   type TokenAuthContext,
 } from "@/clients/mcp-client";
+import {
+  holdsFileShapedUpload,
+  redactFileShapedData,
+  schemaDeclaresFileInput,
+} from "@/clients/mcp-files/file-input";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import logger from "@/logging";
@@ -165,6 +170,7 @@ import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 import { cursorFormSchema } from "./cursor-forms";
+import { GatewayFileCall, readFilesDeclaration } from "./files";
 import { grokCanonicalToolName, grokToolName } from "./grok-tool-names";
 import {
   buildInputRequiredResult,
@@ -360,6 +366,12 @@ export async function buildAgentMcpToolList(params: {
       >
     >;
   lookups?: RequestLookups;
+  /**
+   * Whether tools that take files (`x-mcp-file`) are listed. Only a client of
+   * the File Uploads extension can fill such an argument, so the extension
+   * says to leave them out for any other, which is the default.
+   */
+  includeFileTools?: boolean;
 }): Promise<{
   tools: McpListTool[];
   unattestedTools: McpListTool[];
@@ -420,7 +432,8 @@ export async function buildAgentMcpToolList(params: {
         !isToolRejectedForMcpHeaders({
           toolName: tool.name,
           inputSchema: tool.parameters,
-        }),
+        }) &&
+        (params.includeFileTools || !schemaDeclaresFileInput(tool.parameters)),
     ),
     agentId,
     tokenAuth,
@@ -817,6 +830,8 @@ export async function createAgentServer(params: {
     clientCapabilities?: unknown;
     /** Rounds already spent, read from a verified requestState. */
     round?: number;
+    /** Files extension: the upload session a verified requestState resumes. */
+    uploadSessionId?: string;
   };
 }): Promise<{ server: McpServer; agent: AgentInfo }> {
   const { agentId, tokenAuth, runId, mrtr } = params;
@@ -878,6 +893,9 @@ export async function createAgentServer(params: {
       agent,
       tokenAuth,
       lookups: params.lookups,
+      // The extension exists only in 2026-07-28, where each request declares it.
+      includeFileTools:
+        mrtrEnabled && readFilesDeclaration(mrtr?.clientCapabilities) !== null,
     });
     // Log tools/list request
     try {
@@ -1041,9 +1059,13 @@ export async function createAgentServer(params: {
     // sync threshold and detaches into a durable background task when it
     // outlives it. Everything below (dispatch, policies, envelope, metrics,
     // persistence) runs identically either way; only who is waiting for the
-    // outcome changes.
+    // outcome changes. The first leg of a call that needs files uploaded
+    // stays synchronous: its upload request must reach a caller who is still
+    // waiting (File Uploads), and a detached task has none.
     const taskEligible =
-      mrtrEnabled && clientDeclaredTasks({ params: request.params });
+      mrtrEnabled &&
+      clientDeclaredTasks({ params: request.params }) &&
+      !(mrtr?.uploadSessionId === undefined && holdsFileShapedUpload(args));
 
     // A connection that needs signing in again is offered to the person as a
     // link their client opens, then the call re-runs (see reauth-elicitation).
@@ -1382,6 +1404,25 @@ export async function createAgentServer(params: {
           arguments: args || {},
         };
 
+        // Files extension: a call to a tool that takes files is made by the
+        // file call itself (see files.ts), which may answer with an upload
+        // request or a protocol error instead of a tool result.
+        const fileCall = new GatewayFileCall({
+          agentId,
+          toolName: name,
+          wireName,
+          principal: deriveStatePrincipal({
+            userId: tokenAuth?.userId,
+            tokenId: tokenAuth?.tokenId,
+            organizationId: tokenAuth?.organizationId,
+          }),
+          args: args ?? {},
+          declaration: mrtrEnabled
+            ? readFilesDeclaration(mrtr?.clientCapabilities)
+            : null,
+          uploadSessionId: mrtr?.uploadSessionId,
+        });
+
         // Execute the tool call via McpClient with tracing
         const result = await startActiveMcpSpan({
           toolName: name,
@@ -1391,7 +1432,7 @@ export async function createAgentServer(params: {
           userTeams,
           agentType: agent.agentType,
           toolCallId,
-          toolArgs: args,
+          toolArgs: args && redactFileShapedData(args),
           user: mcpUser,
           callback: async (span) => {
             const runUpstream = () =>
@@ -1401,6 +1442,7 @@ export async function createAgentServer(params: {
                 tokenAuth,
                 {
                   availableTool,
+                  upstreamHttpFor: fileCall.planFor,
                   // Tasks: tasks/cancel on this replica aborts the gateway-side
                   // await; whether the upstream stops working is up to the
                   // upstream (stateless HTTP servers run on — see tasks.ts).
@@ -1468,6 +1510,15 @@ export async function createAgentServer(params: {
             return r;
           },
         });
+
+        // Not a tool result: the caller uploads and retries, or the call
+        // fails at the protocol level. Neither is a finished tool call.
+        if (fileCall.interim?.kind === "upload_required") {
+          return fileCall.interim.result;
+        }
+        if (fileCall.interim?.kind === "error") {
+          throw fileCall.interim.error;
+        }
 
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({

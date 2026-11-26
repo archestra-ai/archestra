@@ -371,9 +371,7 @@ describe("SkillDetailPage", () => {
 
     await user.click(sectionTab("Usage"));
     const prompt = await screen.findByRole("dialog");
-    await user.click(
-      within(prompt).getByRole("button", { name: "Discard changes" }),
-    );
+    await user.click(within(prompt).getByRole("button", { name: "Discard" }));
 
     expect(replace).toHaveBeenCalledWith("/skills/skill-1?section=usage", {
       scroll: false,

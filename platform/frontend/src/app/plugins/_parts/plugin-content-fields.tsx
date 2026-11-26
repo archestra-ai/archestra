@@ -117,8 +117,7 @@ export function PluginContentFields({
             variant="error"
           >
             <AlertTriangle aria-hidden />
-            <span className="font-medium">Name already in use</span>
-            <InlineNoticeText>{OWN_PLUGIN_NAME_TAKEN}</InlineNoticeText>
+            <span className="font-medium">{OWN_PLUGIN_NAME_TAKEN}</span>
           </InlineNotice>
         )}
         {nameTaken === "other" && (

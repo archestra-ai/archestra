@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DeleteConfirmDialog } from "./delete-confirm-dialog";
 
@@ -69,14 +70,9 @@ describe("DeleteConfirmDialog", () => {
       vi.useRealTimers();
     }
   });
-  it("confirms once for a double click, and again after the first attempt has settled", async () => {
-    let settle: () => void = () => {};
-    const onConfirm = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          settle = resolve;
-        }),
-    );
+  it("confirms once for a double click, and again for a later click", async () => {
+    const onConfirm = vi.fn();
+    const user = userEvent.setup();
     render(
       <DeleteConfirmDialog
         open
@@ -91,13 +87,12 @@ describe("DeleteConfirmDialog", () => {
     );
     const remove = screen.getByRole("button", { name: "Delete" });
 
-    fireEvent.click(remove);
-    fireEvent.click(remove);
+    await user.dblClick(remove);
     expect(onConfirm).toHaveBeenCalledTimes(1);
 
-    // A failed attempt leaves the dialog open, and it can be tried again.
-    await act(async () => settle());
-    fireEvent.click(remove);
+    // A refused attempt leaves the dialog open, and it can be tried again
+    // at once: nothing waits on a timer.
+    await user.click(remove);
     expect(onConfirm).toHaveBeenCalledTimes(2);
   });
 });

@@ -137,8 +137,7 @@ export function pluginDraftGap(params: {
 }
 
 /** Shown, and sent back by the API, when an owner would hold a name twice. */
-export const OWN_PLUGIN_NAME_TAKEN =
-  "You already have a plugin with this name for this client. Give this one a different name.";
+export const OWN_PLUGIN_NAME_TAKEN = "Name is already in use. Try another one.";
 
 /**
  * Whether another plugin the viewer can see already carries this name for the

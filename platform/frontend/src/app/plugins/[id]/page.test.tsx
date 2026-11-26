@@ -280,7 +280,9 @@ describe("PluginDetailPage", () => {
     await user.type(screen.getByLabelText("Display name"), "release HELPER");
     const save = screen.getByRole("button", { name: "Save" });
     expect(save).toHaveAttribute("aria-disabled", "true");
-    expect(save).toHaveAccessibleDescription(/You already have a plugin/);
+    expect(save).toHaveAccessibleDescription(
+      "Name is already in use. Try another one.",
+    );
 
     // Stored under the same name as another of the owner's plugins: nothing
     // was renamed, so its other fields still save.

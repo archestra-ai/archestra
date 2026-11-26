@@ -2805,9 +2805,7 @@ test("asks before discarding a GitHub source draft", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
   expect(screen.getByLabelText("Repository")).toHaveValue("example/policies");
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Discard changes" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
   expect(close).toHaveBeenCalledWith(false);
 });
 

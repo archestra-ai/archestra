@@ -258,9 +258,7 @@ describe("NewSkillPage unsaved draft", () => {
     expect(routerPush).not.toHaveBeenCalled();
 
     await user.click(link);
-    await user.click(
-      await screen.findByRole("button", { name: "Discard changes" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Discard" }));
     expect(routerPush).toHaveBeenCalledWith("/plugins");
     link.remove();
   });

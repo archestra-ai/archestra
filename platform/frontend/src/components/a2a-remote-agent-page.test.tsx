@@ -297,7 +297,7 @@ describe("external A2A agent routed pages", () => {
       screen.getByRole("heading", { name: "Discard unsaved changes?" }),
     ).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(push).toHaveBeenCalledWith("/agents/new");
   });
 

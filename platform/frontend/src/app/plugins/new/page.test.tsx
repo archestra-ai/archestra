@@ -742,7 +742,7 @@ describe("NewPluginPage", () => {
     const create = screen.getByRole("button", { name: /Create plugin/ });
     expect(create).toHaveAttribute("aria-disabled", "true");
     expect(create).toHaveAccessibleDescription(
-      "You already have a plugin with this name for this client. Give this one a different name.",
+      "Name is already in use. Try another one.",
     );
   });
 
@@ -769,7 +769,7 @@ describe("NewPluginPage", () => {
     expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
     expect(vi.mocked(useRouter)().push).not.toHaveBeenCalledWith("/skills");
 
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith("/skills");
   });
 });

@@ -581,9 +581,7 @@ describe("RuntimeTemplateSection", () => {
       }),
     );
     // A typed-in runtime asks before it is thrown away.
-    await user.click(
-      await screen.findByRole("button", { name: "Discard changes" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Discard" }));
     await user.click(add);
     await user.click(
       screen.getByRole("menuitem", { name: "Create custom runtime…" }),

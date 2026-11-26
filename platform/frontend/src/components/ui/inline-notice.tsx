@@ -94,6 +94,9 @@ const inlineNoticeVariants = cva(
         floating: true,
         class: "bg-[#FFFAEE]/90 dark:bg-amber-950/60",
       },
+      // Borderless under a field: the text carries the colour, with no tint
+      // behind it to draw a second box.
+      { variant: "error", plain: true, class: "bg-transparent" },
       { variant: "error", floating: true, class: "bg-destructive/10" },
       {
         variant: "success",

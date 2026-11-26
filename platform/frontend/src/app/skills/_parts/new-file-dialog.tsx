@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronRight, Folder, FolderOpen, FolderPlus } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { ChevronRight, Folder, FolderOpen, FolderPlus, X } from "lucide-react";
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,11 +70,28 @@ export function NewFileDialog({
   // chosen, so a separator or a "go up" segment has no meaning in them.
   const nameProblem = (itemKind: "file" | "folder", leaf: string) =>
     /[/\\]/.test(leaf)
-      ? "Enter a name only, without / or \\. Pick the folder above."
+      ? itemKind === "file"
+        ? "Enter a name only, without / or \\. Pick the folder above."
+        : "Enter one folder name, without / or \\."
       : leaf === "." || leaf === ".."
         ? "A name cannot be . or .."
         : problem(itemKind, pathOf(leaf));
 
+  // The row that adds a folder sits in the tree, inside the picked folder:
+  // where the new folder will appear.
+  const addFolder = (depth: number) => (
+    <AddFolderRow
+      key={`add:${location ?? ""}`}
+      depth={depth}
+      location={location}
+      problem={(leaf) => nameProblem("folder", leaf)}
+      onAdd={(leaf) => {
+        const path = pathOf(leaf);
+        setAdded((current) => [...current, path]);
+        setLocation(path);
+      }}
+    />
+  );
   const submit = () => {
     const leaf = name.trim();
     if (!leaf) return;
@@ -101,13 +118,16 @@ export function NewFileDialog({
           submit();
         }}
       >
-        <DialogBody className="flex flex-col gap-4">
+        <DialogBody className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <Label id={`${nameId}-location`}>Folder</Label>
+            {/* No box around the tree: the dialog is the only surface. The
+                rows hang out by their padding, so their text lines up with
+                the labels and the selection reads as one soft bar. */}
             <div
               role="radiogroup"
               aria-labelledby={`${nameId}-location`}
-              className="max-h-48 overflow-y-auto rounded-md border py-1"
+              className="-mx-2 flex max-h-56 flex-col overflow-y-auto"
             >
               <FolderRow
                 label="Top level"
@@ -120,7 +140,16 @@ export function NewFileDialog({
                 depth={1}
                 location={location}
                 collapsed={collapsed}
-                onSelect={setLocation}
+                onSelect={(path) => {
+                  setLocation(path);
+                  // The picked folder opens, to show what a new one joins.
+                  setCollapsed((current) => {
+                    if (!current.has(path)) return current;
+                    const next = new Set(current);
+                    next.delete(path);
+                    return next;
+                  });
+                }}
                 onToggle={(path) =>
                   setCollapsed((current) => {
                     const next = new Set(current);
@@ -129,17 +158,10 @@ export function NewFileDialog({
                     return next;
                   })
                 }
+                addFolder={addFolder}
               />
+              {location === null && addFolder(1)}
             </div>
-            <AddFolderHere
-              location={location}
-              problem={(leaf) => nameProblem("folder", leaf)}
-              onAdd={(leaf) => {
-                const path = pathOf(leaf);
-                setAdded((current) => [...current, path]);
-                setLocation(path);
-              }}
-            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor={nameId}>File name</Label>
@@ -159,7 +181,7 @@ export function NewFileDialog({
               aria-describedby={refusal ? refusalId : undefined}
             />
             {refusal && (
-              <InlineNotice id={refusalId} variant="error" size="xs">
+              <InlineNotice id={refusalId} variant="error" size="xs" plain>
                 <InlineNoticeText>{refusal}</InlineNoticeText>
               </InlineNotice>
             )}
@@ -216,6 +238,7 @@ function FolderRows({
   collapsed,
   onSelect,
   onToggle,
+  addFolder,
 }: {
   nodes: FolderNode[];
   depth: number;
@@ -223,6 +246,8 @@ function FolderRows({
   collapsed: Set<string>;
   onSelect: (path: string) => void;
   onToggle: (path: string) => void;
+  /** The add-a-folder row, drawn inside the picked folder at that depth. */
+  addFolder: (depth: number) => ReactNode;
 }) {
   return nodes.map((node) => {
     const open = !collapsed.has(node.path);
@@ -244,8 +269,10 @@ function FolderRows({
             collapsed={collapsed}
             onSelect={onSelect}
             onToggle={onToggle}
+            addFolder={addFolder}
           />
         )}
+        {location === node.path && addFolder(depth + 1)}
       </div>
     );
   });
@@ -272,10 +299,10 @@ function FolderRow({
   return (
     <div
       className={cn(
-        "flex h-8 items-center gap-1 pr-2 text-sm",
+        "flex h-8 shrink-0 items-center gap-1 rounded-md pr-2 text-sm",
         selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
       )}
-      style={{ paddingLeft: 8 + depth * 16 }}
+      style={{ paddingLeft: rowIndent(depth) }}
     >
       {expanded === undefined ? (
         <span className="size-5 shrink-0" aria-hidden />
@@ -312,21 +339,28 @@ function FolderRow({
   );
 }
 
+/** Left padding of a tree row at a depth. */
+function rowIndent(depth: number): number {
+  return 4 + depth * 16;
+}
+
 /**
  * Adds a folder inside the picked one, for a file whose folder does not exist
- * yet. Closed, it is one button; open, a name and its own confirm, so Enter in
- * it adds the folder and does not create the file.
+ * yet. It is a row of the tree, in the place the folder will take. Closed, a
+ * quiet "New folder"; open, the name, where Enter adds the folder and does not
+ * create the file.
  */
-function AddFolderHere({
+function AddFolderRow({
+  depth,
   location,
   problem,
   onAdd,
 }: {
+  depth: number;
   location: string | null;
   problem: (name: string) => string | null;
   onAdd: (name: string) => void;
 }) {
-  const inputId = useId();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -346,29 +380,34 @@ function AddFolderHere({
     onAdd(leaf);
     close();
   };
+  // The chevron's width and the row's gap, so the icon lines up with the
+  // folder icons above.
+  const indent = rowIndent(depth) + 24;
 
   if (!open) {
     return (
-      <div>
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          onClick={() => setOpen(true)}
-        >
-          <FolderPlus aria-hidden />
-          <span>
-            {location ? `New folder in ${location}` : "New folder at top level"}
-          </span>
-        </Button>
-      </div>
+      <UnstyledButton
+        type="button"
+        aria-label={
+          location ? `New folder in ${location}` : "New folder at top level"
+        }
+        onClick={() => setOpen(true)}
+        className="flex h-8 shrink-0 items-center gap-2 rounded-md pr-2 text-left text-sm text-muted-foreground outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        style={{ paddingLeft: indent }}
+      >
+        <FolderPlus className="size-4 shrink-0" aria-hidden />
+        <span>New folder</span>
+      </UnstyledButton>
     );
   }
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
+    <div className="flex shrink-0 flex-col gap-1 py-0.5 pr-1">
+      <div className="flex items-center gap-2" style={{ paddingLeft: indent }}>
+        <FolderPlus
+          className="size-4 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
         <Input
-          id={inputId}
           autoFocus
           value={name}
           onChange={(event) => {
@@ -380,29 +419,37 @@ function AddFolderHere({
               event.preventDefault();
               add();
             } else if (event.key === "Escape") {
-              // Only this field closes, not the dialog around it.
+              // Only this row closes, not the dialog around it.
               event.stopPropagation();
               close();
             }
           }}
           placeholder="folder-name"
           aria-label="New folder name"
-          className="font-mono"
+          className="h-8 min-w-0 flex-1 font-mono"
           spellCheck={false}
           autoComplete="off"
           aria-invalid={refusal ? true : undefined}
         />
-        <Button type="button" variant="outline" onClick={add}>
+        <Button type="button" variant="ghost" size="sm" onClick={add}>
           Add
         </Button>
-        <Button type="button" variant="ghost" onClick={close}>
-          Cancel
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Cancel the new folder"
+          onClick={close}
+        >
+          <X aria-hidden />
         </Button>
       </div>
       {refusal && (
-        <InlineNotice variant="error" size="xs">
-          <InlineNoticeText>{refusal}</InlineNoticeText>
-        </InlineNotice>
+        <div style={{ paddingLeft: indent + 24 }}>
+          <InlineNotice variant="error" size="xs" plain>
+            <InlineNoticeText>{refusal}</InlineNoticeText>
+          </InlineNotice>
+        </div>
       )}
     </div>
   );

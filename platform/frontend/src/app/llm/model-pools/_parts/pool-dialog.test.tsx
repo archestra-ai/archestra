@@ -41,6 +41,16 @@ import { PoolDialog } from "./pool-dialog";
 
 const NOW = Date.now();
 
+/**
+ * A bench that is still running when the assertion reads it. Taken from the
+ * clock at the call, not at module load: under a loaded CI runner the tests
+ * late in this file start well after `NOW`, and a short bench measured from
+ * it has already expired.
+ */
+function benchedUntilLater(): string {
+  return new Date(Date.now() + 10 * 60_000).toISOString();
+}
+
 function pool(benchedUntil: string | null): ModelPool {
   return {
     id: "pool",
@@ -248,7 +258,7 @@ describe("PoolDialog", () => {
     await user.type(weight, "5");
 
     // The 5 s refetch brings a new pool object: the member is now benched.
-    const refetched = pool(new Date(NOW + 20_000).toISOString());
+    const refetched = pool(benchedUntilLater());
     vi.mocked(useModelPools).mockReturnValue({
       data: [refetched],
     } as unknown as ReturnType<typeof useModelPools>);
@@ -344,8 +354,7 @@ describe("PoolDialog", () => {
         id: modelId,
         modelId,
         priority: index < 2 ? 1 : 2,
-        benchedUntil:
-          modelId === "e" ? new Date(NOW + 20_000).toISOString() : null,
+        benchedUntil: modelId === "e" ? benchedUntilLater() : null,
       })),
     } as ModelPool;
     vi.mocked(useModelPools).mockReturnValue({

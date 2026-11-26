@@ -6,6 +6,7 @@ import {
   ChatMessageMetadataSchema,
   extractMcpExecutedAs,
   HOOK_RUN_PART_TYPE,
+  isRequiredOpenAppaToolShortName,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
   parseArchestraAppResourceUri,
@@ -143,16 +144,13 @@ import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
 import { NoDeviceToolCard } from "./no-device-tool-card";
+import { getBlockedAttempt } from "./openappa-blocked-attempt";
+import { BlockedAttemptCard } from "./openappa-blocked-attempt-card";
 import {
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
 } from "./openappa-policy-change";
 import { isPolicyChangeTool } from "./openappa-policy-change.utils";
-import {
-  RemedyChainCard,
-  RemedyGuardrailsSteps,
-} from "./openappa-remedy-chain-card";
-import type { RemedyChain } from "./openappa-remedy-chains";
 import { PolicyDiffReferenceCollector } from "./policy-diff-deduplication";
 import {
   collectPreviewedChanges,
@@ -601,11 +599,12 @@ export function ChatMessages({
     [session],
   );
   const subagentCallsFor = useCallback(
-    (toolCallId: string | undefined) =>
+    (toolCallId: string | undefined, turnActive: boolean) =>
       toolCallId && subagentParentToolCallIds.has(toolCallId) ? (
         <SubagentToolCalls
           parentToolCallId={toolCallId}
           subagentToolCalls={subagentToolCalls}
+          turnActive={turnActive}
           canExpandToolCalls={canExpandToolCalls}
           connectedCatalogIds={orchestrator.connectedCatalogIds}
           getToolShortName={getToolShortName}
@@ -814,13 +813,13 @@ export function ChatMessages({
                   className={cn(isDimmed && "opacity-40 transition-opacity")}
                 >
                   {(() => {
-                    // Guarded calls in the turn still running read as
-                    // running until they settle.
+                    // Calls in the turn still running read as running
+                    // until they settle.
                     const turnActive =
                       isTurnLive &&
                       message.role === "assistant" &&
                       idx === messages.length - 1;
-                    const { groupMap, consumedIndices, remedyChainCards } =
+                    const { groupMap, consumedIndices } =
                       identifyCompactToolGroups(message.parts, {
                         role: message.role,
                         nonCompactToolNames,
@@ -847,7 +846,6 @@ export function ChatMessages({
                                   part: entry.part,
                                   toolResultPart: entry.toolResultPart,
                                   errorText: entry.errorText,
-                                  remedyChain: entry.remedyChain,
                                 }
                               : {
                                   kind: "tool" as const,
@@ -856,9 +854,9 @@ export function ChatMessages({
                                   part: entry.part,
                                   toolResultPart: entry.toolResultPart,
                                   errorText: entry.errorText,
-                                  remedyChain: entry.remedyChain,
                                   nestedToolCalls: subagentCallsFor(
-                                    entryCallId(entry),
+                                    entry.part.toolCallId,
+                                    turnActive,
                                   ),
                                 },
                         ),
@@ -921,65 +919,6 @@ export function ChatMessages({
                               earlyToolUiStarts,
                               onSendMessage: sendUserText,
                             }}
-                          />
-                        );
-                      }
-
-                      // A guarded call that needs the full card (e.g. an
-                      // approval) still renders as one card of its target.
-                      const remedyChain = remedyChainCards.get(i);
-                      const releasedAttempt = remedyChain?.finalAttempt;
-                      if (remedyChain && releasedAttempt) {
-                        const releasedId = releasedAttempt.part.toolCallId;
-                        return (
-                          <MessageTool
-                            key={partKey}
-                            part={{ ...releasedAttempt.part }}
-                            toolResultPart={releasedAttempt.toolResultPart}
-                            toolName={releasedAttempt.toolName}
-                            agentId={agentId}
-                            canExpandToolCalls={canExpandToolCalls}
-                            onToolApprovalResponse={onToolApprovalResponse}
-                            onInstallMcp={
-                              orchestrator.triggerInstallByCatalogId
-                            }
-                            onReauthMcp={
-                              orchestrator.triggerReauthByCatalogIdAndServerId
-                            }
-                            connectedCatalogIds={
-                              orchestrator.connectedCatalogIds
-                            }
-                            getToolShortName={getToolShortName}
-                            toolIconMap={toolIconMap}
-                            earlyToolUiData={
-                              releasedId
-                                ? earlyToolUiStarts[releasedId]
-                                : undefined
-                            }
-                            onSendMessage={sendUserText}
-                            nestedToolCalls={
-                              <>
-                                <RemedyGuardrailsSteps
-                                  steps={remedyChain.steps}
-                                  onToolApprovalResponse={
-                                    onToolApprovalResponse
-                                  }
-                                />
-                                {subagentCallsFor(releasedId)}
-                              </>
-                            }
-                          />
-                        );
-                      }
-                      if (remedyChain) {
-                        return (
-                          <RemedyChainCard
-                            key={partKey}
-                            chain={remedyChain}
-                            collapsible
-                            turnActive={turnActive}
-                            canExpandToolCalls={canExpandToolCalls}
-                            onToolApprovalResponse={onToolApprovalResponse}
                           />
                         );
                       }
@@ -1537,6 +1476,7 @@ export function ChatMessages({
                               toolResultPart={toolResultPart}
                               toolName={toolName}
                               agentId={agentId}
+                              turnActive={turnActive}
                               canExpandToolCalls={canExpandToolCalls}
                               onToolApprovalResponse={onToolApprovalResponse}
                               onInstallMcp={
@@ -1657,6 +1597,7 @@ export function ChatMessages({
                                 toolResultPart={outputPart}
                                 toolName={toolName}
                                 agentId={agentId}
+                                turnActive={turnActive}
                                 canExpandToolCalls={canExpandToolCalls}
                                 onToolApprovalResponse={onToolApprovalResponse}
                                 onInstallMcp={
@@ -1721,6 +1662,7 @@ export function ChatMessages({
                                 toolResultPart={toolResultPart}
                                 toolName={toolName}
                                 agentId={agentId}
+                                turnActive={turnActive}
                                 canExpandToolCalls={canExpandToolCalls}
                                 onToolApprovalResponse={onToolApprovalResponse}
                                 onInstallMcp={
@@ -1738,7 +1680,10 @@ export function ChatMessages({
                                   tcId ? earlyToolUiStarts[tcId] : undefined
                                 }
                                 onSendMessage={sendUserText}
-                                nestedToolCalls={subagentCallsFor(tcId)}
+                                nestedToolCalls={subagentCallsFor(
+                                  tcId,
+                                  turnActive,
+                                )}
                               />
                             );
                           }
@@ -1804,6 +1749,7 @@ export function ChatMessages({
                 toolResultPart={null}
                 toolName={toolCall.toolName}
                 agentId={agentId}
+                turnActive={isTurnLive}
                 canExpandToolCalls={canExpandToolCalls}
                 onToolApprovalResponse={onToolApprovalResponse}
                 onInstallMcp={orchestrator.triggerInstallByCatalogId}
@@ -1853,16 +1799,6 @@ export function ChatMessages({
     <PreviewedChangesProvider value={previewedChanges}>
       {conversation}
     </PreviewedChangesProvider>
-  );
-}
-
-/** The call whose subagent tool calls nest under an entry: a guarded call's released attempt. */
-function entryCallId(entry: {
-  part: DynamicToolUIPart | ToolUIPart;
-  remedyChain?: RemedyChain;
-}): string | undefined {
-  return (
-    entry.remedyChain?.finalAttempt?.part.toolCallId ?? entry.part.toolCallId
   );
 }
 
@@ -2034,10 +1970,16 @@ const MessageTool = memo(
     earlyToolUiData,
     toolIconMap,
     nestedToolCalls,
+    turnActive = true,
   }: {
     part: ToolUIPart | DynamicToolUIPart;
     toolResultPart: ToolUIPart | DynamicToolUIPart | null;
     toolName: string;
+    /**
+     * The call's turn is still running. A blocked call's card uses it: once
+     * the turn has ended, a notice without a result did not finish.
+     */
+    turnActive?: boolean;
     agentId?: string;
     canExpandToolCalls?: boolean;
     onToolApprovalResponse?: (params: {
@@ -2276,6 +2218,28 @@ const MessageTool = memo(
     const isExpandable =
       hasContent && (canExpandToolCalls || isApprovalRequested);
 
+    // A denial notice shows as the call it blocked, with its ruling.
+    const blockedAttempt = getBlockedAttempt({
+      part,
+      toolName,
+      getToolShortName,
+    });
+    if (blockedAttempt) {
+      return (
+        <BlockedAttemptCard
+          attempt={blockedAttempt}
+          notice={{ part, toolResultPart, errorText }}
+          // This card stands on its own, like its neighbours here: it opens
+          // and closes the same way.
+          turnActive={turnActive}
+          open={isOpen}
+          onOpenChange={handleOpenChange}
+          isCollapsible={isExpandable}
+          className={isExpandable ? "cursor-pointer" : ""}
+        />
+      );
+    }
+
     return (
       <Tool
         className={isExpandable ? "cursor-pointer" : ""}
@@ -2285,10 +2249,7 @@ const MessageTool = memo(
       >
         <ToolHeader
           type={`tool-${displayToolName}`}
-          title={getToolCardTitle(
-            displayToolName,
-            getToolShortName(displayToolName),
-          )}
+          title={getToolCardTitle(displayToolName)}
           state={getHeaderState({
             state: part.state || "input-available",
             toolResultPart,
@@ -2431,7 +2392,14 @@ const MessageTool = memo(
             !uiResourceUri &&
             !policyChange &&
             (toolResultPart || Boolean(part.output)) && (
-              <ToolOutput label="Result" output={rawOutput} />
+              <ToolOutput
+                label="Result"
+                output={rawOutput}
+                // A Guardrails tool answers in prose: wrap it to the card.
+                wrapLongLines={isRequiredOpenAppaToolShortName(
+                  getToolShortName(toolName) ?? "",
+                )}
+              />
             )}
         </ToolContent>
       </Tool>
@@ -2451,6 +2419,7 @@ const MessageTool = memo(
     prev.toolName === next.toolName &&
     prev.agentId === next.agentId &&
     prev.part.toolCallId === next.part.toolCallId &&
+    prev.turnActive === next.turnActive &&
     prev.part.state === next.part.state &&
     (prev.part.state !== "input-streaming" ||
       prev.part.input === next.part.input) &&
@@ -2508,6 +2477,7 @@ function SubagentToolCalls({
   parentToolCallId,
   subagentToolCalls,
   depth = 0,
+  turnActive,
   canExpandToolCalls,
   connectedCatalogIds,
   getToolShortName,
@@ -2516,6 +2486,8 @@ function SubagentToolCalls({
   parentToolCallId: string;
   subagentToolCalls: Map<string, SubagentChildEntry[]>;
   depth?: number;
+  /** The delegation's turn is still running. */
+  turnActive: boolean;
   canExpandToolCalls?: boolean;
   connectedCatalogIds: ReadonlySet<string>;
   getToolShortName: (toolName: string) => ArchestraToolShortName | null;
@@ -2543,6 +2515,7 @@ function SubagentToolCalls({
             part={synthesizeSubagentToolPart(child)}
             toolResultPart={null}
             toolName={child.toolName}
+            turnActive={turnActive}
             canExpandToolCalls={canExpandToolCalls}
             connectedCatalogIds={connectedCatalogIds}
             getToolShortName={getToolShortName}
@@ -2553,6 +2526,7 @@ function SubagentToolCalls({
                   parentToolCallId={child.toolCallId}
                   subagentToolCalls={subagentToolCalls}
                   depth={depth + 1}
+                  turnActive={turnActive}
                   canExpandToolCalls={canExpandToolCalls}
                   connectedCatalogIds={connectedCatalogIds}
                   getToolShortName={getToolShortName}

@@ -137,6 +137,44 @@ describe("Tool copy actions", () => {
   });
 });
 
+describe("ToolOutput for a result that is prose", () => {
+  const prose = "The call is checked again and can still be blocked.";
+  // The block wraps on its `pre` before the highlighter loads and on the
+  // `code` inside it afterwards.
+  const wraps = (container: HTMLElement) =>
+    [container.querySelector("pre"), container.querySelector("pre code")].some(
+      (el) => (el as HTMLElement | null)?.style.whiteSpace === "pre-wrap",
+    );
+
+  it("keeps long lines on one line unless it is asked to wrap them", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+
+    const plain = render(<ToolOutput output={prose} />);
+    expect(wraps(plain.container)).toBe(false);
+    plain.unmount();
+
+    const wrapped = render(<ToolOutput output={prose} wrapLongLines />);
+    expect(wraps(wrapped.container)).toBe(true);
+    expect(screen.getByText(prose)).toBeInTheDocument();
+  });
+
+  it("shows a mark of its own beside the label in place of the accent bar", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+
+    render(
+      <ToolOutput
+        label="Blocked"
+        labelIcon={<svg data-testid="mark" />}
+        output={prose}
+      />,
+    );
+
+    expect(screen.getByText("Blocked").parentElement).toContainElement(
+      screen.getByTestId("mark"),
+    );
+  });
+});
+
 describe("ToolOutput for results that are not plain text", () => {
   const TINY_PNG =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";

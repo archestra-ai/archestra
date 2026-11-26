@@ -235,12 +235,15 @@ export const ToolInput = ({
 export const SectionLabel = ({
   children,
   accent,
+  icon,
 }: {
   children: ReactNode;
   accent: string;
+  /** Stands in for the accent bar, for a section that has a mark of its own. */
+  icon?: ReactNode;
 }) => (
   <div className="flex items-center gap-2">
-    <span className={cn("h-3 w-[3px] rounded-full", accent)} />
+    {icon ?? <span className={cn("h-3 w-[3px] rounded-full", accent)} />}
     <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
       {children}
     </span>
@@ -254,7 +257,7 @@ export const SectionLabel = ({
  * button copies the raw value, ready to paste into a terminal. Everything
  * else keeps the compact pretty-printed JSON view.
  */
-const ToolInputBody = ({ input }: { input: ToolUIPart["input"] }) => {
+export const ToolInputBody = ({ input }: { input: ToolUIPart["input"] }) => {
   const entries = getEntriesWithMultilineStrings(input);
 
   if (!entries) {
@@ -357,6 +360,10 @@ export type ToolOutputProps = ComponentProps<"div"> & {
   output?: ToolUIPart["output"];
   errorText?: ToolUIPart["errorText"];
   label?: string;
+  /** Stands in for the label's accent bar. */
+  labelIcon?: ReactNode;
+  /** Wraps the result's long lines to the card, for a result that is prose. */
+  wrapLongLines?: boolean;
 };
 
 export const ToolOutput = ({
@@ -364,6 +371,8 @@ export const ToolOutput = ({
   output,
   errorText,
   label,
+  labelIcon,
+  wrapLongLines = false,
   ...props
 }: ToolOutputProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -426,6 +435,7 @@ export const ToolOutput = ({
         code={codeString}
         language="json"
         copyText={codeString}
+        wrapLongLines={wrapLongLines}
       />
     );
   } else {
@@ -440,7 +450,9 @@ export const ToolOutput = ({
       className={cn("px-3 pb-3 pt-2 space-y-1.5", className)}
       {...props}
     >
-      <SectionLabel accent={accent}>{labelText}</SectionLabel>
+      <SectionLabel accent={accent} icon={labelIcon}>
+        {labelText}
+      </SectionLabel>
       {error ? <ToolErrorText text={error.text} /> : null}
       {Output ? (
         <div className="overflow-x-auto rounded-md text-xs text-foreground [&_table]:w-full">

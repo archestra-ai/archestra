@@ -55,7 +55,7 @@ Other limit scopes still require the organization permissions above. Organizatio
 
 **Hard limit** blocks requests when the allowance is exhausted. **Soft limit** keeps requests flowing and records exceeded checks in Prometheus. Use soft limits to observe a workload before enforcing a cap. Existing limits and newly created limits default to hard.
 
-Choose **Behavior** under **Advanced** when creating or editing an explicit spend, token, or request limit. Changing behavior preserves recorded usage and the reset schedule. A soft limit does not override another matching hard limit. Default user allowances remain hard.
+Choose **Behavior** under **Advanced** when creating or editing an explicit spend, token, or request limit. Changing behavior preserves recorded usage and the reset schedule. A soft limit does not override another matching hard limit. Default user limits remain hard.
 
 See [Limit Metrics](/docs/admin/observability/metrics/limits) for the counters. Your existing monitoring and alerting stack can use them to notify your team.
 
@@ -73,7 +73,7 @@ Each limit resets or recovers according to its **Interval**:
 
 ## Reset a Spend Limit
 
-Unblock a spend limit before its next scheduled reset. In **Explicit limits**, click **Reset usage** on the limit and confirm. Spend starts again at `$0`, and cost reports keep the past usage.
+Unblock a spend limit before its next scheduled reset. In the table, click **Reset usage** on the limit and confirm. Spend starts again at `$0`, and cost reports keep the past usage.
 
 - A **Calendar** interval keeps its schedule. A **Rolling** interval next resets one full interval after your reset.
 - Token, request, and per-minute limits have no **Reset usage**. They recover on their own schedule.
@@ -83,10 +83,10 @@ Unblock a spend limit before its next scheduled reset. In **Explicit limits**, c
 
 <span id="default-user-limits"></span>
 
-At the top of **Limits**, the **Default user limit** card sets a baseline per-user spend allowance without creating a separate rule for every member. Click **Set default** (or **Edit**), enter a **Limit per user ($)**, choose an **Interval**, and pick **All models** or specific models. Every user gets their own individual counter of that size, while any matching organization, team, virtual key, agent, OAuth client, or environment rules in **Explicit limits** still apply on top.
+A **Default user limit** sets a baseline per-user spend allowance without creating a separate rule for every member. Click **Add Limit**, choose **Default user limit** under **Apply to** and **All environments** next to it, enter a **Limit value**, choose an **Interval**, and pick **All models** or specific models. Every user gets their own individual counter of that size, while any matching organization, team, virtual key, agent, OAuth client, or environment rules still apply on top. Edit or delete a default user limit from its row in the table.
 
-- **Environment override:** click **Environment override** (or **N environment overrides → Add environment override**) on the card to set a different default per-user cap for a specific [Environment](/docs/admin/environments).
-- **Custom limit for one user:** under **Who's affected**, click **All N** to open **Users and their limits**, open a user's actions menu (**...**), and select **Set custom limit** (or create a **User** spend limit in **Explicit limits**). You can include an optional **Reason** note that appears in the drawer and table. A hard custom user limit overrides any environment override and the organization default, and starts its own counter at `$0`. A soft custom user limit observes usage alongside the hard default allowance.
+- **Default user limit for one environment:** pick an environment instead of **All environments** to set a different default per-user cap for a specific [Environment](/docs/admin/environments).
+- **Custom limit for one user:** above the table, click **Users and their limits**, open a user's actions menu (**...**), and select **Set custom limit** (or create a **User** spend limit with **Add Limit**). You can include an optional **Reason** note that appears in the drawer and table. A hard custom user limit overrides any default user limit, and starts its own counter at `$0`. A soft custom user limit observes usage alongside the default user limit.
 - **Reset a user's current window:** in **Users and their limits**, click **Reset** on a user at their limit (or **Reset usage** from **...**, or **Reset all N** when filtered to **At limit**) to zero their spend for the current window immediately. The next scheduled reset stays unchanged and past usage remains in cost reports.
 
 ## How Usage Is Counted

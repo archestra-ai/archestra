@@ -2,11 +2,18 @@
 
 import {
   builtInProviderLabel,
+  isPersonalSubscriptionProvider,
   MAX_INTEGRATION_DISPLAY_NAME_LENGTH,
+  type ModelProviderOverride,
   type ModelProviderOverrides,
+  PERSONAL_SUBSCRIPTION_LABELS,
+  type ProviderPlan,
+  ProviderPlanSchema,
+  providerPlans,
   pruneIntegrationOverrides,
   type SupportedProvider,
   SupportedProviders,
+  subscriptionKindForProvider,
 } from "@archestra/shared";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -21,6 +28,7 @@ import {
   SettingsBlock,
   SettingsSaveBar,
 } from "@/components/settings/settings-block";
+import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -40,7 +48,10 @@ import { providerSearchHaystack } from "@/lib/provider-search";
  * controls.
  *
  * A provider switched off leaves every picker, and the API refuses to
- * configure it. Keys that already exist keep working.
+ * configure it. Keys that already exist keep working. A provider with more
+ * than one way in gets one card per plan, so each switches off separately:
+ * OpenAI, Anthropic and xAI API keys beside ChatGPT, Claude Code and
+ * SuperGrok. Every plan off is the provider off.
  */
 export function ModelProvidersSection() {
   const { data: organization } = useOrganization();
@@ -71,10 +82,16 @@ export function ModelProvidersSection() {
   // by the name people here actually know it by, and the entry's aliases, so a
   // generic entry is findable by the products it serves.
   const query = search.trim().toLowerCase();
-  const visible = SupportedProviders.filter((provider) =>
+  const visible = CARDS.filter((card) =>
     providerSearchHaystack({
-      provider,
-      labels: [builtInProviderLabel(provider), draft[provider]?.displayName],
+      provider: card.provider,
+      labels: [
+        cardLabel(card),
+        cardName(draft[card.provider] ?? EMPTY_DRAFT_ENTRY, card),
+        cardNote(card),
+        // A personal subscription is also found by the provider it runs on.
+        isPersonalCard(card) ? builtInProviderLabel(card.provider) : null,
+      ],
     })
       .toLowerCase()
       .includes(query),
@@ -89,11 +106,7 @@ export function ModelProvidersSection() {
   const handleSave = async () => {
     const next: ModelProviderOverrides = {};
     for (const provider of SupportedProviders) {
-      const entry = draft[provider];
-      next[provider] = {
-        hidden: entry.hidden,
-        displayName: entry.displayName.trim() || null,
-      };
+      next[provider] = toOverride(provider, draft[provider]);
     }
     await updateMutation.mutateAsync({
       modelProviderOverrides: pruneIntegrationOverrides(next),
@@ -137,45 +150,77 @@ export function ModelProvidersSection() {
                   </p>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {visible.map((provider) => {
+                    {visible.map((card) => {
+                      const { provider, plan } = card;
                       const entry = draft[provider] ?? EMPTY_DRAFT_ENTRY;
-                      const label = builtInProviderLabel(provider);
+                      const label = cardLabel(card);
+                      const id = cardId(card);
+                      const note = cardNote(card);
+                      // "ChatGPT personal subscription", "OpenAI API keys".
+                      const fullLabel = note
+                        ? `${label} ${note.replace(/^[A-Z][a-z]/, (start) => start.toLowerCase())}`
+                        : label;
+                      const available = plan
+                        ? !entry.hiddenPlans[plan]
+                        : !entry.hidden;
                       return (
                         <div
-                          key={provider}
-                          data-testid={`model-provider-row-${provider}`}
-                          data-hidden={entry.hidden}
+                          key={id}
+                          data-testid={`model-provider-row-${id}`}
+                          data-hidden={!available}
                           className="rounded-lg border bg-card/40 p-3 transition-colors data-[hidden=true]:opacity-60"
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <ProviderIcon provider={provider} size={18} />
-                              <span className="truncate text-sm font-medium">
-                                {label}
-                              </span>
+                          <div className="mb-2 flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex min-w-0 items-center gap-2">
+                                {isPersonalCard(card) ? (
+                                  <SubscriptionBrandIcon
+                                    provider={provider}
+                                    kind={subscriptionKindForProvider(provider)}
+                                    size={18}
+                                  />
+                                ) : (
+                                  <ProviderIcon provider={provider} size={18} />
+                                )}
+                                <span className="truncate text-sm font-medium">
+                                  {label}
+                                </span>
+                              </div>
+                              {note ? (
+                                <p className="mt-0.5 truncate pl-[26px] text-xs text-muted-foreground">
+                                  {note}
+                                </p>
+                              ) : null}
                             </div>
                             <Label
-                              htmlFor={`model-provider-available-${provider}`}
+                              htmlFor={`model-provider-available-${id}`}
                               className="flex shrink-0 items-center gap-2 text-[11.5px] font-medium text-muted-foreground"
                             >
                               <Switch
-                                id={`model-provider-available-${provider}`}
-                                checked={!entry.hidden}
+                                id={`model-provider-available-${id}`}
+                                checked={available}
                                 onCheckedChange={(checked) =>
-                                  patch(provider, { hidden: !checked })
+                                  plan
+                                    ? patch(provider, {
+                                        hiddenPlans: {
+                                          ...entry.hiddenPlans,
+                                          [plan]: !checked,
+                                        },
+                                      })
+                                    : patch(provider, { hidden: !checked })
                                 }
                                 disabled={locked}
-                                aria-label={`Make ${label} available`}
+                                aria-label={`Make ${fullLabel} available`}
                               />
                               <span>Available</span>
                             </Label>
                           </div>
                           <Input
-                            aria-label={`${label} display name`}
-                            value={entry.displayName}
+                            aria-label={`${fullLabel} display name`}
+                            value={cardName(entry, card)}
                             onChange={(event) =>
                               patch(provider, {
-                                displayName: event.target.value,
+                                [cardNameField(card)]: event.target.value,
                               })
                             }
                             placeholder={`Show as “${label}”`}
@@ -204,10 +249,102 @@ export function ModelProvidersSection() {
   );
 }
 
-/** The name input is controlled, so the draft holds "" rather than null. */
-type DraftEntry = { hidden: boolean; displayName: string };
+/**
+ * One card in the grid: a provider, or one plan of a provider with more than
+ * one way in.
+ */
+type ProviderCard = { provider: SupportedProvider; plan?: ProviderPlan };
 
-const EMPTY_DRAFT_ENTRY: DraftEntry = { hidden: false, displayName: "" };
+const CARDS: ProviderCard[] = SupportedProviders.flatMap(
+  (provider): ProviderCard[] => {
+    const plans = providerPlans(provider);
+    return plans.length > 0
+      ? plans.map((plan) => ({ provider, plan }))
+      : [{ provider }];
+  },
+);
+
+/**
+ * The card's id in test ids and control ids. A provider's API key card keeps
+ * the provider's own id, as it had before the provider got a second card.
+ */
+function cardId({ provider, plan }: ProviderCard): string {
+  return plan && plan !== "apiKey" ? `${provider}-${plan}` : provider;
+}
+
+/**
+ * A card that stands for a person's own subscription: a personal plan, or a
+ * provider that is a personal subscription and nothing else.
+ */
+function isPersonalCard({ provider, plan }: ProviderCard): boolean {
+  return (
+    plan === "personal" ||
+    (plan === undefined && isPersonalSubscriptionProvider(provider))
+  );
+}
+
+/**
+ * The name a card ships with: personal subscriptions beside API keys
+ * (ChatGPT, Claude Code, SuperGrok) have their own, every other card the
+ * provider's.
+ */
+function cardLabel(card: ProviderCard): string {
+  if (cardNameField(card) === "personalDisplayName") {
+    return PERSONAL_SUBSCRIPTION_LABELS[
+      card.provider as keyof typeof PERSONAL_SUBSCRIPTION_LABELS
+    ];
+  }
+  return builtInProviderLabel(card.provider);
+}
+
+/** The draft field a card's name input edits. */
+function cardNameField(
+  card: ProviderCard,
+): "displayName" | "personalDisplayName" {
+  if (card.plan === "personal") {
+    return "personalDisplayName";
+  }
+  return "displayName";
+}
+
+/** The name an admin typed on this card. */
+function cardName(entry: DraftEntry, card: ProviderCard): string {
+  return entry[cardNameField(card)];
+}
+
+const PERSONAL_SUBSCRIPTION_NOTE = "Personal subscription";
+const API_KEYS_NOTE = "API keys";
+
+/**
+ * The note beside a card's name, so an admin tells the cards of one provider
+ * apart: "API keys" or "Personal subscription". Every personal subscription is
+ * noted, from the shared list, so a subscription added later is noted with no
+ * edit here.
+ */
+function cardNote(card: ProviderCard): string | null {
+  if (card.plan === "apiKey") return API_KEYS_NOTE;
+  return isPersonalCard(card) ? PERSONAL_SUBSCRIPTION_NOTE : null;
+}
+
+/**
+ * The name inputs are controlled, so the draft holds "" rather than null. The
+ * provider's name is `displayName`; the personal subscription beside API keys
+ * has its own.
+ */
+type DraftEntry = {
+  hidden: boolean;
+  displayName: string;
+  /** Providers with plans: their cards read and write these, never `hidden`. */
+  hiddenPlans: Record<ProviderPlan, boolean>;
+  personalDisplayName: string;
+};
+
+const EMPTY_DRAFT_ENTRY: DraftEntry = {
+  hidden: false,
+  displayName: "",
+  hiddenPlans: { apiKey: false, personal: false },
+  personalDisplayName: "",
+};
 
 function toDraft(
   overrides: ModelProviderOverrides | null,
@@ -215,10 +352,48 @@ function toDraft(
   const draft = {} as Record<SupportedProvider, DraftEntry>;
   for (const provider of SupportedProviders) {
     const override = overrides?.[provider];
+    const hidden = override?.hidden === true;
     draft[provider] = {
-      hidden: override?.hidden === true,
+      hidden,
       displayName: override?.displayName ?? "",
+      // A provider switched off as a whole shows every plan card off.
+      hiddenPlans: Object.fromEntries(
+        ProviderPlanSchema.options.map((plan) => [
+          plan,
+          hidden || override?.plans?.[plan]?.hidden === true,
+        ]),
+      ) as Record<ProviderPlan, boolean>,
+      personalDisplayName: override?.plans?.personal?.displayName ?? "",
     };
   }
   return draft;
+}
+
+/**
+ * What one provider's cards save. Every plan card off is the provider off,
+ * stored as the provider switch so every other place reads one answer; the
+ * plans' names stay, so switching back on restores them.
+ */
+function toOverride(
+  provider: SupportedProvider,
+  entry: DraftEntry,
+): ModelProviderOverride {
+  const displayName = entry.displayName.trim() || null;
+  const plans = providerPlans(provider);
+  if (plans.length === 0) return { hidden: entry.hidden, displayName };
+  const allOff = plans.every((plan) => entry.hiddenPlans[plan]);
+  const names: Partial<Record<ProviderPlan, string | null>> = {
+    personal: entry.personalDisplayName.trim() || null,
+  };
+  const planOverrides: NonNullable<ModelProviderOverride["plans"]> = {};
+  for (const plan of plans) {
+    const name = names[plan];
+    planOverrides[plan] = {
+      ...(allOff ? {} : { hidden: entry.hiddenPlans[plan] }),
+      ...(name !== undefined ? { displayName: name } : {}),
+    };
+  }
+  return allOff
+    ? { hidden: true, displayName, plans: planOverrides }
+    : { displayName, plans: planOverrides };
 }

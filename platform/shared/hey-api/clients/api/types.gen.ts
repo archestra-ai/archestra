@@ -38811,6 +38811,15 @@ export type GetBootstrapResponses = {
                 [key: string]: {
                     hidden?: boolean;
                     displayName?: string | null;
+                    plans?: {
+                        apiKey?: {
+                            hidden?: boolean;
+                        };
+                        personal?: {
+                            hidden?: boolean;
+                            displayName?: string | null;
+                        };
+                    };
                 };
             } | null;
             messagingChannelOverrides: {
@@ -39152,6 +39161,7 @@ export type GetNewChatBootstrapResponses = {
             bestModelId?: string | null;
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            plan?: 'apiKey' | 'personal';
             labels?: Array<{
                 key: string;
                 value: string;
@@ -39193,6 +39203,7 @@ export type GetNewChatBootstrapResponses = {
             bestModelId?: string | null;
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            plan?: 'apiKey' | 'personal';
             labels?: Array<{
                 key: string;
                 value: string;
@@ -39736,6 +39747,7 @@ export type GetConversationBootstrapResponses = {
                 bestModelId?: string | null;
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+                plan?: 'apiKey' | 'personal';
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -39777,6 +39789,7 @@ export type GetConversationBootstrapResponses = {
                 bestModelId?: string | null;
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+                plan?: 'apiKey' | 'personal';
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -86993,6 +87006,7 @@ export type GetLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        plan?: 'apiKey' | 'personal';
         labels?: Array<{
             key: string;
             value: string;
@@ -87164,6 +87178,7 @@ export type CreateLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        plan?: 'apiKey' | 'personal';
         labels?: Array<{
             key: string;
             value: string;
@@ -87291,6 +87306,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        plan?: 'apiKey' | 'personal';
         labels?: Array<{
             key: string;
             value: string;
@@ -87505,6 +87521,7 @@ export type GetLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        plan?: 'apiKey' | 'personal';
         labels?: Array<{
             key: string;
             value: string;
@@ -87654,6 +87671,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        plan?: 'apiKey' | 'personal';
         labels?: Array<{
             key: string;
             value: string;
@@ -87782,6 +87800,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        plan?: 'apiKey' | 'personal';
         labels?: Array<{
             key: string;
             value: string;
@@ -106353,6 +106372,15 @@ export type GetOrganizationResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -106690,6 +106718,15 @@ export type UpdateAppearanceSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -106905,6 +106942,15 @@ export type UpdateSecuritySettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -107117,6 +107163,15 @@ export type UpdateMcpSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -107329,6 +107384,15 @@ export type UpdateSkillsSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -107638,6 +107702,15 @@ export type UpdateAgentSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -107873,6 +107946,15 @@ export type UpdateConnectionSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -107942,6 +108024,15 @@ export type UpdateIntegrationSettingsData = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides?: {
@@ -108124,6 +108215,15 @@ export type UpdateIntegrationSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -108346,6 +108446,15 @@ export type UpdateDefaultEnvironmentResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -108563,6 +108672,15 @@ export type UpdateAuthSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -108782,6 +108900,15 @@ export type UpdateKnowledgeSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -108991,6 +109118,15 @@ export type DropEmbeddingConfigResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -109562,6 +109698,15 @@ export type CompleteOnboardingResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
+                    personal?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {

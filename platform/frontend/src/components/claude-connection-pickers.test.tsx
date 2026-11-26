@@ -102,6 +102,11 @@ vi.mock("@/lib/integration-overrides", () => ({
     isHidden: () => false,
     isKeyHidden: () => false,
     canAddKey: () => true,
+    canAddApiKey: () => true,
+    canAddPersonalSubscription: () => true,
+    personalSubscriptionLabel: (provider: string, fallback?: string) =>
+      provider === "anthropic" ? "Claude Code" : (fallback ?? provider),
+    overrides: null,
   }),
 }));
 

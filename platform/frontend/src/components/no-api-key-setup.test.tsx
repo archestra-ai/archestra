@@ -86,6 +86,28 @@ describe("NoApiKeySetup", () => {
     ).toBeInTheDocument();
   });
 
+  it("follows each personal subscription's own switch and name, apart from API keys", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          openai: { plans: { personal: { hidden: true } } },
+          xai: { plans: { personal: { displayName: "Company Grok" } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<NoApiKeySetup />);
+
+    expect(
+      screen.queryByRole("button", { name: "Sign in with ChatGPT" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sign in with Company Grok" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add API Key" }),
+    ).toBeInTheDocument();
+  });
   it("offers nothing to add when every provider is turned off", () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: {

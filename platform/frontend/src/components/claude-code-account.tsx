@@ -1,6 +1,9 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  personalSubscriptionTurnedOffMessage,
+} from "@archestra/shared";
 import { CheckCircle2, ExternalLink, Loader2, Unplug } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ClaudeCodeSignInSteps } from "@/components/claude-code-sign-in-steps";
@@ -23,6 +26,7 @@ import {
   useClaudeCodeSignIn,
   useDisconnectClaudeCodeAccount,
 } from "@/lib/claude-code-account.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 
 type ClaudeCodeAccountQuery = {
   data: archestraApiTypes.GetClaudeCodeAccountResponses["200"] | undefined;
@@ -205,6 +209,13 @@ export function ClaudeCodeAccount({
   const signIn = useClaudeCodeSignIn(agentId);
   const disconnect = useDisconnectClaudeCodeAccount(agentId);
   const state = account.data?.state;
+  // Claude Code is a personal subscription on Anthropic: with it turned off a
+  // new sign-in is refused, so none is offered. A connected account stays
+  // manageable and disconnectable.
+  const providerCatalog = useModelProviderCatalog();
+  const name = providerCatalog.personalSubscriptionLabel("anthropic");
+  const signInOffered =
+    connected || providerCatalog.canAddPersonalSubscription("anthropic");
 
   // Inline variant renders without ClaudeCodeAccountDialog, so keep its own
   // completion effects scoped to inline.
@@ -269,11 +280,16 @@ export function ClaudeCodeAccount({
       ? "Could not check connection"
       : connected
         ? "Signed in for you"
-        : account.data?.state === "expired"
-          ? "Connection expired. Sign in again."
-          : variant === "row"
-            ? "Sign in once for all your Claude Code agents."
-            : "Sign in to use this agent.";
+        : !signInOffered
+          ? personalSubscriptionTurnedOffMessage(
+              providerCatalog.overrides,
+              "anthropic",
+            )
+          : account.data?.state === "expired"
+            ? "Connection expired. Sign in again."
+            : variant === "row"
+              ? "Sign in once for all your Claude Code agents."
+              : "Sign in to use this agent.";
 
   if (!agentId)
     return (
@@ -297,6 +313,8 @@ export function ClaudeCodeAccount({
               <CheckCircle2 className="size-3.5 text-green-500" aria-hidden />
               <span>Signed in for you</span>
             </span>
+          ) : !signInOffered ? (
+            <span className="text-xs text-muted-foreground">{statusText}</span>
           ) : (
             !open && (
               <Button
@@ -371,7 +389,8 @@ export function ClaudeCodeAccount({
         // Nothing until the account has answered: a connected person never
         // sees a sign-in flash by.
         !account.isPending &&
-        !connected && (
+        !connected &&
+        signInOffered && (
           <Button type="button" size="sm" onClick={openAccount}>
             <span>Sign in</span>
           </Button>
@@ -382,20 +401,22 @@ export function ClaudeCodeAccount({
           role={connected ? "status" : "alert"}
         >
           <RuntimeCredentialIcon icon="logo:anthropic" className="size-3.5" />
-          <span className="font-medium">Claude Code</span>
+          <span className="font-medium">{name}</span>
           <InlineNoticeText>{statusText}</InlineNoticeText>
           {connected && <CheckCircle2 aria-label="Connected" />}
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            className="ml-auto shrink-0 bg-background"
-            onClick={openAccount}
-            disabled={account.isPending}
-          >
-            <span>{connected ? "Manage" : "Sign in"}</span>
-            <ExternalLink className="size-3" />
-          </Button>
+          {signInOffered && (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="ml-auto shrink-0 bg-background"
+              onClick={openAccount}
+              disabled={account.isPending}
+            >
+              <span>{connected ? "Manage" : "Sign in"}</span>
+              <ExternalLink className="size-3" />
+            </Button>
+          )}
         </InlineNotice>
       ) : (
         <div className="flex flex-wrap items-center gap-3 p-3">
@@ -403,7 +424,7 @@ export function ClaudeCodeAccount({
             <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
           </div>
           <div className="min-w-0 flex-1 space-y-0.5">
-            <p className="text-sm font-medium">Claude Code</p>
+            <p className="text-sm font-medium">{name}</p>
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {connected && (
                 <CheckCircle2 className="size-3.5 text-green-500" />
@@ -411,17 +432,19 @@ export function ClaudeCodeAccount({
               <span>{statusText}</span>
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            className="shrink-0"
-            onClick={openAccount}
-            disabled={account.isPending}
-          >
-            <span>{connected ? "Manage" : "Sign in"}</span>
-            <ExternalLink className="size-3" />
-          </Button>
+          {signInOffered && (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="shrink-0"
+              onClick={openAccount}
+              disabled={account.isPending}
+            >
+              <span>{connected ? "Manage" : "Sign in"}</span>
+              <ExternalLink className="size-3" />
+            </Button>
+          )}
         </div>
       )}
       <ClaudeCodeAccountDialog

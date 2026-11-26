@@ -254,7 +254,9 @@ export function useChatSetupOptions(params: {
       allKeys.filter(
         (k) =>
           providerSupportsChat(k.provider) &&
-          !catalog.isHidden(k.provider) &&
+          // A key follows its own plan's switch: API keys or a personal
+          // subscription.
+          !catalog.isKeyHidden(k) &&
           (!isPersonalSubscription(k) || k.userId === userId) &&
           (!keyFilter || keyFilter(k)),
       ),

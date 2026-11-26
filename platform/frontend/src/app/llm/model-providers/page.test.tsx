@@ -243,10 +243,13 @@ vi.mock("@/components/ui/data-table", () => ({
     // whose contents are asserted, and dropping it would let a blank
     // ownership cell pass unnoticed.
     const access = columns.find((column) => column.accessorKey === "scope");
+    const provider = columns.find(
+      (column) => column.accessorKey === "provider",
+    );
     return (
       <div data-loading={isLoading}>
         {data.map((row) => (
-          <div key={row.id}>
+          <div key={row.id} data-testid={`provider-key-row-${row.id}`}>
             <span>{row.name}</span>
             {select?.cell?.({
               row: {
@@ -257,6 +260,7 @@ vi.mock("@/components/ui/data-table", () => ({
               },
               table: {},
             } as never)}
+            {provider?.cell?.({ row: { original: row } })}
             {access?.cell?.({ row: { original: row } })}
             {actions?.cell?.({ row: { original: row } })}
           </div>
@@ -620,7 +624,69 @@ describe("ApiKeysPage", () => {
     expect(
       screen.getByTestId("subscription-provider-cards"),
     ).not.toHaveTextContent("SuperGrok");
-    expect(screen.getAllByText("Connect")).toHaveLength(3);
+    expect(personalCards().getAllByText("Connect")).toHaveLength(3);
+  });
+
+  it("drops only ChatGPT when its personal subscription is off, and names a renamed subscription", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          openai: { plans: { personal: { hidden: true } } },
+          xai: { plans: { personal: { displayName: "Company Grok" } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(personalCards().queryByText("ChatGPT")).toBeNull();
+    expect(personalCards().getByText("Company Grok")).toBeInTheDocument();
+    expect(personalCards().queryByText("SuperGrok")).toBeNull();
+    expect(personalCards().getAllByText("Connect")).toHaveLength(3);
+  });
+
+  it("keeps a ChatGPT sign-in in the table once ChatGPT is off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          openai: { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "chatgpt-key",
+          name: "My ChatGPT",
+          provider: "openai",
+          scope: "personal",
+          subscriptionKind: "chatgpt",
+        },
+        {
+          id: "openai-api-key",
+          name: "Team OpenAI",
+          provider: "openai",
+          scope: "org",
+          subscriptionKind: null,
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    // No card stands for it now, so the table keeps it deletable.
+    expect(screen.getByText("My ChatGPT")).toBeInTheDocument();
+    expect(personalCards().queryByText("My ChatGPT")).toBeNull();
+    expect(screen.getByText("Team OpenAI")).toBeInTheDocument();
   });
 
   it("keeps a turned-off provider's connected subscription key in the table", () => {
@@ -1113,6 +1179,69 @@ describe("ApiKeysPage", () => {
 
     expect(personalCards().queryByText("Claude Code")).toBeNull();
     expect(personalCards().getAllByText("Connect")).toHaveLength(4);
+  });
+
+  it("hides an unconnected Claude Code card when only Claude Code is turned off, keeping Anthropic API keys", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => (feature === "agentRuntime") as never,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          anthropic: { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(personalCards().queryByText("Claude Code")).toBeNull();
+  });
+
+  it("badges a listed Anthropic OAuth key as turned off when only Claude Code is off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          anthropic: { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "anthropic-oauth-key",
+          name: "My Claude OAuth Key",
+          provider: "anthropic",
+          plan: "personal",
+          subscriptionKind: null,
+          scope: "personal",
+        },
+        {
+          id: "anthropic-api-key",
+          name: "Company Anthropic Key",
+          provider: "anthropic",
+          plan: "apiKey",
+          subscriptionKind: null,
+          scope: "org",
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    const oauthRow = screen.getByTestId("provider-key-row-anthropic-oauth-key");
+    const apiRow = screen.getByTestId("provider-key-row-anthropic-api-key");
+    expect(within(oauthRow).getByText("Turned off")).toBeInTheDocument();
+    expect(within(apiRow).queryByText("Turned off")).not.toBeInTheDocument();
   });
 
   it("keeps a connected Claude Code subscription disconnectable without provider-key read permission while hiding provider API keys", () => {

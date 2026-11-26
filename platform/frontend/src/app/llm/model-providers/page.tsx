@@ -207,14 +207,15 @@ export default function ApiKeysPage() {
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
-  const canAddAnthropic = !providerCatalog.isHidden("anthropic");
+  const canConnectClaudeCode =
+    providerCatalog.canAddPersonalSubscription("anthropic");
   const myClaudeCodeAccount = useMyClaudeCodeAccount(
     agentRuntimeEnabled,
     false,
   );
   const showClaudeCodeCard =
     agentRuntimeEnabled &&
-    (canAddAnthropic ||
+    (canConnectClaudeCode ||
       myClaudeCodeAccount.data?.state === "connected" ||
       myClaudeCodeAccount.data?.state === "expired");
 
@@ -223,7 +224,7 @@ export default function ApiKeysPage() {
   const createProvider = searchParams.get("create");
   const linkedCreate =
     isSupportedProvider(createProvider) &&
-    !providerCatalog.isHidden(createProvider)
+    providerCatalog.canAddApiKey(createProvider)
       ? { provider: createProvider, initialGrants: [] }
       : undefined;
   const [subscriptionToConnect, setSubscriptionToConnect] =
@@ -443,14 +444,18 @@ export default function ApiKeysPage() {
   const apiKeys = queriedApiKeys;
 
   /**
-   * Subscription offers shown as cards above the table. A provider the admins
-   * turned off is not offered at all; a key that already connects it keeps its
-   * table row instead, so an admin can still see and delete it.
+   * Subscription offers shown as cards above the table, under the names the
+   * organization gave them. A personal subscription the admins turned off,
+   * alone or with its provider, is not offered at all. A key that already
+   * connects it keeps its table row instead, so an admin can still see and
+   * delete it.
    */
   const subscriptionOffers = useMemo(
     () =>
-      buildSubscriptionOffers(allApiKeys).filter(
-        ({ provider }) => !providerCatalog.isHidden(provider),
+      buildSubscriptionOffers(allApiKeys, {
+        label: providerCatalog.personalSubscriptionLabel,
+      }).filter(({ provider }) =>
+        providerCatalog.canAddPersonalSubscription(provider),
       ),
     [allApiKeys, providerCatalog],
   );
@@ -506,9 +511,11 @@ export default function ApiKeysPage() {
     return (
       buildSubscriptionOffers(
         allApiKeys.filter((key) => key.userId === currentUserId),
+        { label: providerCatalog.personalSubscriptionLabel },
       ).find(
         ({ kind, provider }) =>
-          kind === reconnectKind && !providerCatalog.isHidden(provider),
+          kind === reconnectKind &&
+          providerCatalog.canAddPersonalSubscription(provider),
       ) ?? null
     );
   }, [
@@ -663,7 +670,7 @@ export default function ApiKeysPage() {
                 className="rounded dark:invert"
               />
               <span className="truncate">{label}</span>
-              {providerCatalog.isHidden(provider) && (
+              {providerCatalog.isKeyHidden(row.original) && (
                 <InlineTag className="shrink-0">Turned off</InlineTag>
               )}
             </div>
@@ -789,7 +796,10 @@ export default function ApiKeysPage() {
           offers={subscriptionOffers}
           leadingCards={
             showClaudeCodeCard ? (
-              <ClaudeCodeSubscriptionCard canAddAnthropic={canAddAnthropic} />
+              <ClaudeCodeSubscriptionCard
+                canConnect={canConnectClaudeCode}
+                name={providerCatalog.personalSubscriptionLabel("anthropic")}
+              />
             ) : undefined
           }
           currentUserId={currentUserId}

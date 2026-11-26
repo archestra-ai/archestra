@@ -362,4 +362,164 @@ describe("LLM provider key credential kind", () => {
       false,
     );
   });
+
+  test("skips reading Anthropic secrets when includeSubscriptionInfo is not requested", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: "member" });
+    const secret = await SecretModel.create({
+      name: "anthropic-vault-key",
+      secret: { apiKey: "sk-ant-oat01-stored-in-vault" },
+      isVault: true,
+    });
+    const key = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        name: "Vault Anthropic",
+        provider: "anthropic",
+        secretId: secret.id,
+        scope: "org",
+        userId: null,
+        teamId: null,
+      },
+      {
+        publishToOrganization: true,
+        apiKeyValue: "sk-ant-oat01-stored-in-vault",
+      },
+    );
+    const getSecret = vi.spyOn(secretManager(), "getSecret");
+
+    const internalList = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+      org.id,
+      member.id,
+      [],
+    );
+    expect(internalList.map((k) => k.id)).toEqual([key.id]);
+    expect(getSecret).not.toHaveBeenCalled();
+
+    const uiList = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+      org.id,
+      member.id,
+      [],
+      undefined,
+      { includeSubscriptionInfo: true },
+    );
+    expect(uiList.find((k) => k.id === key.id)?.plan).toBe("personal");
+    expect(getSecret).toHaveBeenCalledTimes(1);
+    getSecret.mockRestore();
+  });
+
+  test("classifies an unreadable key as the same plan across findPlan and list endpoints", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    await makeMember(creator.id, org.id, { role: "admin" });
+    const secret = await SecretModel.create({
+      name: "unreadable-vault-openai",
+      secret: { apiKey: "sk-in-vault" },
+      isVault: true,
+    });
+    const legacy = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        createdBy: creator.id,
+        name: "Unclassified OpenAI",
+        provider: "openai",
+        secretId: secret.id,
+        scope: "org",
+        userId: null,
+        teamId: null,
+      },
+      { publishToOrganization: true },
+    );
+    const vaultDown = vi
+      .spyOn(secretManager(), "getSecret")
+      .mockRejectedValue(new Error("vault unreachable"));
+
+    try {
+      const fromFindPlan = await LlmProviderApiKeyModel.findPlan(legacy);
+      const fromGetById =
+        await LlmProviderApiKeyModel.findByIdWithSubscriptionInfo(legacy.id);
+      const fromList = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+        org.id,
+        creator.id,
+        [],
+        undefined,
+        { includeSubscriptionInfo: true },
+      );
+
+      expect(fromFindPlan).toBe("personal");
+      expect(fromGetById?.plan).toBe("personal");
+      expect(fromList.find((k) => k.id === legacy.id)?.plan).toBe("personal");
+    } finally {
+      vaultDown.mockRestore();
+    }
+  });
+
+  test("resolves BYOS Vault secrets when classifying Anthropic OAuth keys in lists and get-by-id", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: "admin" });
+    const secret = await SecretModel.create({
+      name: "byos-anthropic-oauth",
+      // DB row stores the Vault reference ("path#key"), not the resolved token.
+      secret: { apiKey: "secret/data/llm#anthropic_oauth" },
+      isVault: false,
+      isByosVault: true,
+    });
+    const key = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        name: "BYOS Anthropic OAuth",
+        provider: "anthropic",
+        secretId: secret.id,
+        scope: "org",
+        userId: null,
+        teamId: null,
+      },
+      { publishToOrganization: true, apiKeyValue: "sk-ant-oat01-from-byos" },
+    );
+    const getSecret = vi.spyOn(secretManager(), "getSecret").mockResolvedValue({
+      ...secret,
+      secret: { apiKey: "sk-ant-oat01-from-byos" },
+    });
+
+    try {
+      expect(await LlmProviderApiKeyModel.findPlan(key)).toBe("personal");
+      expect(
+        (await LlmProviderApiKeyModel.findByIdWithSubscriptionInfo(key.id))
+          ?.plan,
+      ).toBe("personal");
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
+        org.id,
+        member.id,
+        [],
+        true,
+        undefined,
+        { includeSubscriptionInfo: true },
+      );
+      expect(visible.find((k) => k.id === key.id)?.plan).toBe("personal");
+      const available = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+        org.id,
+        member.id,
+        [],
+        undefined,
+        { includeSubscriptionInfo: true },
+      );
+      expect(available.find((k) => k.id === key.id)?.plan).toBe("personal");
+    } finally {
+      getSecret.mockRestore();
+    }
+  });
 });

@@ -1,9 +1,14 @@
 import {
   DEFAULT_MODELS,
+  isPersonalSubscriptionHidden,
+  isProviderKeyHidden,
+  type ModelProviderOverrides,
   OPENCODE_PRIMARY_PROVIDERS,
   type Permissions,
   PROVIDERS_REQUIRING_BASE_URL,
+  type ProviderPlan,
   providerRequiresPerUserCredential,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -148,6 +153,7 @@ export function firstConnectionSetupInputs(params: {
     connectionSkillsEnabled?: boolean | null;
     connectionLlmProxyEnabled?: boolean | null;
     connectionPluginsEnabled?: boolean | null;
+    modelProviderOverrides?: ModelProviderOverrides | null;
     connectionClientProviderKeys?: Record<
       string,
       { provider: string }[]
@@ -176,6 +182,8 @@ export function firstConnectionSetupInputs(params: {
         isPrimary: boolean;
         baseUrl?: string | null;
         requiresReauthentication?: boolean | null;
+        subscriptionKind?: SubscriptionCredentialKind | null;
+        plan?: ProviderPlan | null;
       }[]
     | null;
 }): ConnectionSetupInputs | null {
@@ -245,7 +253,15 @@ export function firstConnectionSetupInputs(params: {
 
   // Model routing.
   if (!params.availableKeys) return null;
-  const availableKeys = params.availableKeys;
+  const overrides = organization.modelProviderOverrides ?? null;
+  const availableKeys = params.availableKeys.filter(
+    (key) =>
+      !isProviderKeyHidden(overrides, {
+        provider: key.provider as SupportedProvider,
+        plan: key.plan,
+        subscriptionKind: key.subscriptionKind,
+      }),
+  );
   const canAttribute = can("llmVirtualKey", "create");
   const adminMappedProviders = new Set(
     (organization.connectionClientProviderKeys?.[client.id] ?? []).map(
@@ -286,6 +302,10 @@ export function firstConnectionSetupInputs(params: {
     shown && !allPrimaryProviders
       ? supported.filter((p) => shown.has(p))
       : supported;
+  const claudeDesktopSubscriptionHidden =
+    client.id === "claude-desktop" &&
+    proxyAuth === "provider-key" &&
+    isPersonalSubscriptionHidden(overrides, "anthropic");
   let providers: SupportedProvider[];
   if (allPrimaryProviders) {
     const backing =
@@ -297,6 +317,8 @@ export function firstConnectionSetupInputs(params: {
               .map((key) => key.provider),
           );
     providers = supportedProviders.filter((p) => backing.has(p));
+  } else if (claudeDesktopSubscriptionHidden) {
+    providers = [];
   } else if (proxyAuth !== "virtual-key") {
     providers = supportedProviders;
   } else {

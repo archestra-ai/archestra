@@ -1,4 +1,8 @@
 import {
+  isProviderPlanHidden,
+  type ModelProviderOverrides,
+  type ProviderPlan,
+  providerPlanTurnedOffMessage,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -7,7 +11,11 @@ import {
   type InstallerClientId,
 } from "@archestra/shared/connection-setup";
 import logger from "@/logging";
-import { LlmProviderApiKeyModel, VirtualApiKeyModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  OrganizationModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import {
   type AnthropicCreditVerdict,
   probeAnthropicCredit,
@@ -117,28 +125,72 @@ export async function ensureConnectionVirtualKey(params: {
   // org/team-shared default, which would hand one account's credential to
   // everyone. getCurrentApiKey already resolves only the acting user's personal
   // key for per-user providers, so skip the admin-default precedence entirely.
+  // Each plan has its own switch (API keys vs personal subscriptions): an
+  // account of a plan the admins turned off is not set up again, though it
+  // keeps serving existing setups. On a multi-plan non-per-user provider
+  // (OpenAI, Anthropic, xAI), skip keys whose plan is hidden so a disabled
+  // personal sign-in falls through to an enabled team/org API key rather than
+  // shadowing it.
   const isPerUser = providerRequiresPerUserCredential(provider);
-  const providerApiKey = isPerUser
-    ? await LlmProviderApiKeyModel.getCurrentApiKey({
-        organizationId,
-        userId,
-        userTeamIds,
-        provider,
-        conversationId: null,
-      })
-    : ((await resolvePreferredProviderKey({
-        preferredProviderKeyId,
-        organizationId,
-        provider,
-      })) ??
-      (await LlmProviderApiKeyModel.getCurrentApiKey({
-        organizationId,
-        userId,
-        userTeamIds,
-        provider,
-        conversationId: null,
-      })));
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(organizationId);
+  let providerApiKey: Awaited<
+    ReturnType<typeof LlmProviderApiKeyModel.findById>
+  > = null;
+  let firstHiddenPlan: ProviderPlan | null = null;
+  if (isPerUser) {
+    const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
+      organizationId,
+      userId,
+      userTeamIds,
+      provider,
+      conversationId: null,
+    });
+    if (resolved) {
+      const plan = await LlmProviderApiKeyModel.findPlan(resolved);
+      if (isProviderPlanHidden(modelProviderOverrides, provider, plan)) {
+        firstHiddenPlan = plan;
+      } else {
+        providerApiKey = resolved;
+      }
+    }
+  } else {
+    const preferred = await resolvePreferredProviderKey({
+      preferredProviderKeyId,
+      organizationId,
+      provider,
+    });
+    const ranked = await LlmProviderApiKeyModel.getRankedAvailableKeys({
+      organizationId,
+      userId,
+      userTeamIds,
+      provider,
+    });
+    const candidates = [
+      ...(preferred ? [preferred] : []),
+      ...ranked.filter((key) => key.id !== preferred?.id),
+    ];
+    for (const candidate of candidates) {
+      const plan = await LlmProviderApiKeyModel.findPlan(candidate);
+      if (isProviderPlanHidden(modelProviderOverrides, provider, plan)) {
+        firstHiddenPlan ??= plan;
+        continue;
+      }
+      providerApiKey = await LlmProviderApiKeyModel.findById(candidate.id);
+      if (providerApiKey) break;
+    }
+  }
   if (!providerApiKey) {
+    if (firstHiddenPlan) {
+      throw new ApiError(
+        400,
+        providerPlanTurnedOffMessage(
+          modelProviderOverrides,
+          provider,
+          firstHiddenPlan,
+        ),
+      );
+    }
     throw new ApiError(
       400,
       isPerUser
@@ -159,6 +211,7 @@ export async function ensureConnectionVirtualKey(params: {
           organizationId,
           userId,
           userTeamIds,
+          modelProviderOverrides,
         })
       : { keyToBind: providerApiKey, creditWarning: undefined };
 
@@ -382,11 +435,18 @@ async function selectAnthropicKeyByCredit(params: {
   organizationId: string;
   userId: string;
   userTeamIds: string[];
+  modelProviderOverrides: ModelProviderOverrides | null;
 }): Promise<{
   keyToBind: CreditProbeCandidate;
   creditWarning?: ConnectionCreditWarning;
 }> {
-  const { resolvedKey, organizationId, userId, userTeamIds } = params;
+  const {
+    resolvedKey,
+    organizationId,
+    userId,
+    userTeamIds,
+    modelProviderOverrides,
+  } = params;
 
   const available = await LlmProviderApiKeyModel.getAvailableKeysForUser(
     organizationId,
@@ -394,12 +454,18 @@ async function selectAnthropicKeyByCredit(params: {
     userTeamIds,
     "anthropic",
   );
+  const enabledFallbacks: CreditProbeCandidate[] = [];
+  for (const key of available) {
+    if (enabledFallbacks.length >= MAX_CREDIT_PROBE_CANDIDATES - 1) break;
+    if (key.id === resolvedKey.id) continue;
+    const plan = await LlmProviderApiKeyModel.findPlan(key);
+    if (!isProviderPlanHidden(modelProviderOverrides, "anthropic", plan)) {
+      enabledFallbacks.push(key);
+    }
+  }
   // Resolved key first (preserves the admin/precedence choice when it works),
   // then the rest — bounded so a pathological key set can't fan out probes.
-  const candidates: CreditProbeCandidate[] = [
-    resolvedKey,
-    ...available.filter((key) => key.id !== resolvedKey.id),
-  ].slice(0, MAX_CREDIT_PROBE_CANDIDATES);
+  const candidates: CreditProbeCandidate[] = [resolvedKey, ...enabledFallbacks];
 
   // A definitive "balance too low" beats a transient one; `unverified` is the
   // fallback if we only saw inconclusive probes. Remember which key produced

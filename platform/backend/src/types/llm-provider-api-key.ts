@@ -1,5 +1,6 @@
 import {
   CreatedByNullableSchema,
+  ProviderPlanSchema,
   SubscriptionCredentialKindSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -126,6 +127,12 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
      * subscription with its row.
      */
     subscriptionKind: SubscriptionCredentialKindSchema.nullable().optional(),
+    /**
+     * Which plan the stored credential belongs to (`apiKey` or `personal`),
+     * resolved server-side so the UI classifies Anthropic `sk-ant-oat…` OAuth
+     * tokens under Claude Code just like the backend.
+     */
+    plan: ProviderPlanSchema.optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
   });
 

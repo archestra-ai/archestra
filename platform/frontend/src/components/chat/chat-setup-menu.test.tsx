@@ -11,6 +11,8 @@ const {
   readiness,
   mutateConversation,
   hiddenProviders,
+  hiddenPersonalSubscriptions,
+  subscriptionNames,
   navigate,
 } = vi.hoisted(() => ({
   agents: [
@@ -67,6 +69,8 @@ const {
     },
   ],
   hiddenProviders: new Set<string>(),
+  hiddenPersonalSubscriptions: new Set<string>(),
+  subscriptionNames: new Map<string, string>(),
   keys: [
     {
       id: "key-org",
@@ -133,6 +137,20 @@ vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({
     label: (provider: string) => (provider === "vllm" ? "vLLM" : provider),
     isHidden: (provider: string) => hiddenProviders.has(provider),
+    isKeyHidden: (key: {
+      provider: string;
+      plan?: string | null;
+      subscriptionKind?: string | null;
+    }) =>
+      hiddenProviders.has(key.provider) ||
+      (Boolean(key.subscriptionKind || key.plan === "personal") &&
+        hiddenPersonalSubscriptions.has(key.provider)),
+    canAddKey: (provider: string) => !hiddenProviders.has(provider),
+    canAddPersonalSubscription: (provider: string) =>
+      !hiddenProviders.has(provider) &&
+      !hiddenPersonalSubscriptions.has(provider),
+    personalSubscriptionLabel: (provider: string, fallback?: string) =>
+      subscriptionNames.get(provider) ?? fallback ?? provider,
   }),
 }));
 
@@ -150,6 +168,8 @@ beforeAll(() => {
 beforeEach(() => {
   keys.splice(0, keys.length, ...originalKeys);
   hiddenProviders.clear();
+  hiddenPersonalSubscriptions.clear();
+  subscriptionNames.clear();
   navigate.mockClear();
   readiness.splice(0);
   mutateConversation.mockReset();
@@ -301,6 +321,18 @@ describe("ChatSetupMenu", () => {
     ).toBeInTheDocument();
   });
 
+  it("omits a sign-in for a personal subscription that is turned off, and names one the organization renamed", async () => {
+    hiddenPersonalSubscriptions.add("openai");
+    subscriptionNames.set("xai", "Company Grok");
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+
+    expect(screen.queryByText("ChatGPT Subscription")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Company Grok/ }),
+    ).toBeInTheDocument();
+  });
   it("lets the footer keep its own Enter key without selecting the highlighted credential", async () => {
     const user = userEvent.setup();
     const props = renderMenu();

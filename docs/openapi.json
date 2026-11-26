@@ -143612,6 +143612,35 @@
                                 "nullable": true,
                                 "type": "string",
                                 "maxLength": 60
+                              },
+                              "plans": {
+                                "type": "object",
+                                "properties": {
+                                  "apiKey": {
+                                    "type": "object",
+                                    "properties": {
+                                      "hidden": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "personal": {
+                                    "type": "object",
+                                    "properties": {
+                                      "hidden": {
+                                        "type": "boolean"
+                                      },
+                                      "displayName": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "maxLength": 60
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "additionalProperties": false
                               }
                             },
                             "additionalProperties": false
@@ -145259,6 +145288,13 @@
                               "x-premium"
                             ]
                           },
+                          "plan": {
+                            "type": "string",
+                            "enum": [
+                              "apiKey",
+                              "personal"
+                            ]
+                          },
                           "labels": {
                             "type": "array",
                             "items": {
@@ -145489,6 +145525,13 @@
                               "github-copilot",
                               "microsoft-365-copilot",
                               "x-premium"
+                            ]
+                          },
+                          "plan": {
+                            "type": "string",
+                            "enum": [
+                              "apiKey",
+                              "personal"
                             ]
                           },
                           "labels": {
@@ -148516,6 +148559,13 @@
                                   "x-premium"
                                 ]
                               },
+                              "plan": {
+                                "type": "string",
+                                "enum": [
+                                  "apiKey",
+                                  "personal"
+                                ]
+                              },
                               "labels": {
                                 "type": "array",
                                 "items": {
@@ -148746,6 +148796,13 @@
                                   "github-copilot",
                                   "microsoft-365-copilot",
                                   "x-premium"
+                                ]
+                              },
+                              "plan": {
+                                "type": "string",
+                                "enum": [
+                                  "apiKey",
+                                  "personal"
                                 ]
                               },
                               "labels": {
@@ -342645,6 +342702,13 @@
                           "x-premium"
                         ]
                       },
+                      "plan": {
+                        "type": "string",
+                        "enum": [
+                          "apiKey",
+                          "personal"
+                        ]
+                      },
                       "labels": {
                         "type": "array",
                         "items": {
@@ -343394,6 +343458,13 @@
                         "x-premium"
                       ]
                     },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal"
+                      ]
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -343925,6 +343996,13 @@
                           "x-premium"
                         ]
                       },
+                      "plan": {
+                        "type": "string",
+                        "enum": [
+                          "apiKey",
+                          "personal"
+                        ]
+                      },
                       "labels": {
                         "type": "array",
                         "items": {
@@ -344420,6 +344498,13 @@
                         "github-copilot",
                         "microsoft-365-copilot",
                         "x-premium"
+                      ]
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal"
                       ]
                     },
                     "labels": {
@@ -345004,6 +345089,13 @@
                         "github-copilot",
                         "microsoft-365-copilot",
                         "x-premium"
+                      ]
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal"
                       ]
                     },
                     "labels": {
@@ -345795,6 +345887,13 @@
                         "github-copilot",
                         "microsoft-365-copilot",
                         "x-premium"
+                      ]
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal"
                       ]
                     },
                     "labels": {
@@ -412454,6 +412553,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -413605,6 +413733,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -414997,6 +415154,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -416000,6 +416186,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -417003,6 +417218,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -418348,6 +418592,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -419482,6 +419755,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -420053,6 +420355,35 @@
                           "nullable": true,
                           "type": "string",
                           "maxLength": 60
+                        },
+                        "plans": {
+                          "type": "object",
+                          "properties": {
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "hidden": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "personal": {
+                              "type": "object",
+                              "properties": {
+                                "hidden": {
+                                  "type": "boolean"
+                                },
+                                "displayName": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "maxLength": 60
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -420609,6 +420940,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -421682,6 +422042,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -422699,6 +423088,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -423747,6 +424165,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -424732,6 +425179,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -426921,6 +427397,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false

@@ -17,6 +17,10 @@ vi.mock("@/lib/config/config.query", () => ({
 // The card brands the client-side fallback copy, which otherwise reaches for
 // the appearance-settings query and needs a QueryClientProvider.
 vi.mock("@/lib/hooks/use-app-name");
+// Every provider and personal subscription stays on: no admin turned any off.
+vi.mock("@/lib/organization.query", () => ({
+  useOrganization: () => ({ data: { modelProviderOverrides: null } }),
+}));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useCreateLlmProviderApiKey: () => ({

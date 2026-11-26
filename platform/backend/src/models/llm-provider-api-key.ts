@@ -313,6 +313,7 @@ class LlmProviderApiKeyModel {
         secretId: apiKey.secretId,
         secret: row.secret,
         secretIsVault: row.secretIsVault,
+        secretIsByosVault: row.secretIsByosVault,
         credentialKind: resolvedKind,
       },
       { inspectAnthropicSecret: true },
@@ -509,6 +510,7 @@ class LlmProviderApiKeyModel {
               secretId: key.secretId,
               secret: key.secret,
               secretIsVault: key.secretIsVault,
+              secretIsByosVault: key.secretIsByosVault,
               credentialKind: resolvedKind,
             },
             {
@@ -618,6 +620,7 @@ class LlmProviderApiKeyModel {
               secretId: key.secretId,
               secret: key.secret,
               secretIsVault: key.secretIsVault,
+              secretIsByosVault: key.secretIsByosVault,
               credentialKind: resolvedKind,
             },
             {
@@ -1782,6 +1785,7 @@ async function resolveKeyPlan(
     secretId: string | null;
     secret: SecretValue | null;
     secretIsVault: boolean | null;
+    secretIsByosVault: boolean | null;
     credentialKind: LlmProviderCredentialKind | null | undefined;
   },
   options: { inspectAnthropicSecret: boolean },
@@ -1794,7 +1798,7 @@ async function resolveKeyPlan(
   ) {
     try {
       const value =
-        key.secretIsVault && key.secretId
+        key.secretId && (key.secretIsVault || key.secretIsByosVault)
           ? await getSecretValueForLlmProviderApiKey(key.secretId)
           : readApiKeyValue(key.secret);
       if (isAnthropicOAuthToken(value)) {

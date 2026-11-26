@@ -252,6 +252,12 @@ const sentryWebpackOptions = {
 
   project: "archestra-platform-frontend",
 
+  // Image builds have no Git metadata to infer a release from, so name it
+  // after the build's VERSION (the backend uploads under the same value).
+  release: {
+    name: process.env.SENTRY_RELEASE || process.env.VERSION,
+  },
+
   // The archestra Sentry org is hosted in the EU region
   sentryUrl: "https://de.sentry.io/",
 

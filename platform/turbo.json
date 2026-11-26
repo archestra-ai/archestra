@@ -7,7 +7,8 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**", "*.node"],
-      "env": ["VERSION"]
+      "env": ["VERSION"],
+      "passThroughEnv": ["SENTRY_AUTH_TOKEN"]
     },
     "@archestra/app-runtime-rs#build": {
       "dependsOn": ["^build"],

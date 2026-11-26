@@ -179,7 +179,7 @@ export function OpenAppaEnforcedMarksSetting() {
     <SettingsBlock
       id="enforced-marks"
       title="Approvals that need a person"
-      description="In Observe and with automatic approval, these still wait for a person. Use the names from attention in your policy."
+      description="In Observe and with automatic approval, these still wait for a person."
       control={
         deployment.data ? (
           <div className="flex w-full flex-col gap-2 sm:w-80">

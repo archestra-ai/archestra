@@ -172,7 +172,9 @@ jobs:
   # out: their .next and dist outputs would make each entry hundreds of MB.
   warm-turbo-cache:
     name: Warm Turbo Cache
-    runs-on: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core-spot' || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.
+    # Stays on GitHub's runner: on the GCE 16-core pool the frontend unit
+    # tests ran about twice as long and hit their 10s per-test timeout.
+    runs-on: ubuntu-24.04-16core
     timeout-minutes: 20
     concurrency:
       group: on-commits-to-main-warm-turbo-cache

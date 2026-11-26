@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.40](https://github.com/archestra-ai/archestra/compare/platform-v1.4.39...platform-v1.4.40) (2026-11-26)
+
+
+### Features
+
+* **llm:** admin controls for all personal subscriptions (backport release/1.4) ([#11281](https://github.com/archestra-ai/archestra/issues/11281)) ([9922fa7](https://github.com/archestra-ai/archestra/commit/9922fa79e5f9983d595454959a88e93e8b2e69e9))
+
+
+### Bug Fixes
+
+* **agent-runtimes:** clarify built-in runtime copy (backport release/1.4) ([#11271](https://github.com/archestra-ai/archestra/issues/11271)) ([f13855f](https://github.com/archestra-ai/archestra/commit/f13855f4dbba9cea0c01535804047ff36eef5734))
+* **auth:** restore SAML sign-in (backport release/1.4) ([#11301](https://github.com/archestra-ai/archestra/issues/11301)) ([b02e8c0](https://github.com/archestra-ai/archestra/commit/b02e8c0f74a284137a432a0b7a0a5e1452607139))
+* **build:** upload debug files from image builds and tag frontend releases (backport release/1.4) ([#11288](https://github.com/archestra-ai/archestra/issues/11288)) ([a060148](https://github.com/archestra-ai/archestra/commit/a06014807ee5115bf192924e0f20f2572e001a96))
+* **chat:** show full tool names, keep the circle row in place, keep answer op (backport release/1.4) ([#11272](https://github.com/archestra-ai/archestra/issues/11272)) ([3d8518f](https://github.com/archestra-ai/archestra/commit/3d8518f4c770b17e59c72fcdf62901ffd6835295))
+* **frontend:** polish runtime credentials UI (backport release/1.4) ([#11276](https://github.com/archestra-ai/archestra/issues/11276)) ([bd000c2](https://github.com/archestra-ai/archestra/commit/bd000c2b9f3328fb6d67b26cd58d1f543c10b1ff))
+* **llm-proxy:** keep streamed finish_reason after held tool calls (backport release/1.4) ([#11307](https://github.com/archestra-ai/archestra/issues/11307)) ([caf36a3](https://github.com/archestra-ai/archestra/commit/caf36a3ca171e52938bc2b073056037bf520ddb0))
+* **users:** keep failed member removals retryable without unhandled rejections (backport release/1.4) ([#11290](https://github.com/archestra-ai/archestra/issues/11290)) ([ded7b58](https://github.com/archestra-ai/archestra/commit/ded7b5899c088fa7328f1dcbaaa234de6b98fb93))
+
 ## [1.4.39](https://github.com/archestra-ai/archestra/compare/platform-v1.4.38...platform-v1.4.39) (2026-11-25)
 
 

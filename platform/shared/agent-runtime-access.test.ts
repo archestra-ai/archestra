@@ -199,7 +199,7 @@ describe("companyAccountWords", () => {
         plan: false,
         a: "an API key",
         the: "the API key",
-        companys: "an API key",
+        companys: "a provider API key",
         short: "API key",
         connection: "connection",
         aConnection: "a connection",

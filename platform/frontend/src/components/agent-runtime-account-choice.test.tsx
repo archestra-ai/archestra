@@ -1243,7 +1243,9 @@ describe("the account row on an agent's page", () => {
     const user = userEvent.setup();
     renderRow();
 
-    expect(await screen.findByText("Uses an API key")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Uses a provider API key"),
+    ).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Use personal subscription instead" }),
     );
@@ -1426,7 +1428,7 @@ describe("the account row on an agent's page", () => {
     await waitFor(() =>
       expect(writes).toEqual([{ method: "DELETE", body: null }]),
     );
-    expect(await screen.findByText("Uses an API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
   });
 
   it("keeps a way back from a chosen subscription when the agent runs on the organization's default or its key stopped qualifying", async () => {
@@ -1459,7 +1461,7 @@ describe("the account row on an agent's page", () => {
     await waitFor(() =>
       expect(writes).toEqual([{ method: "DELETE", body: null }]),
     );
-    expect(await screen.findByText("Uses an API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     unmount();
 
     // Its own key, which no longer qualifies as a company key to choose.
@@ -1499,7 +1501,7 @@ describe("the account row on an agent's page", () => {
       ]),
     );
     // Their runs are on the agent's connection now; nothing asked them more.
-    expect(await screen.findByText("Uses an API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     await user.click(
@@ -1575,7 +1577,7 @@ describe("the account row on an agent's page", () => {
     await user.click(
       screen.getByRole("button", { name: "Use API key instead" }),
     );
-    expect(await screen.findByText("Uses an API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
@@ -1748,7 +1750,7 @@ describe("the account row on an agent's page", () => {
     await user.click(
       screen.getByRole("button", { name: "Use API key instead" }),
     );
-    expect(await screen.findByText("Uses an API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
@@ -2047,7 +2049,7 @@ describe("the account row on an agent's page", () => {
     await user.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(waiting).toHaveLength(1));
     waiting.shift()?.();
-    expect(await screen.findByText("Uses an API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(
       screen.queryByText("Could not load the account for your runs."),
     ).not.toBeInTheDocument();
@@ -2068,7 +2070,7 @@ describe("the account row on an agent's page", () => {
   it("puts the card back as it was when a switch is refused and the account cannot be read again", async () => {
     const user = userEvent.setup();
     renderRow();
-    await screen.findByText("Uses an API key");
+    await screen.findByText("Uses a provider API key");
 
     const unavailable = () =>
       HttpResponse.json(
@@ -2087,7 +2089,7 @@ describe("the account row on an agent's page", () => {
 
     // Nothing was stored, so the card does not go on saying it was.
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
-    expect(await screen.findByText("Uses an API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(
       screen.queryByText("Uses your personal subscription"),
     ).not.toBeInTheDocument();
@@ -2149,7 +2151,9 @@ describe("the account row on an agent's page", () => {
       const user = userEvent.setup();
       renderRow();
 
-      expect(await screen.findByText("Uses an API key")).toBeInTheDocument();
+      expect(
+        await screen.findByText("Uses a provider API key"),
+      ).toBeInTheDocument();
       // Nothing resolves yet: each field asks, and the model waits.
       await user.click(await connectionField("Choose an API key"));
       expect(await modelField("Choose a model")).toBeDisabled();
@@ -2557,7 +2561,9 @@ describe("the account row on an agent's page", () => {
       "This agent is locked to an API key, so your own choice is not used.";
     renderRow();
 
-    expect(await screen.findByText("Uses an API key")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Uses a provider API key"),
+    ).toBeInTheDocument();
     // The model the agent fixes shows, locked; nothing else is a control.
     expect(
       await screen.findByRole("button", { name: "Model Agent model" }),
@@ -2569,7 +2575,9 @@ describe("the account row on an agent's page", () => {
     account.subscription = null;
     renderRow();
 
-    expect(await screen.findByText("Uses an API key")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Uses a provider API key"),
+    ).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Model Agent model" }),
     ).toBeDisabled();

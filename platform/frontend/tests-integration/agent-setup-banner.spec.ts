@@ -213,7 +213,7 @@ test("shows the connection and model that are the person's to pick on the accoun
   await page.goto(`/agents/${AGENT.id}?section=general`);
 
   const workSources = page.getByRole("region", { name: "Give it work" });
-  const summary = workSources.getByText("Uses an API key", {
+  const summary = workSources.getByText("Uses a provider API key", {
     exact: true,
   });
   await expect(summary).toBeVisible();

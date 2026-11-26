@@ -150,7 +150,7 @@ export type CompanyAccountWords = {
   a: string;
   /** As the one the agent has: "the API key". */
   the: string;
-  /** After "Uses": "an API key". */
+  /** After "Uses": "a provider API key". */
   companys: string;
   /** In a button: "API key". */
   short: string;
@@ -164,7 +164,7 @@ const API_KEY_WORDS: CompanyAccountWords = {
   plan: false,
   a: "an API key",
   the: "the API key",
-  companys: "an API key",
+  companys: "a provider API key",
   short: "API key",
   connection: "connection",
   aConnection: "a connection",

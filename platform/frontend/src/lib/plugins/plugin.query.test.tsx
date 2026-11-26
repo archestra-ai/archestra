@@ -25,9 +25,8 @@ import {
   type CreatePluginBody,
   type ImportGithubPluginBody,
   type ImportGithubPluginMarketplaceBody,
-  useBulkDeletePlugins,
   useCreatePlugin,
-  useDeletePlugin,
+  useDeletePlugins,
   useImportGithubPlugin,
   useImportGithubPluginMarketplace,
   usePlugin,
@@ -60,7 +59,7 @@ describe("Plugin bulk mutations", () => {
     sdk.deletePlugin
       .mockResolvedValueOnce({ data: { success: true }, error: undefined })
       .mockResolvedValueOnce({ data: undefined, error: { message: "failed" } });
-    const { result } = renderHook(() => useBulkDeletePlugins(), { wrapper });
+    const { result } = renderHook(() => useDeletePlugins(), { wrapper });
 
     const outcome = await act(() =>
       result.current.mutateAsync([
@@ -73,15 +72,15 @@ describe("Plugin bulk mutations", () => {
     expect(outcome.failed).toHaveLength(1);
   });
 
-  it("counts one deleted plugin as one plugin", async () => {
+  it("reports one deleted plugin and several in the same words from every caller", async () => {
     sdk.deletePlugin.mockResolvedValue({
       data: { success: true },
       error: undefined,
     });
-    const { result } = renderHook(() => useBulkDeletePlugins(), { wrapper });
+    const { result } = renderHook(() => useDeletePlugins(), { wrapper });
 
     await act(() => result.current.mutateAsync([{ id: "p1", name: "One" }]));
-    expect(toast.success).toHaveBeenLastCalledWith("Deleted 1 plugin");
+    expect(toast.success).toHaveBeenLastCalledWith("Plugin deleted");
 
     await act(() =>
       result.current.mutateAsync([
@@ -90,6 +89,24 @@ describe("Plugin bulk mutations", () => {
       ]),
     );
     expect(toast.success).toHaveBeenLastCalledWith("Deleted 2 plugins");
+  });
+
+  it("says how many of several could not be deleted", async () => {
+    sdk.deletePlugin
+      .mockResolvedValueOnce({ data: { success: true }, error: undefined })
+      .mockResolvedValueOnce({ data: undefined, error: { message: "failed" } });
+    const { result } = renderHook(() => useDeletePlugins(), { wrapper });
+
+    await act(() =>
+      result.current.mutateAsync([
+        { id: "p1", name: "One" },
+        { id: "p2", name: "Two" },
+      ]),
+    );
+
+    expect(toast.warning).toHaveBeenLastCalledWith(
+      "Deleted 1 of 2 plugins; 1 could not be deleted",
+    );
   });
 
   it("names the failed plugins and their reasons in the import toast", async () => {
@@ -176,20 +193,7 @@ describe("Plugin bulk mutations", () => {
           data: { success: true },
           error: undefined,
         });
-        const { result } = renderHook(() => useDeletePlugin("p-1"), {
-          wrapper: makeWrapper(client),
-        });
-        await act(() => result.current.mutateAsync());
-      },
-    },
-    {
-      name: "bulk delete",
-      run: async (client: QueryClient) => {
-        sdk.deletePlugin.mockResolvedValue({
-          data: { success: true },
-          error: undefined,
-        });
-        const { result } = renderHook(() => useBulkDeletePlugins(), {
+        const { result } = renderHook(() => useDeletePlugins(), {
           wrapper: makeWrapper(client),
         });
         await act(() =>

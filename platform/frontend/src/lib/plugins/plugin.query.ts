@@ -318,28 +318,12 @@ export function useTriggerPluginGithubSync(id: string) {
   });
 }
 
-export function useDeletePlugin(id: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await deletePlugin({ path: { id } });
-      if (error) {
-        handleApiError(error);
-        return false;
-      }
-      return data?.success ?? false;
-    },
-    onSuccess: (deleted) => {
-      if (!deleted) return;
-      queryClient.removeQueries({ queryKey: ["plugins", id] });
-      queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      toast.success("Plugin deleted");
-      return invalidatePluginCapabilities(queryClient);
-    },
-  });
-}
-
-export function useBulkDeletePlugins() {
+/**
+ * Deletes one plugin or several. Every place that deletes plugins goes
+ * through this one mutation, so the outcome is reported the same way from a
+ * row, the bulk bar and the plugin's page.
+ */
+export function useDeletePlugins() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (plugins: Array<{ id: string; name: string }>) => {
@@ -357,12 +341,25 @@ export function useBulkDeletePlugins() {
       };
     },
     onSuccess: ({ succeeded, failed }) => {
+      for (const plugin of succeeded) {
+        queryClient.removeQueries({ queryKey: ["plugins", plugin.id] });
+      }
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      const deleted = `Deleted ${succeeded.length} ${
-        succeeded.length === 1 ? "plugin" : "plugins"
-      }`;
-      if (failed.length === 0) toast.success(deleted);
-      else toast.warning(`${deleted}; ${failed.length} failed`);
+      const total = succeeded.length + failed.length;
+      if (total === 1 && failed.length === 1) {
+        // One plugin, one reason: say the reason itself.
+        handleApiError(failed[0].error);
+      } else if (failed.length === 0) {
+        toast.success(
+          total === 1 ? "Plugin deleted" : `Deleted ${total} plugins`,
+        );
+      } else if (succeeded.length === 0) {
+        toast.error(`Couldn't delete ${failed.length} plugins`);
+      } else {
+        toast.warning(
+          `Deleted ${succeeded.length} of ${total} plugins; ${failed.length} could not be deleted`,
+        );
+      }
       if (succeeded.length > 0) {
         return invalidatePluginCapabilities(queryClient);
       }

@@ -18,7 +18,6 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { OsLogos } from "@/app/connection/os-logos";
 import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -74,14 +73,10 @@ import {
 } from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
-import {
-  type PluginListItem,
-  useBulkDeletePlugins,
-  useDeletePlugin,
-  usePlugins,
-} from "@/lib/plugins/plugin.query";
+import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
 import { repositoryLabel } from "@/lib/skills/skill-source";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { DeletePluginsDialog } from "./_parts/delete-plugins-dialog";
 import {
   getPluginActionModel,
   pluginAction,
@@ -257,7 +252,6 @@ function PluginsList() {
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkInstallOpen, setBulkInstallOpen] = useState(false);
-  const bulkDelete = useBulkDeletePlugins();
   const { rangeSelection, ...bulkSelection } = useBulkSelection({
     rows: filteredPlugins,
     getId: (plugin) => plugin.id,
@@ -613,7 +607,6 @@ function PluginsList() {
                 count={bulkSelection.selected.length}
                 noun="plugin"
                 onClear={bulkSelection.clearSelection}
-                busy={bulkDelete.isPending}
                 selectAllMatching={bulkSelection.selectAllMatching}
               >
                 <PermissionButton
@@ -767,9 +760,10 @@ function PluginsList() {
         </TableCardView>
       </PageLayout>
 
+      {/* A row's delete button and the bulk bar open the same dialog. */}
       {deletingPlugin && (
-        <DeletePluginDialog
-          plugin={deletingPlugin}
+        <DeletePluginsDialog
+          plugins={[deletingPlugin]}
           open={!!deletingPlugin}
           onOpenChange={(open) => !open && setDeletingPlugin(null)}
         />
@@ -801,27 +795,11 @@ function PluginsList() {
         />
       )}
       {bulkDeleteOpen && (
-        <DeleteConfirmDialog
+        <DeletePluginsDialog
+          plugins={bulkSelection.selected}
           open={bulkDeleteOpen}
           onOpenChange={setBulkDeleteOpen}
-          title="Delete plugins"
-          description={`Delete ${bulkSelection.selected.length} ${
-            bulkSelection.selected.length === 1 ? "plugin" : "plugins"
-          }? Installed copies stay on developer machines.`}
-          isPending={bulkDelete.isPending}
-          confirmLabel="Delete plugins"
-          onConfirm={async () => {
-            const result = await bulkDelete.mutateAsync(
-              bulkSelection.selected.map((plugin) => ({
-                id: plugin.id,
-                name: plugin.displayName,
-              })),
-            );
-            if (result.succeeded.length > 0) {
-              bulkSelection.clearSelection();
-              setBulkDeleteOpen(false);
-            }
-          }}
+          onDeleted={bulkSelection.clearSelection}
         />
       )}
     </>
@@ -858,35 +836,6 @@ function PluginsEmptyState() {
           Browse popular marketplaces
         </Link>
       }
-    />
-  );
-}
-
-function DeletePluginDialog({
-  plugin,
-  open,
-  onOpenChange,
-}: {
-  plugin: PluginListItem;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const deletePlugin = useDeletePlugin(plugin.id);
-
-  const handleDelete = useCallback(async () => {
-    const deleted = await deletePlugin.mutateAsync();
-    if (deleted) onOpenChange(false);
-  }, [deletePlugin, onOpenChange]);
-
-  return (
-    <DeleteConfirmDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Delete plugin?"
-      // The title asks the question; the text says what it leaves behind.
-      description="Installed copies stay on developer machines until you uninstall them."
-      isPending={deletePlugin.isPending}
-      onConfirm={handleDelete}
     />
   );
 }

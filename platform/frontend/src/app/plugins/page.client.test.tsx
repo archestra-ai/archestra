@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -62,6 +62,7 @@ vi.mock("@/components/search-input", () => ({
 vi.mock("./_parts/plugin-install-dialog", () => ({
   PluginInstallDialog: () => null,
 }));
+const deleteMutateAsync = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/plugins/plugin.query", () => ({
   usePlugins: () => ({
     data: access.plugins ?? [PLUGIN],
@@ -70,8 +71,10 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
     isLoadingError: false,
     refetch: vi.fn(),
   }),
-  useBulkDeletePlugins: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useDeletePlugin: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeletePlugins: () => ({
+    mutateAsync: deleteMutateAsync,
+    isPending: false,
+  }),
 }));
 vi.mock("@/lib/entity-labels.query");
 
@@ -420,6 +423,65 @@ describe("PluginsPage", () => {
       "Installed copies stay on developer machines until you uninstall them.",
     );
     expect(dialog).not.toHaveTextContent('Delete "Policy Runtime"?');
+  });
+
+  it("opens the same confirmation from the bulk bar as from a row", async () => {
+    access.grants.push({ resource: "plugin", action: "delete", scope: "*" });
+    access.plugins = [
+      PLUGIN,
+      { ...PLUGIN, id: "plugin-2", displayName: "Second plugin" },
+    ];
+    deleteMutateAsync.mockResolvedValue({
+      succeeded: [{ id: PLUGIN.id, name: PLUGIN.displayName }],
+      failed: [],
+    });
+    const user = userEvent.setup();
+    render(<PluginsPage />);
+    const bulkDelete = () =>
+      screen.getByRole("button", { name: "Delete", exact: true } as never);
+
+    // One ticked plugin: word for word the dialog a row's button opens.
+    await user.click(
+      within(
+        screen.getByText("Policy Runtime").closest("tr") as HTMLElement,
+      ).getByRole("checkbox"),
+    );
+    await user.click(bulkDelete());
+    const one = screen.getByRole("dialog", { name: "Delete plugin?" });
+    expect(one).toHaveTextContent(
+      "Installed copies stay on developer machines until you uninstall them.",
+    );
+    expect(one).not.toHaveTextContent("Delete 1 plugin");
+    expect(within(one).getByRole("button", { name: "Delete" })).toBeVisible();
+    expect(
+      within(one).queryByRole("button", { name: "Delete plugins" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(one).getByRole("button", { name: "Delete" }));
+    expect(deleteMutateAsync).toHaveBeenCalledWith([
+      { id: PLUGIN.id, name: PLUGIN.displayName },
+    ]);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
+    // Several: the same dialog, with the count in the title.
+    await user.click(
+      within(
+        screen.getByText("Policy Runtime").closest("tr") as HTMLElement,
+      ).getByRole("checkbox"),
+    );
+    await user.click(
+      within(
+        screen.getByText("Second plugin").closest("tr") as HTMLElement,
+      ).getByRole("checkbox"),
+    );
+    await user.click(bulkDelete());
+    const two = screen.getByRole("dialog", { name: "Delete 2 plugins?" });
+    expect(two).toHaveTextContent(
+      "Installed copies stay on developer machines until you uninstall them.",
+    );
+    expect(within(two).getByRole("button", { name: "Delete" })).toBeVisible();
   });
 
   it("puts every row action on the row, with no one-item menu", () => {

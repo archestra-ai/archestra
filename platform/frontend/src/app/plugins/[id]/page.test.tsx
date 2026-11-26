@@ -34,7 +34,7 @@ import { useAppearanceSettings } from "@/lib/organization.query";
 import {
   type PluginDetail,
   useApplyGithubPluginUpdate,
-  useDeletePlugin,
+  useDeletePlugins,
   usePlugin,
   usePlugins,
   usePreviewGithubPluginUpdate,
@@ -152,8 +152,8 @@ beforeEach(() => {
   vi.mocked(usePlugins).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof usePlugins>);
-  vi.mocked(useDeletePlugin).mockReturnValue(
-    mutationStub as unknown as ReturnType<typeof useDeletePlugin>,
+  vi.mocked(useDeletePlugins).mockReturnValue(
+    mutationStub as unknown as ReturnType<typeof useDeletePlugins>,
   );
   vi.mocked(useApplyGithubPluginUpdate).mockReturnValue(
     mutationStub as unknown as ReturnType<typeof useApplyGithubPluginUpdate>,

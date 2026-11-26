@@ -20,7 +20,6 @@ import {
 } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -46,11 +45,11 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   type PluginDetail,
-  useDeletePlugin,
   usePlugin,
   usePlugins,
   useUpdatePlugin,
 } from "@/lib/plugins/plugin.query";
+import { DeletePluginsDialog } from "../_parts/delete-plugins-dialog";
 import {
   getPluginActionModel,
   pluginAction,
@@ -290,13 +289,6 @@ function PluginDetailView({
   const [deleteRequested, setDeleteRequested] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
-  const deletePlugin = useDeletePlugin(plugin.id);
-
-  const handleDelete = async () => {
-    const deleted = await deletePlugin.mutateAsync();
-    if (deleted) onDeleted();
-  };
-
   return (
     <PageLayout
       icon={
@@ -549,13 +541,11 @@ function PluginDetailView({
         }}
         onDiscard={guard.discardChanges}
       />
-      <DeleteConfirmDialog
+      <DeletePluginsDialog
+        plugins={[plugin]}
         open={deleteRequested}
         onOpenChange={setDeleteRequested}
-        title="Delete plugin?"
-        description="Installed copies stay on developer machines until you uninstall them."
-        isPending={deletePlugin.isPending}
-        onConfirm={handleDelete}
+        onDeleted={onDeleted}
       />
       {updatesOpen && (
         <PluginGithubUpdatesDialog

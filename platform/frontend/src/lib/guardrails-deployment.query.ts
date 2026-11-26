@@ -71,8 +71,9 @@ export function useUpdatePersonApproval() {
   );
 }
 
-export function useIsGuardrailsSettingSaving(setting: GatedSetting) {
-  return useIsMutating({ mutationKey: mutationKeyOf(setting) }) > 0;
+/** Whether a mode or approvals save is in flight; each locks both selectors. */
+export function useIsGuardrailsModeOrApprovalSaving() {
+  return useIsMutating({ mutationKey: queryKey }) > 0;
 }
 
 /**

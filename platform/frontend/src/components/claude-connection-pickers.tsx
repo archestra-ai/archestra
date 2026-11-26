@@ -11,7 +11,14 @@ import {
   LockIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { ChatSetupMenu } from "@/components/chat/chat-setup-menu";
 import type { ConnectionKey } from "@/components/claude-connection-pickers.utils";
@@ -72,7 +79,7 @@ export function CompanyConnectionPickers({
   modelLockedReason,
   modelFixed = false,
   compact = false,
-  emptyConnection = "Choose a connection",
+  emptyConnection = "Choose an API key",
   emptyModel,
 }: {
   keys: ConnectionKey[];
@@ -223,12 +230,18 @@ export function CompanyConnectionPickers({
   return (
     <div className={compact ? COMPACT_ROW : FIELD_GRID}>
       {!connectionFixed && (
-        <div className={compact ? COMPACT_FIELD : "min-w-0 space-y-2"}>
+        <div
+          className={
+            compact
+              ? COMPACT_FIELD
+              : "w-fit min-w-0 max-w-full space-y-2 sm:max-w-80"
+          }
+        >
           <Label
             id={`${id}-connection`}
             className={compact ? "sr-only" : undefined}
           >
-            Which connection pays
+            Key
           </Label>
           <PickerField
             labelId={`${id}-connection`}
@@ -254,12 +267,19 @@ export function CompanyConnectionPickers({
             onClear={
               companyKeyId && !lockedConnection ? onApiKeyClear : undefined
             }
-            clearLabel="Clear connection"
+            clearLabel="Clear key"
+            fitContent={!compact}
           />
         </div>
       )}
       {!modelFixed && (
-        <div className={compact ? COMPACT_FIELD : "min-w-0 space-y-2"}>
+        <div
+          className={
+            compact
+              ? COMPACT_FIELD
+              : "w-fit min-w-0 max-w-full space-y-2 sm:max-w-80"
+          }
+        >
           <Label id={`${id}-model`} className={compact ? "sr-only" : undefined}>
             Model
           </Label>
@@ -278,7 +298,7 @@ export function CompanyConnectionPickers({
             value={companyKeyId ? modelName : null}
             placeholder={
               emptyModel ??
-              (companyKeyId ? copy.model : "Choose a connection first")
+              (companyKeyId ? copy.model : "Choose an API key first")
             }
             disabled={disabled || !companyKeyId}
             locked={
@@ -291,6 +311,7 @@ export function CompanyConnectionPickers({
               companyKeyId && modelId && !modelLocked ? onModelClear : undefined
             }
             clearLabel="Clear model"
+            fitContent={!compact}
           />
         </div>
       )}
@@ -436,7 +457,7 @@ export function SubscriptionModelPicker({
 }
 
 const CLAUDE_COPY = {
-  none: "No company connection can run Claude yet",
+  none: "No API key can run Claude yet",
   needs:
     "Claude Code needs an Anthropic API key, Amazon Bedrock, or Vertex AI with Anthropic models. Add one to use it here.",
   add: "Add an Anthropic key",
@@ -444,7 +465,7 @@ const CLAUDE_COPY = {
   model: "Select a Claude model",
 };
 const RUNTIME_COPY = {
-  none: "No company connection can run this agent yet",
+  none: "No API key can run this agent yet",
   needs:
     "Its runtime needs a key of a provider it can call. Add one to use it here.",
   add: "Add a key",
@@ -460,8 +481,8 @@ const COMPACT_ROW = "flex min-w-0 flex-wrap items-center justify-end gap-2";
 /** Never wider than the card it is on. */
 const COMPACT_FIELD = "w-52 min-w-0 max-w-full";
 
-/** Both cards lay their fields out on these columns. */
-const FIELD_GRID = "grid gap-3 sm:grid-cols-[minmax(0,20rem)_minmax(0,16rem)]";
+/** Both cards lay their fields out side by side, sized to their content. */
+const FIELD_GRID = "flex flex-wrap items-start gap-3";
 
 /** A form field that shows its value and opens the composer's list to change it. */
 function PickerField({
@@ -474,6 +495,7 @@ function PickerField({
   onClear,
   clearLabel,
   locked = null,
+  fitContent = false,
 }: {
   labelId: string;
   icon: ReactNode;
@@ -490,8 +512,14 @@ function PickerField({
    * hover and to assistive technology.
    */
   locked?: string | null;
+  /** Size the button to its content up to its container's width instead of filling it. */
+  fitContent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const valueRef = useRef<HTMLSpanElement>(null);
+  const displayText = value ?? placeholder;
+  const widthClass = fitContent ? "w-fit max-w-full" : "w-full";
   if (locked) {
     return (
       <TooltipProvider>
@@ -499,7 +527,7 @@ function PickerField({
           <TooltipTrigger asChild>
             {/* The span takes the pointer while the field is disabled, so
                 the reason still shows. */}
-            <span className="flex w-full min-w-0">
+            <span className={cn("flex min-w-0", widthClass)}>
               <Button
                 type="button"
                 aria-labelledby={`${labelId} ${labelId}-value`}
@@ -507,7 +535,10 @@ function PickerField({
                 variant="outline"
                 size="sm"
                 disabled
-                className="w-full min-w-0 justify-start gap-2 font-normal"
+                className={cn(
+                  widthClass,
+                  "min-w-0 justify-start gap-2 font-normal",
+                )}
               >
                 <span aria-hidden className="flex shrink-0 items-center">
                   {icon}
@@ -538,54 +569,94 @@ function PickerField({
       </TooltipProvider>
     );
   }
+  const handleTooltipOpenChange = (next: boolean) => {
+    if (!next || open) {
+      setTooltipOpen(false);
+      return;
+    }
+    const el = valueRef.current;
+    setTooltipOpen(!!el && el.scrollWidth > el.clientWidth);
+  };
   const field = (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          // Named by its label and its value, so the value is read out too.
-          aria-labelledby={`${labelId} ${labelId}-value`}
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          className={cn(
-            "w-full min-w-0 justify-start gap-2 font-normal",
-            // Room for the clear control, which sits over the field's end.
-            onClear && "pr-8",
-          )}
-        >
-          <span aria-hidden className="flex shrink-0 items-center">
-            {icon}
-          </span>
-          <span
-            id={`${labelId}-value`}
-            className={cn(
-              "min-w-0 flex-1 truncate text-left",
-              !value && "text-muted-foreground",
-            )}
-          >
-            {value ?? placeholder}
-          </span>
-          {/* The clear control takes the chevron's place while it shows. */}
-          {!onClear && <ChevronsUpDownIcon className="shrink-0 opacity-50" />}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={6}
-        collisionPadding={12}
-        className="w-auto overflow-hidden rounded-xl p-0"
+    <TooltipProvider>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (next) setTooltipOpen(false);
+        }}
       >
-        {menu(() => setOpen(false))}
-      </PopoverContent>
-    </Popover>
+        <Tooltip
+          open={open ? false : tooltipOpen}
+          onOpenChange={handleTooltipOpenChange}
+        >
+          <TooltipTrigger asChild>
+            {/* A non-disabled wrapper takes hover and focus when the button is
+                disabled, so truncated values can still show their tooltip. */}
+            <span
+              tabIndex={disabled ? 0 : undefined}
+              className={cn(
+                "flex min-w-0",
+                widthClass,
+                disabled &&
+                  "rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+            >
+              <PopoverTrigger asChild disabled={disabled}>
+                <Button
+                  type="button"
+                  // Named by its label and its value, so the value is read out too.
+                  aria-labelledby={`${labelId} ${labelId}-value`}
+                  variant="outline"
+                  size="sm"
+                  disabled={disabled}
+                  className={cn(
+                    widthClass,
+                    "min-w-0 justify-start gap-2 font-normal",
+                    // Room for the clear control, which sits over the field's end.
+                    onClear && "pr-8",
+                  )}
+                >
+                  <span aria-hidden className="flex shrink-0 items-center">
+                    {icon}
+                  </span>
+                  <span
+                    ref={valueRef}
+                    id={`${labelId}-value`}
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-left",
+                      !value && "text-muted-foreground",
+                    )}
+                  >
+                    {displayText}
+                  </span>
+                  {/* The clear control takes the chevron's place while it shows. */}
+                  {!onClear && (
+                    <ChevronsUpDownIcon className="shrink-0 opacity-50" />
+                  )}
+                </Button>
+              </PopoverTrigger>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{displayText}</TooltipContent>
+        </Tooltip>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          collisionPadding={12}
+          className="w-auto overflow-hidden rounded-xl p-0"
+        >
+          {menu(() => setOpen(false))}
+        </PopoverContent>
+      </Popover>
+    </TooltipProvider>
   );
   if (!onClear) return field;
   return (
     // The clear control is a button of its own beside the field's, as on the
     // model selector: it takes the keyboard after the field, and a click on
     // it does not open the list.
-    <div className="relative">
+    <div className={cn("relative", fitContent && "w-fit max-w-full")}>
       {field}
       <UnstyledButton
         type="button"

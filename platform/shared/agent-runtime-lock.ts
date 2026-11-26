@@ -117,11 +117,11 @@ export function agentRuntimeCanNameAccountKind(runtime: {
  * the web app's labels say the same thing.
  */
 export type CompanyAccountWords = {
-  /** As one of two accounts: "a company API key". */
+  /** As one of two accounts: "an API key". */
   a: string;
-  /** As the one the agent has: "the company API key". */
+  /** As the one the agent has: "the API key". */
   the: string;
-  /** After "Uses": "company's API key". */
+  /** After "Uses": "a provider API key". */
   companys: string;
   /** In a button: "API key". */
   short: string;
@@ -132,9 +132,9 @@ export type CompanyAccountWords = {
 };
 
 export const COMPANY_ACCOUNT_WORDS: CompanyAccountWords = {
-  a: "a company API key",
-  the: "the company API key",
-  companys: "company's API key",
+  a: "an API key",
+  the: "the API key",
+  companys: "a provider API key",
   short: "API key",
   connection: "connection",
   aConnection: "a connection",

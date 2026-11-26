@@ -355,12 +355,12 @@ describe("a person's account for an agent", () => {
     show();
     const group = await choices();
     const company = within(group).getByRole("radio", {
-      name: /^A company API key/,
+      name: /^Provider API key/,
     });
     expect(company).toBeChecked();
     expect(company.closest("label")).toHaveTextContent("Agent default");
     expect(company.closest("label")).toHaveTextContent(
-      "The agent's connection and model. Billed to the company.",
+      "The agent's connection and model.",
     );
     expect(
       within(group)
@@ -409,7 +409,7 @@ describe("a person's account for an agent", () => {
     show();
     const group = await choices();
     const company = within(group).getByRole("radio", {
-      name: /^A company API key/,
+      name: /^Provider API key/,
     });
     expect(company).not.toBeChecked();
     expect(company.closest("label")).not.toHaveTextContent("Agent default");
@@ -446,7 +446,7 @@ describe("a person's account for an agent", () => {
 
     // The company key needs nothing from the person.
     await user.click(
-      within(group).getByRole("radio", { name: /^A company API key/ }),
+      within(group).getByRole("radio", { name: /^Provider API key/ }),
     );
     expect(
       screen.queryByRole("button", { name: /Sign in/ }),
@@ -469,7 +469,7 @@ describe("a person's account for an agent", () => {
     ).not.toBeInTheDocument();
 
     await user.click(
-      within(group).getByRole("radio", { name: /^A company API key/ }),
+      within(group).getByRole("radio", { name: /^Provider API key/ }),
     );
     await user.click(saveButton());
 
@@ -499,7 +499,7 @@ describe("a person's account for an agent", () => {
 
     // The other way is ready to save as soon as it is selected.
     await user.click(
-      within(group).getByRole("radio", { name: /^A company API key/ }),
+      within(group).getByRole("radio", { name: /^Provider API key/ }),
     );
     expect(saveButton()).toBeEnabled();
     await user.click(subscription);
@@ -541,12 +541,12 @@ describe("a person's account for an agent", () => {
     const group = await choices();
 
     const company = within(group).getByRole("radio", {
-      name: /^A company API key/,
+      name: /^Provider API key/,
     });
     expect(company).toBeChecked();
     expect(company.closest("label")).toHaveTextContent("Agent default");
     expect(company.closest("label")).toHaveTextContent(
-      "A connection and model you pick on the agent's page. Billed to the company.",
+      "A connection and model you pick on the agent's page.",
     );
     expect(
       screen.queryByRole("button", { name: "Save" }),
@@ -624,7 +624,7 @@ describe("a person's account for an agent", () => {
     {
       lock: "key",
       setAside: "subscription",
-      line: "This agent runs only on a company API key.",
+      line: "This agent runs only on an API key.",
     },
     {
       lock: "subscription",
@@ -667,7 +667,7 @@ describe("a person's account for an agent", () => {
     });
 
     expect(
-      await screen.findByText("This agent runs only on a company API key."),
+      await screen.findByText("This agent runs only on an API key."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
   });
@@ -693,7 +693,7 @@ describe("a person's account for an agent", () => {
     ).toBeInTheDocument();
     // The broken choice is what is shown, not as in effect.
     expect(
-      within(group).getByRole("radio", { name: /^A company API key/ }),
+      within(group).getByRole("radio", { name: /^Provider API key/ }),
     ).toBeChecked();
     expect(
       screen.queryByText(/^Your runs use this account/),
@@ -730,7 +730,7 @@ describe("a person's account for an agent", () => {
     show();
     const group = await choices();
 
-    await within(group).findByRole("radio", { name: /^A company API key/ });
+    await within(group).findByRole("radio", { name: /^Provider API key/ });
     expect(within(group).getAllByRole("radio")).toHaveLength(1);
     expect(
       within(group).queryByRole("radio", { name: /^My / }),
@@ -740,17 +740,15 @@ describe("a person's account for an agent", () => {
   it.each([
     {
       open: "both",
-      description:
-        "A connection and model you pick on the agent's page. Billed to the company.",
+      description: "A connection and model you pick on the agent's page.",
     },
     {
       open: "model",
-      description:
-        "The agent's connection, with a model you pick on its page. Billed to the company.",
+      description: "The agent's connection, with a model you pick on its page.",
     },
     {
       open: "nothing",
-      description: "The agent's connection and model. Billed to the company.",
+      description: "The agent's connection and model.",
     },
   ] as const)("says what the company API key runs on where $open is left to the person", async ({
     open,
@@ -783,10 +781,10 @@ describe("a person's account for an agent", () => {
     show();
 
     const company = within(await choices()).getByRole("radio", {
-      name: /A company API key/,
+      name: /Provider API key/,
     });
     expect(company.closest("label")).toHaveTextContent(
-      "A connection and model you pick on the agent's page. Billed to the company.",
+      "A connection and model you pick on the agent's page.",
     );
     await user.click(company);
     await user.click(saveButton());
@@ -832,7 +830,7 @@ describe("a person's account for an agent", () => {
       within(group).getByRole("radio", { name: /My ChatGPT/ }),
     ).toBeChecked();
     expect(
-      within(group).queryByRole("radio", { name: /^A company API key/ }),
+      within(group).queryByRole("radio", { name: /^Provider API key/ }),
     ).not.toBeInTheDocument();
   });
 });
@@ -1180,7 +1178,7 @@ describe("the account row on an agent's page", () => {
     renderRow();
 
     expect(
-      await screen.findByText("Uses company's API key"),
+      await screen.findByText("Uses a provider API key"),
     ).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Use personal subscription instead" }),
@@ -1218,7 +1216,7 @@ describe("the account row on an agent's page", () => {
     await waitFor(() =>
       expect(writes).toEqual([{ method: "DELETE", body: null }]),
     );
-    expect(await screen.findByText("Uses company's API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
   });
 
   it("keeps a way back from a chosen subscription when the agent runs on the organization's default or its key stopped qualifying", async () => {
@@ -1251,7 +1249,7 @@ describe("the account row on an agent's page", () => {
     await waitFor(() =>
       expect(writes).toEqual([{ method: "DELETE", body: null }]),
     );
-    expect(await screen.findByText("Uses company's API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     unmount();
 
     // Its own key, which no longer qualifies as a company key to choose.
@@ -1291,7 +1289,7 @@ describe("the account row on an agent's page", () => {
       ]),
     );
     // Their runs are on the agent's connection now; nothing asked them more.
-    expect(await screen.findByText("Uses company's API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     await user.click(
@@ -1367,7 +1365,7 @@ describe("the account row on an agent's page", () => {
     await user.click(
       screen.getByRole("button", { name: "Use API key instead" }),
     );
-    expect(await screen.findByText("Uses company's API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
@@ -1535,7 +1533,7 @@ describe("the account row on an agent's page", () => {
     await user.click(
       screen.getByRole("button", { name: "Use API key instead" }),
     );
-    expect(await screen.findByText("Uses company's API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
@@ -1797,7 +1795,7 @@ describe("the account row on an agent's page", () => {
     await user.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(waiting).toHaveLength(1));
     waiting.shift()?.();
-    expect(await screen.findByText("Uses company's API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(
       screen.queryByText("Could not load the account for your runs."),
     ).not.toBeInTheDocument();
@@ -1818,7 +1816,7 @@ describe("the account row on an agent's page", () => {
   it("puts the card back as it was when a switch is refused and the account cannot be read again", async () => {
     const user = userEvent.setup();
     renderRow();
-    await screen.findByText("Uses company's API key");
+    await screen.findByText("Uses a provider API key");
 
     const unavailable = () =>
       HttpResponse.json(
@@ -1837,7 +1835,7 @@ describe("the account row on an agent's page", () => {
 
     // Nothing was stored, so the card does not go on saying it was.
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
-    expect(await screen.findByText("Uses company's API key")).toBeVisible();
+    expect(await screen.findByText("Uses a provider API key")).toBeVisible();
     expect(
       screen.queryByText("Uses your personal subscription"),
     ).not.toBeInTheDocument();
@@ -1848,7 +1846,7 @@ describe("the account row on an agent's page", () => {
 
   describe("the connection and model that are the person's to pick", () => {
     const connectionField = (value: string) =>
-      screen.findByRole("button", { name: `Which connection pays ${value}` });
+      screen.findByRole("button", { name: `Key ${value}` });
     const modelField = (value: string) =>
       screen.findByRole("button", { name: `Model ${value}` });
     /** What each connection offers, and which were asked for. */
@@ -1900,10 +1898,10 @@ describe("the account row on an agent's page", () => {
       renderRow();
 
       expect(
-        await screen.findByText("Uses company's API key"),
+        await screen.findByText("Uses a provider API key"),
       ).toBeInTheDocument();
       // Nothing resolves yet: each field asks, and the model waits.
-      await user.click(await connectionField("Choose a connection"));
+      await user.click(await connectionField("Choose an API key"));
       expect(await modelField("Choose a model")).toBeDisabled();
       expect(
         await screen.findByRole("option", { name: /Company OpenAI/ }),
@@ -1959,7 +1957,7 @@ describe("the account row on an agent's page", () => {
       });
       renderRow();
 
-      expect(await connectionField("Default connection")).toBeEnabled();
+      expect(await connectionField("Default API key")).toBeEnabled();
       // A model of their own waits for a connection of their own.
       expect(await modelField("Default model")).toBeDisabled();
       expect(screen.queryByText("Organization OpenAI")).toBeNull();
@@ -2019,7 +2017,7 @@ describe("the account row on an agent's page", () => {
       renderRow();
 
       expect(await modelField("Choose a model")).toBeDisabled();
-      await user.click(await connectionField("Choose a connection"));
+      await user.click(await connectionField("Choose an API key"));
       await user.click(
         await screen.findByRole("option", { name: /Company OpenAI/ }),
       );
@@ -2056,7 +2054,7 @@ describe("the account row on an agent's page", () => {
         screen.queryByRole("button", { name: "Choose account" }),
       ).toBeNull();
       expect(screen.queryByRole("button", { name: /instead$/ })).toBeNull();
-      await user.click(await connectionField("Choose a connection"));
+      await user.click(await connectionField("Choose an API key"));
       await user.click(
         await screen.findByRole("option", { name: /Company OpenAI/ }),
       );
@@ -2116,9 +2114,7 @@ describe("the account row on an agent's page", () => {
       // Accepted: a refusal would put the field back as it was.
       expect(await modelField("GPT-5")).toBeVisible();
       // The fixed connection has no field, and its models were not asked for.
-      expect(
-        screen.queryByRole("button", { name: /^Which connection pays/ }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Key/ })).toBeNull();
       expect(modelRequests).toEqual([]);
     });
 
@@ -2161,9 +2157,7 @@ describe("the account row on an agent's page", () => {
       renderRow();
 
       expect(await modelField("Agent model")).toBeDisabled();
-      expect(
-        screen.queryByRole("button", { name: /^Which connection pays/ }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Key/ })).toBeNull();
       expect(screen.queryByText(/Agent key/)).toBeNull();
     });
 
@@ -2188,9 +2182,7 @@ describe("the account row on an agent's page", () => {
       renderRow();
 
       expect(await modelField("Agent model")).toBeDisabled();
-      expect(
-        screen.queryByRole("button", { name: /^Which connection pays/ }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Key/ })).toBeNull();
       expect(listed).toBe(0);
     });
 
@@ -2207,16 +2199,14 @@ describe("the account row on an agent's page", () => {
       expect(
         await screen.findByText("Uses your personal subscription"),
       ).toBeInTheDocument();
-      expect(
-        screen.queryByRole("button", { name: /^Which connection pays/ }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Key/ })).toBeNull();
     });
 
     it("puts the field back as it was when a pick is refused", async () => {
       leftToPerson();
       const user = userEvent.setup();
       renderRow();
-      await user.click(await connectionField("Choose a connection"));
+      await user.click(await connectionField("Choose an API key"));
       server.use(
         http.put(`${origin}/api/agents/${agentId}/runtime/account`, () =>
           HttpResponse.json(
@@ -2235,10 +2225,10 @@ describe("the account row on an agent's page", () => {
       );
 
       await waitFor(() => expect(toast.error).toHaveBeenCalled());
-      expect(await connectionField("Choose a connection")).toBeVisible();
+      expect(await connectionField("Choose an API key")).toBeVisible();
       expect(
         screen.queryByRole("button", {
-          name: "Which connection pays Company OpenAI",
+          name: "Key Company OpenAI",
         }),
       ).toBeNull();
     });
@@ -2269,7 +2259,7 @@ describe("the account row on an agent's page", () => {
           { method: "PUT", body: { authentication: "provider" } },
         ]),
       );
-      expect(await connectionField("Default connection")).toBeVisible();
+      expect(await connectionField("Default API key")).toBeVisible();
       expect(await modelField("Default model")).toBeDisabled();
     });
 
@@ -2287,7 +2277,7 @@ describe("the account row on an agent's page", () => {
           { method: "PUT", body: { authentication: "provider" } },
         ]),
       );
-      expect(await connectionField("Choose a connection")).toBeEnabled();
+      expect(await connectionField("Choose an API key")).toBeEnabled();
       expect(await modelField("Choose a model")).toBeDisabled();
     });
   });
@@ -2318,7 +2308,7 @@ describe("the account row on an agent's page", () => {
     renderRow();
 
     expect(
-      await screen.findByText("Uses company's API key"),
+      await screen.findByText("Uses a provider API key"),
     ).toBeInTheDocument();
     // The model the agent fixes shows, locked; nothing else is a control.
     expect(
@@ -2332,7 +2322,7 @@ describe("the account row on an agent's page", () => {
     renderRow();
 
     expect(
-      await screen.findByText("Uses company's API key"),
+      await screen.findByText("Uses a provider API key"),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Model Agent model" }),

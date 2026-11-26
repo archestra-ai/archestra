@@ -154,7 +154,7 @@ describe("CompanyConnectionPickers", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Which connection pays Company Anthropic",
+        name: "Key Company Anthropic",
       }),
     ).toBeEnabled();
     expect(
@@ -172,12 +172,12 @@ describe("CompanyConnectionPickers", () => {
 
     // No model can be picked before a connection.
     expect(
-      screen.getByRole("button", { name: "Model Choose a connection first" }),
+      screen.getByRole("button", { name: "Model Choose an API key first" }),
     ).toBeDisabled();
 
     await user.click(
       screen.getByRole("button", {
-        name: "Which connection pays Choose a connection",
+        name: "Key Choose an API key",
       }),
     );
     expect(
@@ -231,9 +231,7 @@ describe("CompanyConnectionPickers", () => {
     const user = userEvent.setup();
     const props = renderPickers();
 
-    await user.click(
-      screen.getByRole("button", { name: /^Which connection pays/ }),
-    );
+    await user.click(screen.getByRole("button", { name: /^Key/ }));
     await user.click(screen.getByRole("button", { name: "Add a key" }));
     expect(props.onAddApiKey).toHaveBeenCalledOnce();
   });
@@ -247,11 +245,9 @@ describe("CompanyConnectionPickers", () => {
       runsOn: () => false,
     });
 
+    expect(screen.getByText("No API key can run Claude yet")).toBeVisible();
     expect(
-      screen.getByText("No company connection can run Claude yet"),
-    ).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: /^Which connection pays/ }),
+      screen.queryByRole("button", { name: /^Key/ }),
     ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Add an Anthropic key" }),
@@ -275,17 +271,44 @@ describe("CompanyConnectionPickers", () => {
       />
     );
     const { rerender } = render(fields(() => false));
-    expect(
-      screen.getByText("No company connection can run Claude yet"),
-    ).toBeVisible();
+    expect(screen.getByText("No API key can run Claude yet")).toBeVisible();
     expect(screen.queryByText(/each person picks/i)).toBeNull();
 
-    // Once one can run it, the line says what leaving the fields empty does.
+    // Once one can run it, the empty key field says who picks instead of an extra sentence.
     rerender(fields((provider) => provider === "anthropic"));
     expect(
-      screen.getByText(
-        "Optional. Set a connection and model to fix them for every run on the company account. Leave them empty and each person picks their own on the agent's page.",
-      ),
+      screen.getByRole("button", {
+        name: "Key User chooses key themselves",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByText(/fix them for every/i)).toBeNull();
+  });
+
+  it("shows level-specific unset model labels once a key is chosen", () => {
+    const base = {
+      keys: keys as never,
+      apiKeyId: "key-anthropic",
+      runsOn: (provider: string) => provider === "anthropic",
+      claude: true,
+      modelId: null,
+      modelName: null,
+      modelProvider: null,
+      onChange: vi.fn(),
+    };
+    const { rerender } = render(
+      <CompanyAccountFields level="agent" {...base} />,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "Model User chooses model themselves",
+      }),
+    ).toBeVisible();
+
+    rerender(<CompanyAccountFields level="runtime" {...base} />);
+    expect(
+      screen.getByRole("button", {
+        name: "Model Each agent chooses its own model",
+      }),
     ).toBeVisible();
   });
 
@@ -305,7 +328,7 @@ describe("CompanyConnectionPickers", () => {
     ).toBeEnabled();
     await user.click(
       screen.getByRole("button", {
-        name: "Which connection pays Company OpenAI",
+        name: "Key Company OpenAI",
       }),
     );
     expect(
@@ -326,9 +349,7 @@ describe("CompanyConnectionPickers", () => {
       apiKeyId: null,
       runsOn: () => false,
     });
-    expect(
-      screen.getByText("No company connection can run this agent yet"),
-    ).toBeVisible();
+    expect(screen.getByText("No API key can run this agent yet")).toBeVisible();
     expect(screen.queryByText(/Claude/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Add a key" }));
     expect(props.onAddApiKey).toHaveBeenCalledOnce();
@@ -340,7 +361,7 @@ describe("CompanyConnectionPickers", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Which connection pays Choose a connection",
+        name: "Key Choose an API key",
       }),
     ).toBeEnabled();
     expect(
@@ -348,7 +369,7 @@ describe("CompanyConnectionPickers", () => {
     ).not.toBeInTheDocument();
     // Its model is not the company connection's either.
     expect(
-      screen.getByRole("button", { name: "Model Choose a connection first" }),
+      screen.getByRole("button", { name: "Model Choose an API key first" }),
     ).toBeDisabled();
   });
 
@@ -369,7 +390,7 @@ describe("CompanyConnectionPickers", () => {
     expect(onModelClear).toHaveBeenCalledOnce();
     expect(screen.queryByRole("option")).toBeNull();
     // Reached and used from the keyboard as well.
-    screen.getByRole("button", { name: "Clear connection" }).focus();
+    screen.getByRole("button", { name: "Clear key" }).focus();
     await user.keyboard("{Enter}");
     expect(onApiKeyClear).toHaveBeenCalledOnce();
     first.unmount();
@@ -398,7 +419,7 @@ describe("CompanyConnectionPickers", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Which connection pays Runtime connection",
+        name: "Key Runtime connection",
       }),
     ).toBeDisabled();
     expect(
@@ -416,7 +437,7 @@ describe("CompanyConnectionPickers", () => {
     });
     expect(
       screen.getByRole("button", {
-        name: "Which connection pays Runtime connection",
+        name: "Key Runtime connection",
       }),
     ).toBeDisabled();
     expect(
@@ -462,11 +483,11 @@ describe("CompanyConnectionPickers", () => {
     // It stays the reader's to change or clear.
     expect(
       screen.getByRole("button", {
-        name: "Which connection pays Platform team Anthropic",
+        name: "Key Platform team Anthropic",
       }),
     ).toBeEnabled();
     expect(
-      screen.getByRole("button", { name: "Clear connection" }),
+      screen.getByRole("button", { name: "Clear key" }),
     ).toBeInTheDocument();
   });
 
@@ -476,7 +497,7 @@ describe("CompanyConnectionPickers", () => {
     const picked = renderPickers(fixed);
 
     expect(
-      screen.queryByRole("button", { name: /^Which connection pays/ }),
+      screen.queryByRole("button", { name: /^Key/ }),
     ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Model Select a Claude model" }),
@@ -489,10 +510,75 @@ describe("CompanyConnectionPickers", () => {
     // here: the model waits for whoever decides the connection.
     renderPickers({ ...fixed, apiKeyId: null, runsOn: () => false });
     expect(
-      screen.queryByText("No company connection can run Claude yet"),
+      screen.queryByText("No API key can run Claude yet"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Model Choose a connection first" }),
+      screen.getByRole("button", { name: "Model Choose an API key first" }),
     ).toBeDisabled();
+  });
+
+  it("shows an overflow tooltip only when truncated, including on disabled pickers", async () => {
+    const user = userEvent.setup();
+    const longKeyName =
+      "Very Long Production Anthropic Organization Provider API Key Name";
+    const enabled = renderPickers({
+      apiKeyId: "key-long",
+      apiKeyName: longKeyName,
+    });
+    const enabledValue = screen.getByText(longKeyName);
+    Object.defineProperty(enabledValue, "clientWidth", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(enabledValue, "scrollWidth", {
+      configurable: true,
+      value: 200,
+    });
+    const enabledButton = screen.getByRole("button", {
+      name: `Key ${longKeyName}`,
+    });
+    await user.hover(enabledButton);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await user.unhover(enabledButton);
+
+    Object.defineProperty(enabledValue, "scrollWidth", {
+      configurable: true,
+      value: 420,
+    });
+    await user.hover(enabledButton);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(longKeyName);
+    await user.unhover(enabledButton);
+    enabled.unmount();
+
+    renderPickers({
+      apiKeyId: "key-long",
+      apiKeyName: longKeyName,
+      disabled: true,
+    });
+    const disabledValue = screen.getByText(longKeyName);
+    Object.defineProperty(disabledValue, "clientWidth", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(disabledValue, "scrollWidth", {
+      configurable: true,
+      value: 420,
+    });
+    const disabledButton = screen.getByRole("button", {
+      name: `Key ${longKeyName}`,
+    });
+    expect(disabledButton).toBeDisabled();
+    const triggerWrapper = disabledButton.parentElement;
+    if (!triggerWrapper) {
+      throw new Error("Expected disabled picker button wrapper");
+    }
+    expect(triggerWrapper).toHaveAttribute("tabindex", "0");
+    await user.hover(triggerWrapper);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(longKeyName);
+    await user.unhover(triggerWrapper);
+    triggerWrapper.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(longKeyName);
+    await user.click(triggerWrapper);
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
   });
 });

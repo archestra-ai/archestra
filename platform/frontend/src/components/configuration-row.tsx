@@ -27,7 +27,7 @@ export function ConfigurationRow({
   id?: string;
   value: string;
   title: string;
-  summary: string;
+  summary?: string;
   wrapSummary?: boolean;
   description?: string;
   attention?: string;
@@ -35,9 +35,9 @@ export function ConfigurationRow({
 }) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
   return (
-    <AccordionItem id={id} value={value} className="px-4 last:border-b-0">
+    <AccordionItem id={id} value={value} className="last:border-b-0">
       <AccordionTrigger
-        className="min-w-0 items-center hover:no-underline"
+        className="min-w-0 items-center rounded-none px-4 hover:no-underline focus-visible:ring-2 focus-visible:ring-inset data-[state=open]:pb-2"
         onFocus={() => setTooltipOpen(true)}
         onBlur={() => setTooltipOpen(false)}
       >
@@ -69,17 +69,21 @@ export function ConfigurationRow({
               </span>
             )}
           </span>
-          <span
-            className={cn(
-              "min-w-0 text-sm font-normal text-muted-foreground sm:ml-auto sm:max-w-[45%] sm:text-right",
-              wrapSummary ? "break-all" : "truncate",
-            )}
-          >
-            {summary}
-          </span>
+          {summary && (
+            <span
+              className={cn(
+                "min-w-0 text-sm font-normal text-muted-foreground sm:ml-auto sm:max-w-[45%] sm:text-right",
+                wrapSummary ? "break-all" : "truncate",
+              )}
+            >
+              {summary}
+            </span>
+          )}
         </span>
       </AccordionTrigger>
-      <AccordionContent className="pt-2">{children}</AccordionContent>
+      <AccordionContent className={description ? "px-4 pt-1" : "px-4 pt-0"}>
+        {children}
+      </AccordionContent>
     </AccordionItem>
   );
 }

@@ -53,7 +53,7 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   // is named until an administrator chooses, so both are selected.
   let dialog = await openCodex();
   const accounts = dialog.getByRole("group", {
-    name: "Accounts that can run it",
+    name: "Credentials to use",
   });
   await expect(
     accounts.getByRole("checkbox", {
@@ -61,34 +61,32 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
     }),
   ).toBeChecked();
   await expect(
-    accounts.getByRole("checkbox", { name: /A company API key/ }),
+    accounts.getByRole("checkbox", { name: /Provider API key/ }),
   ).toBeChecked();
   await expect(
     dialog.getByText(
-      "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, a company API key, or both.",
+      "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, an API key, or both.",
     ),
   ).toBeVisible();
-  // Its connection and model are optional: left empty, each agent sets its own.
+  // Its connection and model are optional: left empty, the key field says each agent sets its own.
   await expect(
-    dialog.getByText(
-      "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.",
-    ),
+    accounts.getByRole("button", {
+      name: "Key Each agent chooses its own key",
+    }),
   ).toBeVisible();
   await expect(accounts.getByRole("button", { name: /^Model/ })).toBeDisabled();
 
   // Fix the connection.
-  await accounts
-    .getByRole("button", { name: /^Which connection pays/ })
-    .click();
+  await accounts.getByRole("button", { name: /^Key/ }).click();
   await page.getByRole("option", { name: /Company OpenAI/ }).click();
   await expect(
     accounts.getByRole("button", {
-      name: "Which connection pays Company OpenAI",
+      name: "Key Company OpenAI",
     }),
   ).toBeVisible();
   await expect(
     dialog.getByText(
-      "Every agent on this runtime uses this connection. Set the model in each agent's settings, or set it here.",
+      "Every agent on this runtime uses this API key. Set the model in each agent's settings, or choose one here.",
     ),
   ).toBeVisible();
   const fixed = savedBody();
@@ -108,14 +106,12 @@ test("an administrator sees Codex's two account cards in its editor, fixes its c
   dialog = await openCodex();
   await expect(
     dialog.getByRole("button", {
-      name: "Which connection pays Company OpenAI",
+      name: "Key Company OpenAI",
     }),
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Clear connection" }).click();
+  await dialog.getByRole("button", { name: "Clear key" }).click();
   await expect(
-    dialog.getByText(
-      "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.",
-    ),
+    dialog.getByRole("button", { name: "Key Each agent chooses its own key" }),
   ).toBeVisible();
   const cleared = savedBody();
   await dialog.getByRole("button", { name: "Save runtime" }).click();
@@ -159,24 +155,24 @@ test("an administrator sees both account cards on the Claude Code runtime with n
 
   // Nothing is stored, so the runtime names no kind: both cards.
   const accounts = dialog.getByRole("group", {
-    name: "Accounts that can run it",
+    name: "Credentials to use",
   });
   const subscription = accounts.getByRole("checkbox", {
     name: /Each person's Claude subscription/,
   });
   await expect(subscription).toBeChecked();
   await expect(
-    accounts.getByRole("checkbox", { name: /A company API key/ }),
+    accounts.getByRole("checkbox", { name: /Provider API key/ }),
   ).toBeChecked();
   await expect(
     dialog.getByText(
-      "Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save.",
+      "Which credentials agents on this runtime may allow. Changes apply to every agent as soon as you save.",
     ),
   ).toBeVisible();
 
   // One card left names that kind for every agent of the runtime.
   await subscription.click();
-  await expect(dialog.getByText("Locked to a company API key")).toBeVisible();
+  await expect(dialog.getByText("Locked to an API key")).toBeVisible();
   const saved = page.waitForRequest(
     (sent) => sent.method() === "PUT" && sent.url().endsWith(SETTINGS_URL),
   );
@@ -232,15 +228,15 @@ test("a runtime that fixes a connection and model shows both fields disabled, wi
   await expect(page.getByRole("textbox", { name: /^Name\b/ })).toBeVisible();
 
   // The runtime's one account, on the connection and model it fixes.
-  const row = page.getByRole("button", { name: /^Accounts that can run it/ });
-  await expect(row).toContainText("Company OpenAI, GPT-5");
+  const row = page.getByRole("button", { name: /^Credentials to use/ });
+  await expect(row).toHaveText("Credentials to use");
   if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
   const accounts = page.getByRole("group", {
-    name: "Accounts that can run it",
+    name: "Credentials to use",
   });
   await expect(
     accounts.getByRole("button", {
-      name: "Which connection pays Company OpenAI",
+      name: "Key Company OpenAI",
     }),
   ).toBeDisabled();
   await expect(
@@ -256,9 +252,7 @@ async function openAccounts(page: Page, name: string): Promise<Locator> {
   await page.getByRole("button", { name: `Actions for ${name}` }).click();
   await page.getByRole("menuitem", { name: "Edit runtime" }).click();
   const dialog = page.getByRole("dialog", { name: `Edit ${name} runtime` });
-  await dialog
-    .getByRole("button", { name: /^Accounts that can run it/ })
-    .click();
+  await dialog.getByRole("button", { name: /^Credentials to use/ }).click();
   return dialog;
 }
 

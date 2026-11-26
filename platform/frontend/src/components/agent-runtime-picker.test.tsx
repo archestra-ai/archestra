@@ -87,6 +87,56 @@ beforeEach(() => {
 });
 
 describe("AgentRuntimePicker", () => {
+  it("shows no summary on the Credentials to use bar of a runtime, and keeps one on the built-in Model row", async () => {
+    const props = {
+      onSelect: vi.fn(),
+      onChange: vi.fn(),
+      modelBlock: <div>Model settings content</div>,
+      modelSummary: "Each person's Claude subscription",
+    };
+    const { rerender } = render(
+      <AgentRuntimePicker
+        {...props}
+        selectedId="claude-code"
+        value={runtimeFor("claude-code")}
+      />,
+      { wrapper: QueryWrapper },
+    );
+    const bar = await screen.findByRole("button", {
+      name: /^Credentials to use/,
+    });
+    expect(bar).toHaveTextContent(/^Credentials to use$/);
+
+    rerender(<AgentRuntimePicker {...props} selectedId="chat" value={null} />);
+    expect(screen.getByRole("button", { name: /^Model/ })).toHaveTextContent(
+      "Each person's Claude subscription",
+    );
+  });
+
+  it("shows modelCollapsedSummary on a runtime credentials bar only while collapsed", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentRuntimePicker
+        selectedId="claude-code"
+        value={runtimeFor("claude-code")}
+        onSelect={vi.fn()}
+        onChange={vi.fn()}
+        modelBlock={<div>Model settings content</div>}
+        modelSummary="Each person's Claude subscription"
+        modelCollapsedSummary="None selected"
+      />,
+      { wrapper: QueryWrapper },
+    );
+    const bar = await screen.findByRole("button", {
+      name: /^Credentials to use/,
+    });
+    expect(bar).toHaveTextContent(/^Credentials to use$/);
+    await user.click(bar);
+    expect(bar).toHaveTextContent("None selected");
+    await user.click(bar);
+    expect(bar).toHaveTextContent(/^Credentials to use$/);
+  });
+
   it("starts a maintained runtime from the administrator's settings", async () => {
     let served = false;
     server.use(
@@ -263,7 +313,7 @@ describe("AgentRuntimePicker", () => {
       screen.queryByRole("button", { name: /^Inference API/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Accounts that can run it/ }),
+      screen.getByRole("button", { name: /^Credentials to use/ }),
     ).toBeVisible();
 
     fireEvent.change(screen.getByLabelText("Command"), {
@@ -273,7 +323,7 @@ describe("AgentRuntimePicker", () => {
     expect(screen.getByLabelText("Inference API")).toBeEnabled();
     // The section keeps its title whatever the command runs.
     expect(
-      screen.getByRole("button", { name: /^Accounts that can run it/ }),
+      screen.getByRole("button", { name: /^Credentials to use/ }),
     ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /^Model/ }),
@@ -390,14 +440,14 @@ describe("AgentRuntimePicker", () => {
     await user.tab();
     await user.tab();
     expect(
-      screen.getByRole("button", { name: /^Accounts that can run it/ }),
+      screen.getByRole("button", { name: /^Credentials to use/ }),
     ).toHaveFocus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       props.modelAttention,
     );
     expect(screen.getByText("Model settings content")).toBeVisible();
     await user.click(
-      screen.getByRole("button", { name: /^Accounts that can run it/ }),
+      screen.getByRole("button", { name: /^Credentials to use/ }),
     );
     expect(
       screen.queryByText("Model settings content"),
@@ -419,7 +469,7 @@ describe("AgentRuntimePicker", () => {
     );
     // Another runtime's section has the same title and opens the same way.
     expect(
-      screen.getByRole("button", { name: /^Accounts that can run it/ }),
+      screen.getByRole("button", { name: /^Credentials to use/ }),
     ).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Model settings content")).toBeVisible();
   });

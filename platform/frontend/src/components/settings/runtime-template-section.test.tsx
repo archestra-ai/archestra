@@ -189,7 +189,7 @@ const openAccounts = async (
   await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
   const dialog = screen.getByRole("dialog", { name: `Edit ${name} runtime` });
   await user.click(
-    within(dialog).getByRole("button", { name: /^Accounts that can run it/ }),
+    within(dialog).getByRole("button", { name: /^Credentials to use/ }),
   );
   return dialog;
 };
@@ -218,7 +218,7 @@ const pick = async (
   await user.click(await screen.findByRole("option", { name: option }));
 };
 const connectionField = (dialog: HTMLElement) =>
-  within(dialog).getByRole("button", { name: /^Which connection pays/ });
+  within(dialog).getByRole("button", { name: /^Key/ });
 const modelField = (dialog: HTMLElement) =>
   within(dialog).getByRole("button", { name: /^Model/ });
 
@@ -243,11 +243,11 @@ describe("RuntimeTemplateSection", () => {
     ).toBeVisible();
     expect(
       within(dialog).getByText(
-        "Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save.",
+        "Which credentials agents on this runtime may allow. Changes apply to every agent as soon as you save.",
       ),
     ).toBeInTheDocument();
     await user.click(
-      within(dialog).getByRole("button", { name: /^Accounts that can run it/ }),
+      within(dialog).getByRole("button", { name: /^Credentials to use/ }),
     );
     await user.click(within(dialog).getByRole("button", { name: /^Limits/ }));
     // The company card alone: every agent on it runs on a company API key.
@@ -667,20 +667,20 @@ describe("RuntimeTemplateSection", () => {
     expect(ordered.at(-1)?.position).toBeLessThan(1000);
   });
 
-  describe("Accounts that can run it", () => {
+  describe("Credentials to use", () => {
     it("fixes the connection and model of Claude Code's company card, and keeps them when both cards are ticked again", async () => {
       const user = userEvent.setup();
       mount();
       let dialog = await openAccounts(user, "Claude Code");
       // No rule yet: both cards, and each agent chooses.
       expect(card(dialog, /Each person's Claude subscription/)).toBeChecked();
-      expect(card(dialog, /A company API key/)).toBeChecked();
+      expect(card(dialog, /Provider API key/)).toBeChecked();
       await user.click(card(dialog, /Each person's Claude subscription/));
       await pick(user, connectionField(dialog), /Company Anthropic/);
       await pick(user, modelField(dialog), /Claude Sonnet/);
       expect(
         within(dialog).getByText(
-          "Every agent on this runtime uses this connection and model.",
+          "Every agent on this runtime uses this API key and model.",
         ),
       ).toBeVisible();
       await saveRuntime(user, dialog);
@@ -715,7 +715,7 @@ describe("RuntimeTemplateSection", () => {
       mount();
       const dialog = await openAccounts(user, "Codex");
       await user.click(card(dialog, /Each person's ChatGPT subscription/));
-      await user.click(card(dialog, /A company API key/));
+      await user.click(card(dialog, /Provider API key/));
       expect(within(dialog).getByRole("alert")).toHaveTextContent(
         "Select at least one option.",
       );
@@ -753,7 +753,10 @@ describe("RuntimeTemplateSection", () => {
       const dialog = await openAccounts(user, "Engineering workspace");
       // One account, so nothing to tick.
       expect(within(dialog).queryByRole("checkbox")).toBeNull();
-      expect(within(dialog).getByText("A company API key")).toBeVisible();
+      expect(
+        within(dialog).getByRole("button", { name: /^Credentials to use/ }),
+      ).toHaveTextContent("Provider API key");
+      expect(within(dialog).getAllByText("Provider API key")).toHaveLength(2);
       await pick(user, connectionField(dialog), /Company OpenAI/);
       await saveRuntime(user, dialog);
       expect(settings.templates[0].accounts).toEqual({
@@ -788,7 +791,7 @@ describe("RuntimeTemplateSection", () => {
       // Personal subscriptions only: the server refuses a Claude account
       // of the other kind beside that rule.
       let dialog = await openAccounts(user, "Claude workspace");
-      await user.click(card(dialog, /A company API key/));
+      await user.click(card(dialog, /Provider API key/));
       await saveRuntime(user, dialog);
       expect(settings.templates[0]).toMatchObject({
         accounts: { kind: "subscription" },
@@ -797,8 +800,11 @@ describe("RuntimeTemplateSection", () => {
 
       // The company API key only.
       dialog = await openAccounts(user, "Claude workspace");
-      await user.click(card(dialog, /A company API key/));
+      await user.click(card(dialog, /Provider API key/));
       await user.click(card(dialog, /Each person's Claude subscription/));
+      expect(
+        within(dialog).getByRole("button", { name: /^Credentials to use/ }),
+      ).toHaveTextContent("Provider API key");
       await saveRuntime(user, dialog);
       expect(settings.templates[0]).toMatchObject({
         accounts: { kind: "key" },

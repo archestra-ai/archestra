@@ -56,9 +56,9 @@ describe("accountWaysMeaning", () => {
     const both = { subscription: true, provider: true };
     const companyOnly = { subscription: false, provider: true };
     expect(accountWaysMeaning(both)).toBe(
-      "Each person who runs this agent chooses their own subscription or a company API key on the agent's page.",
+      "If both an API key and a subscription are selected, each person can choose what to use.",
     );
-    expect(accountWaysMeaning(companyOnly)).toBe("Locked to a company API key");
+    expect(accountWaysMeaning(companyOnly)).toBe("Locked to an API key");
     expect(accountWaysMeaning({ subscription: true, provider: false })).toBe(
       "Locked to each user's personal subscription",
     );
@@ -73,7 +73,7 @@ describe("accountWaysMeaning", () => {
       provider,
     });
     expect(accountWaysMeaning(ways(true, true), "agent")).toBe(
-      "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, a company API key, or both.",
+      "People who create or edit an agent on this runtime choose whether it allows personal subscriptions, an API key, or both.",
     );
     // Only the sentence for both differs from an agent's own settings.
     for (const one of [
@@ -105,7 +105,7 @@ describe("AgentAccountOptions", () => {
     const [checked, setChecked] = useState<string[]>([]);
     return (
       <AgentAccountOptions
-        label="Accounts that can run it"
+        label="Credentials to use"
         meaning="What the ticks amount to"
         options={ids.map((id) =>
           option(id, {
@@ -125,14 +125,14 @@ describe("AgentAccountOptions", () => {
   it("shows a single account as always on: its setup without a tick, a meaning or a request to select", () => {
     render(
       <AgentAccountOptions
-        label="Accounts that can run it"
+        label="Credentials to use"
         meaning="What the ticks amount to"
         // Not ticked by whoever holds it: one account cannot be left out.
         options={[option("a")]}
       />,
     );
     const group = screen.getByRole("group", {
-      name: "Accounts that can run it",
+      name: "Credentials to use",
     });
     expect(within(group).getByText("Account a")).toBeVisible();
     expect(within(group).getByText("Setup of a")).toBeVisible();
@@ -179,9 +179,9 @@ describe("AgentAccountOptions", () => {
     let toggles = 0;
     render(
       <AgentAccountOptions
-        label="Accounts that can run it"
+        label="Credentials to use"
         readOnly
-        problem="Choose a connection and model for the company API key."
+        problem="Choose an API key and model for the API key."
         options={[
           option("a", { checked: true, onToggle: () => toggles++ }),
           option("b", { onToggle: () => toggles++ }),
@@ -193,7 +193,7 @@ describe("AgentAccountOptions", () => {
     expect(toggles).toBe(0);
     // What keeps the section from being saved is its one red line.
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Choose a connection and model for the company API key.",
+      "Choose an API key and model for the API key.",
     );
   });
 });

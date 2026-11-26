@@ -919,13 +919,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the caller supplies a new secret, judge by the plan that new secret
       // moves the key into so a frozen subscription key can be rotated in
       // place onto an enabled API-key plan without losing its mappings.
-      const currentPlan = await LlmProviderApiKeyModel.findPlan(apiKeyFromDB);
       const targetPlan = body.apiKey
         ? credentialPlan({
             provider: apiKeyFromDB.provider,
             apiKey: body.apiKey,
           })
-        : currentPlan;
+        : await LlmProviderApiKeyModel.findPlan(apiKeyFromDB);
       await assertProviderPlanAllowed({
         organizationId,
         provider: apiKeyFromDB.provider,

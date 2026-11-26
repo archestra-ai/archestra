@@ -233,6 +233,7 @@
     "src/services/openappa-yells.ts",
     "src/skills/github-app-token.ts",
     "src/skills/github-source.ts",
+    "src/hooks/hook-run-parts.ts",
     "src/openappa/runtime-tool-proof.ts",
     "src/plugins/delivery-budget.ts",
     "src/services/a2a-outbound-assignments.ts",

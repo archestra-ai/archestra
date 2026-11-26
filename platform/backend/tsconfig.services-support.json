@@ -5,6 +5,7 @@
     "tsBuildInfoFile": "./.tsbuild/services-support.tsbuildinfo"
   },
   "files": [
+    "src/hooks/hook-run-parts.ts",
     "src/openappa/runtime-tool-proof.ts",
     "src/plugins/delivery-budget.ts",
     "src/routes/mcp-gateway/protocol.ts",

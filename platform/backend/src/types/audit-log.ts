@@ -212,6 +212,8 @@ export const AuditEventNameSchema = z.enum([
   // reason the bulk delete has its own action.
   "skill.bulk_restored",
   "skill.purged",
+  // Permanently deleted across a batch of skills in one request.
+  "skill.bulk_purged",
   "skill.imported",
   "skillShareLink.created",
   "skillShareLink.rotated",

@@ -1486,43 +1486,84 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
 
-      // A built-in's soft-deleted row IS the opt-out: `SkillModel.findBuiltIn`
-      // includes deleted rows precisely so the startup seeder sees one and
-      // skips it. Destroying the row would hand the skill back on the next
-      // boot, making "permanent" deletion both untrue and silently
-      // opt-out-reverting. 403 rather than 404 — the skill is visibly in the
-      // trash to anyone who can list it, so there is nothing to conceal.
-      if (skill.sourceType === "built_in") {
-        throw new ApiError(
-          403,
-          "Built-in skills cannot be permanently deleted. Deleting one already " +
-            "removes it for good — its retained record is what stops it being " +
-            "recreated on the next restart.",
-        );
-      }
+      await purgeDeletedSkill(skill);
+      return reply.send({ success: true });
+    },
+  );
 
-      if (await SkillVersionModel.hasSandboxMountsForSkill(id)) {
-        throw skillStillMounted();
-      }
-
-      let purged: boolean;
-      try {
-        purged = await SkillModel.purge({ id, organizationId });
-      } catch (error) {
-        // The pre-check above is advisory; the RESTRICT foreign key is the real
-        // guard, and a sandbox can mount the skill between the two. Map that to
-        // the same 409 rather than a 500. Caught HERE, outside the model's
-        // transaction: a foreign-key violation aborts the whole Postgres
-        // transaction, so nothing inside it could have recovered.
-        if (isForeignKeyConstraintError(error)) {
-          throw skillStillMounted();
-        }
-        throw error;
-      }
-      if (!purged) {
+  fastify.post(
+    "/api/skills/bulk-permanent-delete",
+    {
+      schema: {
+        operationId: RouteId.BulkPermanentlyDeleteSkills,
+        description:
+          "Permanently destroy several soft-deleted skills in one request " +
+          "(global admins only). Irreversible, exactly as the single-skill " +
+          "permanent delete is, and refused for the same reasons, per skill: " +
+          "an id that names no soft-deleted skill, a built-in skill, or a " +
+          "skill a sandbox still has mounted is reported in `failed` and the " +
+          "rest of the batch still applies. 404 for a caller who is not a " +
+          "global admin.",
+        tags: ["Skills"],
+        body: z.object({ skillIds: BulkSkillIdsSchema }),
+        response: constructResponseSchema(BulkSkillOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      // Before anything is read, as on the single route: a caller who is not
+      // a global admin learns nothing about which ids exist.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
         throw new ApiError(404, "Skill not found");
       }
-      return reply.send({ success: true });
+      const skillIds = dedupe(body.skillIds);
+      const skills = await SkillModel.findByIds(skillIds, {
+        includeDeleted: true,
+      });
+      // Fenced to the organization, and to the trash: a live skill is not
+      // this route's to destroy.
+      const deletedById = new Map(
+        skills
+          .filter(
+            (skill) =>
+              skill.organizationId === organizationId &&
+              skill.deletedAt !== null,
+          )
+          .map((skill) => [skill.id, skill]),
+      );
+      request.auditBefore = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+
+      const succeeded: BulkSkillOutcomeEntry[] = [];
+      const failed: BulkSkillFailure[] = [];
+
+      // One skill at a time: each purge is its own transaction, so a skill a
+      // sandbox still mounts is refused without undoing the others.
+      for (const id of skillIds) {
+        const skill = deletedById.get(id);
+        if (!skill) {
+          failed.push({ id, name: null, error: "Skill not found" });
+          continue;
+        }
+        try {
+          await purgeDeletedSkill(skill);
+        } catch (error) {
+          if (error instanceof ApiError) {
+            failed.push({ id, name: skill.name, error: error.message });
+            continue;
+          }
+          throw error;
+        }
+        succeeded.push({ id, name: skill.name });
+      }
+
+      request.auditAfter = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+      return reply.send({ succeeded, failed });
     },
   );
 
@@ -2577,6 +2618,55 @@ async function assertNewSkillNameUsable(
 function assertNewSkillDescriptionUsable(description: string): void {
   const problem = findNewSkillDescriptionProblem(description);
   if (problem) throw new ApiError(problem.status, problem.message);
+}
+
+/**
+ * Destroy one soft-deleted skill for good, or throw the reason it cannot be.
+ * The single and the bulk permanent delete both go through here, so a skill
+ * is refused for the same reasons and in the same words either way. The
+ * caller has already checked that the user may purge and that the skill is in
+ * the trash of their organization.
+ */
+async function purgeDeletedSkill(skill: Skill): Promise<void> {
+  // A built-in's soft-deleted row IS the opt-out: `SkillModel.findBuiltIn`
+  // includes deleted rows precisely so the startup seeder sees one and
+  // skips it. Destroying the row would hand the skill back on the next
+  // boot, making "permanent" deletion both untrue and silently
+  // opt-out-reverting. 403 rather than 404 — the skill is visibly in the
+  // trash to anyone who can list it, so there is nothing to conceal.
+  if (skill.sourceType === "built_in") {
+    throw new ApiError(
+      403,
+      "Built-in skills cannot be permanently deleted. Deleting one already " +
+        "removes it for good — its retained record is what stops it being " +
+        "recreated on the next restart.",
+    );
+  }
+
+  if (await SkillVersionModel.hasSandboxMountsForSkill(skill.id)) {
+    throw skillStillMounted();
+  }
+
+  let purged: boolean;
+  try {
+    purged = await SkillModel.purge({
+      id: skill.id,
+      organizationId: skill.organizationId,
+    });
+  } catch (error) {
+    // The pre-check above is advisory; the RESTRICT foreign key is the real
+    // guard, and a sandbox can mount the skill between the two. Map that to
+    // the same 409 rather than a 500. Caught HERE, outside the model's
+    // transaction: a foreign-key violation aborts the whole Postgres
+    // transaction, so nothing inside it could have recovered.
+    if (isForeignKeyConstraintError(error)) {
+      throw skillStillMounted();
+    }
+    throw error;
+  }
+  if (!purged) {
+    throw new ApiError(404, "Skill not found");
+  }
 }
 
 /**

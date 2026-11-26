@@ -36,6 +36,7 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { ItemNames } from "@/components/item-names";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
@@ -108,7 +109,7 @@ import {
   useBulkDeleteSkills,
   useBulkRestoreSkills,
   useExternalMcpSkills,
-  usePermanentlyDeleteSkill,
+  usePermanentlyDeleteSkills,
   usePluginSkills,
   useRestoreSkill,
   useSkillSourceRepos,
@@ -479,8 +480,12 @@ function SkillsList() {
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
-    useState<SkillItem | null>(null);
+  // One skill from its row, or the ticked ones from the bulk bar: the same
+  // question either way.
+  const [permanentlyDeleting, setPermanentlyDeleting] = useState<{
+    skills: SkillItem[];
+    fromSelection: boolean;
+  } | null>(null);
   const [historySkillId, setHistorySkillId] = useState<string | null>(null);
   const [usageSkill, setUsageSkill] = useState<{
     reference: SkillUsageReference;
@@ -754,7 +759,8 @@ function SkillsList() {
           // On the row, not in a menu: it would be the menu's only item.
           permanentDeleteRowAction({
             admin,
-            onClick: () => setPermanentlyDeletingSkill(skill),
+            onClick: () =>
+              setPermanentlyDeleting({ skills: [skill], fromSelection: false }),
             disabledReason:
               skill.sourceType === "built_in"
                 ? "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart"
@@ -1236,20 +1242,41 @@ function SkillsList() {
                     }
                   >
                     {isDeletedView ? (
-                      // The grant a row's own Restore asks for.
-                      <PermissionButton
-                        permissions={{ skill: ["delete"] }}
-                        size="sm"
-                        disabled={bulkRestoreSkills.isPending}
-                        onClick={bulkRestore}
-                      >
-                        <ArchiveRestore className="h-4 w-4" />
-                        <span>
-                          {bulkRestoreSkills.isPending
-                            ? "Restoring..."
-                            : ACTION_LABEL.restore}
-                        </span>
-                      </PermissionButton>
+                      <>
+                        {/* The grant a row's own Restore asks for. */}
+                        <PermissionButton
+                          permissions={{ skill: ["delete"] }}
+                          size="sm"
+                          disabled={bulkRestoreSkills.isPending}
+                          onClick={bulkRestore}
+                        >
+                          <ArchiveRestore className="h-4 w-4" />
+                          <span>
+                            {bulkRestoreSkills.isPending
+                              ? "Restoring..."
+                              : ACTION_LABEL.restore}
+                          </span>
+                        </PermissionButton>
+                        {/* A role, not a permission, so there is no
+                            permission button for it: offered only to the
+                            admins who can do it. */}
+                        {admin.isGlobalAdmin && (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() =>
+                              setPermanentlyDeleting({
+                                skills: selectedSkills,
+                                fromSelection: true,
+                              })
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span>{PERMANENT_DELETE_LABEL}</span>
+                          </Button>
+                        )}
+                      </>
                     ) : (
                       <PermissionButton
                         permissions={{ skill: ["delete"] }}
@@ -1405,11 +1432,15 @@ function SkillsList() {
         />
       )}
 
-      {permanentlyDeletingSkill && (
-        <PermanentlyDeleteSkillDialog
-          skill={permanentlyDeletingSkill}
-          open={!!permanentlyDeletingSkill}
-          onOpenChange={(open) => !open && setPermanentlyDeletingSkill(null)}
+      {permanentlyDeleting && (
+        <PermanentlyDeleteSkillsDialog
+          skills={permanentlyDeleting.skills}
+          open
+          onOpenChange={(open) => !open && setPermanentlyDeleting(null)}
+          // What was destroyed is no longer there to stay selected.
+          onDeleted={
+            permanentlyDeleting.fromSelection ? clearSelection : undefined
+          }
         />
       )}
 
@@ -1707,33 +1738,60 @@ function ListedSkillIcon({
   );
 }
 
-function PermanentlyDeleteSkillDialog({
-  skill,
+/**
+ * The one confirmation for destroying deleted skills for good. A row's action
+ * and the bulk bar both open it, so the question and the words are the same
+ * for one skill and for several.
+ */
+function PermanentlyDeleteSkillsDialog({
+  skills,
   open,
   onOpenChange,
+  onDeleted,
 }: {
-  skill: SkillItem;
+  skills: SkillItem[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Fires once at least one skill has been destroyed. */
+  onDeleted?: () => void;
 }) {
-  const permanentlyDeleteSkill = usePermanentlyDeleteSkill();
+  const permanentlyDeleteSkills = usePermanentlyDeleteSkills();
+  const one = skills.length === 1;
 
   // One request per confirmation: a second click before the button has
-  // re-rendered as busy would ask to destroy a skill that is already gone.
+  // re-rendered as busy would ask to destroy skills that are already gone.
   const handleDelete = useSingleFlight(async () => {
-    const result = await permanentlyDeleteSkill.mutateAsync(skill.id);
-    if (result) {
-      onOpenChange(false);
-    }
+    const result = await permanentlyDeleteSkills
+      .mutateAsync(skills.map((skill) => skill.id))
+      // A rejection is reported by the mutation's own `onError`.
+      .catch(() => null);
+    // Nothing destroyed: the toast says why, and the question stays open.
+    if (!result || result.succeeded.length === 0) return;
+    onDeleted?.();
+    onOpenChange(false);
   });
 
   return (
     <DeleteConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Delete skill permanently"
-      description={`This destroys "${skill.name}" along with every version and resource file, its grants and environment assignments, and any public share link for it. Nothing recovers it.`}
-      isPending={permanentlyDeleteSkill.isPending}
+      title={
+        one
+          ? "Delete skill permanently"
+          : `Delete ${skills.length} skills permanently`
+      }
+      description={
+        <>
+          <span>This destroys </span>
+          <ItemNames items={skills} />
+          <span>
+            {one
+              ? " along with every version and resource file, its grants and environment assignments, and any public share link for it. Nothing recovers it."
+              : " along with every version and resource file, their grants and environment assignments, and any public share links for them. Nothing recovers them."}
+          </span>
+        </>
+      }
+      isPending={permanentlyDeleteSkills.isPending}
       onConfirm={handleDelete}
       confirmLabel={PERMANENT_DELETE_LABEL}
     />

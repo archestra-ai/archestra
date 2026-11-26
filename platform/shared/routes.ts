@@ -1045,6 +1045,7 @@ export const RouteId = {
   DeleteSkill: "deleteSkill",
   BulkDeleteSkills: "bulkDeleteSkills",
   BulkRestoreSkills: "bulkRestoreSkills",
+  BulkPermanentlyDeleteSkills: "bulkPermanentlyDeleteSkills",
   RestoreSkill: "restoreSkill",
   PermanentlyDeleteSkill: "permanentlyDeleteSkill",
   ResetSkill: "resetSkill",

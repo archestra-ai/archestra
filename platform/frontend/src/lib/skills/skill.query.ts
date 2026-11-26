@@ -28,6 +28,7 @@ import {
 
 const {
   bulkDeleteSkills,
+  bulkPermanentlyDeleteSkills,
   bulkRestoreSkills,
   getSkills,
   getSkill,
@@ -46,7 +47,6 @@ const {
   updateSkill,
   updateSkillGithubSync,
   deleteSkill,
-  permanentlyDeleteSkill,
   restoreSkill,
   resetSkill,
   discoverGithubSkills,
@@ -625,32 +625,42 @@ export function useRestoreSkill() {
 }
 
 /**
- * Permanently destroy a soft-deleted skill: every version and resource file,
- * plus its grants, environment assignments, usage events, and share links.
+ * Permanently destroy soft-deleted skills: every version and resource file,
+ * plus each skill's grants, environment assignments, usage events, and share
+ * links. One skill or many go through the same request, so a row's action and
+ * the bulk bar's cannot differ.
  *
- * The refusals surface their own message through the error toast — a 409 while
- * a sandbox still mounts one of its versions, a 403 for a built-in.
+ * The answer is per skill. A refusal names its own reason in the toast: a
+ * built-in, or a skill a sandbox still has mounted.
  */
-export function usePermanentlyDeleteSkill() {
+export function usePermanentlyDeleteSkills() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data, error } = await permanentlyDeleteSkill({ path: { id } });
+    mutationFn: async (skillIds: string[]) => {
+      const { data, error } = await bulkPermanentlyDeleteSkills({
+        body: { skillIds },
+      });
       if (error) {
         handleApiError(error);
         return null;
       }
       return data;
     },
-    onSuccess: (data, id) => {
+    onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
-      // Drop the detail, versions and usage-statistics queries for an id that
-      // no longer resolves, rather than letting a stale history or edit URL
+      // Drop the detail, versions and usage-statistics queries for ids that
+      // no longer resolve, rather than letting a stale history or edit URL
       // remount them and refetch into a 404.
-      queryClient.removeQueries({ queryKey: ["skills", id] });
-      toast.success("Skill permanently deleted");
+      for (const { id } of data.succeeded) {
+        queryClient.removeQueries({ queryKey: ["skills", id] });
+      }
+      reportBulkSkillOutcome(data, {
+        verb: "Permanently deleted",
+        failureVerb: "permanently delete",
+      });
     },
+    onError: (error) => handleApiError(error),
   });
 }
 

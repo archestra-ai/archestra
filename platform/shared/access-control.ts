@@ -1915,6 +1915,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // a built-in admin ROLE — no skill permission, `skill:admin` included, gets
   // you past the trash.
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
+  [RouteId.BulkPermanentlyDeleteSkills]: { skill: ["delete"] },
   [RouteId.ResetSkill]: {},
   // Any member: the Connect page shows whether guardrails apply to their
   // agent. It reveals only the on/off switch and the unrecognized-client

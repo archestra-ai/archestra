@@ -912,6 +912,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "skill.restored",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
+  // The bulk purge is the same shape as the bulk delete above: the handler
+  // sets both snapshots itself. They are ids, names, scopes and a deleted
+  // flag, so they are identity-only like the single purge below.
+  "/api/skills/bulk-permanent-delete": {
+    resourceType: "skill",
+    action: "skill.bulk_purged",
+    resourceIdSource: "organizationContext",
+  },
   // Identity-only, like the other purges — see the agent entry above.
   "/api/skills/:id/permanent": {
     resourceType: "skill",

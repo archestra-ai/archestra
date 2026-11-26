@@ -29,7 +29,7 @@ vi.mock("@/lib/skills/skill.query", () => ({
   useExternalMcpSkills: vi.fn(),
   usePluginSkills: vi.fn(),
   useRestoreSkill: vi.fn(),
-  usePermanentlyDeleteSkill: vi.fn(),
+  usePermanentlyDeleteSkills: vi.fn(),
 }));
 // Filter chrome reads the URL and the org's teams; the row actions are what
 // this file is about.
@@ -65,7 +65,7 @@ import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   useBulkRestoreSkills,
   useExternalMcpSkills,
-  usePermanentlyDeleteSkill,
+  usePermanentlyDeleteSkills,
   usePluginSkills,
   useRestoreSkill,
   useSkillSourceRepos,
@@ -178,6 +178,7 @@ function mockPermissions({ skillAdmin }: { skillAdmin: boolean }) {
 
 const restoreMutateAsync = vi.fn();
 const bulkRestoreMutateAsync = vi.fn();
+const permanentDeleteMutateAsync = vi.fn();
 
 /**
  * A reader who holds every permission except managing all skills
@@ -240,8 +241,8 @@ describe("SkillsPage rows", () => {
       isPending: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
     } as any);
-    vi.mocked(usePermanentlyDeleteSkill).mockReturnValue({
-      mutateAsync: vi.fn(),
+    vi.mocked(usePermanentlyDeleteSkills).mockReturnValue({
+      mutateAsync: permanentDeleteMutateAsync,
       isPending: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
     } as any);
@@ -961,6 +962,71 @@ describe("SkillsPage rows", () => {
         screen.getByRole("checkbox", { name: "Select pdf-tools" }),
       ).not.toBeChecked(),
     );
+  });
+
+  it("destroys the ticked deleted skills from the bulk bar, after naming them in the confirmation", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockPermissions({ skillAdmin: true });
+    vi.mocked(useIsGlobalAdmin).mockReturnValue({
+      isGlobalAdmin: true,
+      isLoading: false,
+    });
+    mockSkills([{ ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" }]);
+    permanentDeleteMutateAsync.mockResolvedValue({
+      succeeded: [{ id: MINE.id, name: MINE.name }],
+      failed: [],
+    });
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    );
+    // The bar's button: a row's own is named "Delete permanently pdf-tools".
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete permanently" }),
+    );
+
+    // Nothing is destroyed before the question is answered.
+    expect(permanentDeleteMutateAsync).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Delete skill permanently");
+    expect(dialog).toHaveTextContent("This destroys pdf-tools along with");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Delete permanently" }),
+    );
+
+    expect(permanentDeleteMutateAsync).toHaveBeenCalledExactlyOnceWith([
+      MINE.id,
+    ]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    ).not.toBeChecked();
+  });
+
+  it("offers bulk permanent delete only to the admins who can do it", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    // Manages every skill, but holds no built-in admin role.
+    mockPermissions({ skillAdmin: true });
+    mockSkills([{ ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" }]);
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    );
+
+    expect(screen.getByRole("button", { name: "Restore" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete permanently" }),
+    ).toBeNull();
   });
 
   it("sends one restore for a double click, and holds the button until it settles", async () => {

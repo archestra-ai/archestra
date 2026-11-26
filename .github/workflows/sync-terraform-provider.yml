@@ -68,7 +68,7 @@ jobs:
       # The staging API is private. This account can open the IAP tunnel to
       # its TLS forwarder and nothing else.
       - name: Authenticate to Google Cloud
-        uses: archestra-ai/.github/actions/google-auth@v1.31.1
+        uses: archestra-ai/.github/actions/google-auth@v1.32.0
         with:
           service_account: ${{ vars.TERRAFORM_PROVIDER_SYNC_GCP_SERVICE_ACCOUNT }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

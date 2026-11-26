@@ -116,7 +116,7 @@ jobs:
       # reads only the alerting secrets, so no repository secret holds it.
       # This one posts to #alerts; ci-alerts-slack-webhook-url posts to #approvals.
       - name: Authenticate to read the alerting webhook
-        uses: archestra-ai/.github/actions/google-auth@v1.31.1
+        uses: archestra-ai/.github/actions/google-auth@v1.32.0
         with:
           service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

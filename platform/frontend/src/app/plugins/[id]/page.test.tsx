@@ -273,6 +273,15 @@ describe("PluginDetailPage", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
+  it("offers the whole plugin as a download in the header, not on the file editor", () => {
+    renderPage(BASE_PLUGIN);
+
+    expect(screen.getByRole("button", { name: "Download" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Download as .zip" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("deletes a manual plugin from a button, since a menu would hold nothing else", () => {
     renderPage(BASE_PLUGIN);
 

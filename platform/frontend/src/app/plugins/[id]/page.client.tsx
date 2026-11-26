@@ -54,6 +54,7 @@ import {
   getPluginActionModel,
   pluginAction,
 } from "../_parts/plugin-actions-model";
+import { PluginDownloadButton } from "../_parts/plugin-download-button";
 import {
   isPluginDraftDirty,
   OWN_PLUGIN_NAME_TAKEN,
@@ -340,6 +341,7 @@ function PluginDetailView({
               <CreatedByCell createdBy={plugin.createdBy} />
             </p>
           )}
+          <PluginDownloadButton name={plugin.pluginSlug} files={draft.files} />
           <PermissionButton
             permissions={installAction.permissions}
             permissionScope={installAction.permissionScope}

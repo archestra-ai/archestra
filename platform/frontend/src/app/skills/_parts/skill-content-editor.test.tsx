@@ -119,7 +119,13 @@ describe("SkillContentEditor", () => {
     const name = () => screen.getByRole("textbox", { name: "File name" });
 
     await user.click(screen.getByRole("button", { name: "New file" }));
+    // The folder is picked in the tree, so a name holds no path.
     await user.type(name(), "../up.txt{Enter}");
+    expect(
+      screen.getByText("Pick the folder above. A name cannot contain /."),
+    ).toBeVisible();
+    await user.clear(name());
+    await user.type(name(), "..{Enter}");
     expect(
       screen.getByText("A path cannot contain . or .. as a folder name."),
     ).toBeVisible();
@@ -160,9 +166,7 @@ describe("SkillContentEditor", () => {
     );
     expect(editor()).toHaveValue("first");
 
-    await user.click(
-      screen.getByRole("button", { name: "Move a.md to trash" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Delete a.md" }));
 
     expect(editor()).toHaveValue("second");
   });
@@ -177,9 +181,7 @@ describe("SkillContentEditor", () => {
     };
     render(<Harness files={[file]} onFiles={onFiles} />);
 
-    await user.click(
-      screen.getByRole("button", { name: "Move notes.md to trash" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Delete notes.md" }));
     expect(onFiles).toHaveBeenLastCalledWith([]);
     expect(screen.getByRole("button", { name: /^Trash\s*1$/ })).toBeVisible();
 
@@ -190,7 +192,7 @@ describe("SkillContentEditor", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("jumps to a file from the palette that Cmd+P opens", async () => {
+  it("names the open file on its bar, with no quick-open palette to learn", async () => {
     const user = userEvent.setup();
     render(
       <Harness
@@ -202,10 +204,134 @@ describe("SkillContentEditor", () => {
 
     await user.click(editor());
     await user.keyboard("{Meta>}p{/Meta}");
-    const palette = screen.getByRole("dialog", { name: "Open a file" });
-    await user.type(within(palette).getByRole("combobox"), "config");
-    await user.click(within(palette).getByRole("option", { name: /config/ }));
 
-    expect(editor()).toHaveValue("{}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open a file" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("names a new file in a dialog, in a folder picked from the tree", async () => {
+    const user = userEvent.setup();
+    const onFiles = vi.fn();
+    const existing: ResourceFile = {
+      path: "docs/api/intro.md",
+      content: "",
+      encoding: "utf8",
+    };
+    render(<Harness files={[existing]} onFiles={onFiles} />);
+
+    await user.click(screen.getByRole("button", { name: "New file" }));
+    const dialog = screen.getByRole("dialog", { name: "New file" });
+    // It opens on the top level, with every folder there to pick.
+    expect(
+      within(dialog).getByRole("radio", { name: "Top level" }),
+    ).toBeChecked();
+    // Nothing to create yet.
+    expect(
+      within(dialog).getByRole("button", { name: "Create file" }),
+    ).toBeDisabled();
+
+    await user.click(within(dialog).getByRole("radio", { name: "api" }));
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "File name" }),
+      "guide.md",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create file" }),
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onFiles).toHaveBeenLastCalledWith([
+      existing,
+      { path: "docs/api/guide.md", content: "", encoding: "utf8" },
+    ]);
+  });
+
+  it("adds the folders a new file needs from inside its dialog", async () => {
+    const user = userEvent.setup();
+    const onFiles = vi.fn();
+    render(<Harness files={[]} onFiles={onFiles} />);
+
+    await user.click(screen.getByRole("button", { name: "New file" }));
+    const dialog = screen.getByRole("dialog", { name: "New file" });
+    const addFolder = async (button: string, name: string) => {
+      await user.click(within(dialog).getByRole("button", { name: button }));
+      // Enter adds the folder; it does not create the file.
+      await user.type(
+        within(dialog).getByRole("textbox", { name: "New folder name" }),
+        `${name}{Enter}`,
+      );
+    };
+    await addFolder("New folder at top level", "references");
+    // The new folder is picked, so the next one goes inside it.
+    expect(
+      within(dialog).getByRole("radio", { name: "references" }),
+    ).toBeChecked();
+    await addFolder("New folder in references", "eu");
+    expect(onFiles).not.toHaveBeenCalled();
+
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "File name" }),
+      "terms.md{Enter}",
+    );
+
+    expect(onFiles).toHaveBeenLastCalledWith([
+      { path: "references/eu/terms.md", content: "", encoding: "utf8" },
+    ]);
+  });
+
+  it("puts a new folder inside the folder picked in the tree", async () => {
+    const user = userEvent.setup();
+    const onFiles = vi.fn();
+    render(
+      <Harness
+        files={[{ path: "docs/intro.md", content: "", encoding: "utf8" }]}
+        onFiles={onFiles}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "New folder" }));
+    const folderDialog = screen.getByRole("dialog", { name: "New folder" });
+    await user.click(within(folderDialog).getByRole("radio", { name: "docs" }));
+    await user.type(
+      within(folderDialog).getByRole("textbox", { name: "Folder name" }),
+      "Docs{Enter}",
+    );
+    // `docs/Docs` is free; `docs` itself, in any letter case, is not.
+    const fileDialog = screen.getByRole("dialog", { name: "New file" });
+    expect(
+      within(fileDialog).getByRole("radio", { name: "Docs" }),
+    ).toBeChecked();
+    await user.type(
+      within(fileDialog).getByRole("textbox", { name: "File name" }),
+      "a.md{Enter}",
+    );
+
+    expect(onFiles).toHaveBeenLastCalledWith([
+      { path: "docs/intro.md", content: "", encoding: "utf8" },
+      { path: "docs/Docs/a.md", content: "", encoding: "utf8" },
+    ]);
+  });
+
+  it("offers the files as a .zip unless the host does", () => {
+    const { unmount } = render(<Harness files={[]} />);
+    expect(
+      screen.getByRole("button", { name: "Download as .zip" }),
+    ).toBeVisible();
+
+    unmount();
+    render(
+      <SkillContentEditor
+        manifest={null}
+        files={[{ path: "a.md", content: "x", encoding: "utf8" }]}
+        onManifestChange={() => {}}
+        onFilesChange={() => {}}
+        showDownload={false}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Download as .zip" }),
+    ).not.toBeInTheDocument();
   });
 });

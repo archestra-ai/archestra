@@ -34,6 +34,7 @@ import { WizardStepper } from "@/components/wizard-stepper";
 import { useSession } from "@/lib/auth/auth.query";
 import { useCreatePlugin, usePlugins } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
+import { PluginDownloadButton } from "../_parts/plugin-download-button";
 import {
   blankPluginDraft,
   isPluginDraftDirty,
@@ -218,17 +219,25 @@ function NewPluginWizard() {
         }
         mobileVisibleCount={2}
         actionButton={
-          <WizardStepper
-            compact
-            steps={CREATE_STEPS}
-            activeStep={step}
-            onStepClick={(target) => {
-              const targetIndex = CREATE_STEPS.findIndex(
-                (candidate) => candidate.id === target,
-              );
-              if (targetIndex < stepIndex) goToSource();
-            }}
-          />
+          <div className="flex items-center gap-3">
+            {step === "configure" && (
+              <PluginDownloadButton
+                name={draft.displayName}
+                files={draft.files}
+              />
+            )}
+            <WizardStepper
+              compact
+              steps={CREATE_STEPS}
+              activeStep={step}
+              onStepClick={(target) => {
+                const targetIndex = CREATE_STEPS.findIndex(
+                  (candidate) => candidate.id === target,
+                );
+                if (targetIndex < stepIndex) goToSource();
+              }}
+            />
+          </div>
         }
         // The Plugins list's column (the layout's default), so the header,
         // its actions and the content keep their edges on the way in.

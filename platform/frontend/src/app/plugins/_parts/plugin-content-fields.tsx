@@ -186,7 +186,8 @@ export function PluginContentFields({
           );
         }}
         readOnly={readOnly || locked}
-        downloadName={pluginSlug || displayName}
+        // The page header offers the plugin as a .zip.
+        showDownload={false}
         className="h-[calc(100vh-26rem)] min-h-[28rem]"
       />
     </div>

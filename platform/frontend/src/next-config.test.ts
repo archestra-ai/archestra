@@ -4,8 +4,13 @@ import {
 } from "next/experimental/testing/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const sentry = vi.hoisted(() => ({ options: undefined as unknown }));
+
 vi.mock("@sentry/nextjs", () => ({
-  withSentryConfig: (config: unknown) => config,
+  withSentryConfig: (config: unknown, options: unknown) => {
+    sentry.options = options;
+    return config;
+  },
 }));
 
 describe("next config rewrites", () => {
@@ -13,6 +18,17 @@ describe("next config rewrites", () => {
     vi.resetModules();
     delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
     delete process.env.VERSION;
+    delete process.env.SENTRY_RELEASE;
+  });
+
+  it("names the error-reporting release after VERSION", async () => {
+    process.env.VERSION = "v1.2.41+build.5";
+
+    await import("../next.config");
+
+    expect(sentry.options).toMatchObject({
+      release: { name: "v1.2.41+build.5" },
+    });
   });
 
   it("uses sanitized VERSION as the deployment id", async () => {

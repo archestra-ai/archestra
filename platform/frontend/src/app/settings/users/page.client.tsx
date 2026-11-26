@@ -756,9 +756,10 @@ function MembersTab({
           title="Remove User"
           description={`Are you sure you want to remove ${removingMember.name || removingMember.email} from the organization? This action cannot be undone.`}
           isPending={removeMember.isPending}
-          onConfirm={async () => {
-            await removeMember.mutateAsync(removingMember.id);
-            setRemovingMember(null);
+          onConfirm={() => {
+            removeMember.mutate(removingMember.id, {
+              onSuccess: () => setRemovingMember(null),
+            });
           }}
           confirmLabel="Remove"
           pendingLabel="Removing..."

@@ -38,7 +38,6 @@ export function SkillPageLoading() {
       title="Skill"
       description=""
       backLink={<SkillBackLink href="/skills" label="Skills" />}
-      maxWidth="wizard"
     >
       {null}
     </PageLayout>
@@ -52,7 +51,6 @@ export function SkillNotFound() {
       title="Skill"
       description=""
       backLink={<SkillBackLink href="/skills" label="Skills" />}
-      maxWidth="wizard"
     >
       <Empty className="border">
         <EmptyHeader>
@@ -86,7 +84,6 @@ export function SkillLoadError({
       title="Skill"
       description=""
       backLink={<SkillBackLink href="/skills" label="Skills" />}
-      maxWidth="wizard"
     >
       <QueryLoadError
         title="Couldn't load this skill"

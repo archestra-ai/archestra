@@ -220,14 +220,13 @@ function NewSkillWizard() {
             }}
           />
         }
-        maxWidth="wizard"
         contentOverflowX="clip"
       >
         <div className="space-y-6">
           {isOrganizationPending ? null : (
             <>
               {effectiveStep === "source" && (
-                <div className="mx-auto max-w-3xl space-y-8">
+                <div className="space-y-8">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <CatalogSourceCard
                       icon={<GitBranch className="size-5" />}

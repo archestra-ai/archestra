@@ -368,7 +368,6 @@ function SkillDetailView({
       backLink={
         <SkillBackLink href="/skills" label={backToListLabel("skill")} />
       }
-      maxWidth="wizard"
       contentOverflowX="clip"
       minWidth="phone"
       tabs={visibleSections.map((entry) => ({

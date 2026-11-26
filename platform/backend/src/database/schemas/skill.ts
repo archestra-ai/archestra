@@ -135,6 +135,28 @@ const skillsTable = softDeletablePgTable(
       .$type<Record<string, string>>()
       .notNull()
       .default({}),
+    /**
+     * The `SKILL.md` frontmatter block as its author wrote it, without the
+     * `---` fences: every key, nested value and comment, in the author's
+     * order.
+     *
+     * The columns above hold what Archestra understands and acts on. This
+     * holds the rest, so editing a skill gives back the frontmatter that was
+     * saved: keys the columns have no place for (a client's own `model` or
+     * `argument-hint`), structured `metadata` values and comments would
+     * otherwise be gone on the next load.
+     *
+     * Kept only while it still says what the columns say. `SkillModel`
+     * re-reads it on every write and nulls it when a writer changed a
+     * frontmatter column some other way (an explicit `allowedTools` in a
+     * request body, a conversion from an agent). Readers then recompose the
+     * frontmatter from the columns, as they do for every row written before
+     * this column existed.
+     *
+     * Not part of what is published over MCP: `frontmatterBlob` stays the
+     * standard fields only, so storing this never moves a digest.
+     */
+    frontmatterSource: text("frontmatter_source"),
     /** How the skill entered the system. */
     sourceType: text("source_type")
       .$type<SkillSourceType>()

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   deriveSkillFileKind,
+  extraFrontmatter,
+  frontmatterSourceMatches,
   parseSkillManifest,
   SkillParseError,
 } from "./parser";
@@ -251,5 +253,68 @@ describe("deriveSkillFileKind", () => {
 
   test("treats other top-level files as assets", () => {
     expect(deriveSkillFileKind("data.csv")).toBe("asset");
+  });
+});
+
+describe("frontmatter kept as written", () => {
+  const source = [
+    "name: release-notes",
+    "description: Draft release notes.",
+    "# Which model the client runs it on",
+    "model: fast",
+    "argument-hint: <version>",
+    "released: 2026-01-01",
+    "metadata:",
+    "  owner: docs",
+    "  review:",
+    "    required: true",
+  ].join("\n");
+  const parsed = parseSkillManifest(`---\n${source}\n---\n\n# Body\n`);
+
+  test("the parsed skill carries the block between the fences, comments included", () => {
+    expect(parsed.frontmatterSource).toBe(source);
+    // The columns still get the flat form the Agent Skills format asks for.
+    expect(parsed.metadata).toEqual({
+      owner: "docs",
+      review: '{"required":true}',
+    });
+  });
+
+  test("the block matches the columns it was parsed into", () => {
+    expect(frontmatterSourceMatches(source, parsed)).toBe(true);
+  });
+
+  test("the block stops matching once a column says something else", () => {
+    // What an explicit `allowedTools` in a request body does.
+    expect(
+      frontmatterSourceMatches(source, { ...parsed, allowedTools: "Bash" }),
+    ).toBe(false);
+    expect(
+      frontmatterSourceMatches(source, { ...parsed, name: "renamed" }),
+    ).toBe(false);
+    expect(
+      frontmatterSourceMatches(source, {
+        ...parsed,
+        metadata: { owner: "docs" },
+      }),
+    ).toBe(false);
+    expect(frontmatterSourceMatches("name: [unclosed", parsed)).toBe(false);
+  });
+
+  test("names what the block holds beyond the columns", () => {
+    expect(extraFrontmatter(source)).toEqual({
+      fields: {
+        model: "fast",
+        "argument-hint": "<version>",
+        // Still the text that was typed, not a timestamp.
+        released: "2026-01-01",
+      },
+      metadata: { review: { required: true } },
+    });
+    expect(extraFrontmatter(null)).toEqual({ fields: {}, metadata: {} });
+    expect(extraFrontmatter("name: [unclosed")).toEqual({
+      fields: {},
+      metadata: {},
+    });
   });
 });

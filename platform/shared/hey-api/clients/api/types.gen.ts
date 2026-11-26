@@ -147717,6 +147717,7 @@ export type GetSkillsResponses = {
             metadata: {
                 [key: string]: string;
             };
+            frontmatterSource: string | null;
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceOrigin: string | null;
@@ -147935,6 +147936,7 @@ export type CreateSkillResponses = {
         metadata: {
             [key: string]: string;
         };
+        frontmatterSource: string | null;
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceOrigin: string | null;
@@ -148181,6 +148183,7 @@ export type GetSkillResponses = {
         metadata: {
             [key: string]: string;
         };
+        frontmatterSource: string | null;
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceOrigin: string | null;
@@ -148380,6 +148383,7 @@ export type UpdateSkillResponses = {
         metadata: {
             [key: string]: string;
         };
+        frontmatterSource: string | null;
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceOrigin: string | null;
@@ -149124,6 +149128,7 @@ export type RestoreSkillResponses = {
         metadata: {
             [key: string]: string;
         };
+        frontmatterSource: string | null;
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceOrigin: string | null;
@@ -149370,6 +149375,7 @@ export type ResetSkillResponses = {
         metadata: {
             [key: string]: string;
         };
+        frontmatterSource: string | null;
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceOrigin: string | null;
@@ -149560,6 +149566,7 @@ export type UpdateSkillGithubSyncResponses = {
         metadata: {
             [key: string]: string;
         };
+        frontmatterSource: string | null;
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceOrigin: string | null;
@@ -150169,6 +150176,7 @@ export type ImportGithubSkillsResponses = {
             metadata: {
                 [key: string]: string;
             };
+            frontmatterSource: string | null;
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceOrigin: string | null;

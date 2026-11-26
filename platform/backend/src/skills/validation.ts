@@ -136,7 +136,8 @@ type SkillManifestFieldKey =
   | "allowedTools"
   | "agentName"
   | "templated"
-  | "metadata";
+  | "metadata"
+  | "frontmatterSource";
 
 /** Manifest-derived columns valid in both insert and update rows, so a schema
  * divergence is caught here rather than at a spread site. */
@@ -161,6 +162,7 @@ export function toSkillInsertFields(draft: ParsedSkill): SkillManifestFields {
     agentName: draft.agentName,
     templated: draft.templated,
     metadata: draft.metadata,
+    frontmatterSource: draft.frontmatterSource,
   };
 }
 

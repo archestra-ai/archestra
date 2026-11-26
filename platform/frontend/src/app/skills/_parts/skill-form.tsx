@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  findFrontmatterNotKept,
   parseManifestFields,
   setManifestFrontmatterField,
 } from "@/lib/skills/manifest-compose";
@@ -67,16 +66,6 @@ export function SkillForm({
   const parsed = useMemo(
     () => parseManifestFields(draft.manifest),
     [draft.manifest],
-  );
-
-  // What the save would drop, said while the author can still move it: a
-  // repository-owned or read-only manifest is not this reader's to change.
-  const notKept = useMemo(
-    () =>
-      readOnly || contentReadOnly
-        ? null
-        : findFrontmatterNotKept(draft.manifest),
-    [draft.manifest, readOnly, contentReadOnly],
   );
 
   return (
@@ -150,28 +139,6 @@ export function SkillForm({
             />
           </div>
         </div>
-        {notKept &&
-          (notKept.keys.length > 0 ||
-            notKept.nestedMetadataKeys.length > 0) && (
-            <InlineNotice id="skill-frontmatter-not-kept">
-              <AlertTriangle aria-hidden />
-              <span className="font-medium">
-                Some frontmatter will not be saved
-              </span>
-              <InlineNoticeText>
-                {notKept.keys.length > 0 && (
-                  <span>
-                    {`Only name, description, license, compatibility, allowed-tools, agent, templated and metadata are kept. Saving removes: ${notKept.keys.join(", ")}. `}
-                  </span>
-                )}
-                {notKept.nestedMetadataKeys.length > 0 && (
-                  <span>
-                    {`Metadata values are saved as text, so these nested values become one line of JSON: ${notKept.nestedMetadataKeys.join(", ")}.`}
-                  </span>
-                )}
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
         <SkillContentEditor
           manifest={draft.manifest}
           files={draft.files}

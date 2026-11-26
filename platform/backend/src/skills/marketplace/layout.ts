@@ -3,7 +3,7 @@ import { isSpecCompliantSkillName } from "@archestra/shared";
 import { chatgptConnectionPluginFiles } from "@archestra/shared/chatgpt-plugin";
 import { dump as dumpYaml } from "js-yaml";
 import logger from "@/logging";
-import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
+import { extraFrontmatter, SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import type { SkillFile } from "@/types";
 import type {
   ClientType,
@@ -52,6 +52,13 @@ export interface MaterializeSkillInput {
   agentName: string | null;
   templated: boolean;
   metadata: Record<string, string>;
+  /**
+   * The frontmatter as its author wrote it (`skills.frontmatter_source`),
+   * when the skill has one. The keys and structured `metadata` values it
+   * holds beyond the fields above are written into the generated SKILL.md,
+   * so a client's own frontmatter keys reach the client that reads them.
+   */
+  frontmatterSource?: string | null;
   updatedAt: Date;
   files: SkillFile[];
 }
@@ -394,7 +401,19 @@ function buildSkillMarkdown(
   if (skill.allowedTools) frontmatter["allowed-tools"] = skill.allowedTools;
   if (skill.agentName) frontmatter.agent = skill.agentName;
   if (skill.templated) frontmatter.templated = true;
-  frontmatter.metadata = { displayName: skill.name, ...skill.metadata };
+  const extra = extraFrontmatter(skill.frontmatterSource);
+  frontmatter.metadata = {
+    displayName: skill.name,
+    ...skill.metadata,
+    // The structured form the author wrote, over the one line of JSON text
+    // the column keeps for the same key.
+    ...extra.metadata,
+  };
+  // Last, and never over a field above: these are keys Archestra does not
+  // interpret (a client's `model`, `argument-hint`), passed through as written.
+  for (const [key, value] of Object.entries(extra.fields)) {
+    if (!(key in frontmatter)) frontmatter[key] = value;
+  }
 
   const yamlBody = dumpYaml(frontmatter, {
     sortKeys: false,

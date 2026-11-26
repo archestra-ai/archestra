@@ -27,6 +27,7 @@ function makeOrgSkill(id: string, name: string): OrgSkill {
     license: null,
     compatibility: null,
     allowedTools: null,
+    frontmatterSource: null,
     templated: false,
     metadata: {},
     sourceType: "manual",

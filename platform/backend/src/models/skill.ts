@@ -34,7 +34,10 @@ import {
   getDisabledBuiltInSkillSourceRefs,
   isBuiltInSkillSourceRef,
 } from "@/skills/built-in-skills";
-import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
+import {
+  frontmatterSourceMatches,
+  SKILL_MANIFEST_FILENAME,
+} from "@/skills/parser";
 import {
   buildSkillPublicationArtifacts,
   computeFileDigest,
@@ -924,6 +927,7 @@ class SkillModel {
           await CreatedByModel.forInsert({
             data: {
               ...params.skill,
+              frontmatterSource: keptFrontmatterSource(params.skill),
               latestVersion: 1,
               // Publication artifacts are derived from the columns written in this
               // same statement, so a skill is publishable from the moment it exists.
@@ -1135,10 +1139,17 @@ class SkillModel {
       // frontmatter-only edit that forks nothing — and fills in a legacy row
       // whose artifacts were never computed. Folded into the version bump when
       // there is one, so the common path still writes the row once.
-      const artifacts = buildSkillPublicationArtifacts(skill);
+      // The frontmatter as written is kept only while it agrees with the
+      // columns this update left, so an edit that moved a column some other
+      // way cannot leave the editor showing the old value.
+      const artifacts = {
+        ...buildSkillPublicationArtifacts(skill),
+        frontmatterSource: keptFrontmatterSource(skill),
+      };
       const artifactsChanged =
         skill.frontmatterBlob !== artifacts.frontmatterBlob ||
-        skill.digest !== artifacts.digest;
+        skill.digest !== artifacts.digest ||
+        skill.frontmatterSource !== artifacts.frontmatterSource;
 
       if (!latest || latest.contentHash !== contentHash) {
         const nextVersion = skill.latestVersion + 1;
@@ -2098,6 +2109,20 @@ export async function skillReadablePredicate(params: {
         scopeColumn: schema.skillsTable.id,
       });
   // SPDX-SnippetEnd
+}
+
+/**
+ * The frontmatter block to store with a skill: the one that came with the
+ * write, unless it no longer says what the skill's columns say. See
+ * `skills.frontmatter_source`.
+ */
+function keptFrontmatterSource(
+  skill: Parameters<typeof frontmatterSourceMatches>[1] & {
+    frontmatterSource?: string | null;
+  },
+): string | null {
+  const source = skill.frontmatterSource;
+  return source && frontmatterSourceMatches(source, skill) ? source : null;
 }
 
 /**

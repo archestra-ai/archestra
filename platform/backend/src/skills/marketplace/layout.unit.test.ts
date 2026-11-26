@@ -1,3 +1,4 @@
+import { load as parseYaml } from "js-yaml";
 import { describe, expect, test } from "vitest";
 import { parseSkillManifest } from "@/skills/parser";
 import type { SkillFile } from "@/types";
@@ -182,6 +183,46 @@ describe("computeLayout", () => {
       seen.add(parsed.name);
     }
     expect(seen.size).toBe(skillMds.length);
+  });
+
+  test("writes a client's own frontmatter keys into the SKILL.md it installs", () => {
+    const files = computeTestLayout({
+      ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
+      marketplaceName: "org-abcd1234-skills",
+      ownerName: "Acme Corp",
+      displayName: "Acme Skills",
+      skills: [
+        makeSkill([], {
+          metadata: { owner: "docs", review: '{"required":true}' },
+          frontmatterSource: [
+            "name: PDF Helper",
+            "description: Helps with PDFs",
+            "model: fast",
+            "argument-hint: <file>",
+            "metadata:",
+            "  owner: docs",
+            "  review:",
+            "    required: true",
+          ].join("\n"),
+        }),
+      ],
+    });
+
+    const skillMd = files.find((file) => file.path.endsWith("/SKILL.md"));
+    const frontmatter = parseYaml(
+      (skillMd?.content ?? "").split("---")[1],
+    ) as Record<string, unknown>;
+
+    expect(frontmatter.model).toBe("fast");
+    expect(frontmatter["argument-hint"]).toBe("<file>");
+    // The slug stays the name a client reads; the author's keys never
+    // replace a field the layout sets.
+    expect(frontmatter.name).toBe("pdf-helper");
+    expect(frontmatter.metadata).toEqual({
+      displayName: "PDF Helper",
+      owner: "docs",
+      review: { required: true },
+    });
   });
 
   test("stamps every client manifest with the supplied revision version", () => {

@@ -7,14 +7,15 @@
  * (the editor, restoring a version) has to compose one first. The backend
  * parser (`skills/parser.ts`) stays authoritative for semantics.
  *
- * That makes the field list below a copy of the backend's, and the copy is only
- * half-checked: renaming a frontmatter column breaks the call sites, which
- * spread a skill into `composeManifest`, but *adding* one does not. A new
- * frontmatter field has to be added here too, or every save and every restore
- * silently drops it.
+ * A skill saved from a manifest also keeps its frontmatter as it was written
+ * (`frontmatterSource`), and that is what goes back into the editor: the keys
+ * the columns have no place for, nested values and comments included. The
+ * field list below is the fallback for a skill without one (written before
+ * the column existed, or changed some other way since). It is a copy of the
+ * backend's, and the copy is only half-checked: renaming a frontmatter column
+ * breaks the call sites, which spread a skill into `composeManifest`, but
+ * *adding* one does not. A new frontmatter field has to be added here too.
  */
-
-import { load as parseYaml } from "js-yaml";
 
 export function composeManifest(skill: {
   name: string;
@@ -25,8 +26,13 @@ export function composeManifest(skill: {
   agentName: string | null;
   templated: boolean;
   metadata: Record<string, string>;
+  /** The frontmatter as its author wrote it, when the skill has one. */
+  frontmatterSource?: string | null;
   content: string;
 }): string {
+  if (skill.frontmatterSource) {
+    return `---\n${skill.frontmatterSource}\n---\n\n${skill.content}`;
+  }
   const lines = [
     "---",
     `name: ${yamlScalar(skill.name)}`,
@@ -110,64 +116,6 @@ export function setManifestFrontmatterField({
     return `${manifest.slice(0, closingFence)}\n${line}${manifest.slice(closingFence)}`;
   }
   return `---\n${line}\n---\n\n${manifest}`;
-}
-
-/**
- * What a save would drop from the manifest's frontmatter.
- *
- * A skill's frontmatter is stored as columns, one per field listed in
- * `STORED_FRONTMATTER_KEYS`, and `metadata` as a flat map of text. Anything
- * else an author writes there is parsed and then not kept: a key the columns
- * have no place for (`model`, `argument-hint`) is gone on the next load, and a
- * nested value under `metadata` comes back as one line of JSON text. Until the
- * storage keeps the whole block, the form says so before the save instead of
- * after the reload.
- *
- * Empty for frontmatter that is not valid YAML: the save is refused then, with
- * its own message.
- */
-export function findFrontmatterNotKept(manifest: string): {
-  /** Top-level keys with no column to be stored in. */
-  keys: string[];
-  /** `metadata` entries whose value is a map or a list. */
-  nestedMetadataKeys: string[];
-} {
-  const nothing = { keys: [], nestedMetadataKeys: [] };
-  const match = manifest.match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return nothing;
-  let frontmatter: unknown;
-  try {
-    frontmatter = parseYaml(match[1]);
-  } catch {
-    return nothing;
-  }
-  if (!isPlainMap(frontmatter)) return nothing;
-  return {
-    keys: Object.keys(frontmatter).filter(
-      (key) => !STORED_FRONTMATTER_KEYS.has(key),
-    ),
-    nestedMetadataKeys: isPlainMap(frontmatter.metadata)
-      ? Object.entries(frontmatter.metadata)
-          .filter(([, value]) => value !== null && typeof value === "object")
-          .map(([key]) => key)
-      : [],
-  };
-}
-
-/** The frontmatter fields the backend parser (`skills/parser.ts`) stores. */
-const STORED_FRONTMATTER_KEYS = new Set([
-  "name",
-  "description",
-  "license",
-  "compatibility",
-  "allowed-tools",
-  "agent",
-  "templated",
-  "metadata",
-]);
-
-function isPlainMap(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function yamlScalar(value: string): string {

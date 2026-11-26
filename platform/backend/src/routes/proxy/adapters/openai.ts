@@ -1146,13 +1146,12 @@ export class OpenAIStreamAdapter
 
     let sseData: string | null = null;
     let isToolCallChunk = false;
-    let isFinal = false;
 
     this.state.responseId = chunk.id;
     this.state.model = chunk.model;
 
-    // Handle usage first - OpenAI sends usage in a final chunk with empty choices[]
-    // when stream_options.include_usage is true
+    // Usage is cumulative metadata, not a terminal signal: some compatible
+    // providers include it on every chunk, including the initial zero counts.
     if (chunk.usage) {
       const tokens = getUsageTokens(chunk.usage, {
         reasoningOutsideCompletion: this.reasoningOutsideCompletion,
@@ -1172,11 +1171,12 @@ export class OpenAIStreamAdapter
     // reading [0] off it unguarded is a crash.
     const choice = chunk.choices?.[0];
     if (!choice) {
-      // If we have usage, this is the final chunk (OpenAI sends usage in a chunk with empty choices)
+      // OpenAI sends terminal usage after finish_reason. An early usage-only
+      // chunk or a heartbeat after earlier usage must not end the stream.
       return {
         sseData: null,
         isToolCallChunk: false,
-        isFinal: this.state.usage !== null,
+        isFinal: !!chunk.usage && this.state.stopReason !== null,
       };
     }
 
@@ -1202,7 +1202,9 @@ export class OpenAIStreamAdapter
       this.state.text += delta.content;
     }
     if (delta.content || hasReasoning) {
-      const outbound = delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk;
+      const outbound = delta.tool_calls
+        ? withoutToolCallDeltas(chunk)
+        : withoutFinishReason(chunk);
       let prefixSse = "";
       if (delta.content && !this.textPrefixIssued && this.getTextSuffix) {
         const prefix = this.resolveTextPrefix(delta.content);
@@ -1219,7 +1221,7 @@ export class OpenAIStreamAdapter
 
     let isResponsePreamble = false;
     if (delta.role && !delta.content && !hasReasoning && !delta.tool_calls) {
-      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+      sseData = `data: ${JSON.stringify(withoutFinishReason(chunk))}\n\n`;
       isResponsePreamble = true;
     }
 
@@ -1267,20 +1269,14 @@ export class OpenAIStreamAdapter
       isToolCallChunk = true;
     }
 
-    // Handle finish reason
-    // Note: Don't set isFinal here - OpenAI sends the usage chunk AFTER the finish_reason chunk
-    // when stream_options.include_usage is true (which we always set in executeStream)
+    // A finish chunk can carry cumulative usage that a trailing usage-only
+    // chunk corrects. Keep reading even when both are present; providers that
+    // omit trailing usage complete when the iterator ends normally.
     if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
     }
 
-    // Only mark as final after we've received usage data (which comes in a separate chunk
-    // after the finish_reason chunk when include_usage is enabled)
-    if (this.state.usage !== null) {
-      isFinal = true;
-    }
-
-    return { sseData, isToolCallChunk, isFinal, isResponsePreamble };
+    return { sseData, isToolCallChunk, isFinal: false, isResponsePreamble };
   }
 
   getSSEHeaders(): Record<string, string> {
@@ -1863,8 +1859,25 @@ export const openAiEmbeddingsAdapterFactory: OpenAiEmbeddingsProvider =
 function withoutToolCallDeltas(chunk: OpenAiStreamChunk): OpenAiStreamChunk {
   const [choice] = chunk.choices;
   const { tool_calls: _toolCalls, ...delta } = choice.delta;
-  // The turn is not over while its calls are held: formatEndSSE finishes it.
-  return { ...chunk, choices: [{ ...choice, delta, finish_reason: null }] };
+  return withoutFinishReason({ ...chunk, choices: [{ ...choice, delta }] });
+}
+
+/**
+ * An upstream chunk relayed as it arrives, minus its finish_reason. Tool calls
+ * are held for policy evaluation and released after the stream drains, so an
+ * upstream finish relayed early would end the turn before them (Copilot's
+ * Gemini models put `role` on the finish chunk, which reads as a preamble).
+ * formatEndSSE always sends the one terminal finish_reason.
+ */
+function withoutFinishReason(chunk: OpenAiStreamChunk): OpenAiStreamChunk {
+  if (!chunk.choices.some((choice) => choice.finish_reason)) return chunk;
+  return {
+    ...chunk,
+    choices: chunk.choices.map((choice) => ({
+      ...choice,
+      finish_reason: null,
+    })),
+  };
 }
 
 /** The tool call portion of a combined chunk waiting for policy evaluation. */

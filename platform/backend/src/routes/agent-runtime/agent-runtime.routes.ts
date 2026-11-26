@@ -1604,7 +1604,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.params.transferId,
         bearerToken(request.headers.authorization),
       );
-      if (ticket.direction !== "download") {
+      if (ticket.direction !== "download" || ticket.sha256 === undefined) {
         throw new ApiError(404, "Transfer not found");
       }
       const offset = parseRangeStart(request.headers.range);

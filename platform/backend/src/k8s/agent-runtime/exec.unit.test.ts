@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import type { Exec } from "@kubernetes/client-node";
 import { afterEach, expect, test, vi } from "vitest";
 import type WebSocket from "ws";
@@ -156,6 +157,25 @@ test("bounds a streaming transfer that never finishes", async () => {
   const result = expect(completed).rejects.toThrow("timed out");
   await vi.advanceTimersByTimeAsync(100);
   await result;
+});
+
+test("input that fails mid-stream ends the command with that failure", async () => {
+  const boundary = connection();
+  const stdin = new PassThrough();
+  const result = expect(
+    execAgentRuntimeCommand({
+      exec: boundary,
+      namespace: "test",
+      podName: "workspace",
+      container: "agent-runtime",
+      command: ["cat"],
+      stdin,
+    }),
+  ).rejects.toThrow("digest mismatch");
+  await Promise.resolve();
+  stdin.destroy(new Error("digest mismatch"));
+  await result;
+  expect(boundary.terminate).toHaveBeenCalledOnce();
 });
 
 function connection() {

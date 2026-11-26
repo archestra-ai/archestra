@@ -74,6 +74,8 @@ export function streamAgentRuntimeCommand(params: {
   // credentials, file contents, or unbounded custom-image diagnostics.
   stderr.resume();
   stderr.on("error", () => {});
+  // Input that fails mid-stream ends the command with that failure.
+  params.stdin?.on("error", finish);
   // A consumer that stops reading, such as a disconnected download, closes the
   // stream. Settling is idempotent, so a normal end does not report a failure.
   stdout.on("close", () =>
@@ -174,6 +176,8 @@ export function execAgentRuntimeCommand(params: {
     stderr.on("data", (chunk: Buffer) => consume(chunk, false));
     stdout.on("error", finish);
     stderr.on("error", finish);
+    // Input that fails mid-stream ends the command with that failure.
+    params.stdin?.on("error", finish);
     // Do not include arbitrary runtime stderr in API errors: it can contain
     // credentials, file contents, or unbounded custom-image diagnostics.
     params.exec

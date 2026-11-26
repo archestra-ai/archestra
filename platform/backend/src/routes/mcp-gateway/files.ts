@@ -1,17 +1,17 @@
-import { randomBytes } from "node:crypto";
 import {
   MCP_FILES_EXTENSION_ID,
   MCP_GATEWAY_MAX_INLINE_FILE_BYTES,
   MCP_UPLOAD_REQUIRED_RESULT_TYPE,
 } from "@archestra/shared";
 import type { ContentBlock } from "@modelcontextprotocol/sdk/types.js";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { cacheManager } from "@/cache-manager";
 import mcpClient, {
   type TokenAuthContext,
   type UpstreamHttpCall,
   type UpstreamHttpCallOutcome,
   type UpstreamHttpCallPlan,
 } from "@/clients/mcp-client";
+import type { FileCallRpcError } from "@/clients/mcp-files/built-in-files";
 import {
   collectFileArguments,
   decodeInlineFile,
@@ -44,8 +44,24 @@ import config from "@/config";
 import logger from "@/logging";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import { agentOwner } from "@/types/tool-owner";
+import { type BuiltInRelay, receiveBuiltInUpload } from "./built-in-files";
 import { encodeRequestState, INPUT_REQUIRED_RESULT_TYPE } from "./mrtr";
 import { COMPLETE_RESULT_TYPE } from "./protocol";
+import {
+  acknowledgeRepeat,
+  FILE_UPLOAD_PATH_SEGMENT,
+  FILE_UPLOAD_STATE_TTL_MS,
+  type FilesDeclaration,
+  missingCapabilityError,
+  newOpaqueId,
+  RELAY_TARGET_TTL_MS,
+  type RelayDone,
+  relayDoneKey,
+  relayKey,
+  requestMismatchError,
+  sessionKey,
+  spentStateError,
+} from "./upload-store";
 
 /**
  * The MCP File Uploads extension at the gateway.
@@ -63,48 +79,6 @@ import { COMPLETE_RESULT_TYPE } from "./protocol";
  *
  * @see https://github.com/modelcontextprotocol/experimental-ext-file-uploads
  */
-
-/** `MissingRequiredClientCapabilityError` from the base protocol. */
-export const MISSING_REQUIRED_CLIENT_CAPABILITY_ERROR_CODE = -32021;
-
-/** Path segment under `/v1/mcp/:profileId` that relayed uploads go to. */
-export const FILE_UPLOAD_PATH_SEGMENT = "files";
-
-/**
- * How long the caller's `requestState` for an upload stays redeemable. It has
- * to cover the caller's transfers and the retry after them.
- */
-export const FILE_UPLOAD_STATE_TTL_MS = 60 * 60 * 1000;
-
-/** Latest a relayed target may start: well inside the state's lifetime. */
-const RELAY_TARGET_TTL_MS = 30 * 60 * 1000;
-
-/** What a caller declared of the files extension on this request. */
-export type FilesDeclaration = { upload: boolean };
-
-/**
- * Read the files extension out of a request's client capabilities.
- *
- * Null when the extension is not declared, including when it carries a
- * `revision` the gateway does not know.
- */
-export function readFilesDeclaration(
-  clientCapabilities: unknown,
-): FilesDeclaration | null {
-  if (!isObject(clientCapabilities)) return null;
-  const extensions = clientCapabilities.extensions;
-  if (!isObject(extensions)) return null;
-  const settings = extensions[MCP_FILES_EXTENSION_ID];
-  if (!isObject(settings) || settings.revision !== undefined) return null;
-  return { upload: isObject(settings.upload) };
-}
-
-/** A JSON-RPC error the caller's `tools/call` is answered with. */
-export type FileCallRpcError = {
-  code: number;
-  message: string;
-  data?: unknown;
-};
 
 /**
  * One caller `tools/call` as the files extension sees it.
@@ -172,9 +146,11 @@ export class GatewayFileCall {
     // caller without the extension cannot call a tool that takes files.
     if (this.context.declaration === null) {
       return this.answerWith(
-        missingCapabilityError(
-          "This tool takes files, but the request did not declare the files extension, so the tool didn't run.",
-          {},
+        rpcError(
+          missingCapabilityError(
+            "This tool takes files, but the request did not declare the files extension, so the tool didn't run.",
+            {},
+          ),
         ),
       );
     }
@@ -202,9 +178,11 @@ export class GatewayFileCall {
     const callerUploads = this.context.declaration?.upload === true;
     if (outOfBand.length > 0 && !callerUploads) {
       return this.answerWith(
-        missingCapabilityError(
-          "This tool needs files uploaded, but the request did not declare file uploads, so the tool didn't run.",
-          { upload: {} },
+        rpcError(
+          missingCapabilityError(
+            "This tool needs files uploaded, but the request did not declare file uploads, so the tool didn't run.",
+            { upload: {} },
+          ),
         ),
       );
     }
@@ -313,6 +291,7 @@ export class GatewayFileCall {
         );
       }
       relays.push({
+        kind: "upstream",
         relayId: newOpaqueId(),
         agentId,
         toolName,
@@ -326,6 +305,7 @@ export class GatewayFileCall {
     }
 
     const session: UploadSession = {
+      kind: "upstream",
       agentId,
       toolName,
       principal,
@@ -386,19 +366,14 @@ export class GatewayFileCall {
         throwOnError: true,
       },
     );
-    if (!session) return this.answerWith(spentStateError());
+    if (!session) return this.answerWith(rpcError(spentStateError()));
     if (
+      session.kind !== "upstream" ||
       session.agentId !== agentId ||
       session.toolName !== toolName ||
       session.principal !== principal
     ) {
-      return this.answerWith({
-        kind: "error",
-        error: {
-          code: -32602,
-          message: "Invalid requestState (request_mismatch).",
-        },
-      });
+      return this.answerWith(rpcError(requestMismatchError()));
     }
     if (session.installKey !== params.installKey) {
       return toolError(
@@ -421,7 +396,7 @@ export class GatewayFileCall {
       sessionKey(sessionId),
       { throwOnError: true },
     );
-    if (!claimed) return this.answerWith(spentStateError());
+    if (!claimed) return this.answerWith(rpcError(spentStateError()));
 
     const answer = await this.callUpstream(params, {
       declareUpload: true,
@@ -568,9 +543,10 @@ export async function relayFileUpload(params: {
     status: 404,
     message: "This upload target does not exist or has expired.",
   };
-  const relay = await cacheManager.get<RelayRecord>(relayKey(relayId), {
-    throwOnError: true,
-  });
+  const relay = await cacheManager.get<RelayRecord | BuiltInRelay>(
+    relayKey(relayId),
+    { throwOnError: true },
+  );
   if (!relay) {
     // Repeating an upload that already arrived succeeds again without
     // sending anything: the caller may have lost the first answer.
@@ -592,7 +568,7 @@ export async function relayFileUpload(params: {
   if (relay.agentId !== profileId || relay.principal !== principal) {
     return notFound;
   }
-  const method = callerMethod(relay.target);
+  const method = relay.kind === "built-in" ? "PUT" : callerMethod(relay.target);
   if (params.method !== method) {
     return { status: 405, message: `Upload this file with ${method}.` };
   }
@@ -606,7 +582,7 @@ export async function relayFileUpload(params: {
     };
   }
   // Claim the target: one transfer at a time, and none after it succeeded.
-  const claimed = await cacheManager.getAndDelete<RelayRecord>(
+  const claimed = await cacheManager.getAndDelete<RelayRecord | BuiltInRelay>(
     relayKey(relayId),
     { throwOnError: true },
   );
@@ -615,6 +591,9 @@ export async function relayFileUpload(params: {
       status: 409,
       message: "This file is already being uploaded.",
     };
+  }
+  if (claimed.kind === "built-in") {
+    return storeForBuiltIn({ relay: claimed, method, body: params.body });
   }
 
   let failure: { status: number; message: string } | undefined;
@@ -673,6 +652,7 @@ export async function relayFileUpload(params: {
 // === Internal helpers ===
 
 type UploadSession = {
+  kind: "upstream";
   agentId: string;
   toolName: string;
   principal: string;
@@ -682,6 +662,7 @@ type UploadSession = {
 };
 
 type RelayRecord = {
+  kind: "upstream";
   relayId: string;
   agentId: string;
   toolName: string;
@@ -693,40 +674,6 @@ type RelayRecord = {
   /** Epoch ms after which the caller may no longer start this upload. */
   expiresAt: number;
 };
-
-/** A relayed file that reached its upstream target. */
-type RelayDone = {
-  agentId: string;
-  principal: string;
-  method: "PUT" | "POST";
-  size: number;
-};
-
-/**
- * Answer a repeated upload of a file that already arrived. Nothing is sent
- * on, but the body is held to the file's size like the first one was.
- */
-async function acknowledgeRepeat(
-  params: {
-    contentLength: number | undefined;
-    body: AsyncIterable<Uint8Array>;
-  },
-  size: number,
-): Promise<{ status: number; message?: string }> {
-  const wrongSize = (received: number) => ({
-    status: 400,
-    message: `The upload is ${received} bytes; the file was declared as ${size}.`,
-  });
-  if (params.contentLength !== undefined && params.contentLength !== size) {
-    return wrongSize(params.contentLength);
-  }
-  let received = 0;
-  for await (const chunk of params.body) {
-    received += chunk.length;
-    if (received > size) return wrongSize(received);
-  }
-  return received === size ? { status: 200 } : wrongSize(received);
-}
 
 /**
  * The method the caller uploads with. A form target is presented without its
@@ -741,11 +688,53 @@ function callerMethod(target: UploadTarget): "PUT" | "POST" {
  * safe: a PUT can be repeated, and a POST that never started sending was not
  * applied. A POST that may have been is never offered twice.
  */
-async function offerAgain(relay: RelayRecord, sending: boolean) {
+async function offerAgain(relay: RelayRecord | BuiltInRelay, sending: boolean) {
   const remaining = relay.expiresAt - Date.now();
   if (remaining <= 0) return;
-  if (sending && (relay.target.method ?? "PUT") !== "PUT") return;
+  if (
+    sending &&
+    relay.kind === "upstream" &&
+    (relay.target.method ?? "PUT") !== "PUT"
+  ) {
+    return;
+  }
   await cacheManager.set(relayKey(relay.relayId), relay, remaining);
+}
+
+/**
+ * The upload for a built-in tool: the bytes go to the tool's own sink, which
+ * can take them again after a failure for as long as the target lives.
+ */
+async function storeForBuiltIn(params: {
+  relay: BuiltInRelay;
+  method: "PUT" | "POST";
+  body: AsyncIterable<Uint8Array>;
+}): Promise<{ status: number; message?: string }> {
+  const { relay } = params;
+  let outcome: Awaited<ReturnType<typeof receiveBuiltInUpload>>;
+  try {
+    outcome = await receiveBuiltInUpload({ relay, body: params.body });
+  } catch (error) {
+    await offerAgain(relay, true);
+    throw error;
+  }
+  if (outcome.kind === "failed") {
+    await offerAgain(relay, true);
+    return { status: outcome.status, message: outcome.message };
+  }
+  const done: RelayDone = {
+    agentId: relay.agentId,
+    principal: relay.principal,
+    method: params.method,
+    size: relay.file.size,
+    receipt: outcome.receipt,
+  };
+  await cacheManager.set(
+    relayDoneKey(relay.relayId),
+    done,
+    FILE_UPLOAD_STATE_TTL_MS,
+  );
+  return { status: 200 };
 }
 
 async function transferToUpstream(params: {
@@ -883,32 +872,10 @@ function toolError(text: string): UpstreamHttpCallOutcome {
   };
 }
 
-function missingCapabilityError(
-  message: string,
-  settings: Record<string, unknown>,
+function rpcError(
+  error: FileCallRpcError,
 ): NonNullable<GatewayFileCall["interim"]> {
-  return {
-    kind: "error",
-    error: {
-      code: MISSING_REQUIRED_CLIENT_CAPABILITY_ERROR_CODE,
-      message,
-      data: {
-        requiredCapabilities: {
-          extensions: { [MCP_FILES_EXTENSION_ID]: settings },
-        },
-      },
-    },
-  };
-}
-
-function spentStateError(): NonNullable<GatewayFileCall["interim"]> {
-  return {
-    kind: "error",
-    error: {
-      code: -32602,
-      message: "Invalid requestState (already used or expired).",
-    },
-  };
+  return { kind: "error", error };
 }
 
 function describeToolResult(content: unknown): string {
@@ -927,20 +894,4 @@ function describeToolResult(content: unknown): string {
 /** Loopback http upload targets are fine where loopback servers are. */
 function allowsLocalTargets(): boolean {
   return !config.production || config.test.enableE2eTestEndpoints;
-}
-
-function newOpaqueId(): string {
-  return randomBytes(32).toString("base64url");
-}
-
-function sessionKey(id: string) {
-  return `${CacheKey.McpFileUploadSession}-${id}` as const;
-}
-
-function relayKey(id: string) {
-  return `${CacheKey.McpFileUploadRelay}-${id}` as const;
-}
-
-function relayDoneKey(id: string) {
-  return `${CacheKey.McpFileUploadRelayDone}-${id}` as const;
 }

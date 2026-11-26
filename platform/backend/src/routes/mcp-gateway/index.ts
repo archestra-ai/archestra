@@ -1700,7 +1700,14 @@ function sharesCallerLookups(body: unknown): boolean {
     method?: unknown;
     params?: { name?: unknown };
   };
-  if (method === "tools/list") return true;
+  if (
+    method === "tools/list" ||
+    method === "resources/list" ||
+    method === "resources/templates/list" ||
+    method === "prompts/list"
+  ) {
+    return true;
+  }
   const name = params?.name;
   if (
     method === "tools/call" &&

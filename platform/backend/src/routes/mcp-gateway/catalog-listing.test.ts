@@ -9,7 +9,7 @@ import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import { McpServerModel, UserTokenModel } from "@/models";
+import { McpServerModel, TeamModel, UserTokenModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -53,6 +53,8 @@ describe("MCP gateway catalog listing", () => {
     makeOrganization,
     makeUser,
     makeMember,
+    makeTeam,
+    makeTeamMember,
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -62,7 +64,9 @@ describe("MCP gateway catalog listing", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const otherUser = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
+    await makeMember(user.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, otherUser.id);
+    await makeTeamMember(team.id, user.id);
     const agent = await makeAgent({ organizationId: org.id });
     const token = await UserTokenModel.create(user.id, org.id);
     const listedCatalogs: string[] = [];
@@ -114,6 +118,7 @@ describe("MCP gateway catalog listing", () => {
         organizationId: org.id,
         serverType: "remote",
         serverUrl: `https://listing.example/catalog-${index}`,
+        access: { teams: [team.id], level: "use" },
       });
       // Another caller's install must not be selected by the batch resolver.
       await makeMcpServer({
@@ -192,6 +197,12 @@ describe("MCP gateway catalog listing", () => {
     expect(response.statusCode).toBe(200);
     expect(deploymentLookups).not.toHaveBeenCalled();
     expect(response.json().result[key]).toHaveLength(5);
+    expect(
+      queries.mock.calls.filter(
+        ([sql]) =>
+          sql.includes('from "team_member"') || sql.includes("subject_teams"),
+      ),
+    ).toHaveLength(1);
     expect(listedCatalogs.sort()).toEqual([
       "catalog-0",
       "catalog-1",
@@ -242,5 +253,12 @@ describe("MCP gateway catalog listing", () => {
     const afterRemoval = await listAgain();
     expect(afterRemoval.json().result[key]).toHaveLength(4);
     expect(listedCatalogs).not.toContain("catalog-0");
+
+    await TeamModel.removeMember(team.id, user.id);
+    listedCatalogs.length = 0;
+    const afterRevocation = await listAgain();
+    expect(afterRevocation.statusCode).toBe(200);
+    expect(afterRevocation.json().result[key]).toEqual([]);
+    expect(listedCatalogs).toEqual([]);
   });
 });

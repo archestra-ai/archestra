@@ -436,4 +436,39 @@ describe("PluginsPage", () => {
       screen.getByText("No plugins match the current filters."),
     ).toBeVisible();
   });
+  it("names an imported plugin's repository in both views, and shows no source line for one written in the app", () => {
+    access.plugins = [
+      PLUGIN,
+      {
+        ...PLUGIN,
+        id: "plugin-2",
+        displayName: "Handwritten",
+        sourceKind: "manual",
+        sourceRepo: null,
+        sourceMarketplaceRepo: null,
+      },
+    ];
+    const { unmount } = render(<PluginsPage />);
+
+    const imported = screen.getByText("Policy Runtime").closest("tr");
+    const handwritten = screen.getByText("Handwritten").closest("tr");
+    expect(imported).toHaveTextContent("acme/policy-plugins");
+    expect(handwritten).not.toHaveTextContent("Manual");
+    expect(
+      screen.queryByRole("button", { name: "Manual source details" }),
+    ).not.toBeInTheDocument();
+
+    // The cards say the repository in words too, not only as a mark.
+    unmount();
+    localStorage.setItem("archestra-plugins-view", "cards");
+    render(<PluginsPage />);
+    expect(screen.getByText("acme/policy-plugins")).toBeVisible();
+    expect(screen.queryByText("Manual")).not.toBeInTheDocument();
+    // And the platforms, which the cards used to leave out.
+    expect(
+      screen.getAllByRole("img", {
+        name: "Supported platforms: macOS and Linux, Windows",
+      }),
+    ).toHaveLength(2);
+  });
 });

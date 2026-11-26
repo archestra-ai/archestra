@@ -99,7 +99,7 @@ import {
   PluginSourceIcon,
   pluginRepository,
 } from "./_parts/plugin-source-icon";
-import { PluginSourceInfo } from "./_parts/plugin-source-info";
+import { PluginSourceLabel } from "./_parts/plugin-source-info";
 
 const PLUGINS_DESCRIPTION =
   "Plugins install client-native files on developer machines.";
@@ -384,14 +384,6 @@ function PluginsList() {
       header: "Details",
       cell: ({ row }) => {
         const plugin = row.original;
-        const platforms = plugin.supportedPlatforms;
-        const repo = plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
-        const platformLabel = [
-          platforms.includes("posix") ? "macOS and Linux" : null,
-          platforms.includes("windows") ? "Windows" : null,
-        ]
-          .filter(Boolean)
-          .join(", ");
         return (
           <div className="min-w-0 space-y-1.5 text-sm">
             <div className="flex min-w-0 items-center gap-2">
@@ -399,24 +391,10 @@ function PluginsList() {
               <span className="truncate text-muted-foreground">
                 {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
               </span>
-              <span
-                className="flex shrink-0 items-center gap-1.5"
-                role="img"
-                aria-label={`Supported platforms: ${platformLabel}`}
-                title={platformLabel}
-              >
-                {platforms.includes("posix") && <OsLogos platform="macos" />}
-                {platforms.includes("windows") && (
-                  <OsLogos platform="windows" />
-                )}
-              </span>
+              <PluginPlatformMarks platforms={plugin.supportedPlatforms} />
             </div>
-            <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-              <PluginSourceInfo plugin={plugin} />
-              <span className="truncate">
-                {plugin.sourceKind === "github" ? repo : "Manual"}
-              </span>
-            </div>
+            {/* Only an imported plugin has a source to name. */}
+            <PluginSourceLabel plugin={plugin} />
           </div>
         );
       },
@@ -746,11 +724,16 @@ function PluginsList() {
                                 plugin.clientType}
                             </span>
                           </Badge>
+                          <PluginPlatformMarks
+                            platforms={plugin.supportedPlatforms}
+                          />
 
                           {!plugin.enabled ? (
                             <Badge variant="outline">Disabled</Badge>
                           ) : null}
-                          <PluginSourceInfo plugin={plugin} />
+                          {/* The repository in words, as the table has it:
+                              the mark alone does not say which one. */}
+                          <PluginSourceLabel plugin={plugin} />
                         </div>
                       </TableCard>
                     ))}
@@ -962,6 +945,34 @@ function FacetSelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+/**
+ * The operating systems a plugin installs on, as their marks. One component
+ * for the table row and the card, so neither view leaves the platforms out.
+ */
+function PluginPlatformMarks({
+  platforms,
+}: {
+  platforms: PluginListItem["supportedPlatforms"];
+}) {
+  const label = [
+    platforms.includes("posix") ? "macOS and Linux" : null,
+    platforms.includes("windows") ? "Windows" : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return (
+    <span
+      className="flex shrink-0 items-center gap-1.5 text-muted-foreground"
+      role="img"
+      aria-label={`Supported platforms: ${label}`}
+      title={label}
+    >
+      {platforms.includes("posix") && <OsLogos platform="macos" />}
+      {platforms.includes("windows") && <OsLogos platform="windows" />}
+    </span>
   );
 }
 

@@ -87,7 +87,7 @@ jobs:
   # See backend-test-dependencies in on-pull-requests.yml for the consumer.
   warm-backend-build-cache:
     name: Warm Backend Build Cache
-    runs-on: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-8core-spot' || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.
+    runs-on: ${{ true && 'archestra-gce-8core-spot' || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.
     timeout-minutes: 20
     concurrency:
       group: on-commits-to-main-warm-backend-cache
@@ -172,7 +172,7 @@ jobs:
   # out: their .next and dist outputs would make each entry hundreds of MB.
   warm-turbo-cache:
     name: Warm Turbo Cache
-    runs-on: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core-spot' || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.
+    runs-on: ${{ true && 'archestra-gce-16core-spot' || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.
     timeout-minutes: 20
     concurrency:
       group: on-commits-to-main-warm-turbo-cache

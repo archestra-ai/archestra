@@ -559,6 +559,7 @@ export function RequestExample({
   virtualApiKeyId,
   grantedRouterIds,
   fields,
+  compactCode = false,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -609,6 +610,7 @@ export function RequestExample({
    * which copies the real key when the reader may read it.
    */
   fields?: React.ReactNode;
+  compactCode?: boolean;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
@@ -941,6 +943,7 @@ export function RequestExample({
           code={example}
           secret={secret}
           placeholder={`$${credentialEnvVar}`}
+          compact={compactCode}
         />
       </div>
     );

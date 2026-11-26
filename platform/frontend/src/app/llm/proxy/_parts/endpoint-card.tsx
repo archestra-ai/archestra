@@ -200,6 +200,7 @@ function EndpointRequest({
           connectionBaseUrl={baseUrl}
           {...connection.requestProps}
           fields={fields}
+          compactCode={auth === "oauth"}
         />
       ) : (
         <>

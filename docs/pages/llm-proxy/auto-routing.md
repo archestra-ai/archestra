@@ -128,7 +128,19 @@ Pick a preset and Archestra calculates the budget from the router's recent traff
 
 ![Configuring a router: a provider key and model per tier, the budget presets with the estimated split, and the decision model](/docs/automated_screenshots/llm-proxy-auto-routing_configure.webp)
 
-<span id="decision-model"></span><span id="test-and-simulate-through-the-api"></span><span id="learning-from-past-sessions"></span>
+<span id="learning-from-past-sessions"></span>
+
+## Warm Start From Past Sessions
+
+A new router has no traffic of its own, so it sends every session to the normal model until it has seen 200 sessions. Past sessions shorten that wait: Archestra scores a sample of the organization's earlier proxy traffic once, and every router that learns from it can use the result.
+
+- **Which routers use it:** a router learns from past sessions while **Learn from past sessions** is on in **Configure** (the default) and it uses the default decision model. Routers that existed before v1.5 keep what they had: the original `auto` router learns from past sessions, and routers created later stay cold until you turn the switch on.
+- **When it helps:** past sessions count only once enough of them are scored to reach [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS) (1,000 by default) before the router has 200 of its own — with the defaults, more than 800. Fewer would never start a router sooner, so the router waits for its own 200, and the **Score** dialog warns you before you pay for them. The router's **Overview** shows which threshold applies and how far along it is.
+- **Find and score:** the **Past sessions** card counts the last 35 days of proxy logs for free (automatically the first time, or with **Scan again**), then **Score** sends the opening prompt of each sampled session to Jev up to the spending limit you set and refits every router that learns from past sessions. Scoring pays with a Jev key shared with the whole organization, never a personal key, and stops if that key is removed or no longer shared. **Stop** ends a run early; whatever it scored still counts.
+- **Expected traffic:** past traffic shows how busy the whole organization was, not how busy one router will be. **Expected traffic** in **Configure** scales that baseline (1× by default, up to 100×) for budget planning until the router's own traffic spans a week; after that it plans for what it actually sees.
+- **What is skipped:** only sessions with a client-supplied session ID that began inside the window are used; sessions whose content was not logged or is end-to-end encrypted are skipped. A new count does not set a warm router back: it keeps learning from the count it was fitted on until a newer one is scored at least as far.
+
+<span id="decision-model"></span><span id="test-and-simulate-through-the-api"></span>
 
 ## Preview and Simulate Before Rollout
 
@@ -136,7 +148,7 @@ Before you shift traffic or change a budget, you can check what the router would
 
 - **Preview in the UI:** once a router has history, switching presets or editing a custom budget on **Configure** previews expected daily spend and the Fast / Normal / Smart split on today's traffic before you save.
 - **Dry-run a prompt ([`POST /api/auto-routing/routers/{id}/preview`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/POST/api/auto-routing/routers/{id}/preview)):** scores plain opening `text` or a full opening Chat Completions, Responses, or Anthropic Messages `request` body against the active plan without calling the target model or saving a decision. Needs [`llmProxy:update`](/docs/reference/permissions#llmProxy:update).
-- **Simulate a budget or traffic shift ([`POST /api/auto-routing/routers/{id}/simulate`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/POST/api/auto-routing/routers/{id}/simulate)):** fits a candidate plan for a different daily budget, preset, or scaled traffic volume (`volumeMultiplier`) without publishing it. Needs [`llmProxy:read`](/docs/reference/permissions#llmProxy:read).
+- **Simulate a budget or traffic shift ([`POST /api/auto-routing/routers/{id}/simulate`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/POST/api/auto-routing/routers/{id}/simulate)):** fits a candidate plan for a different daily budget or preset without publishing it, either at an unsaved **Expected traffic** multiple (`expectedTrafficFactor`, applied the way the router applies its own) or at the plan's usage window scaled by `volumeMultiplier`, which replaces the router's multiple rather than stacking on it. Needs [`llmProxy:read`](/docs/reference/permissions#llmProxy:read).
 - **Inspect or refit a plan:** call [`GET /api/auto-routing/routers/{id}/diagnostics`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/GET/api/auto-routing/routers/{id}/diagnostics) to see per-session routes at a target budget, or [`POST /api/auto-routing/routers/{id}/replan`](/docs/reference/api/llm-proxy/auto-routing#tag/auto-routing/POST/api/auto-routing/routers/{id}/replan) to trigger a fresh fit right away.
 
 ```bash
@@ -164,6 +176,6 @@ To read the saved decision from code without calling the scorer again, call [`GE
 
 ## What to Know
 
-- **Normal-tier fallback:** during cold start (until a router reaches [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS) scored sessions), while a plan is refitting, or if Jev fails or exceeds [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS), sessions fall back to the normal model automatically.
+- **Normal-tier fallback:** during cold start (until a router has 200 sessions of its own, or enough scored [past sessions](#learning-from-past-sessions) to start sooner), while a plan is refitting, or if Jev fails or exceeds [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS), sessions fall back to the normal model automatically.
 - **Limits and Guardrails:** every routed request still passes through your existing [cost limits](/docs/llm-proxy/cost-controls) and [Guardrails](/docs/agents/guardrails).
 - **Deleting a router:** removes its plans and learned history; agents and chats assigned to it fall back to their own model.

@@ -7,6 +7,7 @@ import {
   FilterBar,
   FilterBarContextualActions,
   FilterSelect,
+  overflowFiltersThatFit,
 } from "@/components/filter-bar";
 
 const ITEMS = [
@@ -74,42 +75,88 @@ describe("FilterBar", () => {
   });
 
   describe("moreFilters", () => {
-    const renderWithOverflow = (active: boolean) =>
+    const filter = (key: string, active: boolean) => ({
+      key,
+      label: key,
+      active,
+      control: <button type="button">{`${key} control`}</button>,
+    });
+    const renderWithOverflow = (filters: Array<ReturnType<typeof filter>>) =>
       render(
-        <FilterBar
-          moreFilters={[
-            {
-              key: "actorType",
-              label: "Actor type",
-              active,
-              control: <button type="button">actor type control</button>,
-            },
-          ]}
-        >
+        <FilterBar moreFilters={filters}>
           <span>primary filters</span>
         </FilterBar>,
       );
+    // By role: the bar keeps hidden copies of the idle controls to measure,
+    // which are not part of what a person can reach.
+    const control = (key: string) =>
+      screen.queryByRole("button", { name: `${key} control` });
+    const more = () => screen.queryByRole("button", { name: /More filters/ });
 
-    it("tucks an idle filter behind More filters, and still opens it", async () => {
-      renderWithOverflow(false);
+    it("tucks idle filters that have no room behind More filters, and still opens them", async () => {
+      // No layout in this environment, so the row has room for none of them.
+      renderWithOverflow([filter("actor", false), filter("source", false)]);
 
-      expect(screen.queryByText("actor type control")).not.toBeInTheDocument();
+      expect(control("actor")).not.toBeInTheDocument();
+      expect(control("source")).not.toBeInTheDocument();
 
-      await userEvent.click(
-        screen.getByRole("button", { name: /More filters/ }),
-      );
-      expect(screen.getByText("actor type control")).toBeVisible();
+      await userEvent.click(more() as HTMLElement);
+      expect(control("actor")).toBeVisible();
+      expect(control("source")).toBeVisible();
     });
 
     it("shows an applied filter inline instead, so nothing narrows the table invisibly", () => {
-      renderWithOverflow(true);
+      renderWithOverflow([
+        filter("actor", true),
+        filter("source", false),
+        filter("status", false),
+      ]);
 
-      expect(screen.getByText("actor type control")).toBeVisible();
-      // Nothing left to tuck away, so the popover trigger goes too.
-      expect(
-        screen.queryByRole("button", { name: /More filters/ }),
-      ).not.toBeInTheDocument();
+      expect(control("actor")).toBeVisible();
+      expect(control("source")).not.toBeInTheDocument();
+      expect(more()).toBeVisible();
     });
+
+    it("never opens a menu for one filter: a single leftover goes on the bar", () => {
+      renderWithOverflow([filter("actor", true), filter("source", false)]);
+
+      expect(control("source")).toBeVisible();
+      expect(more()).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("overflowFiltersThatFit", () => {
+  const candidates = [
+    { key: "platform", width: 130 },
+    { key: "source", width: 120 },
+    { key: "repository", width: 150 },
+  ];
+  const fit = (width: number) =>
+    overflowFiltersThatFit({
+      width,
+      gap: 6,
+      // Search, three primary controls and the view toggle: 760 with gaps.
+      fixed: [320, 180, 100, 80, 56],
+      candidates,
+      moreWidth: 125,
+    });
+
+  it("puts every filter on a row that has room for all of them", () => {
+    // 760 + 136 + 126 + 156 = 1178; the last one needs no menu after it.
+    expect(fit(1178)).toEqual(["platform", "source", "repository"]);
+  });
+
+  it("keeps room for the menu while filters remain for it", () => {
+    // Platform and Source fit only if Repository's menu (131) fits after them.
+    expect(fit(1177)).toEqual(["platform", "source"]);
+    expect(fit(760 + 136 + 126 + 131)).toEqual(["platform", "source"]);
+    expect(fit(760 + 136 + 126 + 130)).toEqual(["platform"]);
+  });
+
+  it("puts none on a row the fixed controls already fill, or one with no layout", () => {
+    expect(fit(800)).toEqual([]);
+    expect(fit(0)).toEqual([]);
   });
 });
 

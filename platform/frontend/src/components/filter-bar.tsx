@@ -11,7 +11,9 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -133,10 +135,13 @@ export function useCompactFilters(): boolean {
  * filters. Pass it only while some filter is actually applied; the button is
  * the bar's only affordance for resetting them all at once.
  * @param moreFilters - Secondary filters, for pages with more of them than fit
- * a row. On desktop, an entry is inline while `active` and tucked into a "More
- * filters" popover while it is not, so the bar always states every filter
- * currently narrowing the table — a hidden active filter reads as an empty
- * table with no explanation.
+ * a row. On desktop an entry is inline while `active`, so the bar always
+ * states every filter currently narrowing the table — a hidden active filter
+ * reads as an empty table with no explanation. The rest are inline for as far
+ * as the row has room, in the order given, and only those that do not fit are
+ * tucked into a "More filters" popover: a filter one click away behind a
+ * menu, beside a half-empty bar, is a filter people do not find. The popover
+ * never holds a single filter; one leftover is shown on the bar.
  * @param actions - Trailing controls (sort, view toggle) pinned to the right.
  * @param tuckActionsWhenCompact - On compact screens, move `actions` into the
  * filter popover instead of giving them a row of their own. For secondary
@@ -205,8 +210,46 @@ export function FilterBar({
       : null;
   const actionsInPopover =
     tuckActionsWhenCompact && compact && hasFilters && !!actions;
-  const appliedOverflow = moreFilters?.filter((filter) => filter.active) ?? [];
-  const tuckedAway = moreFilters?.filter((filter) => !filter.active) ?? [];
+  // Which unapplied secondary filters the row has room for. Measured, since
+  // every control is sized to its label; nothing is inline until a layout has
+  // been read, and nothing ever is where there is no layout to read.
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [fitting, setFitting] = useState<string[]>([]);
+  const fit = useCallback(() => {
+    const next = readOverflowFiltersThatFit(
+      controlsRef.current,
+      measureRef.current,
+    );
+    setFitting((current) =>
+      current.length === next.length &&
+      current.every((key, index) => key === next[index])
+        ? current
+        : next,
+    );
+  }, []);
+  // After every render: a filter gaining a value, or the Clear button coming
+  // and going, changes how much room is left without resizing the bar.
+  useLayoutEffect(fit);
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(controls);
+    return () => observer.disconnect();
+  }, [fit]);
+  const unapplied = moreFilters?.filter((filter) => !filter.active) ?? [];
+  const notFitting = unapplied.filter(
+    (filter) => !fitting.includes(filter.key),
+  );
+  // A menu holding one filter saves nothing: its button is as wide as the
+  // filter. So a single leftover goes on the bar too, room or no room, and
+  // wraps where the button would have.
+  const tuckedAway = notFitting.length > 1 ? notFitting : [];
+  const inlineOverflow =
+    moreFilters?.filter(
+      (filter) => filter.active || !tuckedAway.includes(filter),
+    ) ?? [];
 
   return (
     <div
@@ -217,6 +260,7 @@ export function FilterBar({
       )}
     >
       <div
+        ref={controlsRef}
         data-slot="filter-controls"
         inert={contextualActions ? true : undefined}
         className={cn(
@@ -300,15 +344,32 @@ export function FilterBar({
         ) : (
           <>
             {children}
-            {appliedOverflow.map((filter) => (
-              // Fragment rather than a wrapper element: the control has to be the
-              // bar's own flex item for its sizing to behave like the inline ones'.
-              <Fragment key={filter.key}>{filter.control}</Fragment>
-            ))}
+            {inlineOverflow.map((filter) =>
+              filter.active ? (
+                // Fragment rather than a wrapper element: the control has to be the
+                // bar's own flex item for its sizing to behave like the inline ones'.
+                <Fragment key={filter.key}>{filter.control}</Fragment>
+              ) : (
+                // `contents` keeps the control the bar's flex item all the
+                // same; the attribute tells the measurement that this one is
+                // here only while it fits.
+                <span
+                  key={filter.key}
+                  className="contents"
+                  {...{ [FITTED_FILTER_ATTRIBUTE]: "" }}
+                >
+                  {filter.control}
+                </span>
+              ),
+            )}
             {tuckedAway.length > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className={filterControlClass()}>
+                  <Button
+                    variant="outline"
+                    className={filterControlClass()}
+                    {...{ [FITTED_FILTER_ATTRIBUTE]: "" }}
+                  >
                     <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
                     <span>More filters</span>
                     <ChevronDown
@@ -354,6 +415,33 @@ export function FilterBar({
           </div>
         )}
       </div>
+      {!compact && unapplied.length > 0 && (
+        // Off-screen copies of the unapplied secondary filters and of the
+        // "More filters" button, to learn how wide each would be on the bar.
+        <div
+          ref={measureRef}
+          aria-hidden
+          inert
+          className="pointer-events-none invisible absolute flex h-0 w-max items-center overflow-hidden"
+        >
+          {unapplied.map((filter) => (
+            <div
+              key={filter.key}
+              className="shrink-0"
+              {...{ [MEASURED_FILTER_ATTRIBUTE]: filter.key }}
+            >
+              {filter.control}
+            </div>
+          ))}
+          <div className="shrink-0" {...{ [MEASURED_MORE_ATTRIBUTE]: "" }}>
+            <Button variant="outline" className={filterControlClass()}>
+              <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
+              <span>More filters</span>
+              <ChevronDown aria-hidden className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
       {contextualActions ? (
         <div
           className={cn(
@@ -500,4 +588,100 @@ function getCompactFiltersSnapshot() {
     typeof window.matchMedia === "function" &&
     window.matchMedia("(max-width: 1023px)").matches
   );
+}
+
+/**
+ * Which of a bar's unapplied secondary filters fit on its row, in order.
+ *
+ * The row always keeps what is `fixed` on it: the search box, the primary
+ * controls, every applied filter, Clear, the trailing actions. A candidate
+ * joins while the row still holds it and, when candidates remain after it,
+ * the "More filters" button they go behind. It stops at the first one that
+ * does not fit, so the bar and the popover each keep the given order.
+ */
+export function overflowFiltersThatFit(params: {
+  /** Width of the row. */
+  width: number;
+  /** Space between two controls. */
+  gap: number;
+  /** Widths of the controls that are on the row whatever happens. */
+  fixed: number[];
+  candidates: Array<{ key: string; width: number }>;
+  /** Width of the "More filters" button. */
+  moreWidth: number;
+}): string[] {
+  const { width, gap, fixed, candidates, moreWidth } = params;
+  // No layout (a hidden bar, a test without a browser): nothing to fit into.
+  if (width <= 0) return [];
+  let used =
+    fixed.reduce((sum, item) => sum + item, 0) +
+    gap * Math.max(fixed.length - 1, 0);
+  let controls = fixed.length;
+  const fitting: string[] = [];
+  for (const [index, candidate] of candidates.entries()) {
+    const withCandidate = used + (controls > 0 ? gap : 0) + candidate.width;
+    const isLast = index === candidates.length - 1;
+    const needed = isLast ? withCandidate : withCandidate + gap + moreWidth;
+    // Half a pixel of slack: widths are fractional, and a row that fits to
+    // the pixel must not be read as overflowing.
+    if (needed > width + 0.5) break;
+    used = withCandidate;
+    controls += 1;
+    fitting.push(candidate.key);
+  }
+  return fitting;
+}
+
+const FITTED_FILTER_ATTRIBUTE = "data-fitted-filter";
+const MEASURED_FILTER_ATTRIBUTE = "data-measured-filter";
+const MEASURED_MORE_ATTRIBUTE = "data-measured-more-filters";
+
+/** Reads the widths {@link overflowFiltersThatFit} decides from off the page. */
+function readOverflowFiltersThatFit(
+  controls: HTMLElement | null,
+  measure: HTMLElement | null,
+): string[] {
+  if (!controls || !measure) return [];
+  const candidates = [
+    ...measure.querySelectorAll<HTMLElement>(`[${MEASURED_FILTER_ATTRIBUTE}]`),
+  ].map((element) => ({
+    key: element.getAttribute(MEASURED_FILTER_ATTRIBUTE) ?? "",
+    width: element.getBoundingClientRect().width,
+  }));
+  return overflowFiltersThatFit({
+    width: controls.clientWidth,
+    gap: Number.parseFloat(getComputedStyle(controls).columnGap) || 0,
+    fixed: flexItems(controls)
+      .filter((item) => !item.closest(`[${FITTED_FILTER_ATTRIBUTE}]`))
+      .map(wantedWidth),
+    candidates,
+    moreWidth:
+      measure
+        .querySelector<HTMLElement>(`[${MEASURED_MORE_ATTRIBUTE}]`)
+        ?.getBoundingClientRect().width ?? 0,
+  });
+}
+
+/** The row's own flex items, looking through `display: contents` wrappers. */
+function flexItems(container: Element): HTMLElement[] {
+  return [...container.children].flatMap((child) => {
+    if (!(child instanceof HTMLElement)) return [];
+    const display = getComputedStyle(child).display;
+    if (display === "none") return [];
+    return display === "contents" ? flexItems(child) : [child];
+  });
+}
+
+/**
+ * The width a control wants. A control that grows into free space (the search
+ * box) is counted at the width it grows to, so the filters do not take the
+ * room it would have shrunk out of.
+ */
+function wantedWidth(item: HTMLElement): number {
+  const { width } = item.getBoundingClientRect();
+  const style = getComputedStyle(item);
+  const maxWidth = Number.parseFloat(style.maxWidth);
+  return Number.parseFloat(style.flexGrow) > 0 && Number.isFinite(maxWidth)
+    ? Math.max(width, maxWidth)
+    : width;
 }

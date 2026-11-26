@@ -109,13 +109,13 @@ describe("useExportSessionInteractions", () => {
   const sessionId = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
   function makePage(params: {
-    ids: string[];
+    rows: { id: string; response?: unknown }[];
     total: number;
     hasNext: boolean;
   }) {
     return {
       data: {
-        data: params.ids.map((id) => ({ id })),
+        data: params.rows,
         pagination: {
           currentPage: 1,
           limit: 100,
@@ -150,7 +150,7 @@ describe("useExportSessionInteractions", () => {
 
   it("includes the errors the chat showed, which no request row carries", async () => {
     getInteractionsMock.mockResolvedValueOnce(
-      makePage({ ids: ["row-1"], total: 1, hasNext: false }),
+      makePage({ rows: [{ id: "row-1" }], total: 1, hasNext: false }),
     );
     const chatError = {
       id: "chat-error-1",
@@ -187,10 +187,23 @@ describe("useExportSessionInteractions", () => {
   it("pages through the whole session and downloads every interaction", async () => {
     getInteractionsMock
       .mockResolvedValueOnce(
-        makePage({ ids: ["row-1", "row-2"], total: 102, hasNext: true }),
+        makePage({
+          rows: [{ id: "row-1" }, { id: "row-2" }],
+          total: 102,
+          hasNext: true,
+        }),
       )
       .mockResolvedValueOnce(
-        makePage({ ids: ["row-3"], total: 102, hasNext: false }),
+        makePage({
+          rows: [
+            {
+              id: "row-3",
+              response: { error: "Response review failed after usage arrived" },
+            },
+          ],
+          total: 102,
+          hasNext: false,
+        }),
       );
 
     let downloadedJson: string | null = null;
@@ -241,6 +254,9 @@ describe("useExportSessionInteractions", () => {
       "row-2",
       "row-3",
     ]);
+    expect(payload.interactions[2].response).toEqual({
+      error: "Response review failed after usage arrived",
+    });
   });
 
   it("fails the mutation when a page fetch errors", async () => {

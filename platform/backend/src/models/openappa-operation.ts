@@ -44,18 +44,33 @@ class OpenAppaOperationModel {
           AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'tool_call'
           AND o.decision->>'decision' = 'deny_call'
       ),
-      lifted AS (
-        SELECT b.session_id, b.operation_id,
-          BOOL_OR(c.role = 'authority' AND c.answer->>'ruling' = 'approve') AS approved,
-          BOOL_OR(c.role = 'sanitizer') AS cleaned
+      offered AS (
+        SELECT b.session_id, b.operation_id, offer->>'offer_id' AS offer_id
         FROM blocked AS b
         CROSS JOIN LATERAL jsonb_array_elements(COALESCE(b.decision->'offers', '[]'::jsonb)) AS offer
-        JOIN ${consults} AS c
-          ON c.organization_id = ${params.organizationId}
+        WHERE offer->>'offer_id' <> ''
+      ),
+      rendered_lengths AS (
+        SELECT DISTINCT length(offer_id) AS n FROM offered
+      ),
+      -- Decisions carry the rendered offer id, a prefix of the canonical one a
+      -- consult stores: each consult answers under its prefix of every
+      -- rendered length, so the join is on equality.
+      answered AS (
+        SELECT left(c.offer_id, l.n) AS offer_id, c.role, c.answer
+        FROM ${consults} AS c
+        CROSS JOIN rendered_lengths AS l
+        WHERE c.organization_id = ${params.organizationId}
           AND c.created_at >= ${since}
-          AND c.offer_id = offer->>'offer_id'
           AND c.outcome = 'answered'
-        GROUP BY b.session_id, b.operation_id
+      ),
+      lifted AS (
+        SELECT o.session_id, o.operation_id,
+          BOOL_OR(a.role = 'authority' AND a.answer->>'ruling' = 'approve') AS approved,
+          BOOL_OR(a.role = 'sanitizer') AS cleaned
+        FROM offered AS o
+        JOIN answered AS a ON a.offer_id = o.offer_id
+        GROUP BY o.session_id, o.operation_id
       )
       SELECT d.date,
         COUNT(b.operation_id) FILTER (WHERE NOT COALESCE(l.approved, false) AND NOT COALESCE(l.cleaned, false))::int AS blocked,

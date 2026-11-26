@@ -51,7 +51,7 @@ jobs:
     needs: [classify]
     if: ${{ needs.classify.outputs.scan == 'true' }}
     # Build every architecture on native runners in parallel.
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm-32core' || 'ubuntu-24.04-16core' }}
+    runs-on: ${{ matrix.arch == 'arm64' && (vars.GCE_RUNNERS_PR_CI == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-16core-arm' || 'archestra-gce-16core-arm-spot') || 'ubuntu-24.04-arm-32core') || (vars.GCE_RUNNERS_PR_CI == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-16core' || 'archestra-gce-16core-spot') || 'ubuntu-24.04-16core') }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS_PR_CI kill switch; never for fork PRs.
     # Only merge groups reach this job (release-image-policy.py). The
     # merge-queue-build environment admits gh-readonly-queue/main/* and
     # gh-readonly-queue/release/*/* refs and holds the Sentry build secret.

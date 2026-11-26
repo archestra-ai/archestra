@@ -199,8 +199,8 @@ test.each([
   expect(selector).toBeDisabled();
 });
 
-test("approvals are chosen in Enforce", async () => {
-  mode = "enforce";
+test("approvals can be set before switching to Enforce", async () => {
+  mode = "observe";
   show(<OpenAppaPersonApprovalSetting />);
   const selector = await choose("Approvals", /^Automatic in Agent Runtime/);
   await waitFor(() =>
@@ -209,12 +209,17 @@ test("approvals are chosen in Enforce", async () => {
   expect(updates).toEqual([{ personApproval: "auto_unattended" }]);
 });
 
-test("approvals cannot be chosen outside Enforce", async () => {
-  mode = "observe";
-  show(<OpenAppaPersonApprovalSetting />);
-  expect(
-    await screen.findByRole("combobox", { name: "Approvals" }),
-  ).toBeDisabled();
+test("without reading the policy, an administrator still changes an active mode", async () => {
+  mode = "enforce";
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({ data: !permissions.guardrailsPolicy }) as ReturnType<
+        typeof useHasPermissions
+      >,
+  );
+  show(<OpenAppaEnforcementSetting />);
+  await choose("Guardrails mode", /^Observe/);
+  await waitFor(() => expect(updates).toEqual([{ mode: "observe" }]));
 });
 
 test("approvals an environment variable sets cannot be changed", async () => {
@@ -242,19 +247,19 @@ test("adding and removing a mark keeps marks saved elsewhere meanwhile", async (
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() => expect(input).toHaveValue(""));
   expect(await screen.findByText("secrets")).toBeInTheDocument();
+  enforcedMarks = [...enforcedMarks, "audit"];
   fireEvent.click(screen.getByRole("button", { name: "Remove pii" }));
   await waitFor(() =>
     expect(screen.queryByText("pii")).not.toBeInTheDocument(),
   );
   expect(updates).toEqual([
     { enforcedMarks: ["pii", "payment", "secrets"] },
-    { enforcedMarks: ["payment", "secrets"] },
+    { enforcedMarks: ["payment", "secrets", "audit"] },
   ]);
 });
 
 test.each([
   ["a blank mark", "   "],
-  ["a duplicate mark", " pii"],
   ["a mark over 128 characters", "m".repeat(129)],
   ["a mark with NUL", "p\u0000ii"],
 ])("%s is not saved", async (_name, value) => {
@@ -269,6 +274,29 @@ test.each([
   // A save starts synchronously on Enter, so none is pending means none was sent.
   expect(client.isMutating()).toBe(0);
   expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+});
+
+test.each([
+  ["a mark already saved", ["pii"], 0],
+  [
+    "a mark past the 64 limit",
+    Array.from({ length: 64 }, (_, i) => `m${i}`),
+    1,
+  ],
+])("%s is not sent", async (_name, saved, errors) => {
+  enforcedMarks = saved;
+  vi.mocked(toast.error).mockClear();
+  const { client } = show(<OpenAppaEnforcedMarksSetting />);
+  const input = await screen.findByRole("textbox", {
+    name: "New enforced mark",
+  });
+  await waitFor(() => expect(input).toBeEnabled());
+  fireEvent.change(input, { target: { value: "pii" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(client.isMutating()).toBe(1);
+  await waitFor(() => expect(client.isMutating()).toBe(0));
+  expect(updates).toEqual([]);
+  expect(vi.mocked(toast.error)).toHaveBeenCalledTimes(errors);
 });
 
 test("an administrator blocks requests from other clients", async () => {

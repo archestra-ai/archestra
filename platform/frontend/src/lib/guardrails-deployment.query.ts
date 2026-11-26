@@ -12,7 +12,9 @@ import { throwOnApiError } from "@/lib/utils/api";
 
 export const guardrailsDeploymentQueryKey = ["guardrails-deployment"];
 const queryKey = guardrailsDeploymentQueryKey;
-const modeMutationKey = [...queryKey, "mode"];
+/** Settings whose saves the other's control waits for. */
+type GatedSetting = "mode" | "personApproval";
+const MAX_ENFORCED_MARKS = 64;
 
 type Deployment = archestraApiTypes.GetGuardrailsDeploymentResponses[200];
 export type GuardrailsMode = Deployment["mode"];
@@ -20,11 +22,9 @@ export type PersonApproval = Deployment["personApproval"];
 
 /** What a mode change says, by the mode the saved settings run in. */
 export const GUARDRAILS_MODE_TOAST: Record<GuardrailsMode, string> = {
-  off: "Guardrails are off. Your policy isn't applied, so agents can call any tool.",
-  observe:
-    "Guardrails are on in Observe. Every tool call is checked and recorded, and the platform applies remedies for the agent where it can.",
-  enforce:
-    "Guardrails are on in Enforce. Every tool call is checked against your policy before it runs.",
+  off: "Guardrails are off.",
+  observe: "Guardrails are in Observe.",
+  enforce: "Guardrails are in Enforce.",
 };
 /**
  * `anyMember`: read it without organization settings access. Every member can
@@ -58,21 +58,21 @@ export function useGuardrailsDeployment({
   });
 }
 export function useUpdateGuardrailsMode() {
-  return useUpdateDeployment(
-    (mode: GuardrailsMode) => ({ mode }),
-    (saved) => GUARDRAILS_MODE_TOAST[saved.mode],
-    modeMutationKey,
-  );
-}
-
-export function useIsGuardrailsModeUpdating() {
-  return useIsMutating({ mutationKey: modeMutationKey }) > 0;
+  return useUpdateDeployment((mode: GuardrailsMode) => ({ mode }), {
+    successToast: (saved) => GUARDRAILS_MODE_TOAST[saved.mode],
+    gatedSetting: "mode",
+  });
 }
 
 export function useUpdatePersonApproval() {
-  return useUpdateDeployment((personApproval: PersonApproval) => ({
-    personApproval,
-  }));
+  return useUpdateDeployment(
+    (personApproval: PersonApproval) => ({ personApproval }),
+    { gatedSetting: "personApproval" },
+  );
+}
+
+export function useIsGuardrailsSettingSaving(setting: GatedSetting) {
+  return useIsMutating({ mutationKey: mutationKeyOf(setting) }) > 0;
 }
 
 /**
@@ -86,14 +86,17 @@ export function useUpdateEnforcedMarks() {
       throwOnApiError(error);
       if (!data) throw new Error("Guardrails settings were not returned");
       const marks = data.enforcedMarks;
-      return {
-        enforcedMarks:
-          "add" in change
-            ? marks.includes(change.add)
-              ? marks
-              : [...marks, change.add]
-            : marks.filter((mark) => mark !== change.remove),
-      };
+      if ("remove" in change)
+        return {
+          enforcedMarks: marks.filter((mark) => mark !== change.remove),
+        };
+      if (marks.includes(change.add)) return null;
+      if (marks.length >= MAX_ENFORCED_MARKS) {
+        const message = `Up to ${MAX_ENFORCED_MARKS} enforced marks.`;
+        toast.error(message);
+        throw new Error(message);
+      }
+      return { enforcedMarks: [...marks, change.add] };
     },
   );
 }
@@ -112,30 +115,45 @@ export function useUpdateAnnotatorModel() {
     (
       selection: Pick<Deployment, "annotatorModelId" | "annotatorLlmApiKeyId">,
     ) => selection,
-    () => "Annotator model saved",
+    { successToast: () => "Annotator model saved" },
   );
 }
 
 // ===
 
-/** Saves one deployment change; every save toasts the response's warnings. */
+function mutationKeyOf(setting: GatedSetting) {
+  return [...queryKey, setting];
+}
+
+type DeploymentUpdate =
+  archestraApiTypes.UpdateGuardrailsDeploymentData["body"];
+
+/**
+ * Saves one deployment change; every save toasts the response's warnings. A
+ * `null` body is a change already in place, and nothing is sent.
+ */
 function useUpdateDeployment<TValue>(
   toBody: (
     value: TValue,
-  ) =>
-    | archestraApiTypes.UpdateGuardrailsDeploymentData["body"]
-    | Promise<archestraApiTypes.UpdateGuardrailsDeploymentData["body"]>,
-  successToast?: (
-    saved: archestraApiTypes.UpdateGuardrailsDeploymentResponses[200],
-  ) => string,
-  mutationKey?: readonly unknown[],
+  ) => DeploymentUpdate | null | Promise<DeploymentUpdate | null>,
+  {
+    successToast,
+    gatedSetting,
+  }: {
+    successToast?: (
+      saved: archestraApiTypes.UpdateGuardrailsDeploymentResponses[200],
+    ) => string;
+    gatedSetting?: GatedSetting;
+  } = {},
 ) {
   const client = useQueryClient();
   return useMutation({
-    mutationKey,
+    mutationKey: gatedSetting && mutationKeyOf(gatedSetting),
     mutationFn: async (value: TValue) => {
+      const body = await toBody(value);
+      if (body === null) return undefined;
       const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
-        body: await toBody(value),
+        body,
       });
       throwOnApiError(error);
       return data;

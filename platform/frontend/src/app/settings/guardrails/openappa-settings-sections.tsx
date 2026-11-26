@@ -27,7 +27,7 @@ import {
   type GuardrailsMode,
   type PersonApproval,
   useGuardrailsDeployment,
-  useIsGuardrailsModeUpdating,
+  useIsGuardrailsSettingSaving,
   useUpdateAnnotatorModel,
   useUpdateEnforcedMarks,
   useUpdateGuardrailsMode,
@@ -50,6 +50,7 @@ export function OpenAppaEnforcementSetting() {
     organizationSettings: ["update"],
   });
   const { isFresh } = useOpenAppaSetupState();
+  const approvalSaving = useIsGuardrailsSettingSaving("personApproval");
   const enabled = Boolean(deployment.data?.enabled);
   const observing = deployment.data?.mode === "observe";
   return (
@@ -60,14 +61,12 @@ export function OpenAppaEnforcementSetting() {
         <>
           {observing ? (
             <span>
-              Guardrails observe your policy. Every tool call is checked and
-              recorded, and the platform applies remedies for the agent where it
-              can. Calls that need an enforced mark still wait.
+              Guardrails check and record tool calls, and the platform answers
+              remedies for the agent.
             </span>
           ) : enabled ? (
             <span>
-              Guardrails are on. Every tool call is checked against your policy
-              before it runs.
+              Guardrails check tool calls against your policy before they run.
             </span>
           ) : isFresh ? (
             // Saving the first policy turns enforcement on; there is nothing to enforce before it.
@@ -82,12 +81,8 @@ export function OpenAppaEnforcementSetting() {
               <span> to turn this on.</span>
             </>
           ) : (
-            <span>
-              Guardrails are off. Your policy isn't applied, so agents can call
-              any tool.
-            </span>
+            <span>Guardrails are off. Your policy isn't applied.</span>
           )}
-          <span> {NEW_SESSIONS_NOTE}</span>
           {observing ? <ModesDocsLink /> : null}
         </>
       }
@@ -100,7 +95,8 @@ export function OpenAppaEnforcementSetting() {
             disabled={
               !canManage ||
               !deployment.data.featureEnabled ||
-              isFresh !== false ||
+              (deployment.data.mode === "off" && isFresh !== false) ||
+              approvalSaving ||
               update.isPending
             }
             onChange={update.mutate}
@@ -113,7 +109,7 @@ export function OpenAppaEnforcementSetting() {
   );
 }
 
-/** Who answers what a person would be asked; only Enforce asks. */
+/** Who answers what a person would be asked; only Enforce asks, but it can be set beforehand. */
 export function OpenAppaPersonApprovalSetting() {
   const deployment = useGuardrailsDeployment({ poll: true });
   const update = useUpdatePersonApproval();
@@ -123,26 +119,20 @@ export function OpenAppaPersonApprovalSetting() {
   const pinnedBy = deployment.data?.environmentOverrides.find(
     ({ setting }) => setting === "personApproval",
   )?.variable;
-  const enforcing = deployment.data?.mode === "enforce";
-  const modeUpdating = useIsGuardrailsModeUpdating();
+  const modeSaving = useIsGuardrailsSettingSaving("mode");
   return (
     <SettingsBlock
       id="person-approval"
       title="Approvals"
       description={
         <>
-          <span>
-            Who answers when your policy asks a person to approve a call.{" "}
-            {NEW_SESSIONS_NOTE}
-          </span>
+          <span>Who answers approval requests in Enforce.</span>
           {pinnedBy ? (
             <span>
               {" "}
               Set by <code className="font-mono text-xs">{pinnedBy}</code>.
             </span>
-          ) : enforcing ? null : (
-            <span> Applies in Enforce.</span>
-          )}
+          ) : null}
         </>
       }
       control={
@@ -154,9 +144,8 @@ export function OpenAppaPersonApprovalSetting() {
             disabled={
               !canManage ||
               !deployment.data.featureEnabled ||
-              !enforcing ||
               pinnedBy !== undefined ||
-              modeUpdating ||
+              modeSaving ||
               update.isPending
             }
             onChange={update.mutate}
@@ -179,7 +168,7 @@ export function OpenAppaEnforcedMarksSetting() {
   const [draft, setDraft] = useState("");
   const marks = deployment.data?.enforcedMarks ?? [];
   const mark = draft.trim();
-  const problem = markProblem(mark, marks);
+  const problem = markProblem(mark);
   const disabled =
     !canManage || !deployment.data?.featureEnabled || update.isPending;
   const add = () => {
@@ -190,7 +179,7 @@ export function OpenAppaEnforcedMarksSetting() {
     <SettingsBlock
       id="enforced-marks"
       title="Enforced marks"
-      description="Observe and automatic approval never satisfy these marks; a person or your policy's own authority must."
+      description="Approvals the platform adds, in Observe or automatic approval, never satisfy these marks."
       control={
         deployment.data ? (
           <div className="flex w-full flex-col gap-2 sm:w-80">
@@ -451,49 +440,43 @@ export function OpenAppaClientCoverageSetting() {
 
 type Option = { label: string; description: string };
 
-const NEW_SESSIONS_NOTE =
-  "Changes apply to new sessions; open sessions keep the setting they started with.";
-
 const MODE_OPTIONS: Record<GuardrailsMode, Option> = {
   off: { label: "Off", description: "Your policy isn't applied." },
   observe: {
     label: "Observe",
     description:
-      "Calls are checked and recorded; the platform remedies them where it can.",
+      "Calls are checked and recorded; the platform answers remedies.",
   },
   enforce: {
     label: "Enforce",
-    description: "Calls run only once your policy allows them.",
+    description: "Calls run only as your policy allows.",
   },
 };
 
 const APPROVAL_OPTIONS: Record<PersonApproval, Option> = {
   ask: {
     label: "Ask the person",
-    description: "The person running the session answers.",
+    description: "The person in the session answers.",
   },
   auto_unattended: {
     label: "Automatic in Agent Runtime",
     description:
-      "The platform answers in sessions opened with an Agent Runtime credential; people answer elsewhere.",
+      "The platform answers in sessions opened with an Agent Runtime credential.",
   },
   auto_everywhere: {
     label: "Always automatic",
-    description: "The platform answers where it can, in every session.",
+    description: "The platform answers in every session.",
   },
 };
 
-/** Mirrors the backend's EnforcedMarksSchema. */
-const MAX_MARKS = 64;
+/** Mirrors the backend's EnforcedMarksSchema for one mark. */
 const MAX_MARK_LENGTH = 128;
 
-function markProblem(mark: string, marks: string[]): string | null {
+function markProblem(mark: string): string | null {
   if (!mark) return "Enter a mark.";
   if (mark.length > MAX_MARK_LENGTH)
     return `Use at most ${MAX_MARK_LENGTH} characters.`;
   if (mark.includes("\u0000")) return "A mark can't contain NUL.";
-  if (marks.includes(mark)) return "Already added.";
-  if (marks.length >= MAX_MARKS) return `Up to ${MAX_MARKS} marks.`;
   return null;
 }
 

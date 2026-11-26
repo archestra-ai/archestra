@@ -115,6 +115,17 @@ jobs:
           gh run download "$RUN_ID" --name "release-request-${attempt}" --dir "$RELEASE_DIR/request"
           gh run download "$RUN_ID" --name release-helm-chart --dir "$RELEASE_DIR/chart"
 
+      # A new line's X.Y.0 changelog covers only the changes since its last
+      # release candidate. Point readers upgrading from the previous line at the
+      # upgrade guide and at everything else new in the line (stable-line.py).
+      # A failure here shows on the run but never holds back the release.
+      - name: Add upgrade notes to a new stable line's first release
+        if: ${{ startsWith(github.ref, 'refs/heads/release/') && endsWith(needs.finalize.outputs.tag-name, '.0') }}
+        continue-on-error: true
+        env:
+          TAG_NAME: ${{ needs.finalize.outputs.tag-name }}
+        run: python3 .github/scripts/stable-line.py stable-notes --tag "$TAG_NAME"
+
       # Checks the chart against the request's sha256, then attaches it and
       # publishes the draft. Every registry write, :latest included, belongs to
       # release-publisher; an older line's patch keeps the newer line latest.
@@ -174,6 +185,45 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ needs.finalize.outputs.tag-name }}
         run: gh workflow run sync-terraform-provider.yml --ref main -f "release_tag=$TAG_NAME"
+
+  clear-release-as:
+    name: Clear a consumed release-as
+    # A temporary release-as (X.Y.0 after a stable cut, the next line's first
+    # release candidate, a version override) pauses new release PRs on its
+    # branch once released (release-please.yml). Open the pull request that
+    # removes it; it merges on its own after review.
+    if: ${{ needs.publish.outputs.published == 'true' }}
+    needs:
+      - finalize
+      - publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Check out the release tooling.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # The App token makes the new pull request run ordinary CI.
+      - name: Generate releaser token
+        id: token
+        uses: archestra-ai/.github/actions/github-app-token@v1.31.1
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open the pull request
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          VERSION: ${{ needs.finalize.outputs.version }}
+        run: python3 .github/scripts/stable-line.py clear-release-as --branch "$BRANCH" --version "$VERSION"
 
   move-release-line:
     name: Start Move Release Line

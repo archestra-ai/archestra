@@ -1,0 +1,125 @@
+suite: NOTES links the upgrade guide on the first upgrade into a stable line
+templates:
+  - templates/NOTES.txt
+release:
+  name: archestra-platform
+  namespace: archestra
+chart:
+  appVersion: 1.5.0
+tests:
+  - it: links the adjacent line's guide when upgrading from 1.4.x
+    release:
+      upgrade: true
+    kubernetesProvider: &running-1-4
+      scheme:
+        "apps/v1/Deployment":
+          gvr:
+            group: apps
+            version: v1
+            resource: deployments
+          namespaced: true
+      objects:
+        - kind: Deployment
+          apiVersion: apps/v1
+          metadata:
+            name: archestra-platform
+            namespace: archestra
+            labels:
+              app.kubernetes.io/version: "1.4.12"
+    asserts:
+      - matchRegexRaw:
+          pattern: "Upgrading from v1.4 to v1.5:\n  Read the upgrade guide before using this release:\n  https://archestra.ai/docs/v1.5/admin/upgrade-v1-4-to-v1-5\n"
+
+  - it: says nothing on a patch upgrade within the line
+    release:
+      upgrade: true
+    chart:
+      appVersion: 1.5.1
+    kubernetesProvider:
+      scheme:
+        "apps/v1/Deployment":
+          gvr:
+            group: apps
+            version: v1
+            resource: deployments
+          namespaced: true
+      objects:
+        - kind: Deployment
+          apiVersion: apps/v1
+          metadata:
+            name: archestra-platform
+            namespace: archestra
+            labels:
+              app.kubernetes.io/version: "1.5.0"
+    asserts:
+      - notMatchRegexRaw:
+          pattern: Upgrading from
+
+  - it: counts a release candidate of the new line as already on it
+    release:
+      upgrade: true
+    kubernetesProvider:
+      scheme:
+        "apps/v1/Deployment":
+          gvr:
+            group: apps
+            version: v1
+            resource: deployments
+          namespaced: true
+      objects:
+        - kind: Deployment
+          apiVersion: apps/v1
+          metadata:
+            name: archestra-platform
+            namespace: archestra
+            labels:
+              app.kubernetes.io/version: "1.5.0-rc.44"
+    asserts:
+      - notMatchRegexRaw:
+          pattern: Upgrading from
+
+  - it: points at the new line's docs when the upgrade skips a line
+    release:
+      upgrade: true
+    kubernetesProvider:
+      scheme:
+        "apps/v1/Deployment":
+          gvr:
+            group: apps
+            version: v1
+            resource: deployments
+          namespaced: true
+      objects:
+        - kind: Deployment
+          apiVersion: apps/v1
+          metadata:
+            name: archestra-platform
+            namespace: archestra
+            labels:
+              app.kubernetes.io/version: "1.3.77"
+    asserts:
+      - matchRegexRaw:
+          pattern: "Upgrading from v1.3 to v1.5:\n  This upgrade skips at least one stable line.*\n.*\n  https://archestra.ai/docs/v1.5\n"
+
+  - it: says nothing when upgrading to a release candidate
+    release:
+      upgrade: true
+    chart:
+      appVersion: 1.6.0-rc.1
+    kubernetesProvider: *running-1-4
+    asserts:
+      - notMatchRegexRaw:
+          pattern: Upgrading from
+
+  - it: says nothing on a fresh install
+    kubernetesProvider: *running-1-4
+    asserts:
+      - notMatchRegexRaw:
+          pattern: Upgrading from
+
+  - it: says nothing when the cluster cannot be read (helm template, dry runs)
+    release:
+      upgrade: true
+    asserts:
+      - notMatchRegexRaw:
+          pattern: Upgrading from

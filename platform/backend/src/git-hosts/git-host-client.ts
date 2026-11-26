@@ -1,5 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
-import { type GitHost, isCloudGitHost, TimeInMs } from "@archestra/shared";
+import {
+  GIT_HOST_RATE_LIMITED_CODE,
+  GIT_REPOSITORY_NOT_FOUND_CODE,
+  type GitHost,
+  type GitReadFailureCode,
+  isCloudGitHost,
+  TimeInMs,
+} from "@archestra/shared";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 
@@ -34,10 +41,44 @@ export class GitHostError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The host refused for its request quota, not for the request itself. */
+    readonly rateLimited = false,
   ) {
     super(message);
     this.name = "GitHostError";
   }
+}
+
+/**
+ * A repository that could not be read, with the cause when it is one of the
+ * two an import explains in its own words (see `GitReadFailureCode`).
+ */
+export class GitReadError extends Error {
+  constructor(
+    message: string,
+    readonly code: GitReadFailureCode | null = null,
+  ) {
+    super(message);
+    this.name = "GitReadError";
+  }
+}
+
+/**
+ * The cause an error carries, if any. `lookup` is for the first request of a
+ * read, the one that resolves the repository: there a 404 means the
+ * repository (or the ref in it) was not found. Later requests fetch paths
+ * inside it, where a 404 is only a missing file.
+ */
+export function gitReadFailureCode(
+  error: unknown,
+  options: { lookup?: boolean } = {},
+): GitReadFailureCode | null {
+  if (error instanceof GitReadError) return error.code;
+  if (!(error instanceof GitHostError)) return null;
+  if (error.rateLimited) return GIT_HOST_RATE_LIMITED_CODE;
+  return options.lookup && error.status === 404
+    ? GIT_REPOSITORY_NOT_FOUND_CODE
+    : null;
 }
 
 /**
@@ -546,6 +587,7 @@ async function toError(
     return new GitHostError(
       response.status,
       "the host's request limit is used up. Try again later.",
+      true,
     );
   }
   const reason =

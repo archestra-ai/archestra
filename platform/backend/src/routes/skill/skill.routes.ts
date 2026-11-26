@@ -2495,7 +2495,10 @@ async function runImport<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof SkillImportError || error instanceof SkillParseError) {
+    if (error instanceof SkillImportError) {
+      throw new ApiError(400, error.message, error.code ?? undefined);
+    }
+    if (error instanceof SkillParseError) {
       throw new ApiError(400, error.message);
     }
     throw error;

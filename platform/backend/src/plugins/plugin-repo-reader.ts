@@ -1,4 +1,6 @@
 import {
+  GIT_HOST_RATE_LIMITED_CODE,
+  GIT_REPOSITORY_NOT_FOUND_CODE,
   type GitHost,
   type GitProvider,
   gitHostFromUrl,
@@ -7,7 +9,11 @@ import {
 } from "@archestra/shared";
 import { Octokit } from "@octokit/rest";
 import type { GitAccess } from "@/git-hosts/git-access";
-import { GitHostClient } from "@/git-hosts/git-host-client";
+import {
+  GitHostClient,
+  GitReadError,
+  gitReadFailureCode,
+} from "@/git-hosts/git-host-client";
 import { readResponseBodyWithLimit } from "./bounded-response";
 import {
   isGithubRateLimitError,
@@ -157,14 +163,20 @@ class GithubCloudReader implements PluginRepoReader {
         this.anonymousRateLimited = true;
         return this.resolvePublicCommit({ ...params, repository, ref });
       }
-      throw new Error(
-        githubStatus(error) === 404
-          ? `${
-              ref === "HEAD"
-                ? `Repository ${repository.slug} was not found`
-                : `"${ref}" was not found in ${repository.slug}`
-            }${this.token ? ", or the credential can't see it." : "."}`
-          : `Could not resolve ref "${ref}" in ${repository.slug}: ${githubFailureReason(error)}`,
+      if (githubStatus(error) === 404) {
+        throw new GitReadError(
+          `${
+            ref === "HEAD"
+              ? `Repository ${repository.slug} was not found`
+              : `"${ref}" was not found in ${repository.slug}`
+          }${this.token ? ", or the credential can't see it." : "."}`,
+          // A named ref that is missing is not a missing repository.
+          ref === "HEAD" ? GIT_REPOSITORY_NOT_FOUND_CODE : null,
+        );
+      }
+      throw new GitReadError(
+        `Could not read ${repository.slug}: ${githubFailureReason(error)}`,
+        isGithubRateLimitError(error) ? GIT_HOST_RATE_LIMITED_CODE : null,
       );
     }
   }
@@ -284,10 +296,15 @@ class GithubCloudReader implements PluginRepoReader {
       // a terminal. A repository Git cannot find is the same answer the API
       // gives with 404; anything else is the quota, which is why this path
       // ran at all.
-      throw new Error(
-        /repository[^\n]*not found/i.test(errorMessage(error))
-          ? `Repository ${params.repository.slug} was not found.`
-          : `Could not read ${params.repository.slug}: GitHub's request limit is used up, and reading it over Git failed too. Try again later.`,
+      if (/repository[^\n]*not found/i.test(errorMessage(error))) {
+        throw new GitReadError(
+          `Repository ${params.repository.slug} was not found.`,
+          GIT_REPOSITORY_NOT_FOUND_CODE,
+        );
+      }
+      throw new GitReadError(
+        `Could not read ${params.repository.slug}: GitHub's request limit is used up, and reading it over Git failed too. Try again later.`,
+        GIT_HOST_RATE_LIMITED_CODE,
       );
     }
   }
@@ -351,8 +368,12 @@ class GitHostReader implements PluginRepoReader {
         params.signal,
       );
     } catch (error) {
-      throw new Error(
-        `Could not resolve ref "${params.ref ?? "HEAD"}" in ${params.repo}: ${errorMessage(error)}`,
+      const code = gitReadFailureCode(error, { lookup: params.ref === null });
+      throw new GitReadError(
+        code === GIT_REPOSITORY_NOT_FOUND_CODE
+          ? `Repository ${params.repo} was not found, or the credential can't see it.`
+          : `Could not read ${params.repo}: ${errorMessage(error)}`,
+        code,
       );
     }
   }

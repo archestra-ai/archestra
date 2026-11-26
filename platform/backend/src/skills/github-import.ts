@@ -1,6 +1,9 @@
 import {
+  GIT_HOST_RATE_LIMITED_CODE,
+  GIT_REPOSITORY_NOT_FOUND_CODE,
   type GitHost,
   type GitProvider,
+  type GitReadFailureCode,
   gitHostFromUrl,
   isCloudGitHost,
   normalizeGitSubpath,
@@ -9,7 +12,7 @@ import {
 } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import type { GitAccess } from "@/git-hosts/git-access";
-import { GitHostClient } from "@/git-hosts/git-host-client";
+import { GitHostClient, gitReadFailureCode } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import type { SkillFileEncoding, SkillFileKind } from "@/types";
 import {
@@ -61,7 +64,11 @@ const REPO_CACHE_TTL_MS = 5 * TimeInMs.Minute;
 
 /** Raised when a repository URL is malformed or content cannot be fetched. */
 export class SkillImportError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** Why the repository could not be read, when the cause is a known one. */
+    readonly code: GitReadFailureCode | null = null,
+  ) {
     super(message);
     this.name = "SkillImportError";
   }
@@ -409,8 +416,15 @@ async function loadRepoSnapshot(
   try {
     commitSha = await client.resolveCommit(location.path, location.ref);
   } catch (error) {
+    // A named ref that is missing is not a missing repository.
+    const code = gitReadFailureCode(error, { lookup: location.ref === null });
     throw new SkillImportError(
-      `Could not resolve ref "${location.ref ?? "HEAD"}" in ${location.path}: ${errorMessage(error)}`,
+      code === GIT_REPOSITORY_NOT_FOUND_CODE
+        ? `Repository ${location.path} was not found.`
+        : code === GIT_HOST_RATE_LIMITED_CODE
+          ? "The host's request limit is used up. Try again later."
+          : `Could not resolve ref "${location.ref ?? "HEAD"}" in ${location.path}: ${errorMessage(error)}`,
+      code,
     );
   }
 
@@ -420,6 +434,7 @@ async function loadRepoSnapshot(
   } catch (error) {
     throw new SkillImportError(
       `Could not read repository tree: ${errorMessage(error)}`,
+      gitReadFailureCode(error),
     );
   }
 

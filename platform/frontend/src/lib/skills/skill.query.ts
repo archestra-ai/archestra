@@ -775,9 +775,13 @@ export function useDiscoverGithubSkills() {
     ) => {
       const { data, error } = await discoverGithubSkills({ body });
       if (error) {
-        return { data: null, errorMessage: getApiErrorMessage(error) };
+        return {
+          data: null,
+          errorMessage: getApiErrorMessage(error),
+          errorCode: getApiErrorInternalCode(error) ?? null,
+        };
       }
-      return { data, errorMessage: null };
+      return { data, errorMessage: null, errorCode: null };
     },
   });
 }

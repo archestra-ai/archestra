@@ -13,6 +13,17 @@ export const GIT_PROVIDER_LABELS: Record<GitProvider, string> = {
   gitlab: "GitLab",
 };
 
+/**
+ * Why a repository could not be read, for the two causes a person can act on
+ * and that each need words of their own: the `internal_code` of the API error
+ * an import answers with. Any other failure carries its message only.
+ */
+export const GIT_REPOSITORY_NOT_FOUND_CODE = "git_repository_not_found";
+export const GIT_HOST_RATE_LIMITED_CODE = "git_host_rate_limited";
+export type GitReadFailureCode =
+  | typeof GIT_REPOSITORY_NOT_FOUND_CODE
+  | typeof GIT_HOST_RATE_LIMITED_CODE;
+
 /** Where a provider's repositories and REST API live. */
 export interface GitHost {
   provider: GitProvider;

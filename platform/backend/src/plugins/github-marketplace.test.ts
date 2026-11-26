@@ -478,7 +478,7 @@ describe("discoverGithubMarketplace", () => {
     expect(discovered).toMatchObject({
       marketplacePath: null,
       entries: [],
-      reason: expect.stringContaining("plugin folder"),
+      reason: "No plugins found in the repository",
     });
   });
 

@@ -37,6 +37,10 @@ import {
   ImportSelectionList,
   ImportSettings,
 } from "@/components/git/import-selection";
+import {
+  type RepositoryReadFailure,
+  RepositoryReadNotice,
+} from "@/components/git/repository-read-notice";
 import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SearchInput } from "@/components/search-input";
@@ -52,7 +56,11 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { FieldDescription } from "@/components/ui/field-description";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -124,10 +132,11 @@ export function ImportMarketplaceDialog({
   // A scan ends without plugins in two different ways. `failed`: the
   // repository could not be read. `nothing-found`: it was read, and holds
   // nothing to import, so its access is not the thing to change.
-  const [discoverError, setDiscoverError] = useState<{
-    kind: "failed" | "nothing-found";
-    message: string;
-  } | null>(null);
+  const [discoverError, setDiscoverError] = useState<
+    | { kind: "failed"; failure: RepositoryReadFailure }
+    | { kind: "nothing-found" }
+    | null
+  >(null);
   const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
     [],
   );
@@ -204,7 +213,8 @@ export function ImportMarketplaceDialog({
     fields: NonNullable<typeof repositoryFields>,
   ) => {
     setDiscoverError(null);
-    const { data, errorMessage } = await discover.mutateAsync(fields);
+    const { data, errorMessage, errorCode } =
+      await discover.mutateAsync(fields);
     if (data && !data.reason) {
       setMarketplace(data);
       setPlatforms([...CONNECT_PLATFORM_OPTIONS]);
@@ -231,9 +241,12 @@ export function ImportMarketplaceDialog({
       );
     } else {
       if (errorMessage) {
-        setDiscoverError({ kind: "failed", message: errorMessage });
+        setDiscoverError({
+          kind: "failed",
+          failure: { code: errorCode, message: errorMessage },
+        });
       } else if (data?.reason) {
-        setDiscoverError({ kind: "nothing-found", message: data.reason });
+        setDiscoverError({ kind: "nothing-found" });
       }
     }
   };
@@ -709,14 +722,16 @@ export function ImportMarketplaceDialog({
             <ImportSettings>
               {selectionLimitReached &&
                 totalImportable > PLUGIN_MARKETPLACE_IMPORT_LIMIT && (
-                  <InlineNotice>
-                    <AlertTriangle />
-                    <span className="font-medium">
-                      {PLUGIN_MARKETPLACE_IMPORT_LIMIT}-plugin import limit
-                    </span>
-                    <InlineNoticeText>
-                      Import this batch, then reopen for the next.
-                    </InlineNoticeText>
+                  <InlineNotice className="items-start">
+                    <AlertTriangle className="mt-0.5" />
+                    <InlineNoticeBody>
+                      <span className="font-medium">
+                        {PLUGIN_MARKETPLACE_IMPORT_LIMIT}-plugin import limit
+                      </span>
+                      <InlineNoticeText>
+                        Import this batch, then reopen for the next.
+                      </InlineNoticeText>
+                    </InlineNoticeBody>
                   </InlineNotice>
                 )}
 
@@ -771,23 +786,14 @@ export function ImportMarketplaceDialog({
               <InlineNotice>
                 <AlertTriangle />
                 <span className="font-medium">
-                  No plugins found in that repository
+                  No plugins found in the repository.
                 </span>
-                <InlineNoticeText>{discoverError.message}.</InlineNoticeText>
               </InlineNotice>
             ) : (
-              <InlineNotice variant="error">
-                <AlertTriangle />
-                <span className="font-medium">
-                  Couldn’t read that repository
-                </span>
-                <InlineNoticeText>
-                  <span>{discoverError.message}</span>
-                  {source.access?.kind === "public" ? (
-                    <span> Private? Change the access above.</span>
-                  ) : null}
-                </InlineNoticeText>
-              </InlineNotice>
+              <RepositoryReadNotice
+                failure={discoverError.failure}
+                isPublicAccess={source.access?.kind === "public"}
+              />
             )
           ) : null}
         </div>

@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { pluginsQueryKey } from "@/lib/connection-approval-query-keys";
 import {
+  getApiErrorInternalCode,
   getApiErrorMessage,
   handleApiError,
   throwOnApiError,
@@ -193,9 +194,13 @@ export function useDiscoverGithubPluginMarketplace() {
     mutationFn: async (body: DiscoverGithubPluginMarketplaceBody) => {
       const { data, error } = await discoverGithubPluginMarketplace({ body });
       if (error) {
-        return { data: null, errorMessage: getApiErrorMessage(error) };
+        return {
+          data: null,
+          errorMessage: getApiErrorMessage(error),
+          errorCode: getApiErrorInternalCode(error) ?? null,
+        };
       }
-      return { data, errorMessage: null };
+      return { data, errorMessage: null, errorCode: null };
     },
   });
 }

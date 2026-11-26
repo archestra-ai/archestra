@@ -1063,7 +1063,7 @@ async function runMarketplaceDiscovery<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } catch (error) {
     if (error instanceof MarketplaceDiscoveryError) {
-      throw new ApiError(400, error.message);
+      throw new ApiError(400, error.message, error.code ?? undefined);
     }
     throw error;
   }

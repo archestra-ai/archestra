@@ -245,26 +245,56 @@ describe("NewPluginPage", () => {
 
     // Read fine, holds no plugins: its access is not the thing to change.
     discoverMock.mockResolvedValue({
-      data: { entries: [], reason: "No plugin folder was found" },
+      data: { entries: [], reason: "No plugins found in the repository" },
       errorMessage: null,
+      errorCode: null,
     });
     await scan();
     expect(
-      await screen.findByText("No plugins found in that repository"),
+      await screen.findByText("No plugins found in the repository."),
     ).toBeVisible();
-    expect(screen.getByText("No plugin folder was found.")).toBeVisible();
     expect(screen.queryByText(/Private\?/)).not.toBeInTheDocument();
 
-    // Could not be read: a private repository is the likely reason.
+    // Not found: a private repository is the likely reason, and the
+    // repository's name is not repeated back.
     discoverMock.mockResolvedValue({
       data: null,
       errorMessage: "Repository acme/plugins was not found.",
+      errorCode: "git_repository_not_found",
     });
     await scan();
     expect(
-      await screen.findByText("Couldn’t read that repository"),
+      await screen.findByText("Couldn’t find the repository."),
     ).toBeVisible();
-    expect(screen.getByText(/Private\?/)).toBeVisible();
+    expect(screen.getByText("Private? Change the access above.")).toBeVisible();
+    expect(screen.queryByText(/acme\/plugins was not found/)).toBeNull();
+
+    // The host's request limit: the access is not the thing to change.
+    discoverMock.mockResolvedValue({
+      data: null,
+      errorMessage:
+        "Could not read acme/plugins: the host's request limit is used up. Try again later.",
+      errorCode: "git_host_rate_limited",
+    });
+    await scan();
+    expect(
+      await screen.findByText("Couldn’t read the repository."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("The host’s request limit is used up. Try again later."),
+    ).toBeVisible();
+    expect(screen.queryByText(/Private\?/)).not.toBeInTheDocument();
+
+    // Any other failure shows what the server said.
+    discoverMock.mockResolvedValue({
+      data: null,
+      errorMessage: "Marketplace manifest is not valid JSON",
+      errorCode: null,
+    });
+    await scan();
+    expect(
+      await screen.findByText("Marketplace manifest is not valid JSON"),
+    ).toBeVisible();
   });
 
   it("reads a public GitHub repository without sending a credential", async () => {

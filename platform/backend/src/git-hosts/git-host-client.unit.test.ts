@@ -1,7 +1,7 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, test } from "vitest";
 import { useMswServer } from "@/test/msw";
-import { GitHostClient } from "./git-host-client";
+import { GitHostClient, gitReadFailureCode } from "./git-host-client";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture, not a React hook
 const server = useMswServer();
@@ -131,6 +131,38 @@ describe("host failures", () => {
     expect(message).toContain("request limit is used up");
     expect(message).not.toContain("credential");
     expect(message).not.toContain("203.0.113.7");
+  });
+
+  test("says why a read failed, for the two causes an import explains itself", async () => {
+    // The request quota, whatever the request was.
+    server.use(
+      http.get(commitUrl, () =>
+        HttpResponse.json({ message: "slow down" }, { status: 429 }),
+      ),
+    );
+    const limited = await client
+      .resolveCommit("example/widgets", null)
+      .catch((error: Error) => error);
+    expect(gitReadFailureCode(limited)).toBe("git_host_rate_limited");
+    expect(gitReadFailureCode(limited, { lookup: true })).toBe(
+      "git_host_rate_limited",
+    );
+
+    // A 404 means "repository not found" only for the request that looks the
+    // repository up; for a file inside it, it is a missing file.
+    server.use(
+      http.get(commitUrl, () =>
+        HttpResponse.json({ message: "Not Found" }, { status: 404 }),
+      ),
+    );
+    const missing = await client
+      .resolveCommit("example/widgets", null)
+      .catch((error: Error) => error);
+    expect(gitReadFailureCode(missing, { lookup: true })).toBe(
+      "git_repository_not_found",
+    );
+    expect(gitReadFailureCode(missing)).toBeNull();
+    expect(gitReadFailureCode(new Error("anything else"))).toBeNull();
   });
 
   test("a refused read still names the credential", async () => {

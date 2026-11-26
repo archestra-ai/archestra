@@ -171754,11 +171754,25 @@
                               "plans": {
                                 "type": "object",
                                 "properties": {
+                                  "apiKey": {
+                                    "type": "object",
+                                    "properties": {
+                                      "hidden": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
                                   "personal": {
                                     "type": "object",
                                     "properties": {
                                       "hidden": {
                                         "type": "boolean"
+                                      },
+                                      "displayName": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "maxLength": 60
                                       }
                                     },
                                     "additionalProperties": false
@@ -173488,6 +173502,14 @@
                           "isGithubAppKey": {
                             "type": "boolean"
                           },
+                          "plan": {
+                            "type": "string",
+                            "enum": [
+                              "apiKey",
+                              "personal",
+                              "enterprise"
+                            ]
+                          },
                           "githubOrganization": {
                             "nullable": true,
                             "type": "string"
@@ -173722,6 +173744,14 @@
                           },
                           "isGithubAppKey": {
                             "type": "boolean"
+                          },
+                          "plan": {
+                            "type": "string",
+                            "enum": [
+                              "apiKey",
+                              "personal",
+                              "enterprise"
+                            ]
                           },
                           "githubOrganization": {
                             "nullable": true,
@@ -176954,6 +176984,14 @@
                               "isGithubAppKey": {
                                 "type": "boolean"
                               },
+                              "plan": {
+                                "type": "string",
+                                "enum": [
+                                  "apiKey",
+                                  "personal",
+                                  "enterprise"
+                                ]
+                              },
                               "githubOrganization": {
                                 "nullable": true,
                                 "type": "string"
@@ -177188,6 +177226,14 @@
                               },
                               "isGithubAppKey": {
                                 "type": "boolean"
+                              },
+                              "plan": {
+                                "type": "string",
+                                "enum": [
+                                  "apiKey",
+                                  "personal",
+                                  "enterprise"
+                                ]
                               },
                               "githubOrganization": {
                                 "nullable": true,
@@ -434333,6 +434379,14 @@
                       "isGithubAppKey": {
                         "type": "boolean"
                       },
+                      "plan": {
+                        "type": "string",
+                        "enum": [
+                          "apiKey",
+                          "personal",
+                          "enterprise"
+                        ]
+                      },
                       "githubOrganization": {
                         "nullable": true,
                         "type": "string"
@@ -435099,6 +435153,14 @@
                     "isGithubAppKey": {
                       "type": "boolean"
                     },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
+                    },
                     "githubOrganization": {
                       "nullable": true,
                       "type": "string"
@@ -435634,6 +435696,14 @@
                       "isGithubAppKey": {
                         "type": "boolean"
                       },
+                      "plan": {
+                        "type": "string",
+                        "enum": [
+                          "apiKey",
+                          "personal",
+                          "enterprise"
+                        ]
+                      },
                       "githubOrganization": {
                         "nullable": true,
                         "type": "string"
@@ -436133,6 +436203,14 @@
                     },
                     "isGithubAppKey": {
                       "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
                     },
                     "githubOrganization": {
                       "nullable": true,
@@ -436712,6 +436790,14 @@
                     },
                     "isGithubAppKey": {
                       "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
                     },
                     "githubOrganization": {
                       "nullable": true,
@@ -437506,6 +437592,14 @@
                     },
                     "isGithubAppKey": {
                       "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
                     },
                     "githubOrganization": {
                       "nullable": true,
@@ -514479,11 +514573,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -516301,11 +516409,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -517847,11 +517969,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -519001,11 +519137,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -520152,11 +520302,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -522787,11 +522951,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -524073,11 +524251,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -524787,11 +524979,25 @@
                         "plans": {
                           "type": "object",
                           "properties": {
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "hidden": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
                             "personal": {
                               "type": "object",
                               "properties": {
                                 "hidden": {
                                   "type": "boolean"
+                                },
+                                "displayName": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "maxLength": 60
                                 }
                               },
                               "additionalProperties": false
@@ -525419,11 +525625,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -526640,11 +526860,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -527810,11 +528044,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -529006,11 +529254,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -530139,11 +530401,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -532476,11 +532752,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false

@@ -16,6 +16,8 @@ const {
   mutateConversation,
   hiddenProviders,
   hiddenCopilotPlans,
+  hiddenPersonalSubscriptions,
+  subscriptionNames,
   navigate,
 } = vi.hoisted(() => ({
   agents: [
@@ -74,6 +76,8 @@ const {
   ],
   hiddenProviders: new Set<string>(),
   hiddenCopilotPlans: new Set<string>(),
+  hiddenPersonalSubscriptions: new Set<string>(),
+  subscriptionNames: new Map<string, string>(),
   keys: [
     {
       id: "key-org",
@@ -156,6 +160,12 @@ vi.mock("@/lib/integration-overrides", () => ({
     canAddKey: (provider: string) =>
       !hiddenProviders.has(provider) &&
       !(provider === "github-copilot" && hiddenCopilotPlans.has("personal")),
+    canAddPersonalSubscription: (provider: string) =>
+      !hiddenProviders.has(provider) &&
+      !hiddenPersonalSubscriptions.has(provider) &&
+      !(provider === "github-copilot" && hiddenCopilotPlans.has("personal")),
+    personalSubscriptionLabel: (provider: string, fallback?: string) =>
+      subscriptionNames.get(provider) ?? fallback ?? provider,
   }),
 }));
 
@@ -175,6 +185,8 @@ beforeEach(() => {
   keys.splice(0, keys.length, ...originalKeys);
   hiddenProviders.clear();
   hiddenCopilotPlans.clear();
+  hiddenPersonalSubscriptions.clear();
+  subscriptionNames.clear();
   navigate.mockClear();
   readiness.splice(0);
   pools.splice(0);
@@ -468,6 +480,19 @@ describe("ChatSetupMenu", () => {
     );
     expect(
       screen.getByRole("button", { name: "Manage provider keys" }),
+    ).toBeInTheDocument();
+  });
+
+  it("omits a sign-in for a personal subscription that is turned off, and names one the organization renamed", async () => {
+    hiddenPersonalSubscriptions.add("openai");
+    subscriptionNames.set("xai", "Company Grok");
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+
+    expect(screen.queryByText("ChatGPT Subscription")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Company Grok/ }),
     ).toBeInTheDocument();
   });
 

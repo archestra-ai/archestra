@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  personalSubscriptionTurnedOffMessage,
   SUBSCRIPTION_CREDENTIALS,
   subscriptionKindForProvider,
   subscriptionKindFromKeyMetadata,
@@ -9,6 +10,7 @@ import { KeyRound } from "lucide-react";
 import { type ComponentProps, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 
 import { lazyComponent } from "@/lib/utils/preloadable-lazy";
@@ -38,12 +40,27 @@ export function SubscriptionReconnectNotice({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const providerCatalog = useModelProviderCatalog();
   const kind = credential.isGithubAppKey
     ? null
     : (subscriptionKindFromKeyMetadata(credential) ??
       subscriptionKindForProvider(credential.provider));
   if (!kind) return null;
   const subscription = SUBSCRIPTION_CREDENTIALS[kind];
+  const name = providerCatalog.personalSubscriptionLabel(
+    credential.provider,
+    subscription.displayName,
+  );
+  // A subscription the admins turned off cannot be signed in to again: say so
+  // in place of a Reconnect the server would refuse.
+  const turnedOffMessage = providerCatalog.canAddPersonalSubscription(
+    credential.provider,
+  )
+    ? null
+    : personalSubscriptionTurnedOffMessage(
+        providerCatalog.overrides,
+        credential.provider,
+      );
   return (
     <>
       {compact ? (
@@ -56,14 +73,20 @@ export function SubscriptionReconnectNotice({
         >
           <KeyRound className="size-3.5 shrink-0 text-amber-500" />
           <span>Sign-in expired</span>
-          <Button
-            type="button"
-            variant="link"
-            className="ml-auto h-auto shrink-0 p-0 text-xs"
-            onClick={() => setOpen(true)}
-          >
-            Reconnect
-          </Button>
+          {turnedOffMessage ? (
+            <span className="ml-auto shrink-0" title={turnedOffMessage}>
+              Turned off
+            </span>
+          ) : (
+            <Button
+              type="button"
+              variant="link"
+              className="ml-auto h-auto shrink-0 p-0 text-xs"
+              onClick={() => setOpen(true)}
+            >
+              Reconnect
+            </Button>
+          )}
         </div>
       ) : (
         <InlineNotice className={className}>
@@ -71,23 +94,29 @@ export function SubscriptionReconnectNotice({
           <span className="font-medium">
             {credential.name} needs reconnecting
           </span>
-          <InlineNoticeText>Sign in again to continue.</InlineNoticeText>
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            className="ml-auto shrink-0 bg-background"
-            onClick={() => setOpen(true)}
-          >
-            Reconnect
-          </Button>
+          {turnedOffMessage ? (
+            <InlineNoticeText>{turnedOffMessage}</InlineNoticeText>
+          ) : (
+            <>
+              <InlineNoticeText>Sign in again to continue.</InlineNoticeText>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                className="ml-auto shrink-0 bg-background"
+                onClick={() => setOpen(true)}
+              >
+                Reconnect
+              </Button>
+            </>
+          )}
         </InlineNotice>
       )}
       {open && (
         <CreateLlmProviderApiKeyDialog
           open
           onOpenChange={setOpen}
-          title={`Reconnect ${subscription.displayName}`}
+          title={`Reconnect ${name}`}
           description={subscription.connect.signInDescription}
           reconnectKeyId={credential.id}
           defaultValues={{

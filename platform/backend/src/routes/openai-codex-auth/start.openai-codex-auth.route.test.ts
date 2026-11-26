@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import OrganizationModel from "@/models/organization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { overrideConfig } from "@/test/config";
@@ -28,9 +29,11 @@ overrideConfig({
 describe("POST /api/openai-codex-auth/device/start", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
+  let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
     const organization = await makeOrganization();
+    organizationId = organization.id;
     user = await makeUser();
 
     app = createFastifyInstance();
@@ -50,6 +53,25 @@ describe("POST /api/openai-codex-auth/device/start", () => {
   afterEach(async () => {
     await app.close();
     vi.unstubAllGlobals();
+  });
+
+  test.each([
+    { openai: { hidden: true } },
+    { openai: { plans: { personal: { hidden: true } } } },
+  ])("refuses to start a sign-in when %j turns ChatGPT off", async (modelProviderOverrides) => {
+    await OrganizationModel.patch(organizationId, { modelProviderOverrides });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openai-codex-auth/device/start",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("turned off");
+    // Nothing reaches the vendor for a sign-in that cannot lead to a key.
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   test("requests a device code from OpenAI and returns the poll handle", async () => {

@@ -212,14 +212,15 @@ export default function ApiKeysPage() {
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
-  const canAddAnthropic = providerCatalog.canAddKey("anthropic");
+  const canConnectClaudeCode =
+    providerCatalog.canAddPersonalSubscription("anthropic");
   const myClaudeCodeAccount = useMyClaudeCodeAccount(
     agentRuntimeEnabled,
     false,
   );
   const showClaudeCodeCard =
     agentRuntimeEnabled &&
-    (canAddAnthropic ||
+    (canConnectClaudeCode ||
       myClaudeCodeAccount.data?.state === "connected" ||
       myClaudeCodeAccount.data?.state === "expired");
 
@@ -231,7 +232,7 @@ export default function ApiKeysPage() {
   const linkedCreate = useMemo(
     (): Partial<LlmProviderApiKeyFormValues> | undefined =>
       isSupportedProvider(createProvider) &&
-      providerCatalog.canAddKey(createProvider)
+      providerCatalog.canAddApiKey(createProvider)
         ? {
             provider: createProvider,
             initialGrants: createShared
@@ -457,15 +458,18 @@ export default function ApiKeysPage() {
   const apiKeys = queriedApiKeys;
 
   /**
-   * Subscription offers shown as cards above the table. A provider the admins
-   * turned off is not offered at all, and neither is GitHub Copilot when only
-   * its personal subscriptions are off. A key that already connects it keeps
-   * its table row instead, so an admin can still see and delete it.
+   * Subscription offers shown as cards above the table, under the names the
+   * organization gave them. A personal subscription the admins turned off,
+   * alone or with its provider, is not offered at all. A key that already
+   * connects it keeps its table row instead, so an admin can still see and
+   * delete it.
    */
   const subscriptionOffers = useMemo(
     () =>
-      buildSubscriptionOffers(allApiKeys).filter(({ provider }) =>
-        providerCatalog.canAddKey(provider),
+      buildSubscriptionOffers(allApiKeys, {
+        label: providerCatalog.personalSubscriptionLabel,
+      }).filter(({ provider }) =>
+        providerCatalog.canAddPersonalSubscription(provider),
       ),
     [allApiKeys, providerCatalog],
   );
@@ -521,9 +525,11 @@ export default function ApiKeysPage() {
     return (
       buildSubscriptionOffers(
         allApiKeys.filter((key) => key.userId === currentUserId),
+        { label: providerCatalog.personalSubscriptionLabel },
       ).find(
         ({ kind, provider }) =>
-          kind === reconnectKind && providerCatalog.canAddKey(provider),
+          kind === reconnectKind &&
+          providerCatalog.canAddPersonalSubscription(provider),
       ) ?? null
     );
   }, [
@@ -700,11 +706,9 @@ export default function ApiKeysPage() {
                 className="rounded dark:invert"
               />
               <span className="truncate">{label}</span>
-              {(providerCatalog.isHidden(provider) ||
-                (provider === "github-copilot" &&
-                  providerCatalog.isCopilotPlanHidden(
-                    row.original.isGithubAppKey ? "enterprise" : "personal",
-                  ))) && <InlineTag className="shrink-0">Turned off</InlineTag>}
+              {providerCatalog.isKeyHidden(row.original) && (
+                <InlineTag className="shrink-0">Turned off</InlineTag>
+              )}
             </div>
           );
         },
@@ -829,7 +833,10 @@ export default function ApiKeysPage() {
           offers={subscriptionOffers}
           leadingCards={
             showClaudeCodeCard ? (
-              <ClaudeCodeSubscriptionCard canAddAnthropic={canAddAnthropic} />
+              <ClaudeCodeSubscriptionCard
+                canConnect={canConnectClaudeCode}
+                name={providerCatalog.personalSubscriptionLabel("anthropic")}
+              />
             ) : undefined
           }
           currentUserId={currentUserId}

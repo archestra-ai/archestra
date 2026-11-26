@@ -2650,6 +2650,118 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
+    it("Grok omits native SuperGrok login and defaults to API-key passthrough when SuperGrok is turned off", async () => {
+      vi.mocked(useOrganization).mockReturnValue({
+        data: {
+          modelProviderOverrides: {
+            xai: { plans: { personal: { hidden: true } } },
+          },
+        },
+      } as unknown as ReturnType<typeof useOrganization>);
+      availableKeysMock.mockReturnValue({
+        data: [{ id: "xai-key", provider: "xai" }],
+      });
+      modelsByProviderMock.mockReturnValue({
+        xai: [{ id: "grok-test-model" }],
+      });
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("grok-build") });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "xai",
+            proxyAuth: "provider-key",
+          }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      expect(screen.getByText(/XAI_API_KEY/)).toBeVisible();
+      expect(screen.queryByText(/Choose native login instead/)).toBeNull();
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Grok credentials" }),
+        { key: "ArrowDown" },
+      );
+      expect(
+        screen.queryByRole("option", { name: /native login/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: "Your own API key (passthrough)" }),
+      ).toBeInTheDocument();
+    });
+
+    it("Grok uses the admin-renamed SuperGrok label in native-session copy", async () => {
+      vi.mocked(useOrganization).mockReturnValue({
+        data: {
+          modelProviderOverrides: {
+            xai: { plans: { personal: { displayName: "Company Grok" } } },
+          },
+        },
+      } as unknown as ReturnType<typeof useOrganization>);
+      availableKeysMock.mockReturnValue({ data: [] });
+      modelsByProviderMock.mockReturnValue({});
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("grok-build") });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "xai",
+            proxyAuth: "native-session",
+          }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      expect(
+        screen.getByText(/Reuses your native Company Grok login/),
+      ).toBeVisible();
+    });
+
+    it("Claude Desktop omits Claude subscription passthrough when Claude Code is turned off, while keeping admin-mapped virtual keys", async () => {
+      vi.mocked(useOrganization).mockReturnValue({
+        data: {
+          modelProviderOverrides: {
+            anthropic: { plans: { personal: { hidden: true } } },
+          },
+        },
+      } as unknown as ReturnType<typeof useOrganization>);
+      availableKeysMock.mockReturnValue({ data: [] });
+      renderPanel({ client: findClient("claude-desktop") });
+      await waitFor(() => expect(createSetupMock).toHaveBeenCalled());
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.not.objectContaining({ provider: "anthropic" }),
+      );
+      expect(
+        screen.getByText(/Claude Code is turned off for this organization/),
+      ).toBeVisible();
+
+      createSetupMock.mockClear();
+      vi.mocked(useOrganization).mockReturnValue({
+        data: {
+          modelProviderOverrides: {
+            anthropic: { plans: { personal: { hidden: true } } },
+          },
+          connectionClientProviderKeys: {
+            "claude-desktop": [
+              { provider: "anthropic", providerApiKeyId: "anthropic-org-key" },
+            ],
+          },
+        },
+      } as unknown as ReturnType<typeof useOrganization>);
+      availableKeysMock.mockReturnValue({
+        data: [
+          { id: "anthropic-org-key", provider: "anthropic", plan: "apiKey" },
+        ],
+      });
+      renderPanel({ client: findClient("claude-desktop") });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "anthropic",
+            proxyAuth: "virtual-key",
+          }),
+        ),
+      );
+    });
+
     it.each([
       "pi",
       "copilot-cli",

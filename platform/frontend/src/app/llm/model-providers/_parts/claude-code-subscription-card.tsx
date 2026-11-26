@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { CLAUDE_CODE_SUBSCRIPTION_LABEL, E2eTestId } from "@archestra/shared";
 import { Info } from "lucide-react";
 import { useState } from "react";
 import {
@@ -25,10 +25,17 @@ import {
  * agent you run.
  */
 export function ClaudeCodeSubscriptionCard({
-  canAddAnthropic,
+  canConnect,
+  name = CLAUDE_CODE_SUBSCRIPTION_LABEL,
 }: {
-  /** Whether the organization leaves Anthropic switched on for new connections. */
-  canAddAnthropic: boolean;
+  /**
+   * Whether the organization leaves Claude Code switched on for new
+   * connections. An account already connected stays, so its owner can
+   * disconnect it.
+   */
+  canConnect: boolean;
+  /** The organization's name for Claude Code. */
+  name?: string;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -43,7 +50,7 @@ export function ClaudeCodeSubscriptionCard({
   const expired = state === "expired";
   const hasStoredAccount = connected || expired;
 
-  if (!canAddAnthropic && !hasStoredAccount) return null;
+  if (!canConnect && !hasStoredAccount) return null;
 
   const status: SubscriptionCardStatus = account.isError
     ? "error"
@@ -54,7 +61,7 @@ export function ClaudeCodeSubscriptionCard({
         : "not-connected";
 
   const description = account.isError
-    ? "Could not check your Claude Code subscription."
+    ? `Could not check your ${name} subscription.`
     : expired
       ? "Your sign-in expired or was revoked. Sign in again to use this subscription."
       : undefined;
@@ -79,7 +86,7 @@ export function ClaudeCodeSubscriptionCard({
       <SubscriptionCard
         testId={`${E2eTestId.SubscriptionProviderCard}-claude-code`}
         provider="anthropic"
-        name="Claude Code"
+        name={name}
         description={description}
         notice={
           account.isError || expired ? undefined : (
@@ -94,7 +101,7 @@ export function ClaudeCodeSubscriptionCard({
         isLoading={account.isPending}
         status={status}
         onRetry={() => void account.refetch()}
-        onConnect={canAddAnthropic ? openAccountDialog : undefined}
+        onConnect={canConnect ? openAccountDialog : undefined}
         manage={
           connected
             ? {
@@ -125,7 +132,7 @@ export function ClaudeCodeSubscriptionCard({
       <DeleteConfirmDialog
         open={disconnectOpen}
         onOpenChange={setDisconnectOpen}
-        title="Disconnect Claude Code"
+        title={`Disconnect ${name}`}
         description="Disconnecting stops new runs from using this account. Active runs keep their token until revoked in Claude."
         confirmLabel="Disconnect"
         pendingLabel="Disconnecting..."

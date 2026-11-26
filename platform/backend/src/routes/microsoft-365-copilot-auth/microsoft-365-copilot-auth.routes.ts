@@ -5,6 +5,7 @@ import { isRateLimited } from "@/agents/utils";
 import { CacheKey } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import { assertPersonalSubscriptionAllowed } from "@/services/integration-overrides";
 import {
   entraErrorLogFields,
   MICROSOFT_365_COPILOT_OAUTH_SCOPES,
@@ -56,7 +57,13 @@ const microsoft365CopilotAuthRoutes: FastifyPluginAsyncZod = async (
         response: constructResponseSchema(DeviceStartResponseSchema),
       },
     },
-    async ({ user }) => {
+    async ({ organizationId, user }) => {
+      // A sign-in only leads to a personal key, so refuse it up front when
+      // the admins turned Microsoft 365 Copilot off.
+      await assertPersonalSubscriptionAllowed({
+        organizationId,
+        provider: "microsoft-365-copilot",
+      });
       assertClientIdConfigured();
 
       // Both endpoints relay traffic to Entra; cap per user so a misbehaving

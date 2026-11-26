@@ -1,9 +1,14 @@
 import {
+  isPersonalSubscriptionHidden,
+  isProviderKeyHidden,
+  type ModelProviderOverrides,
   OPENCODE_PRIMARY_PROVIDERS,
   type Permissions,
   PROVIDER_MODEL_TIERS,
   PROVIDERS_REQUIRING_BASE_URL,
+  type ProviderPlan,
   providerRequiresPerUserCredential,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -213,6 +218,7 @@ export function firstConnectionSetupInputs(params: {
     connectionSkillsEnabled?: boolean | null;
     connectionLlmProxyEnabled?: boolean | null;
     connectionPluginsEnabled?: boolean | null;
+    modelProviderOverrides?: ModelProviderOverrides | null;
     connectionClientProviderKeys?: Record<
       string,
       { provider: string }[]
@@ -247,6 +253,8 @@ export function firstConnectionSetupInputs(params: {
         baseUrl?: string | null;
         requiresReauthentication?: boolean | null;
         isGithubAppKey?: boolean | null;
+        subscriptionKind?: SubscriptionCredentialKind | null;
+        plan?: ProviderPlan | null;
       }[]
     | null;
 }): ConnectionSetupInputs | null {
@@ -321,7 +329,16 @@ export function firstConnectionSetupInputs(params: {
 
   // Model routing.
   if (!params.availableKeys) return null;
-  const availableKeys = params.availableKeys;
+  const overrides = organization.modelProviderOverrides ?? null;
+  const availableKeys = params.availableKeys.filter(
+    (key) =>
+      !isProviderKeyHidden(overrides, {
+        provider: key.provider as SupportedProvider,
+        plan: key.plan,
+        isGithubAppKey: key.isGithubAppKey,
+        subscriptionKind: key.subscriptionKind,
+      }),
+  );
   const canAttribute = can("llmVirtualKey", "create");
   const adminMappedProviders = new Set(
     (organization.connectionClientProviderKeys?.[client.id] ?? []).map(
@@ -329,9 +346,17 @@ export function firstConnectionSetupInputs(params: {
     ),
   );
   const openCodeFamily = isOpenCodeFamilyClient(client.id);
+  const grokNativeSessionAllowed = !isPersonalSubscriptionHidden(
+    overrides,
+    "xai",
+  );
   const proxyAuth: ConnectProxyAuth =
     client.id === "grok-build"
-      ? "native-session"
+      ? grokNativeSessionAllowed
+        ? "native-session"
+        : adminMappedProviders.size > 0 && canAttribute
+          ? "virtual-key"
+          : "provider-key"
       : client.id === "cursor" || openCodeFamily
         ? "primary-providers"
         : adminMappedProviders.size > 0 && canAttribute
@@ -366,6 +391,10 @@ export function firstConnectionSetupInputs(params: {
     shown && !allPrimaryProviders
       ? supported.filter((p) => shown.has(p))
       : supported;
+  const claudeDesktopSubscriptionHidden =
+    client.id === "claude-desktop" &&
+    proxyAuth === "provider-key" &&
+    isPersonalSubscriptionHidden(overrides, "anthropic");
   let providers: SupportedProvider[];
   if (allPrimaryProviders) {
     const backing =
@@ -377,6 +406,8 @@ export function firstConnectionSetupInputs(params: {
               .map((key) => key.provider),
           );
     providers = supportedProviders.filter((p) => backing.has(p));
+  } else if (claudeDesktopSubscriptionHidden) {
+    providers = [];
   } else if (proxyAuth !== "virtual-key") {
     providers = supportedProviders;
   } else {

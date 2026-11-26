@@ -248,7 +248,9 @@ function VersionHistory({
       }
       notice={
         isSynced ? (
-          <InlineNotice>
+          // Information, not a warning: nothing is wrong, the notice only
+          // says why Restore is unavailable.
+          <InlineNotice variant="neutral">
             <InlineNoticeText>
               This skill&apos;s content is synced from GitHub. Earlier versions
               stay viewable, but restoring one is unavailable — stop syncing the

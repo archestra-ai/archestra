@@ -88,7 +88,7 @@ export function AgentAccountOptions({
   const only = options.length === 1 ? options[0] : null;
   const noneSelected = !only && options.every((option) => !option.checked);
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {meaning && !only && (
         <FieldDescription id={`${id}-meaning`}>{meaning}</FieldDescription>
       )}
@@ -260,13 +260,13 @@ export type AccountChooser = "person" | "agent";
 export function accountWaysMeaning(
   ways: Record<AccountWay, boolean>,
   /** What the company's way is called where it is not an API key. */
-  company = "a company API key",
+  company = "an API key",
   chooser: AccountChooser = "person",
 ): string {
   return ways.subscription && ways.provider
     ? chooser === "agent"
       ? `People who create or edit an agent on this runtime choose whether it allows personal subscriptions, ${company}, or both.`
-      : `Each person who runs this agent chooses their own subscription or ${company} on the agent's page.`
+      : `If both ${company} and a subscription are selected, each person can choose what to use.`
     : ways.subscription
       ? "Locked to each user's personal subscription"
       : ways.provider

@@ -1,6 +1,6 @@
 # Curated Agent catalog images. The build context is platform/ so every native
 # CLI shares one hardened execution base.
-FROM dhi.io/uv:0.9.30@sha256:2ba66b2a3ecfd98962a18d4eeb399ca537e20a900f29df3bf6952c3190e84c00 AS uv
+FROM dhi.io/uv:0.13.9@sha256:923818bf3ed45deb3030c1fa0b2a46b354c812560185c51a94c57ff3f7bf10c1 AS uv
 # The uv release Hermes locks its environment with.
 FROM dhi.io/uv:0.12.3@sha256:6eb8ea7c3ff90b389a4d1e3c41ee66d8daa204fc6609df65b0ef21e3ba29dd57 AS uv-hermes
 

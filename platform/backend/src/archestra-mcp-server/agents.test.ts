@@ -2328,8 +2328,6 @@ describe("agent runtime and model tools", () => {
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 1,
-        fallbackEnabled: true,
       },
     });
     expect(created.isError).toBe(false);
@@ -2340,8 +2338,6 @@ describe("agent runtime and model tools", () => {
     expect((fetched.structuredContent as any).subagentLoadBalancing).toEqual({
       enabled: true,
       algorithm: "round_robin",
-      retries: 1,
-      fallbackEnabled: true,
     });
 
     const edited = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
@@ -2349,8 +2345,6 @@ describe("agent runtime and model tools", () => {
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "random",
-        retries: 2,
-        fallbackEnabled: false,
       },
     });
     expect(edited.isError).toBe(false);
@@ -2360,8 +2354,6 @@ describe("agent runtime and model tools", () => {
     expect((refetched.structuredContent as any).subagentLoadBalancing).toEqual({
       enabled: true,
       algorithm: "random",
-      retries: 2,
-      fallbackEnabled: false,
     });
   });
 });

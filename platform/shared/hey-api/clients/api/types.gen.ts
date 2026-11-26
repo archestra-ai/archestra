@@ -17269,8 +17269,6 @@ export type GetAgentCatalogResponses = {
                     weights?: {
                         [key: string]: number;
                     };
-                    retries: number;
-                    fallbackEnabled: boolean;
                 } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
@@ -17676,8 +17674,6 @@ export type GetAgentsResponses = {
                 weights?: {
                     [key: string]: number;
                 };
-                retries: number;
-                fallbackEnabled: boolean;
             } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
@@ -17839,8 +17835,6 @@ export type CreateAgentData = {
             weights?: {
                 [key: string]: number;
             };
-            retries?: number;
-            fallbackEnabled?: boolean;
         } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
@@ -18138,8 +18132,6 @@ export type CreateAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -19438,8 +19430,6 @@ export type GetDefaultMcpGatewayResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -19764,8 +19754,6 @@ export type ImportAgentResponses = {
                 weights?: {
                     [key: string]: number;
                 };
-                retries: number;
-                fallbackEnabled: boolean;
             } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
@@ -20099,8 +20087,6 @@ export type GetAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -20251,8 +20237,6 @@ export type UpdateAgentData = {
             weights?: {
                 [key: string]: number;
             };
-            retries?: number;
-            fallbackEnabled?: boolean;
         } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
@@ -20449,8 +20433,6 @@ export type UpdateAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -21028,8 +21010,6 @@ export type GetAgentVersionResponses = {
                 weights?: {
                     [key: string]: number;
                 };
-                retries: number;
-                fallbackEnabled: boolean;
             } | null;
             tools: Array<{
                 toolId: string;
@@ -21253,8 +21233,6 @@ export type RestoreAgentVersionResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -21520,8 +21498,6 @@ export type CloneAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -24023,8 +23999,6 @@ export type RestoreAgentResponses = {
             weights?: {
                 [key: string]: number;
             };
-            retries: number;
-            fallbackEnabled: boolean;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -45999,8 +45973,12 @@ export type GetBootstrapResponses = {
                     hidden?: boolean;
                     displayName?: string | null;
                     plans?: {
+                        apiKey?: {
+                            hidden?: boolean;
+                        };
                         personal?: {
                             hidden?: boolean;
+                            displayName?: string | null;
                         };
                         enterprise?: {
                             hidden?: boolean;
@@ -46361,6 +46339,7 @@ export type GetNewChatBootstrapResponses = {
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
+            plan?: 'apiKey' | 'personal' | 'enterprise';
             githubOrganization?: string | null;
             githubOrganizationName?: string | null;
             labels?: Array<{
@@ -46403,6 +46382,7 @@ export type GetNewChatBootstrapResponses = {
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
+            plan?: 'apiKey' | 'personal' | 'enterprise';
             githubOrganization?: string | null;
             githubOrganizationName?: string | null;
             labels?: Array<{
@@ -46544,8 +46524,6 @@ export type GetNewChatBootstrapResponses = {
                     weights?: {
                         [key: string]: number;
                     };
-                    retries: number;
-                    fallbackEnabled: boolean;
                 } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
@@ -46979,6 +46957,7 @@ export type GetConversationBootstrapResponses = {
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
+                plan?: 'apiKey' | 'personal' | 'enterprise';
                 githubOrganization?: string | null;
                 githubOrganizationName?: string | null;
                 labels?: Array<{
@@ -47021,6 +47000,7 @@ export type GetConversationBootstrapResponses = {
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
+                plan?: 'apiKey' | 'personal' | 'enterprise';
                 githubOrganization?: string | null;
                 githubOrganizationName?: string | null;
                 labels?: Array<{
@@ -47162,8 +47142,6 @@ export type GetConversationBootstrapResponses = {
                         weights?: {
                             [key: string]: number;
                         };
-                        retries: number;
-                        fallbackEnabled: boolean;
                     } | null;
                     builtInAgentConfig: {
                         name: 'openappa-configuration-agent';
@@ -110749,6 +110727,7 @@ export type GetLlmProviderApiKeysResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -110922,6 +110901,7 @@ export type CreateLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -111050,6 +111030,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -111265,6 +111246,7 @@ export type GetLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -111413,6 +111395,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -111542,6 +111525,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -132717,8 +132701,12 @@ export type GetOrganizationResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -133202,8 +133190,12 @@ export type UpdateAppearanceSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -133451,8 +133443,12 @@ export type UpdateSecuritySettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -133696,8 +133692,12 @@ export type UpdateMcpSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -133940,8 +133940,12 @@ export type UpdateSkillsSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -134608,8 +134612,12 @@ export type UpdateAgentSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -134876,8 +134884,12 @@ export type UpdateConnectionSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -134978,8 +134990,12 @@ export type UpdateIntegrationSettingsData = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -135180,8 +135196,12 @@ export type UpdateIntegrationSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -135434,8 +135454,12 @@ export type UpdateDefaultEnvironmentResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -135684,8 +135708,12 @@ export type UpdateAuthSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -135935,8 +135963,12 @@ export type UpdateKnowledgeSettingsResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -136176,8 +136208,12 @@ export type DropEmbeddingConfigResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;
@@ -136779,8 +136815,12 @@ export type CompleteOnboardingResponses = {
                 hidden?: boolean;
                 displayName?: string | null;
                 plans?: {
+                    apiKey?: {
+                        hidden?: boolean;
+                    };
                     personal?: {
                         hidden?: boolean;
+                        displayName?: string | null;
                     };
                     enterprise?: {
                         hidden?: boolean;

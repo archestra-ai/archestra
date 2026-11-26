@@ -7,8 +7,13 @@ import {
   integrationLabel,
   isCopilotPlanHidden,
   isIntegrationHidden,
+  isPersonalSubscriptionHidden,
+  isProviderApiKeyHidden,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
+  type ProviderPlan,
+  personalSubscriptionTurnedOffMessage,
+  providerApiKeyTurnedOffMessage,
   type SupportedProvider,
 } from "@archestra/shared";
 import OrganizationModel from "@/models/organization";
@@ -21,24 +26,6 @@ import { ApiError } from "@/types";
  * provider/channel/connector cannot be re-introduced through the API, the MCP
  * tools, or a stale browser tab.
  */
-
-/** Rejects creating or updating a key for a model provider the admin hid. */
-export async function assertModelProviderAllowed(params: {
-  organizationId: string;
-  provider: SupportedProvider;
-}): Promise<void> {
-  const { modelProviderOverrides } =
-    await OrganizationModel.getIntegrationOverrides(params.organizationId);
-  if (!isIntegrationHidden(modelProviderOverrides, params.provider)) return;
-  throw new ApiError(
-    400,
-    `${integrationLabel(
-      modelProviderOverrides,
-      params.provider,
-      builtInProviderLabel(params.provider),
-    )} is turned off for this organization. Ask an administrator to re-enable it under Settings → LLM → Model providers.`,
-  );
-}
 
 /**
  * Rejects setting up one GitHub Copilot plan when GitHub Copilot is off, or
@@ -59,6 +46,50 @@ export async function assertCopilotPlanAllowed(params: {
     400,
     copilotPlanTurnedOffMessage(modelProviderOverrides, params.plan),
   );
+}
+
+/**
+ * Rejects connecting a personal subscription (a ChatGPT, Claude Code,
+ * SuperGrok, GitHub Copilot or Microsoft 365 Copilot sign-in) when its
+ * provider is off, or when an admin turned off just its personal
+ * subscriptions. Subscriptions that are connected keep working.
+ */
+export async function assertPersonalSubscriptionAllowed(params: {
+  organizationId: string;
+  provider: SupportedProvider;
+}): Promise<void> {
+  await assertModelProviderAllowed(params);
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(params.organizationId);
+  if (!isPersonalSubscriptionHidden(modelProviderOverrides, params.provider)) {
+    return;
+  }
+  throw new ApiError(
+    400,
+    personalSubscriptionTurnedOffMessage(
+      modelProviderOverrides,
+      params.provider,
+    ),
+  );
+}
+
+/**
+ * Rejects setting up a key of a plan an admin turned off: an API key, a
+ * personal subscription, or a GitHub Copilot enterprise plan.
+ */
+export async function assertProviderPlanAllowed(params: {
+  organizationId: string;
+  provider: SupportedProvider;
+  plan: ProviderPlan;
+}): Promise<void> {
+  const { organizationId, provider, plan } = params;
+  if (plan === "enterprise") {
+    await assertCopilotPlanAllowed({ organizationId, plan });
+  } else if (plan === "personal") {
+    await assertPersonalSubscriptionAllowed({ organizationId, provider });
+  } else {
+    await assertProviderApiKeyAllowed({ organizationId, provider });
+  }
 }
 
 /** Rejects configuring a messaging channel the admin hid. */
@@ -115,4 +146,44 @@ export async function getHiddenMessagingChannels(
     if (override?.hidden) hidden.add(channel);
   }
   return hidden;
+}
+
+// ===================================================================
+// Internal
+// ===================================================================
+
+/** Rejects creating or updating a key for a model provider the admin hid. */
+async function assertModelProviderAllowed(params: {
+  organizationId: string;
+  provider: SupportedProvider;
+}): Promise<void> {
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(params.organizationId);
+  if (!isIntegrationHidden(modelProviderOverrides, params.provider)) return;
+  throw new ApiError(
+    400,
+    `${integrationLabel(
+      modelProviderOverrides,
+      params.provider,
+      builtInProviderLabel(params.provider),
+    )} is turned off for this organization. Ask an administrator to re-enable it under Settings → LLM → Model providers.`,
+  );
+}
+
+/**
+ * Rejects adding or changing an ordinary API key when its provider is off, or
+ * when an admin turned off just its API keys. Keys that exist keep working.
+ */
+async function assertProviderApiKeyAllowed(params: {
+  organizationId: string;
+  provider: SupportedProvider;
+}): Promise<void> {
+  await assertModelProviderAllowed(params);
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(params.organizationId);
+  if (!isProviderApiKeyHidden(modelProviderOverrides, params.provider)) return;
+  throw new ApiError(
+    400,
+    providerApiKeyTurnedOffMessage(modelProviderOverrides, params.provider),
+  );
 }

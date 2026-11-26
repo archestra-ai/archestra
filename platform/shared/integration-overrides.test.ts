@@ -7,6 +7,8 @@ import {
   integrationLabel,
   isCopilotPlanHidden,
   isIntegrationHidden,
+  isPersonalSubscriptionHidden,
+  isProviderApiKeyHidden,
   isProviderKeyHidden,
   KnowledgeConnectorIdSchema,
   MessagingChannelIdSchema,
@@ -14,6 +16,9 @@ import {
   orderedPopularAgentIds,
   PopularAgentIdSchema,
   PopularAgentOverridesSchema,
+  personalSubscriptionLabel,
+  personalSubscriptionTurnedOffMessage,
+  providerApiKeyTurnedOffMessage,
   pruneIntegrationOverrides,
   StoredModelProviderOverridesSchema,
   StoredPopularAgentOverridesSchema,
@@ -291,12 +296,17 @@ describe("GitHub Copilot plans", () => {
     ).toBe(true);
   });
 
-  it("refuses plans on any other provider", () => {
-    expect(
-      ModelProviderOverridesSchema.safeParse({
-        openai: { plans: { personal: { hidden: true } } },
-      }).success,
-    ).toBe(false);
+  it("refuses plans on providers with one way in, and plans a provider does not offer", () => {
+    for (const overrides of [
+      { gemini: { plans: { apiKey: { hidden: true } } } },
+      { "microsoft-365-copilot": { plans: { personal: { hidden: true } } } },
+      { openai: { plans: { enterprise: { hidden: true } } } },
+      { "github-copilot": { plans: { apiKey: { hidden: true } } } },
+    ]) {
+      expect(ModelProviderOverridesSchema.safeParse(overrides).success).toBe(
+        false,
+      );
+    }
   });
 
   it("refuses both plans off, which is GitHub Copilot off", () => {
@@ -396,6 +406,195 @@ describe("GitHub Copilot plans", () => {
       ),
     ).toEqual({
       "github-copilot": { plans: { enterprise: { hidden: true } } },
+    });
+  });
+});
+
+describe("personal subscriptions beside API keys", () => {
+  const providers = ["openai", "anthropic", "xai"] as const;
+
+  it("offers API keys and personal subscriptions when nothing is turned off", () => {
+    for (const provider of providers) {
+      expect(isProviderApiKeyHidden(null, provider)).toBe(false);
+      expect(isPersonalSubscriptionHidden(null, provider)).toBe(false);
+    }
+  });
+
+  it.each(
+    providers,
+  )("turns off %s API keys and its personal subscription separately", (provider) => {
+    const personalOff = {
+      [provider]: { plans: { personal: { hidden: true } } },
+    };
+    const apiKeyOff = { [provider]: { plans: { apiKey: { hidden: true } } } };
+
+    expect(isPersonalSubscriptionHidden(personalOff, provider)).toBe(true);
+    expect(isProviderApiKeyHidden(personalOff, provider)).toBe(false);
+    expect(isPersonalSubscriptionHidden(apiKeyOff, provider)).toBe(false);
+    expect(isProviderApiKeyHidden(apiKeyOff, provider)).toBe(true);
+    expect(ModelProviderOverridesSchema.safeParse(personalOff).success).toBe(
+      true,
+    );
+    expect(ModelProviderOverridesSchema.safeParse(apiKeyOff).success).toBe(
+      true,
+    );
+  });
+
+  it.each(
+    providers,
+  )("reads a stored %s provider switch as both off", (provider) => {
+    const overrides = { [provider]: { hidden: true } };
+    expect(isProviderApiKeyHidden(overrides, provider)).toBe(true);
+    expect(isPersonalSubscriptionHidden(overrides, provider)).toBe(true);
+  });
+
+  it.each(
+    providers,
+  )("refuses both %s plans off, which is the provider off", (provider) => {
+    expect(
+      ModelProviderOverridesSchema.safeParse({
+        [provider]: {
+          plans: { apiKey: { hidden: true }, personal: { hidden: true } },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("hides each OpenAI and xAI key by its own plan's switch", () => {
+    const chatgptOff = { openai: { plans: { personal: { hidden: true } } } };
+    const apiKeysOff = { xai: { plans: { apiKey: { hidden: true } } } };
+
+    expect(
+      isProviderKeyHidden(chatgptOff, {
+        provider: "openai",
+        subscriptionKind: "chatgpt",
+      }),
+    ).toBe(true);
+    expect(isProviderKeyHidden(chatgptOff, { provider: "openai" })).toBe(false);
+    expect(
+      isProviderKeyHidden(apiKeysOff, {
+        provider: "xai",
+        subscriptionKind: "x-premium",
+      }),
+    ).toBe(false);
+    expect(
+      isProviderKeyHidden(apiKeysOff, {
+        provider: "xai",
+        subscriptionKind: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("honors a server-resolved plan for Anthropic keys (sk-ant-oat vs API keys)", () => {
+    const claudeCodeOff = {
+      anthropic: { plans: { personal: { hidden: true } } },
+    };
+    const apiKeysOff = {
+      anthropic: { plans: { apiKey: { hidden: true } } },
+    };
+
+    expect(
+      isProviderKeyHidden(claudeCodeOff, {
+        provider: "anthropic",
+        plan: "personal",
+        subscriptionKind: null,
+      }),
+    ).toBe(true);
+    expect(
+      isProviderKeyHidden(claudeCodeOff, {
+        provider: "anthropic",
+        plan: "apiKey",
+        subscriptionKind: null,
+      }),
+    ).toBe(false);
+    expect(
+      isProviderKeyHidden(apiKeysOff, {
+        provider: "anthropic",
+        plan: "personal",
+        subscriptionKind: null,
+      }),
+    ).toBe(false);
+    expect(
+      isProviderKeyHidden(apiKeysOff, {
+        provider: "anthropic",
+        plan: "apiKey",
+        subscriptionKind: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("treats GitHub Copilot and Microsoft 365 Copilot as personal subscriptions only", () => {
+    expect(isProviderApiKeyHidden(null, "github-copilot")).toBe(true);
+    expect(isProviderApiKeyHidden(null, "microsoft-365-copilot")).toBe(true);
+    expect(isPersonalSubscriptionHidden(null, "microsoft-365-copilot")).toBe(
+      false,
+    );
+    const off = { "microsoft-365-copilot": { hidden: true } };
+    expect(isPersonalSubscriptionHidden(off, "microsoft-365-copilot")).toBe(
+      true,
+    );
+    expect(
+      isProviderKeyHidden(off, { provider: "microsoft-365-copilot" }),
+    ).toBe(true);
+  });
+
+  it("names every personal subscription as it ships until an admin names it", () => {
+    expect(personalSubscriptionLabel(null, "anthropic")).toBe("Claude Code");
+    expect(personalSubscriptionLabel(null, "openai")).toBe("ChatGPT");
+    expect(personalSubscriptionLabel(null, "github-copilot")).toBe(
+      "GitHub Copilot",
+    );
+    expect(personalSubscriptionLabel(null, "xai")).toBe("SuperGrok");
+    expect(personalSubscriptionLabel(null, "microsoft-365-copilot")).toBe(
+      "Microsoft 365 Copilot",
+    );
+
+    const overrides = {
+      openai: {
+        displayName: "OpenAI (company)",
+        plans: { personal: { displayName: " My ChatGPT " } },
+      },
+      "github-copilot": { displayName: "Copilot" },
+      "microsoft-365-copilot": { displayName: "Office Copilot" },
+    };
+    // The provider's name is its API keys' name; the subscription has its own.
+    expect(personalSubscriptionLabel(overrides, "openai")).toBe("My ChatGPT");
+    expect(personalSubscriptionLabel(overrides, "github-copilot")).toBe(
+      "Copilot",
+    );
+    expect(personalSubscriptionLabel(overrides, "microsoft-365-copilot")).toBe(
+      "Office Copilot",
+    );
+  });
+
+  it("tells people in plain words where an administrator turns a plan back on", () => {
+    const overrides = {
+      anthropic: { plans: { personal: { displayName: "Claude" } } },
+    };
+    expect(personalSubscriptionTurnedOffMessage(overrides, "anthropic")).toBe(
+      "Claude is turned off for this organization. Ask an administrator to turn it on under Settings → LLM → Model providers.",
+    );
+    expect(providerApiKeyTurnedOffMessage(null, "xai")).toBe(
+      "xAI API keys are turned off for this organization. Ask an administrator to turn them on under Settings → LLM → Model providers.",
+    );
+    expect(
+      personalSubscriptionTurnedOffMessage(null, "github-copilot"),
+    ).toContain("GitHub Copilot personal subscriptions are turned off");
+  });
+
+  it("keeps a personal subscription's name through pruning, also while it is off", () => {
+    expect(
+      pruneIntegrationOverrides({
+        xai: {
+          plans: {
+            apiKey: { hidden: false },
+            personal: { hidden: true, displayName: " Grok " },
+          },
+        },
+        anthropic: { plans: { apiKey: {}, personal: { displayName: "" } } },
+      }),
+    ).toEqual({
+      xai: { plans: { personal: { hidden: true, displayName: "Grok" } } },
     });
   });
 });

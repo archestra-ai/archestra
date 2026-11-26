@@ -212,8 +212,36 @@ describe("PATCH /api/organization/integration-settings", () => {
     });
   });
 
+  test("stores a renamed personal subscription beside its provider's API keys", async () => {
+    const response = await patch({
+      modelProviderOverrides: {
+        openai: {
+          displayName: "OpenAI (company)",
+          plans: { personal: { hidden: true, displayName: "My ChatGPT" } },
+        },
+        xai: { plans: { apiKey: { hidden: true } } },
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().modelProviderOverrides).toEqual({
+      openai: {
+        displayName: "OpenAI (company)",
+        plans: { personal: { hidden: true, displayName: "My ChatGPT" } },
+      },
+      xai: { plans: { apiKey: { hidden: true } } },
+    });
+  });
+
   test.each([
-    { openai: { plans: { personal: { hidden: true } } } },
+    { gemini: { plans: { apiKey: { hidden: true } } } },
+    { "microsoft-365-copilot": { plans: { personal: { hidden: true } } } },
+    { anthropic: { plans: { enterprise: { hidden: true } } } },
+    {
+      openai: {
+        plans: { apiKey: { hidden: true }, personal: { hidden: true } },
+      },
+    },
     {
       "github-copilot": {
         plans: { personal: { hidden: true }, enterprise: { hidden: true } },

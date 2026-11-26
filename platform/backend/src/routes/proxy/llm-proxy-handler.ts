@@ -1452,6 +1452,21 @@ async function handleObservedLLMProxy<
             userId: authenticatedUserId,
             virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
             providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+            // The direct provider's selected key is only one of the keys a
+            // verified LLM Proxy user can use, especially across providers.
+            loadUsableProviderApiKeyIds:
+              !internalCall &&
+              authenticatedUserId &&
+              (authMethod === "jwks" || authMethod === "oauth_user")
+                ? async () => {
+                    const { keys } =
+                      await LlmProviderApiKeyModel.findUsableKeys({
+                        organizationId: resolvedAgent.organizationId,
+                        userId: authenticatedUserId,
+                      });
+                    return keys.map(({ id }) => id);
+                  }
+                : undefined,
             // An app OAuth client's own pools were checked at sign-in and come
             // back as `grantedPoolId`; it may use no other.
             modelPoolIds:

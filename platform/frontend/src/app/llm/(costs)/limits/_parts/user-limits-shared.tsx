@@ -21,6 +21,12 @@ export type DotItem = { key: string; node: ReactNode };
 
 export const ALL_ENVIRONMENTS = "__all__";
 
+/**
+ * Users fetched for the "Affected by Limits" line: the avatars before "+N".
+ * The limits table reads the same query for its per-row user counts.
+ */
+export const AFFECTED_STACK_SIZE = 4;
+
 /** `near` from this percent of a limit; matches the backend's status. */
 export const NEAR_LIMIT_PERCENT = 75;
 
@@ -53,10 +59,6 @@ export const UNLIMITED_DOT = "border border-muted-foreground/70 bg-transparent";
 
 export const LINK_CLASS =
   "rounded-sm underline decoration-dotted underline-offset-4 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
-
-/** Ghost buttons sitting on an already-accented row need their own hover. */
-export const ROW_ACTION_CLASS =
-  "text-muted-foreground hover:bg-background hover:text-foreground dark:hover:bg-background/60";
 
 export function DotList({
   items,
@@ -157,11 +159,6 @@ export function pluralUsers(count: number) {
 
 export function firstName(name: string) {
   return name.split(" ")[0] || name;
-}
-
-export function modelCountLabel(models: string[] | null | undefined) {
-  if (!models?.length) return "All models";
-  return models.length === 1 ? models[0] : `${models.length} models`;
 }
 
 // ===

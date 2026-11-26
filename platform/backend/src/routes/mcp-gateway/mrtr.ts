@@ -87,6 +87,11 @@ export type RequestStatePayload = {
   keys: string[];
   /** How many rounds of input this call has already taken. */
   round: number;
+  /**
+   * Files extension: the upload session this state resumes. Set only on the
+   * state answering an upload request (see files.ts).
+   */
+  upload?: string;
 };
 
 export type VerifyFailure =
@@ -175,6 +180,9 @@ export function encodeRequestState(params: {
   requestParams: unknown;
   keys: string[];
   round?: number;
+  uploadSessionId?: string;
+  /** Lifetime; defaults to {@link REQUEST_STATE_TTL_MS}. */
+  ttlMs?: number;
   now?: number;
 }): string {
   const {
@@ -183,6 +191,8 @@ export function encodeRequestState(params: {
     requestParams,
     keys,
     round = 1,
+    uploadSessionId,
+    ttlMs = REQUEST_STATE_TTL_MS,
     now = Date.now(),
   } = params;
 
@@ -191,9 +201,10 @@ export function encodeRequestState(params: {
     principal,
     method,
     paramsDigest: digestRequestParams(method, requestParams),
-    exp: now + REQUEST_STATE_TTL_MS,
+    exp: now + ttlMs,
     keys: [...keys].sort(),
     round,
+    ...(uploadSessionId !== undefined && { upload: uploadSessionId }),
   };
 
   const encoded = base64UrlEncode(JSON.stringify(payload));

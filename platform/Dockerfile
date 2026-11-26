@@ -354,6 +354,10 @@ COPY --from=rust-toolchain /usr/local/cargo/bin /usr/local/cargo/bin
 ENV RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:$PATH \
     RUSTFLAGS="-C target-feature=-crt-static"
+# The build is native, so link with Alpine's gcc. Without this, `napi build`
+# defaults aarch64-unknown-linux-musl to the cross linker aarch64-linux-musl-gcc,
+# which Alpine does not ship, and every arm64 image build fails.
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=gcc
 # Use the builder's installed OpenSSL for PostgreSQL TLS. Cross-builds outside
 # this image use the vendored musl dependency from openappa-rs instead.
 ENV OPENSSL_NO_VENDOR=1

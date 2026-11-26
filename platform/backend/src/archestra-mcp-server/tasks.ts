@@ -3,7 +3,9 @@ import {
   AGENT_TOOL_PREFIX,
   DEFAULT_APP_NAME,
   normalizeSubagentLoadBalancingConfig,
+  resolveEffectiveSubagentLoadBalancingConfig,
   resolveSubagentLoadBalancerScopeKey,
+  SUBAGENT_LOAD_BALANCING_RETRIES,
   slugify,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
@@ -352,8 +354,9 @@ export async function startDelegatedTask(params: {
     ? await AgentModel.findById(params.context.agent.id)
     : null;
   let poolAgent: Agent | null = callerAgent;
-  let lbConfig = normalizeSubagentLoadBalancingConfig(
-    callerAgent?.subagentLoadBalancing,
+  let lbConfig = resolveEffectiveSubagentLoadBalancingConfig(
+    normalizeSubagentLoadBalancingConfig(callerAgent?.subagentLoadBalancing),
+    callerAgent?.accessAllSubagents,
   );
   const rawAgentId = params.agentId?.trim();
   let explicitAgentId: string | undefined;
@@ -392,8 +395,11 @@ export async function startDelegatedTask(params: {
   ) {
     const explicitTargetAgent = await AgentModel.findById(explicitAgentId);
     const targetLbConfig = explicitTargetAgent
-      ? normalizeSubagentLoadBalancingConfig(
-          explicitTargetAgent.subagentLoadBalancing,
+      ? resolveEffectiveSubagentLoadBalancingConfig(
+          normalizeSubagentLoadBalancingConfig(
+            explicitTargetAgent.subagentLoadBalancing,
+          ),
+          explicitTargetAgent.accessAllSubagents,
         )
       : undefined;
     if (
@@ -533,7 +539,7 @@ export async function startDelegatedTask(params: {
       ephemeralCredentials = resolved.envForAgent(explicitAgentId);
     }
 
-    const retries = lbConfig?.enabled ? (lbConfig.retries ?? 0) : 0;
+    const retries = lbConfig?.enabled ? SUBAGENT_LOAD_BALANCING_RETRIES : 0;
 
     const { result, outcome } = await launchDelegatedTask({
       ...params,
@@ -591,24 +597,13 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
-  const fallbackEnabled = lbConfig?.fallbackEnabled ?? true;
   const excludedSet = new Set(
     (params.excludeAgentIds ?? []).filter((id) => assignedSet.has(id)),
   );
-  if (excludedSet.size > 0 && !fallbackEnabled) {
-    const { result, outcome } = failedLaunch(
-      "invalid_request",
-      errorResult(
-        `No remaining fallback subagents are available on this ${poolSurfaceLabel}.`,
-      ),
-    );
-    if (outcome) await recordRuntimeLaunch(params.context, outcome);
-    return result;
-  }
 
   let planningExcludedSet = excludedSet;
   const nonExcludedIds = assignedIds.filter((id) => !excludedSet.has(id));
-  if (fallbackEnabled && nonExcludedIds.length > 1) {
+  if (nonExcludedIds.length > 1) {
     const actor = tryRequireActor(params.context);
     if (actor) {
       const readinessChecks = await Promise.all(
@@ -682,9 +677,6 @@ export async function startDelegatedTask(params: {
     if (outcome) await recordRuntimeLaunch(params.context, outcome);
     return result;
   }
-  const activeCandidates = fallbackEnabled
-    ? candidateIds
-    : candidateIds.slice(0, 1);
 
   let ephemeralCredentialsByAgentId:
     | Record<string, Record<string, string>>
@@ -713,7 +705,7 @@ export async function startDelegatedTask(params: {
       organizationId: actor.organizationId,
       userId: actorPrincipalUserId(actor),
       callerAgentId: params.context.agent?.id || poolAgent.id,
-      candidateAgentIds: activeCandidates,
+      candidateAgentIds: candidateIds,
     });
     if (!resolved.ok) {
       await subagentLoadBalancer.releaseUnlaunchedClaim({
@@ -729,19 +721,19 @@ export async function startDelegatedTask(params: {
       return result;
     }
     ephemeralCredentialsByAgentId = Object.fromEntries(
-      activeCandidates.map((id) => [id, resolved.envForAgent(id)]),
+      candidateIds.map((id) => [id, resolved.envForAgent(id)]),
     );
   }
 
-  const retries = lbConfig?.enabled ? (lbConfig.retries ?? 0) : 0;
+  const retries = lbConfig?.enabled ? SUBAGENT_LOAD_BALANCING_RETRIES : 0;
   const trackDistributedRotation = lbConfig?.enabled === true;
 
   let lastAttempt: {
     result: CallToolResult;
     outcome?: RuntimeLaunchOutcome;
   } | null = null;
-  let currentCandidateId: string | null = activeCandidates[0] ?? null;
-  let remainingFallbackIds = activeCandidates.slice(1);
+  let currentCandidateId: string | null = candidateIds[0] ?? null;
+  let remainingFallbackIds = candidateIds.slice(1);
   let currentPlannedDispatchCount = dispatchCount;
 
   while (currentCandidateId) {

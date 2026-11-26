@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { vi } from "vitest";
 import { createFastifyInstance } from "@/fastify-instance";
-import { ModelModel } from "@/models";
+import { InteractionModel, ModelModel } from "@/models";
 import {
   type LlmProxyPlugin,
   registerLlmProxyPlugin,
@@ -338,6 +338,17 @@ describe("LLM proxy buffered model response streaming", () => {
     );
     expect(contentText(response.body)).toBe("");
     expect(response.body).not.toContain("get_weather");
+
+    const rows = await InteractionModel.getAllInteractionsForProfile(agent.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      inputTokens: 1,
+      outputTokens: 1,
+      response: expect.objectContaining({
+        error: `LLM proxy plugin ${pluginId} failed during ${failingHook}`,
+      }),
+    });
+    expect(Number(rows[0].cost)).toBeGreaterThan(0);
   });
 });
 

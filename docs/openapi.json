@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.44"
+    "version": "v1.5.0-rc.45"
   },
   "components": {
     "schemas": {
@@ -63213,23 +63213,11 @@
                                           "minimum": 1,
                                           "maximum": 1000
                                         }
-                                      },
-                                      "retries": {
-                                        "default": 3,
-                                        "type": "integer",
-                                        "minimum": 0,
-                                        "maximum": 3
-                                      },
-                                      "fallbackEnabled": {
-                                        "default": true,
-                                        "type": "boolean"
                                       }
                                     },
                                     "required": [
                                       "enabled",
-                                      "algorithm",
-                                      "retries",
-                                      "fallbackEnabled"
+                                      "algorithm"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -65078,23 +65066,11 @@
                                   "minimum": 1,
                                   "maximum": 1000
                                 }
-                              },
-                              "retries": {
-                                "default": 3,
-                                "type": "integer",
-                                "minimum": 0,
-                                "maximum": 3
-                              },
-                              "fallbackEnabled": {
-                                "default": true,
-                                "type": "boolean"
                               }
                             },
                             "required": [
                               "enabled",
-                              "algorithm",
-                              "retries",
-                              "fallbackEnabled"
+                              "algorithm"
                             ],
                             "additionalProperties": false
                           },
@@ -66238,16 +66214,6 @@
                           "minimum": 1,
                           "maximum": 1000
                         }
-                      },
-                      "retries": {
-                        "default": 1,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 3
-                      },
-                      "fallbackEnabled": {
-                        "default": true,
-                        "type": "boolean"
                       }
                     }
                   },
@@ -67242,23 +67208,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -72759,23 +72713,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -74313,23 +74255,11 @@
                                 "minimum": 1,
                                 "maximum": 1000
                               }
-                            },
-                            "retries": {
-                              "default": 3,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 3
-                            },
-                            "fallbackEnabled": {
-                              "default": true,
-                              "type": "boolean"
                             }
                           },
                           "required": [
                             "enabled",
-                            "algorithm",
-                            "retries",
-                            "fallbackEnabled"
+                            "algorithm"
                           ],
                           "additionalProperties": false
                         },
@@ -75540,23 +75470,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -76678,16 +76596,6 @@
                           "minimum": 1,
                           "maximum": 1000
                         }
-                      },
-                      "retries": {
-                        "default": 1,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 3
-                      },
-                      "fallbackEnabled": {
-                        "default": true,
-                        "type": "boolean"
                       }
                     }
                   },
@@ -77344,23 +77252,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -79838,23 +79734,11 @@
                                 "minimum": 1,
                                 "maximum": 1000
                               }
-                            },
-                            "retries": {
-                              "default": 3,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 3
-                            },
-                            "fallbackEnabled": {
-                              "default": true,
-                              "type": "boolean"
                             }
                           },
                           "required": [
                             "enabled",
-                            "algorithm",
-                            "retries",
-                            "fallbackEnabled"
+                            "algorithm"
                           ],
                           "additionalProperties": false
                         },
@@ -80891,23 +80775,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -82262,23 +82134,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -90417,23 +90277,11 @@
                             "minimum": 1,
                             "maximum": 1000
                           }
-                        },
-                        "retries": {
-                          "default": 3,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 3
-                        },
-                        "fallbackEnabled": {
-                          "default": true,
-                          "type": "boolean"
                         }
                       },
                       "required": [
                         "enabled",
-                        "algorithm",
-                        "retries",
-                        "fallbackEnabled"
+                        "algorithm"
                       ],
                       "additionalProperties": false
                     },
@@ -171906,11 +171754,25 @@
                               "plans": {
                                 "type": "object",
                                 "properties": {
+                                  "apiKey": {
+                                    "type": "object",
+                                    "properties": {
+                                      "hidden": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
                                   "personal": {
                                     "type": "object",
                                     "properties": {
                                       "hidden": {
                                         "type": "boolean"
+                                      },
+                                      "displayName": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "maxLength": 60
                                       }
                                     },
                                     "additionalProperties": false
@@ -173640,6 +173502,14 @@
                           "isGithubAppKey": {
                             "type": "boolean"
                           },
+                          "plan": {
+                            "type": "string",
+                            "enum": [
+                              "apiKey",
+                              "personal",
+                              "enterprise"
+                            ]
+                          },
                           "githubOrganization": {
                             "nullable": true,
                             "type": "string"
@@ -173874,6 +173744,14 @@
                           },
                           "isGithubAppKey": {
                             "type": "boolean"
+                          },
+                          "plan": {
+                            "type": "string",
+                            "enum": [
+                              "apiKey",
+                              "personal",
+                              "enterprise"
+                            ]
                           },
                           "githubOrganization": {
                             "nullable": true,
@@ -174722,23 +174600,11 @@
                                     "minimum": 1,
                                     "maximum": 1000
                                   }
-                                },
-                                "retries": {
-                                  "default": 3,
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 3
-                                },
-                                "fallbackEnabled": {
-                                  "default": true,
-                                  "type": "boolean"
                                 }
                               },
                               "required": [
                                 "enabled",
-                                "algorithm",
-                                "retries",
-                                "fallbackEnabled"
+                                "algorithm"
                               ],
                               "additionalProperties": false
                             },
@@ -177118,6 +176984,14 @@
                               "isGithubAppKey": {
                                 "type": "boolean"
                               },
+                              "plan": {
+                                "type": "string",
+                                "enum": [
+                                  "apiKey",
+                                  "personal",
+                                  "enterprise"
+                                ]
+                              },
                               "githubOrganization": {
                                 "nullable": true,
                                 "type": "string"
@@ -177352,6 +177226,14 @@
                               },
                               "isGithubAppKey": {
                                 "type": "boolean"
+                              },
+                              "plan": {
+                                "type": "string",
+                                "enum": [
+                                  "apiKey",
+                                  "personal",
+                                  "enterprise"
+                                ]
                               },
                               "githubOrganization": {
                                 "nullable": true,
@@ -178200,23 +178082,11 @@
                                         "minimum": 1,
                                         "maximum": 1000
                                       }
-                                    },
-                                    "retries": {
-                                      "default": 3,
-                                      "type": "integer",
-                                      "minimum": 0,
-                                      "maximum": 3
-                                    },
-                                    "fallbackEnabled": {
-                                      "default": true,
-                                      "type": "boolean"
                                     }
                                   },
                                   "required": [
                                     "enabled",
-                                    "algorithm",
-                                    "retries",
-                                    "fallbackEnabled"
+                                    "algorithm"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -434593,6 +434463,14 @@
                       "isGithubAppKey": {
                         "type": "boolean"
                       },
+                      "plan": {
+                        "type": "string",
+                        "enum": [
+                          "apiKey",
+                          "personal",
+                          "enterprise"
+                        ]
+                      },
                       "githubOrganization": {
                         "nullable": true,
                         "type": "string"
@@ -435359,6 +435237,14 @@
                     "isGithubAppKey": {
                       "type": "boolean"
                     },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
+                    },
                     "githubOrganization": {
                       "nullable": true,
                       "type": "string"
@@ -435894,6 +435780,14 @@
                       "isGithubAppKey": {
                         "type": "boolean"
                       },
+                      "plan": {
+                        "type": "string",
+                        "enum": [
+                          "apiKey",
+                          "personal",
+                          "enterprise"
+                        ]
+                      },
                       "githubOrganization": {
                         "nullable": true,
                         "type": "string"
@@ -436393,6 +436287,14 @@
                     },
                     "isGithubAppKey": {
                       "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
                     },
                     "githubOrganization": {
                       "nullable": true,
@@ -436972,6 +436874,14 @@
                     },
                     "isGithubAppKey": {
                       "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
                     },
                     "githubOrganization": {
                       "nullable": true,
@@ -437766,6 +437676,14 @@
                     },
                     "isGithubAppKey": {
                       "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
                     },
                     "githubOrganization": {
                       "nullable": true,
@@ -514739,11 +514657,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -516561,11 +516493,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -518107,11 +518053,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -519261,11 +519221,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -520412,11 +520386,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -523047,11 +523035,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -524333,11 +524335,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -525047,11 +525063,25 @@
                         "plans": {
                           "type": "object",
                           "properties": {
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "hidden": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
                             "personal": {
                               "type": "object",
                               "properties": {
                                 "hidden": {
                                   "type": "boolean"
+                                },
+                                "displayName": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "maxLength": 60
                                 }
                               },
                               "additionalProperties": false
@@ -525679,11 +525709,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -526900,11 +526944,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -528070,11 +528128,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -529266,11 +529338,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -530399,11 +530485,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false
@@ -532736,11 +532836,25 @@
                           "plans": {
                             "type": "object",
                             "properties": {
+                              "apiKey": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "personal": {
                                 "type": "object",
                                 "properties": {
                                   "hidden": {
                                     "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
                                   }
                                 },
                                 "additionalProperties": false

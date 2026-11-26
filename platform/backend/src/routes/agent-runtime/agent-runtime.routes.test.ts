@@ -24,6 +24,7 @@ import {
   RuntimeCredentialDefinitionModel,
 } from "@/models";
 import MemberModel from "@/models/member";
+import OrganizationModel from "@/models/organization";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
@@ -317,6 +318,57 @@ describe("Agent Runtime routes", () => {
     }
     expect(JSON.stringify(audits)).not.toContain("never-record-native-code");
     expect(JSON.stringify(audits)).not.toContain("sk-ant-oat");
+  });
+
+  test.for([
+    { anthropic: { hidden: true } },
+    { anthropic: { plans: { personal: { hidden: true } } } },
+  ])("refuses a new Claude Code sign-in when %j turns Claude Code off", async (modelProviderOverrides, {
+    makeAgent,
+  }) => {
+    assert(agent.runtime);
+    const claudeAgent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      runtime: {
+        ...agent.runtime,
+        command: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic",
+        credentials: [],
+        claudeCode: { authentication: "subscription" },
+      },
+    });
+    await OrganizationModel.patch(organizationId, { modelProviderOverrides });
+
+    for (const url of [
+      "/api/agent-runtime/claude-code/account",
+      `/api/agents/${claudeAgent.id}/runtime/claude-code/account`,
+    ]) {
+      const started = await app.inject({ method: "POST", url });
+      expect(started.statusCode, url).toBe(400);
+      expect(started.json().error.message).toContain("turned off");
+      // Disconnecting stays possible.
+      expect((await app.inject({ method: "DELETE", url })).statusCode).toBe(
+        200,
+      );
+    }
+  });
+
+  test("still starts a Claude Code sign-in when only Anthropic API keys are off", async () => {
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: {
+        anthropic: { plans: { apiKey: { hidden: true } } },
+      },
+    });
+
+    const started = await app.inject({
+      method: "POST",
+      url: "/api/agent-runtime/claude-code/account",
+    });
+
+    expect(started.statusCode, started.body).toBe(200);
+    expect(started.json().state).toBe("awaiting_code");
   });
 
   test("manages the caller's personal Claude Code subscription without an agent and shares it with Claude Code agents", async ({

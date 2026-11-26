@@ -456,6 +456,7 @@ export function CompactToolGroup({
   turnActive = false,
   autoOpenPolicyKey,
   renderAuthCard,
+  onBeforeToggle,
 }: {
   tools: CompactEntry[];
   /** The row's turn is still running, so guarded calls read as running. */
@@ -483,6 +484,11 @@ export function CompactToolGroup({
     toolResultPart: ToolUIPart | DynamicToolUIPart | null;
     errorText: string | undefined;
   }) => React.ReactNode;
+  /**
+   * Called when a circle is clicked, before its card opens or closes. The
+   * chat uses it to stop following its own bottom, so the row stays put.
+   */
+  onBeforeToggle?: () => void;
 }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [dismissedApprovalKeys, setDismissedApprovalKeys] = useState<
@@ -551,6 +557,7 @@ export function CompactToolGroup({
         : expandedKey === key;
 
   const handleToggle = (key: string) => {
+    onBeforeToggle?.();
     if (approvalPendingKeys.has(key)) {
       setDismissedApprovalKeys((prev) => {
         const next = new Set(prev);

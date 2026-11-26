@@ -239,6 +239,13 @@ export const CacheKey = {
    * Distributed per-caller subagent load-balancer rotation state shared across backend pods.
    */
   SubagentLoadBalancer: "subagent-load-balancer-v1",
+  /**
+   * MCP File Uploads extension: an upload the gateway asked a caller for, the
+   * upstream state its retry resumes, and each relayed file target.
+   */
+  McpFileUploadSession: "mcp-file-upload-session-v1",
+  McpFileUploadRelay: "mcp-file-upload-relay-v1",
+  McpFileUploadRelayDone: "mcp-file-upload-relay-done-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

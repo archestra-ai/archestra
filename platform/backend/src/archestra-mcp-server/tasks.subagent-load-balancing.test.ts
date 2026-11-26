@@ -4,6 +4,7 @@ import {
   LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
   SELF_FORK_TOOL_NAME,
   SKILL_TOOL_PREFIX,
+  SUBAGENT_LOAD_BALANCING_RETRIES,
   TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_POST_AGENT_RUN_FILE_FULL_NAME,
   TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
@@ -273,8 +274,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const subagentA = await createRuntimeSubagent(
@@ -311,7 +310,74 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     });
   });
 
-  test("intersects exclude_agent_ids with assigned subagents so foreign IDs are ignored and fallbackEnabled=false refuses assigned exclusions", async ({
+  test("coerces legacy All-agents weighted policies to round_robin during planning and on unrelated updates", async ({
+    makeAgent,
+  }) => {
+    const subagentA = await createRuntimeSubagent(
+      makeAgent,
+      "Subagent A",
+      false,
+    );
+    const subagentB = await createRuntimeSubagent(
+      makeAgent,
+      "Subagent B",
+      false,
+    );
+    const legacyPolicy = {
+      enabled: true,
+      algorithm: "weighted" as const,
+      weights: {
+        [subagentA.id]: 100,
+        [subagentB.id]: 1,
+      },
+    };
+    // Seed a legacy row directly in Postgres to bypass model normalization.
+    await db
+      .update(schema.agentsTable)
+      .set({
+        accessAllSubagents: true,
+        subagentLoadBalancing: legacyPolicy,
+      })
+      .where(eq(schema.agentsTable.id, gateway.id));
+
+    await mockDetachedTaskStart();
+
+    // Two consecutive runs alternate evenly (round_robin) instead of sending
+    // both to the 100-weight subagent.
+    const firstRun = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "First legacy weighted run" },
+      context,
+    );
+    const secondRun = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Second legacy weighted run" },
+      context,
+    );
+    expect(firstRun.isError).toBeFalsy();
+    expect(secondRun.isError).toBeFalsy();
+    const firstAgentId = (
+      firstRun.structuredContent as { run: { agent_id: string } }
+    ).run.agent_id;
+    const secondAgentId = (
+      secondRun.structuredContent as { run: { agent_id: string } }
+    ).run.agent_id;
+    expect(new Set([firstAgentId, secondAgentId])).toEqual(
+      new Set([subagentA.id, subagentB.id]),
+    );
+
+    // An unrelated update heals the stored policy to round_robin.
+    const updated = await AgentModel.update(gateway.id, {
+      description: "Unrelated metadata edit",
+    });
+    expect(updated?.subagentLoadBalancing).toEqual({
+      enabled: true,
+      algorithm: "round_robin",
+      weights: legacyPolicy.weights,
+    });
+  });
+
+  test("intersects exclude_agent_ids with assigned subagents so foreign IDs are ignored and assigned exclusions always fail over until none remain", async ({
     makeAgent,
   }) => {
     const subagentA = await createRuntimeSubagent(makeAgent, "Subagent A");
@@ -320,8 +386,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: false,
       },
     });
 
@@ -343,7 +407,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       },
     });
 
-    // Passing an actually assigned subagent ID when fallbackEnabled=false is refused.
+    // Failover is always enabled: excluding subagentA routes to subagentB.
     const withAssignedExclusion = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,
       {
@@ -352,13 +416,26 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       },
       context,
     );
-    expect(withAssignedExclusion.isError).toBe(true);
-    expect(
-      (withAssignedExclusion.content[0] as { text: string }).text,
-    ).toContain(
+    expect(withAssignedExclusion.isError).toBeFalsy();
+    expect(withAssignedExclusion.structuredContent).toMatchObject({
+      run: {
+        agent_id: subagentB.id,
+      },
+    });
+
+    // Excluding every assigned subagent returns the exhausted fallback error.
+    const withAllExcluded = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        message: "Review with all assigned subagents excluded",
+        exclude_agent_ids: [subagentA.id, subagentB.id],
+      },
+      context,
+    );
+    expect(withAllExcluded.isError).toBe(true);
+    expect((withAllExcluded.content[0] as { text: string }).text).toContain(
       "No remaining fallback subagents are available on this gateway.",
     );
-    expect(subagentB.id).toBeDefined();
   });
 
   test("consumes one-time ephemeral credential_grant_ids on start_agent_run and rejects reuse", async ({
@@ -370,8 +447,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 1,
-        fallbackEnabled: true,
       },
     });
 
@@ -425,7 +500,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         systemParams: expect.objectContaining({
           ephemeralCredentials: { GH_TOKEN: "ghs_ephemeral_token_value" },
           subagentExecutionPolicy: expect.objectContaining({
-            retries: 1,
+            retries: SUBAGENT_LOAD_BALANCING_RETRIES,
             fallbackAgentIds: [subagentB.id],
             ephemeralCredentialsByAgentId: {
               [subagentA.id]: { GH_TOKEN: "ghs_ephemeral_token_value" },
@@ -459,8 +534,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: false,
       },
     });
 
@@ -580,8 +653,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 1,
-        fallbackEnabled: false,
       },
     });
 
@@ -671,8 +742,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       enabled: true,
       algorithm: "weighted" as const,
       weights: { "00000000-0000-4000-8000-000000000001": 5 },
-      retries: 2,
-      fallbackEnabled: true,
     };
     await AgentModel.update(gateway.id, {
       subagentLoadBalancing: initialPolicy,
@@ -688,8 +757,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: false,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: false,
       },
     });
 
@@ -703,18 +770,26 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     const restored = await AgentModel.findById(gateway.id);
     expect(restored?.subagentLoadBalancing).toEqual(initialPolicy);
 
-    // A legacy stored row or version snapshot with retries: 5 parses as 3 through response schemas
+    // Legacy stored rows or version snapshots carrying removed retry/failover fields strip them cleanly
     const parsedAgent = SelectAgentSchema.parse({
       ...restored,
-      subagentLoadBalancing: { ...initialPolicy, retries: 5 },
+      subagentLoadBalancing: {
+        ...initialPolicy,
+        retries: 5,
+        fallbackEnabled: false,
+      },
     });
-    expect(parsedAgent.subagentLoadBalancing?.retries).toBe(3);
+    expect(parsedAgent.subagentLoadBalancing).toEqual(initialPolicy);
 
     const parsedSnapshot = AgentConfigSnapshotSchema.parse({
       ...v2?.snapshot,
-      subagentLoadBalancing: { ...initialPolicy, retries: 5 },
+      subagentLoadBalancing: {
+        ...initialPolicy,
+        retries: 5,
+        fallbackEnabled: false,
+      },
     });
-    expect(parsedSnapshot.subagentLoadBalancing?.retries).toBe(3);
+    expect(parsedSnapshot.subagentLoadBalancing).toEqual(initialPolicy);
   });
 
   test("task supervisor escalates tier on OOM retry and fails over to fallback subagent on persistent failure", async ({
@@ -1131,8 +1206,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 1,
-        fallbackEnabled: true,
       },
     });
 
@@ -1173,8 +1246,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
 
@@ -1243,8 +1314,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 1,
-        fallbackEnabled: true,
       },
     });
 
@@ -1302,7 +1371,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     });
     expect(prompt).toContain(SUBAGENT_LOAD_BALANCING_INSTRUCTION);
 
-    await mockDetachedTaskStart();
+    const sendSpy = await mockDetachedTaskStart();
     const orchestratorContext: ArchestraContext = {
       agent: { id: orchestrator.id, name: orchestrator.name },
       agentId: orchestrator.id,
@@ -1311,7 +1380,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     };
 
     // Even if the orchestrator model invokes the same agent__* tool three times,
-    // handleDelegation routes programmatically across all 3 assigned runtime workers.
+    // handleDelegation routes programmatically across all 3 assigned runtime workers
+    // with hard-coded retries (2) and failover across the remaining workers.
     const delegationToolName = toolA.name;
     const r1 = await executeArchestraTool(
       delegationToolName,
@@ -1332,6 +1402,15 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(r1.isError).toBeFalsy();
     expect(r2.isError).toBeFalsy();
     expect(r3.isError).toBeFalsy();
+    expect(sendSpy.mock.calls[0]?.[0]).toMatchObject({
+      agentId: assignedWorkerIds[0],
+      systemParams: expect.objectContaining({
+        subagentExecutionPolicy: expect.objectContaining({
+          retries: SUBAGENT_LOAD_BALANCING_RETRIES,
+          fallbackAgentIds: [assignedWorkerIds[1], assignedWorkerIds[2]],
+        }),
+      }),
+    });
     expect(r1.structuredContent).toMatchObject({
       run: {
         agent_id: assignedWorkerIds[0],
@@ -1370,8 +1449,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     const legacyConfig = {
       enabled: true,
       algorithm: "ordered",
-      retries: 0,
-      fallbackEnabled: true,
     } as unknown as NonNullable<Agent["subagentLoadBalancing"]>;
 
     const plannedRounds: string[][] = [];
@@ -1416,9 +1493,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       new Set([a, b]),
     );
 
-    // 3. A primary with misconfigured admin credentials fails over to a healthy
-    //    secondary when fallbackEnabled=true, and does not pin the broken primary
-    //    when fallbackEnabled=false.
+    // 3. A primary with misconfigured admin credentials always fails over to a
+    //    healthy secondary.
     await AgentModel.update(a, {
       runtime: runtimeConfig({
         credentials: [
@@ -1436,8 +1512,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await mockDetachedTaskStart();
@@ -1456,8 +1530,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       scopeKey: { userId: actorId },
     });
 
-    // With fallbackEnabled=true, start_agent_run walks past misconfigured `a`
-    // to the round-rotated first fallback (`c` on dispatchCount=11, round=3).
+    // start_agent_run walks past misconfigured `a` to the round-rotated first
+    // fallback (`c` on dispatchCount=11, round=3).
     const failoverResult = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,
       { message: "Should fail over past misconfigured primary a" },
@@ -1469,37 +1543,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         .agent_id,
     ).toBe(c);
 
-    // With fallbackEnabled=false, when `a` is at the front of the queue,
-    // the call fails on `a`, but leaves `a` at the back of the queue so
-    // the next call succeeds on a healthy worker rather than pinning `a`.
-    await subagentLoadBalancer.recordCandidateClaimed({
-      callerAgentId: gateway.id,
-      claimedAgentId: b,
-      assignedAgentIds: assigned,
-      scopeKey: { userId: actorId },
-    });
-    await subagentLoadBalancer.recordCandidateClaimed({
-      callerAgentId: gateway.id,
-      claimedAgentId: c,
-      assignedAgentIds: assigned,
-      scopeKey: { userId: actorId },
-    });
-    await AgentModel.update(gateway.id, {
-      subagentLoadBalancing: {
-        enabled: true,
-        algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: false,
-      },
-    });
-
-    const failedOnA = await executeArchestraTool(
-      TOOL_START_AGENT_RUN_FULL_NAME,
-      { message: "Hits misconfigured primary a with fallback disabled" },
-      context,
-    );
-    expect(failedOnA.isError).toBe(true);
-
+    // Subsequent call continues rotating across healthy workers without pinning `a`.
     const nextCallOnHealthy = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,
       { message: "Advances past misconfigured primary a to healthy b" },
@@ -1681,8 +1725,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const mockedStart = await mockDetachedTaskStart();
@@ -1733,8 +1775,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const mockedStart = await mockDetachedTaskStart();
@@ -1898,8 +1938,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await mockDetachedTaskStart();
@@ -1975,8 +2013,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       config: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
       scopeKey: { userId: "charlie-first-run", organizationId },
     });
@@ -1986,8 +2022,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       config: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
       scopeKey: { userId: "dave-first-run", organizationId },
     });
@@ -2001,8 +2035,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       enabled: true,
       algorithm: "weighted" as const,
       weights: { [a]: 3, [b]: 2, [c]: 1 },
-      retries: 0,
-      fallbackEnabled: true,
     };
     const teamScope = { teamId: "team-platform", organizationId };
     const orgScope = { organizationId };
@@ -2095,8 +2127,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     const randomConfig = {
       enabled: true,
       algorithm: "random" as const,
-      retries: 0,
-      fallbackEnabled: true,
     };
     const fixedRandomCallerId = "00000000-0000-0000-0000-000000000042";
     const randomUser1Primaries: string[] = [];
@@ -2142,8 +2172,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     const rrConfig = {
       enabled: true,
       algorithm: "round_robin" as const,
-      retries: 0,
-      fallbackEnabled: true,
     };
     const plan1 = await subagentLoadBalancer.planCandidates({
       callerAgentId: gateway.id,
@@ -2415,8 +2443,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await mockDetachedTaskStart();
@@ -2472,8 +2498,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 1,
-        fallbackEnabled: true,
       },
     });
     for (const subagent of [reviewSubagentA, reviewSubagentB]) {
@@ -2513,6 +2537,15 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       run: { run_id: string; agent_id: string };
     };
     expect(run1Data.run.agent_id).toBe(expectedOrder[0]);
+    expect(sendSpy.mock.calls[0]?.[0]).toMatchObject({
+      agentId: expectedOrder[0],
+      systemParams: expect.objectContaining({
+        subagentExecutionPolicy: expect.objectContaining({
+          retries: SUBAGENT_LOAD_BALANCING_RETRIES,
+          fallbackAgentIds: [expectedOrder[1]],
+        }),
+      }),
+    });
 
     const run2 = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,
@@ -2590,8 +2623,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const refusedRun = await executeArchestraTool(
@@ -2816,8 +2847,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 2,
-        fallbackEnabled: true,
       },
     });
     for (const subagent of [
@@ -2929,8 +2958,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
 
@@ -3011,8 +3038,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const workerAlpha = await makeAgent({
@@ -3510,8 +3535,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const workerAlpha = await makeAgent({
@@ -3617,8 +3640,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(compactLbGateway.id, alphaTool.id);
@@ -3687,8 +3708,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const workerA = await createRuntimeSubagent(
@@ -3882,8 +3901,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const spoofedToolRow = await ToolModel.findOrCreateDelegationTool(
@@ -4053,8 +4070,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const manualRouterB = await makeAgent({
@@ -4068,8 +4083,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(manualRouterA.id, workerOneTool.id);
@@ -4086,8 +4099,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const autoRouterB = await makeAgent({
@@ -4101,8 +4112,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentExcludedSubagentModel.replaceForAgent(autoRouterB.id, [
@@ -4233,8 +4242,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(encryptedLbAgent.id, workerDelegationTool.id);
@@ -4345,8 +4352,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         subagentLoadBalancing: {
           enabled: true,
           algorithm: "round_robin",
-          retries: 0,
-          fallbackEnabled: true,
         },
       });
       fullEncryptedAgentId = fullEncryptedAgent.id;
@@ -5033,8 +5038,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(autoToolsLbAgent.id, alphaTool.id);
@@ -5189,8 +5192,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(lbAgent.id, alphaTool.id);
@@ -5318,8 +5319,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(routerAgent.id, alphaTool.id);
@@ -5466,8 +5465,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(zeroRuntimeLbAgent.id, inProcessHelperTool.id);
@@ -5504,8 +5501,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     // Exclude every runtime subagent in the organization so 0 runtime candidates remain
@@ -5599,8 +5594,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: false,
       },
     });
     const privateAssignment = await AgentToolModel.create(
@@ -5629,8 +5622,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(
@@ -5744,8 +5735,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         ?.description,
     ).not.toContain("Runs in the background in Agent Runtime");
 
-    // Even with fallbackEnabled: false and privateTeamWorker listed first,
-    // memberUser's delegation dispatches cleanly to sharedTeamWorker.
+    // Even with privateTeamWorker listed first, memberUser's delegation
+    // dispatches cleanly to sharedTeamWorker.
     await mockDetachedTaskStart();
     const delegated = await executeArchestraTool(
       manualRouterTool.name,
@@ -5806,8 +5797,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         subagentLoadBalancing: {
           enabled: true,
           algorithm: "round_robin",
-          retries: 0,
-          fallbackEnabled: true,
         },
       });
       await AgentToolModel.create(routerAgent.id, alphaTool.id);
@@ -6027,8 +6016,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(customLbAgent.id, alphaTool.id);
@@ -6158,8 +6145,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(autoExcludedToolsAgent.id, alphaTool.id);
@@ -6278,8 +6263,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(lbGateway.id, alphaTool.id);
@@ -6414,8 +6397,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const autoRouterTool = await ToolModel.findOrCreateDelegationTool(
@@ -6583,8 +6564,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await AgentToolModel.create(manualRouter.id, workerOneTool.id);
@@ -6603,8 +6582,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const autoRouterTool = await ToolModel.findOrCreateDelegationTool(

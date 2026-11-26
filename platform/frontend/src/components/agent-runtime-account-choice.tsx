@@ -3,6 +3,8 @@
 import {
   type CompanyAccountWords,
   companyAccountWords,
+  personalSubscriptionTurnedOffMessage,
+  SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
 import { AlertTriangle, CircleCheck, Lock } from "lucide-react";
 import Link from "next/link";
@@ -28,6 +30,7 @@ import {
   type CompanyAccount,
   useAgentRuntimeAccount,
 } from "@/lib/agent-runtime-account.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { cn } from "@/lib/utils/tailwind";
 
 type Option = AccountWay;
@@ -245,7 +248,7 @@ function alternativeLabels(
   ];
 }
 
-const COMPANY_API_KEY = "A company API key";
+const COMPANY_API_KEY = "Provider API key";
 const COMPANY_ENTERPRISE_PLAN = "The company's enterprise plan";
 
 /** The way the viewer's runs use: the lock's, their choice, or the default. */
@@ -271,6 +274,7 @@ function AccountChoiceForm({
   onPendingChange: (change: PendingAccountChange | null) => void;
 }) {
   const id = useId();
+  const providerCatalog = useModelProviderCatalog();
   const defaultOption = agentDefault(account);
   // This section mounts once per stored choice: the form starts on it, and
   // a saved choice becomes the new baseline, so the form is not dirty.
@@ -396,6 +400,16 @@ function AccountChoiceForm({
         !subscription.connected &&
         (subscription.kind === "claude" ? (
           <ClaudeCodeAccount agentId={agentId} variant="compact" />
+        ) : !providerCatalog.canAddPersonalSubscription(
+            SUBSCRIPTION_CREDENTIALS[subscription.kind].provider,
+          ) ? (
+          // Turned off by an admin: a sign-in would be refused.
+          <p className="text-sm text-muted-foreground">
+            {personalSubscriptionTurnedOffMessage(
+              providerCatalog.overrides,
+              SUBSCRIPTION_CREDENTIALS[subscription.kind].provider,
+            )}
+          </p>
         ) : (
           <Button type="button" size="xs" variant="outline" asChild>
             <Link
@@ -456,7 +470,8 @@ function companyOptionDescription(
     : modelOpen
       ? `The agent's ${connection}, with a model you pick on its page.`
       : `The agent's ${connection} and model.`;
-  return `${runsOn} Billed to the company.`;
+  // A plan is the organization's; an API key can be the person's own.
+  return copilot ? `${runsOn} Billed to the company.` : runsOn;
 }
 
 /** What the form starts on: the stored choice, else the agent's default. */

@@ -188,7 +188,7 @@ export function CustomLimitDialog({
             ? `${row.name} has no limit today. This sets one just for them.`
             : isCustom
               ? `A limit set just for ${row.name}.`
-              : `${row.name} gets this limit instead of the ${row.source === "environment_default" && row.environmentName ? `${row.environmentName} override` : "organization default"}.`
+              : `${row.name} gets this limit instead of the ${row.source === "environment_default" && row.environmentName ? `default user limit for ${row.environmentName}` : "default user limit"}.`
           : undefined
       }
     >
@@ -380,7 +380,7 @@ function RemoveDescription({
     <span className="block space-y-2">
       {reason}
       <span className="block">
-        {`${firstName(row.name)} goes back to the organization default of ${formatLimit(fallback.limitValue)} per ${intervalLabel(fallback.cleanupInterval).toLowerCase()}.`}
+        {`${firstName(row.name)} goes back to the default user limit of ${formatLimit(fallback.limitValue)} per ${intervalLabel(fallback.cleanupInterval).toLowerCase()}.`}
       </span>
       <span className="block">
         {nextPercent >= 100

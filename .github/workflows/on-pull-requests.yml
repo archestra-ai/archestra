@@ -217,9 +217,47 @@ jobs:
   # placeholders: they could mask a failing merge-group job.
   # Release-please is the exception below: validate its generated head before
   # queue entry. Release PR Generation owns publication of all generated files.
+  #
+  # Every release-please push to a platform release PR is followed by the
+  # release generation commit, which supersedes it, so skip the raw push and
+  # validate only the generated head. Any other head, or a failed lookup, runs.
+  release-pr-generated-head:
+    name: Release PR Generated Head
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-releaser[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Read the head commit's message.
+    outputs:
+      validate: ${{ steps.head.outputs.validate }}
+    steps:
+      - name: Check whether the head is the release generation commit
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          # generationCommit in .github/scripts/release-pr-generation.mjs.
+          GENERATION_COMMIT: "docs: generate release artifacts"
+        run: |
+          if [[ "$HEAD_REF" != release-please--branches--*--components--platform ]]; then
+            echo "Not a platform release PR; nothing regenerates it."
+            echo "validate=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          subject="$(gh api "repos/${REPOSITORY}/commits/${HEAD_SHA}" --jq '.commit.message | split("\n")[0]')"
+          if [ "$subject" = "$GENERATION_COMMIT" ]; then
+            echo "validate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Raw release-please push; the release generation commit supersedes it."
+            echo "validate=false" >> "$GITHUB_OUTPUT"
+          fi
+
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-releaser[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
+    needs: [release-pr-generated-head]
+    if: ${{ !cancelled() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-releaser[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--') && needs.release-pr-generated-head.outputs.validate != 'false')) }}
     # Turbo fans out six check tasks; @frontend:check:ci also runs
     # tsc/vitest/knip/biome concurrently, so retain 16 CPUs.
     runs-on: ubuntu-24.04-16core

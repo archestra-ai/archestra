@@ -423,7 +423,7 @@ export function runtimeAccountsAfter(params: {
 
 // ===
 
-const LABEL = "Accounts that can run it";
+const LABEL = "Credentials to use";
 
 /**
  * The model set for one plan among several the runtime leaves to each

@@ -71,7 +71,10 @@ export async function canUseAgent(
   caller: Caller,
 ): Promise<boolean> {
   if (!PERMISSION_GATED_AGENTS.has(agentId)) return true;
-  return explicitGrantAllows("agent", agentId, "read", caller);
+  return explicitGrantsAllow({
+    caller,
+    requirements: [{ resource: "agent", scope: agentId, actions: ["read"] }],
+  });
 }
 
 export function mayUseCatalog(
@@ -253,39 +256,52 @@ async function catalogGrantAllows(
   caller: Caller,
 ): Promise<boolean> {
   if (!PERMISSION_GATED_CATALOGS.has(catalogId)) return true;
-  const [agentReadable, agentUsable, catalogAccess] = await Promise.all([
-    explicitGrantAllows("agent", SRE_AGENT_ID, "read", caller),
-    explicitGrantAllows("agent", SRE_AGENT_ID, "use", caller),
-    explicitGrantAllows("mcpRegistry", catalogId, "use", caller),
-  ]);
-  return agentReadable && agentUsable && catalogAccess;
+  return explicitGrantsAllow({
+    caller,
+    requirements: [
+      { resource: "agent", scope: SRE_AGENT_ID, actions: ["read", "use"] },
+      { resource: "mcpRegistry", scope: catalogId, actions: ["use"] },
+    ],
+  });
 }
 
 /** SRE access must come from its own policy, never a broad wildcard grant. */
-async function explicitGrantAllows(
-  resource: "agent" | "mcpRegistry",
-  scope: string,
-  action: "read" | "use",
-  { userId, organizationId }: Caller,
-): Promise<boolean> {
+async function explicitGrantsAllow({
+  caller: { userId, organizationId },
+  requirements,
+}: {
+  caller: Caller;
+  requirements: {
+    resource: "agent" | "mcpRegistry";
+    scope: string;
+    actions: ("read" | "use")[];
+  }[];
+}): Promise<boolean> {
   if (!userId || !organizationId || userId === "system") return false;
   const [{ default: Policy }, { default: Subject }] = await Promise.all([
     import("@/models/resource-permission-policy"),
     import("@/models/resource-permission-subject"),
   ]);
-  const [policy, principal] = await Promise.all([
-    Policy.find({ organizationId, resource, scope }),
+  const [policies, principal] = await Promise.all([
+    Promise.all(
+      requirements.map(({ resource, scope }) =>
+        Policy.find({ organizationId, resource, scope }),
+      ),
+    ),
     Subject.resolvePrincipal({ organizationId, userId }),
   ]);
-  return (
-    policy?.grants.some(
-      (grant) =>
-        grant.actions.includes(action) &&
-        principal.subjects.some(
-          (subject) =>
-            subject.type === grant.subject.type &&
-            subject.id === grant.subject.id,
-        ),
-    ) ?? false
+  return requirements.every(({ actions }, index) =>
+    actions.every(
+      (action) =>
+        policies[index]?.grants.some(
+          (grant) =>
+            grant.actions.includes(action) &&
+            principal.subjects.some(
+              (subject) =>
+                subject.type === grant.subject.type &&
+                subject.id === grant.subject.id,
+            ),
+        ) ?? false,
+    ),
   );
 }

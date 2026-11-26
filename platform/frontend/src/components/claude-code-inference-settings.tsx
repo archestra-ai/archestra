@@ -57,7 +57,7 @@ export function ClaudeCodeInferenceSettings({
   const customImage = !isClaudeCodeRuntimeCommand(runtimeCommand);
   return (
     <AgentAccountWays
-      label="Accounts that can run it"
+      label="Credentials to use"
       subscription={{
         ...CLAUDE_SUBSCRIPTION_CARD,
         // Each person's own sign-in and model are theirs to set, on the

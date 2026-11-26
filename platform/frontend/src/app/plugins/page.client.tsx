@@ -149,6 +149,8 @@ function PluginsList() {
       const params = new URLSearchParams(searchParams.toString());
       if (value === "all" || value === "") params.delete(name);
       else params.set(name, value);
+      // A narrowed list starts from its first page.
+      params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [pathname, router, searchParams],
@@ -226,6 +228,7 @@ function PluginsList() {
       "source",
       "state",
       "sourceRepo",
+      "page",
       "scope",
       "teamIds",
       "authorIds",
@@ -757,6 +760,7 @@ function PluginsList() {
                   <DataTable
                     columns={tableColumns}
                     data={filteredPlugins}
+                    urlPagination
                     getRowId={(row) => row.id}
                     emptyIcon={Braces}
                     emptyMessage="No plugins yet."

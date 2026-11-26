@@ -108,6 +108,30 @@ The variant owns every colour, including the colour of the explanation. Never
 give a child its own amber, red, or blue class. The two values drift apart
 when a palette moves.
 
+## Tables and pagination
+
+Every table is a `DataTable` (`components/ui/data-table.tsx`), and where its
+page lives is decided there, not in each page:
+
+- **The server pages the rows** (`pagination` or `cursorPagination` with
+  `manualPagination`): read `pageIndex`/`pageSize` from
+  `useDataTableQueryParams()` and pass its `setPagination`.
+- **The table pages its own rows, and it is the page's main table**: pass
+  `urlPagination`. The page then lives in the URL (`page`, `pageSize`), so a
+  reload, the Back button and a shared link open the same rows.
+- **The table pages its own rows inside a card or a dialog**: it has no claim
+  on the URL. Pass `resetPageKey` with whatever narrows the rows (the search
+  text, a filter signature), so a narrowed list starts from its first page.
+
+A control that narrows a URL-backed list must return it to the first page in
+the same write. `SearchInput`, `ResourceAccessFilter` and the label filter do.
+For a page's own filters, write through `setFilters` from
+`useDataTableQueryParams()`; keep `updateQueryParams` for URL state that
+leaves the rows alone, such as which row is open. Do not keep a table's page
+in `useState` beside a search that writes `page=1` to the URL: the table then
+ignores the URL, loses its page on reload, and a search made on page 3 stays
+on page 3.
+
 ## Text nodes and machine translation
 
 Chrome page-translate re-parents bare text nodes into `<font>` wrappers. React still holds the original nodes, so deleting one — or inserting an element before it — throws `NotFoundError` and crashes the page (facebook/react#11538, no upstream fix). Never let React add, remove, or replace a **bare** text node: wrap conditional text in an element so only elements move.

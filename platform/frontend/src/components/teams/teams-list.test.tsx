@@ -119,6 +119,10 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   useDataTableQueryParams: () => ({
     searchParams: queryParamsHolder.current,
     updateQueryParams: vi.fn(),
+    setFilters: vi.fn(),
+    pageIndex: 0,
+    pageSize: 10,
+    setPagination: vi.fn(),
   }),
 }));
 

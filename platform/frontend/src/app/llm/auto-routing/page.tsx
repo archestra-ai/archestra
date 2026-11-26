@@ -51,12 +51,12 @@ export default function AutoRoutersPage() {
   const query = useAutoRouters();
   const routers = query.data ?? [];
   const navigation = useRouter();
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { searchParams, setFilters } = useDataTableQueryParams();
   const search = (searchParams.get("search") ?? "").trim().toLowerCase();
 
   const clearFilters = useCallback(
-    () => updateQueryParams({ search: null }),
-    [updateQueryParams],
+    () => setFilters({ search: null }),
+    [setFilters],
   );
 
   const [creating, setCreating] = useState(false);
@@ -269,6 +269,7 @@ export default function AutoRoutersPage() {
               }
               table={
                 <DataTable
+                  urlPagination
                   columns={columns}
                   flexibleColumnIds={["name"]}
                   fixedWidthColumnIds={["budget", "status"]}

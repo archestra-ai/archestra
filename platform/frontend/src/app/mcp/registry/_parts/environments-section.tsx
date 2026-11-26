@@ -435,6 +435,9 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
       </BulkActions>
 
       <DataTable
+        // The search and filters live in this component, not in the URL.
+
+        resetPageKey={`${search}|${egressModeFilter}`}
         columns={columns}
         data={filteredRows}
         getRowId={(row) => row.id}

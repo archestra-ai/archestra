@@ -114,7 +114,7 @@ import {
 } from "./models-page-utils";
 
 export default function ModelsPage() {
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { searchParams, setFilters } = useDataTableQueryParams();
   const apiKeyFilter = searchParams.get("apiKey") ?? "all";
   const tabs = useModelProvidersTabs();
   const { hasActiveScopeFilters, access, sharedWith } = useScopeFilterParams();
@@ -189,9 +189,9 @@ export default function ModelsPage() {
     // cache `apiKeys` starts empty, so acting while it loads would strip a
     // `?freeOnly=true` deep link before an OpenRouter key had a chance to load.
     if (!isApiKeysLoading && !canFilterFreeModels && freeOnly) {
-      updateQueryParams({ freeOnly: null });
+      setFilters({ freeOnly: null });
     }
-  }, [isApiKeysLoading, canFilterFreeModels, freeOnly, updateQueryParams]);
+  }, [isApiKeysLoading, canFilterFreeModels, freeOnly, setFilters]);
 
   const bulkVisibility = useBulkUpdateModelVisibility();
 
@@ -264,7 +264,7 @@ export default function ModelsPage() {
       hasActiveScopeFilters,
   );
   const clearFilters = useCallback(() => {
-    updateQueryParams({
+    setFilters({
       search: null,
       apiKey: null,
       modelType: null,
@@ -274,7 +274,7 @@ export default function ModelsPage() {
         RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
       ),
     });
-  }, [updateQueryParams]);
+  }, [setFilters]);
 
   // Hiding keeps a model out of the pickers without deleting anything, so the
   // bar offers both directions rather than a single toggle whose meaning would
@@ -729,7 +729,7 @@ export default function ModelsPage() {
                 open={apiKeyFilterOpen}
                 onOpenChange={setApiKeyFilterOpen}
                 onSelectKey={(value) => {
-                  updateQueryParams({ apiKey: value });
+                  setFilters({ apiKey: value });
                   setApiKeyFilterOpen(false);
                 }}
                 triggerVariant="select"
@@ -740,14 +740,14 @@ export default function ModelsPage() {
                 allOptionLabel="All provider API keys"
                 allOptionSelected={apiKeyFilter === "all"}
                 onSelectAllOption={() => {
-                  updateQueryParams({ apiKey: null });
+                  setFilters({ apiKey: null });
                   setApiKeyFilterOpen(false);
                 }}
               />
               <FilterSelect
                 value={modelTypeFilter}
                 onValueChange={(v) =>
-                  updateQueryParams({ modelType: v === "all" ? null : v })
+                  setFilters({ modelType: v === "all" ? null : v })
                 }
                 placeholder="Model type"
                 items={[
@@ -807,7 +807,7 @@ export default function ModelsPage() {
                     id="models-free-only"
                     checked={freeOnly}
                     onCheckedChange={(checked) =>
-                      updateQueryParams({ freeOnly: checked ? "true" : null })
+                      setFilters({ freeOnly: checked ? "true" : null })
                     }
                   />
                   <Label
@@ -856,6 +856,7 @@ export default function ModelsPage() {
         </BulkActions>
 
         <DataTable
+          urlPagination
           columns={columns}
           flexibleColumnIds={["modelId"]}
           fixedWidthColumnIds={[

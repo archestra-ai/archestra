@@ -89,7 +89,7 @@ const STATUS_FILTERS: AccountHealth[] = [
 
 export default function ServiceAccountsSettingsPage() {
   const router = useRouter();
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { searchParams, setFilters } = useDataTableQueryParams();
   const setActionButton = useSetSettingsAction();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const { data: canReadServiceAccounts, isPending: isCheckingPermissions } =
@@ -152,14 +152,13 @@ export default function ServiceAccountsSettingsPage() {
 
   const clearFilters = useCallback(
     () =>
-      updateQueryParams({
+      setFilters({
         search: null,
         role: null,
         status: null,
         labels: null,
-        page: "1",
       }),
-    [updateQueryParams],
+    [setFilters],
   );
 
   const filteredServiceAccounts = useMemo(() => {
@@ -393,9 +392,8 @@ export default function ServiceAccountsSettingsPage() {
                   mode="filter"
                   value={roleFilter}
                   onValueChange={(value) =>
-                    updateQueryParams({
+                    setFilters({
                       role: value === ALL ? null : value,
-                      page: "1",
                     })
                   }
                   allOptionValue={ALL}
@@ -403,9 +401,8 @@ export default function ServiceAccountsSettingsPage() {
                 <FilterSelect
                   value={statusFilter}
                   onValueChange={(value) =>
-                    updateQueryParams({
+                    setFilters({
                       status: value === ALL ? null : value,
-                      page: "1",
                     })
                   }
                   placeholder="Filter by status"
@@ -504,6 +501,7 @@ export default function ServiceAccountsSettingsPage() {
                   </PermissionButton>
                 </BulkActions>
                 <DataTable
+                  urlPagination
                   columns={columns}
                   data={filteredServiceAccounts}
                   isLoading={

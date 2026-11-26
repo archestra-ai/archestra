@@ -105,7 +105,7 @@ export function CostExportsTable(props: {
     onBulkDelete,
   } = props;
   const now = useNow();
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { searchParams, setFilters } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const statusFilter = (searchParams.get("status") || ALL) as Health | "all";
   const destinationFilter = searchParams.get("destination") || ALL;
@@ -114,11 +114,10 @@ export function CostExportsTable(props: {
     statusFilter !== ALL ||
     destinationFilter !== ALL;
   const clearFilters = () =>
-    updateQueryParams({
+    setFilters({
       search: null,
       status: null,
       destination: null,
-      page: "1",
     });
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -347,9 +346,8 @@ export function CostExportsTable(props: {
             <FilterSelect
               value={destinationFilter}
               onValueChange={(value) =>
-                updateQueryParams({
+                setFilters({
                   destination: value === ALL ? null : value,
-                  page: "1",
                 })
               }
               inactiveValue={ALL}
@@ -381,9 +379,8 @@ export function CostExportsTable(props: {
             <FilterSelect
               value={statusFilter}
               onValueChange={(value) =>
-                updateQueryParams({
+                setFilters({
                   status: value === ALL ? null : value,
-                  page: "1",
                 })
               }
               inactiveValue={ALL}
@@ -463,6 +460,7 @@ export function CostExportsTable(props: {
         </PermissionButton>
       </BulkActions>
       <DataTable
+        urlPagination
         columns={columns}
         data={filtered}
         isLoading={isLoading && exports.length === 0}

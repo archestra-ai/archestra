@@ -746,6 +746,38 @@ describe("NewPluginPage", () => {
     );
   });
 
+  it("does not call the name taken by the plugin it has just created", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    const user = userEvent.setup();
+    const view = renderPage();
+    await user.type(screen.getByLabelText("Display name"), "Session guard");
+
+    // The create has succeeded and the list has been re-read, while the page
+    // is still on screen before the navigation to the new plugin.
+    vi.mocked(useCreatePlugin).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+      data: { id: "created-plugin" },
+    } as unknown as ReturnType<typeof useCreatePlugin>);
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [
+        {
+          id: "created-plugin",
+          displayName: "Session guard",
+          clientType: "claude-code",
+          authorId: "user-1",
+        },
+      ],
+    } as unknown as ReturnType<typeof usePlugins>);
+    view.rerenderPage();
+
+    expect(
+      screen.queryByText("Name is already in use. Try another one."),
+    ).not.toBeInTheDocument();
+  });
+
   it("asks before a link elsewhere drops a started draft", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,

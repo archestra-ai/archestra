@@ -105,12 +105,18 @@ function NewPluginWizard() {
   const patchDraft = (patch: Partial<PluginDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
 
+  const createPlugin = useCreatePlugin();
   const { data: plugins } = usePlugins();
   const { data: session } = useSession();
   const nameTaken = pluginNameTwin({
     displayName: draft.displayName,
     clientType: draft.clientType,
     ownerId: session?.user?.id,
+    // A successful create refreshes the list while this page is still up, on
+    // its way to the new plugin. The list then holds the plugin just created,
+    // which carries the draft's name and owner: without leaving it out, the
+    // draft was told its own name was taken.
+    pluginId: createPlugin.data?.id,
     plugins: plugins ?? [],
   });
   const draftGap =
@@ -146,7 +152,6 @@ function NewPluginWizard() {
   );
   useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
 
-  const createPlugin = useCreatePlugin();
   const handleCreate = async () => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     // A handled failure resolves to null and a rejection is reported by the

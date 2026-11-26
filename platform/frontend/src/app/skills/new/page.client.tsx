@@ -117,10 +117,15 @@ function NewSkillWizard() {
   );
   const contentComplete = parsed.hasName && parsed.hasDescription;
   const { data: session } = useSession();
+  const createSkill = useCreateSkill();
   const nameProblem = useSkillNameProblem({
     name: parsed.name,
     originalName: null,
     ownerId: session?.user?.id,
+    // A successful create refreshes the skills while this page is still up,
+    // on its way to the new skill. The skill just created carries the
+    // draft's name and owner, and is not the draft's duplicate.
+    skillId: createSkill.data?.id,
   });
 
   // The draft exists only on this page, so every way off it asks first: the
@@ -148,7 +153,6 @@ function NewSkillWizard() {
   );
   useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
 
-  const createSkill = useCreateSkill();
   const handleCreate = async () => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     // A handled failure resolves to null and a rejection is reported by the

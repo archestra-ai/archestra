@@ -66,18 +66,18 @@ histogram_quantile(
 
 ## Yell Metrics
 
-Alert on [yells](/docs/agents/guardrails/policies#yells) with `openappa_yells_total`. It counts what the Yells log records.
+Alert on [yells](/docs/agents/guardrails/policies#yells) with `openappa_yells_total`. It counts what the Yells log records, including the calls Break the glass lets through, which never reach the [`yell`](/docs/reference/archestra-mcp-server#yell) hook and so are missing from `openappa_hook_dispatches_total{hook="yell"}`.
 
 | Metric | Type | Labels | Measures |
 | --- | --- | --- | --- |
-| <span id="openappa_yells_total"></span>`openappa_yells_total` | Counter | `kind`, `superyell` | Committed yells: one per agent or client-failure report. A retried report counts nothing. |
+| <span id="openappa_yells_total"></span>`openappa_yells_total` | Counter | `kind`, `superyell` | Committed yells: one per agent or client-failure report, and one per call Break the glass let through. A retried report and a waiver the runtime refuses count nothing. |
 
 | Label | Values |
 | --- | --- |
-| `kind` | `agent` for a report: the agent's [`yell`](/docs/reference/archestra-mcp-server#yell) call, or a client that cannot receive remedies |
-| `superyell` | `false`. A yell no longer turns Guardrails off for its session |
+| `kind` | `agent` for a report (the agent's [`yell`](/docs/reference/archestra-mcp-server#yell) call, or a client that cannot receive remedies), `approval_waived` for a call that waited for human approval, `block_waived` for a call no remedy could lift |
+| `superyell` | `true` when the yell also turned Guardrails off for its session, otherwise `false` |
 
-Repeats of the same tool and kind merge into one row in the Yells log. The counter is recorded only while yells are enabled ([`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED)).
+Repeats of the same tool and kind merge into one row in the Yells log, but each waived call still counts here. The counter is recorded only while yells are enabled ([`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED)).
 
 ```promql
 # Any yell in the last 15 minutes

@@ -13,6 +13,7 @@ import {
 } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { ResourcePermissions } from "@/components/resource-permissions";
@@ -60,6 +61,7 @@ import {
   isSkillDraftDirty,
   isSyncedGithubSkill,
   type SkillDraft,
+  skillArchiveFiles,
   skillDraftFromSkill,
 } from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
@@ -396,6 +398,10 @@ function SkillDetailView({
               <CreatedByCell createdBy={skill.createdBy} />
             </p>
           )}
+          <DownloadFilesButton
+            name={parsed.name || skill.name}
+            files={skillArchiveFiles(draft)}
+          />
           <ChatWithSkillButton skillId={skill.id} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

@@ -3,35 +3,27 @@
 import { Download, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { downloadZip } from "@/components/file-workspace/download-zip";
 import { Button } from "@/components/ui/button";
-import type { PluginFileDraft } from "./plugin-content-fields";
+import { type ArchiveFile, downloadZip } from "./download-zip";
 
 /**
- * Saves the whole plugin, as it stands in the form, as a .zip.
+ * Saves a whole skill or plugin, as it stands on the page, as a .zip.
  *
- * It sits in the page header with the plugin's other whole-plugin actions.
- * On the file editor's bar it read as "download the open file".
+ * It sits in the page header with the other actions on the whole thing. On
+ * the file editor's bar it read as "download the open file".
  */
-export function PluginDownloadButton({
+export function DownloadFilesButton({
   name,
   files,
 }: {
-  /** Names the archive: the plugin's slug, or its display name. */
+  /** Names the archive. */
   name: string;
-  files: PluginFileDraft[];
+  files: ArchiveFile[];
 }) {
   const [pending, setPending] = useState(false);
   const save = () => {
     setPending(true);
-    downloadZip({
-      name: name.trim() || "plugin",
-      files: files.map(({ path, content, encoding }) => ({
-        path,
-        content,
-        encoding,
-      })),
-    })
+    downloadZip({ name: name.trim() || "files", files })
       .catch(() => toast.error("Could not download the files"))
       .finally(() => setPending(false));
   };

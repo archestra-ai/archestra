@@ -13,6 +13,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { FilterBar } from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
@@ -34,7 +35,6 @@ import { WizardStepper } from "@/components/wizard-stepper";
 import { useSession } from "@/lib/auth/auth.query";
 import { useCreatePlugin, usePlugins } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
-import { PluginDownloadButton } from "../_parts/plugin-download-button";
 import {
   blankPluginDraft,
   isPluginDraftDirty,
@@ -235,8 +235,8 @@ function NewPluginWizard() {
         actionButton={
           <div className="flex items-center gap-3">
             {step === "configure" && (
-              <PluginDownloadButton
-                name={draft.displayName}
+              <DownloadFilesButton
+                name={draft.displayName || "plugin"}
                 files={draft.files}
               />
             )}

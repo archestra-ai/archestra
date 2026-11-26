@@ -20,6 +20,7 @@ import {
 } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -54,7 +55,6 @@ import {
   getPluginActionModel,
   pluginAction,
 } from "../_parts/plugin-actions-model";
-import { PluginDownloadButton } from "../_parts/plugin-download-button";
 import {
   isPluginDraftDirty,
   OWN_PLUGIN_NAME_TAKEN,
@@ -341,7 +341,7 @@ function PluginDetailView({
               <CreatedByCell createdBy={plugin.createdBy} />
             </p>
           )}
-          <PluginDownloadButton name={plugin.pluginSlug} files={draft.files} />
+          <DownloadFilesButton name={plugin.pluginSlug} files={draft.files} />
           <PermissionButton
             permissions={installAction.permissions}
             permissionScope={installAction.permissionScope}

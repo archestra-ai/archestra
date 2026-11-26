@@ -3,11 +3,13 @@
 import { Puzzle } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { PageLayout } from "@/components/page-layout";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { usePluginSkill } from "@/lib/skills/skill.query";
 import { SkillContentEditor } from "../../_parts/skill-content-editor";
+import { skillArchiveFiles } from "../../_parts/skill-draft";
 import {
   SkillBackLink,
   SkillLoadError,
@@ -41,6 +43,12 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
       title={skill.name}
       description={skill.description}
       backLink={<SkillBackLink href="/skills" label="Skills" />}
+      actionButton={
+        <DownloadFilesButton
+          name={skill.name}
+          files={skillArchiveFiles(skill)}
+        />
+      }
     >
       <InlineNotice variant="info" className="mb-4">
         <Puzzle />
@@ -68,7 +76,7 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
         onManifestChange={() => undefined}
         onFilesChange={() => undefined}
         readOnly
-        downloadName={skill.name}
+        showDownload={false}
         className="h-[calc(100vh-20rem)] min-h-[32rem]"
       />
     </PageLayout>

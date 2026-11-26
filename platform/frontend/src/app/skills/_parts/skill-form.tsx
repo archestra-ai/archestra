@@ -145,6 +145,8 @@ export function SkillForm({
           onManifestChange={(manifest) => onChange({ manifest })}
           onFilesChange={onFilesChange}
           readOnly={readOnly || contentReadOnly}
+          // The page header offers the skill as a .zip.
+          showDownload={false}
           className={SKILL_WIZARD_EDITOR_CLASS}
         />
       </SettingsSection>

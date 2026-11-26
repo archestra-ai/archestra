@@ -4,6 +4,7 @@ import { Radio } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo } from "react";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -11,6 +12,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import { useExternalMcpSkill } from "@/lib/skills/skill.query";
 import { SkillContentEditor } from "../../_parts/skill-content-editor";
+import { skillArchiveFiles } from "../../_parts/skill-draft";
 import {
   SkillBackLink,
   SkillLoadError,
@@ -66,6 +68,12 @@ export function ExternalMcpSkillPage({ id }: { id: string }) {
       }
       description={skill.description || "Skill served by an MCP server"}
       backLink={<SkillBackLink href="/skills" label="Skills" />}
+      actionButton={
+        <DownloadFilesButton
+          name={skill.name}
+          files={skillArchiveFiles({ manifest, files: skill.files })}
+        />
+      }
     >
       <InlineNotice variant="info" className="mb-4">
         <Radio />
@@ -87,7 +95,7 @@ export function ExternalMcpSkillPage({ id }: { id: string }) {
         onManifestChange={() => undefined}
         onFilesChange={() => undefined}
         readOnly
-        downloadName={skill.name}
+        showDownload={false}
         className="h-[calc(100vh-20rem)] min-h-[32rem]"
       />
     </PageLayout>

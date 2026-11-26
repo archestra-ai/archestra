@@ -395,6 +395,21 @@ describe("NewSkillPage as the first skill's page", () => {
     expect(screen.getByText("Blank template")).toBeVisible();
   });
 
+  it("offers the whole skill as a download in the header once there is a form, not on the file editor", async () => {
+    mockOrganization(true);
+    const user = userEvent.setup();
+    renderPage();
+    // Nothing to download on the step that only picks a source.
+    expect(screen.queryByRole("button", { name: "Download" })).toBeNull();
+
+    await user.click(screen.getByText("Blank template"));
+
+    expect(screen.getByRole("button", { name: "Download" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Download as .zip" }),
+    ).toBeNull();
+  });
+
   it("drops the introduction and links back to the list once a skill exists", () => {
     mockOrganization(true);
     vi.mocked(useSkillsPaginated).mockReturnValue({
@@ -424,6 +439,21 @@ describe("NewSkillPage as the first skill's page", () => {
     renderPage();
 
     expect(screen.queryByText("Teach your agent")).toBeNull();
+  });
+
+  it("still introduces skills to someone whose MCP skill list was refused", () => {
+    mockOrganization(true);
+    mockNoSkillsAtAll();
+    // Answered with a refusal: no data, and not in flight any more.
+    vi.mocked(useExternalMcpSkills).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    renderPage();
+
+    expect(screen.getByText("Teach your agent")).toBeVisible();
   });
 
   it("holds the step until it knows whether skills exist, so nothing jumps", () => {

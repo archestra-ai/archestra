@@ -158,3 +158,21 @@ export function isSkillDraftDirty(draft: SkillDraft, seed: SkillDraft) {
     )
   );
 }
+
+/**
+ * A skill's manifest and files as the entries of its .zip, for the Download
+ * button in a skill page's header.
+ */
+export function skillArchiveFiles(skill: {
+  manifest: string;
+  files: ResourceFile[];
+}): Array<{ path: string; content: string; encoding?: "utf8" | "base64" }> {
+  return [
+    { path: "SKILL.md", content: skill.manifest },
+    ...skill.files.map(({ path, content, encoding }) => ({
+      path,
+      content,
+      encoding,
+    })),
+  ];
+}

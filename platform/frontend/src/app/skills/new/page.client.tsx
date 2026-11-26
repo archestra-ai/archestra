@@ -13,6 +13,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { FilterBar } from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
@@ -49,6 +50,7 @@ import {
   buildSkillSaveBody,
   isSkillDraftDirty,
   type SkillDraft,
+  skillArchiveFiles,
 } from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
 import { SkillBackLink } from "../_parts/skill-page-shell";
@@ -219,15 +221,23 @@ function NewSkillWizard() {
           )
         }
         actionButton={
-          <WizardStepper
-            compact
-            steps={steps}
-            activeStep={effectiveStep}
-            onStepClick={(target) => {
-              const targetIndex = steps.findIndex((s) => s.id === target);
-              if (targetIndex < stepIndex) setStep(target);
-            }}
-          />
+          <div className="flex items-center gap-3">
+            {effectiveStep === "configure" && (
+              <DownloadFilesButton
+                name={parsed.name || "skill"}
+                files={skillArchiveFiles(draft)}
+              />
+            )}
+            <WizardStepper
+              compact
+              steps={steps}
+              activeStep={effectiveStep}
+              onStepClick={(target) => {
+                const targetIndex = steps.findIndex((s) => s.id === target);
+                if (targetIndex < stepIndex) setStep(target);
+              }}
+            />
+          </div>
         }
         contentOverflowX="clip"
       >

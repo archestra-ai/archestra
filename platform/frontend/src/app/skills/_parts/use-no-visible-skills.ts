@@ -49,8 +49,11 @@ export function useNoVisibleSkills(): {
     hasNoSkills:
       !isPending &&
       standalone.data?.pagination?.total === 0 &&
-      external.data?.length === 0 &&
-      (!pluginSkillsEnabled || plugin.data?.length === 0),
+      // A list that was refused or failed shows the viewer none of its
+      // skills, so it counts as empty here; only the viewer's own list has to
+      // have answered.
+      (external.data?.length ?? 0) === 0 &&
+      (!pluginSkillsEnabled || (plugin.data?.length ?? 0) === 0),
   };
 }
 

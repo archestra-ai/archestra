@@ -272,11 +272,12 @@ describe("GET /api/auto-routing/routers/:id/diagnostics", () => {
     const routers = Array.from({ length: 5 }, () => ({
       id: crypto.randomUUID(),
       organizationId: crypto.randomUUID(),
-      usesPastSessions: false,
+      learnFromPastSessions: false,
+      expectedTrafficFactor: 1,
     }));
 
     const results = await Promise.allSettled(
-      routers.map((router) => diagnoseAutoRouting(router, undefined)),
+      routers.map((router) => diagnoseAutoRouting(router, undefined, true)),
     );
 
     expect(

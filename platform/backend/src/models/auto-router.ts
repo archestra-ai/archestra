@@ -58,19 +58,21 @@ class AutoRouterModel {
     return load(eq(routers.organizationId, organizationId));
   }
 
-  /** The router that learns from the organization's scored past sessions, if it still exists. */
-  static async findPastSessionsRouter(
+  /** The organization's routers set to learn from its past sessions, by id. */
+  static async listLearningFromPastSessions(
     organizationId: string,
     tx?: Transaction,
-  ): Promise<AutoRouter | null> {
-    const [router] = await load(
+  ): Promise<AutoRouter[]> {
+    const learning = await load(
       and(
         eq(routers.organizationId, organizationId),
-        eq(routers.usesPastSessions, true),
+        eq(routers.learnFromPastSessions, true),
       ),
       tx,
     );
-    return router ?? null;
+    return learning.toSorted((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    );
   }
 
   /**
@@ -92,6 +94,8 @@ class AutoRouterModel {
           budgetPreset: values.budgetPreset,
           scorerApiKeyId: values.scorerApiKeyId,
           scorerModel: values.scorerModel,
+          learnFromPastSessions: values.learnFromPastSessions,
+          expectedTrafficFactor: values.expectedTrafficFactor?.toString(),
           generation: 1,
         })
         .returning({ id: routers.id });
@@ -135,6 +139,8 @@ class AutoRouterModel {
           budgetPreset: update.budgetPreset,
           scorerApiKeyId: update.scorerApiKeyId,
           scorerModel: update.scorerModel,
+          learnFromPastSessions: update.learnFromPastSessions,
+          expectedTrafficFactor: update.expectedTrafficFactor?.toString(),
           generation: sql`${routers.generation} + 1`,
         })
         .where(eq(routers.id, routerId))
@@ -180,14 +186,25 @@ class AutoRouterModel {
 
   /**
    * Requests a re-plan inside `tx`, under the plan lock, so the bump commits
-   * with whatever made it necessary. The new generation; null when the router
-   * is gone.
+   * with whatever made it necessary, when the router read under that lock
+   * still satisfies `eligible`. The new generation; null when it did not bump.
    */
-  static async bumpGeneration(
+  static async bumpGenerationIf(
     routerId: string,
+    eligible: (
+      router: Pick<AutoRouter, "learnFromPastSessions" | "scorerModel">,
+    ) => boolean,
     tx: Transaction,
   ): Promise<number | null> {
     await lockRoutingPlan(tx, routerId);
+    const [router] = await tx
+      .select({
+        learnFromPastSessions: routers.learnFromPastSessions,
+        scorerModel: routers.scorerModel,
+      })
+      .from(routers)
+      .where(eq(routers.id, routerId));
+    if (!router || !eligible(router)) return null;
     const [row] = await tx
       .update(routers)
       .set({ generation: sql`${routers.generation} + 1` })
@@ -319,6 +336,14 @@ export function mergeRouter(
     budgetPreset: or(update.budgetPreset, current.budgetPreset),
     scorerApiKeyId: or(update.scorerApiKeyId, current.scorerApiKeyId),
     scorerModel: or(update.scorerModel, current.scorerModel),
+    learnFromPastSessions: or(
+      update.learnFromPastSessions,
+      current.learnFromPastSessions,
+    ),
+    expectedTrafficFactor: or(
+      update.expectedTrafficFactor,
+      current.expectedTrafficFactor,
+    ),
     ...(tiers && {
       fastModelId: tiers.fast.modelId,
       normalModelId: tiers.normal.modelId,
@@ -353,7 +378,8 @@ async function load(
       scorerVersionId: routers.scorerVersionId,
       generation: routers.generation,
       plannedGeneration: routers.plannedGeneration,
-      usesPastSessions: routers.usesPastSessions,
+      learnFromPastSessions: routers.learnFromPastSessions,
+      expectedTrafficFactor: routers.expectedTrafficFactor,
     })
     .from(routers)
     .innerJoin(organizations, eq(organizations.id, routers.organizationId))
@@ -377,6 +403,7 @@ async function load(
     const [fast, normal, smart] = TIER_NAMES.map(tier);
     return {
       ...row,
+      expectedTrafficFactor: Number(row.expectedTrafficFactor),
       fastModelId: fast?.modelId ?? null,
       normalModelId: normal?.modelId ?? null,
       smartModelId: smart?.modelId ?? null,

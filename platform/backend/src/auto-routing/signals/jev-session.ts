@@ -1,7 +1,9 @@
 import { randomBytes, scrypt } from "node:crypto";
 import { z } from "zod";
 import config from "@/config";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
+import { ApiError } from "@/types";
 import type { AutoRoutingScorerState } from "@/types/auto-routing-api";
 import { DecisionsResponseSchema } from "@/types/llm-providers/jev/api";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
@@ -71,6 +73,79 @@ export async function scorerState(
   return apiKey ? "ready" : "no_jev_key";
 }
 
+/**
+ * The organization-wide Jev key historical scoring pays with: the first, in
+ * preference order, that resolves to a credential of its own; never a
+ * personal key or the environment's. A run pins it, and its reads use that
+ * key alone.
+ */
+export async function organizationScorerKey(
+  organizationId: string,
+): Promise<string | null> {
+  for (const key of await payerCandidates(organizationId)) {
+    if (await resolvesExactly(organizationId, key.id)) return key.id;
+  }
+  return null;
+}
+
+/** Whether the organization at large may still use `apiKeyId`, the key a run pinned. */
+export async function isOrganizationScorerKey(
+  organizationId: string,
+  apiKeyId: string,
+): Promise<boolean> {
+  return (await payerCandidates(organizationId)).some(
+    (key) => key.id === apiKeyId,
+  );
+}
+
+/**
+ * The organization-wide Jev keys, in preference order, that belong to no
+ * one: a wildcard grant reaches a member's personal key too, which stays
+ * theirs.
+ */
+async function payerCandidates(organizationId: string) {
+  const keys = await LlmProviderApiKeyModel.findOrganizationWideKeys(
+    organizationId,
+    "jev",
+  );
+  return keys.filter((key) => key.userId === null);
+}
+
+/**
+ * The lookup a pinned read makes: `apiKeyId` itself resolves, not a
+ * fallback. A key whose Vault value is gone does not; Vault failing as a
+ * whole still throws.
+ */
+async function resolvesExactly(
+  organizationId: string,
+  apiKeyId: string,
+): Promise<boolean> {
+  try {
+    const { apiKey, chatApiKeyId } = await resolveProviderApiKey({
+      organizationId,
+      provider: "jev",
+      agentLlmApiKeyId: apiKeyId,
+    });
+    return apiKey !== undefined && chatApiKeyId === apiKeyId;
+  } catch (error) {
+    if (isSecretValueMissing(error)) return false;
+    throw error;
+  }
+}
+
+const VaultNotFoundSchema = z.object({
+  response: z.object({ statusCode: z.literal(404) }),
+});
+
+/** Vault answered that this one secret's path holds no value. */
+function isSecretValueMissing(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.statusCode === 404 ||
+      VaultNotFoundSchema.safeParse(error.cause).success)
+  );
+}
+
 export class JevSessionSource
   implements PreRunSignalSource<typeof JEV_SESSION_SOURCE_ID, JevSessionReading>
 {
@@ -95,6 +170,12 @@ export class JevSessionSource
       throw new SignalSourceError(
         "no_credentials",
         "No Jev API key is configured for the organization",
+      );
+    }
+    if (ctx.exactApiKey && chatApiKeyId !== ctx.apiKeyId) {
+      throw new SignalSourceError(
+        "no_credentials",
+        "The Jev API key this read must use is no longer usable",
       );
     }
     const url = baseUrl ?? config.llm.jev.baseUrl;

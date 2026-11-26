@@ -152,11 +152,13 @@ describe("MCP gateway task reaper", () => {
         `keyv:${CacheKey.GitHubActionsTokenJti}-expired`,
         `keyv:${CacheKey.McpGatewayRateLimit}-expired`,
         `keyv:${CacheKey.GitHubActionsTokenRateLimit}-198.51.100.1`,
+        `keyv:${CacheKey.OpenAppaUnansweredAnnotationNotice}-expired`,
       ],
       live: [
         `keyv:${CacheKey.GitHubActionsTokenJti}-live`,
         `keyv:${CacheKey.McpGatewayRateLimit}-live`,
         `keyv:${CacheKey.GitHubActionsTokenRateLimit}-198.51.100.2`,
+        `keyv:${CacheKey.OpenAppaUnansweredAnnotationNotice}-live`,
       ],
     };
     for (const [keys, expires] of [

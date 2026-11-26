@@ -1,8 +1,7 @@
 "use client";
 // The agent's yells in the session trace. A yell's row carries a faint wash
-// and a rail in its colour (amber for a yell, rose for a superyell); from a
-// superyell on, the label gutter becomes a rose-striped "guardrails off" band.
-// The guardrails bar steps through the page's yells.
+// and a rail in its colour (amber for a yell, rose for a superyell, an
+// earlier release's record that marks no later call). The guardrails bar steps through the page's yells.
 
 import {
   Check,
@@ -47,55 +46,33 @@ export function YellChip({ yell }: { yell: TraceYell }) {
   );
 }
 
-/**
- * A row's yell marks, drawn over its `<li>`: the wash and rail of a yell's own
- * row, and the "guardrails off" band over the gutter from the superyell on.
- */
+/** A yell's own row marks, drawn over its `<li>`: a wash and a rail. */
 export function YellRowMarks({
   yell,
-  off,
-  guardrailsOffAt,
   hasGutter,
   selected,
-  onSelectRow,
 }: {
-  /** The yell this row's call sent, if any. */
-  yell: TraceYell | null;
-  /** Guardrails were off for this row. */
-  off: boolean;
-  guardrailsOffAt: number | null;
+  /** The yell this row's call sent. */
+  yell: TraceYell;
   hasGutter: boolean;
   selected: boolean;
-  onSelectRow: () => void;
 }) {
-  const tone = yell ? toneOf(yell) : null;
-  const startsOff = Boolean(yell?.superyell) && yell?.at === guardrailsOffAt;
+  const tone = toneOf(yell);
   return (
-    <>
-      {tone ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute inset-y-0 right-0",
-            tone.wash,
-          )}
-          // Past the 8px gutter; the rail steps aside for the selection edge.
-          style={{ left: hasGutter || off ? 8 : 0 }}
-        >
-          <span
-            className={cn("absolute inset-y-0 w-0.5", tone.rail)}
-            style={{ left: selected ? 2 : 0 }}
-          />
-        </span>
-      ) : null}
-      {off && guardrailsOffAt !== null ? (
-        <OffBand
-          at={guardrailsOffAt}
-          cap={startsOff}
-          onSelectRow={onSelectRow}
-        />
-      ) : null}
-    </>
+    <span
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute inset-y-0 right-0",
+        tone.wash,
+      )}
+      // Past the 8px gutter; the rail steps aside for the selection edge.
+      style={{ left: hasGutter ? 8 : 0 }}
+    >
+      <span
+        className={cn("absolute inset-y-0 w-0.5", tone.rail)}
+        style={{ left: selected ? 2 : 0 }}
+      />
+    </span>
   );
 }
 
@@ -189,11 +166,6 @@ export function YellStepper({
                 <span className="block truncate opacity-70">
                   {yell.message}
                 </span>
-                {yell.superyell ? (
-                  <span className="block opacity-90">
-                    Guardrails off from here
-                  </span>
-                ) : null}
               </li>
             ))}
           </ol>
@@ -286,51 +258,6 @@ export function YellDetails({ yell }: { yell: TraceYell }) {
 // Internal helpers
 // ============================================================================
 
-/**
- * The gutter once guardrails are off: rose stripes, opposite-handed to the
- * label gutter's narrowed stripes so the two never read alike.
- */
-function OffBand({
-  at,
-  cap,
-  onSelectRow,
-}: {
-  at: number;
-  /** The superyell's own row: a cap marks where the band begins. */
-  cap: boolean;
-  onSelectRow: () => void;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/* Selects the row under it, like the label gutter. */}
-        <UnstyledButton
-          tabIndex={-1}
-          aria-hidden="true"
-          onClick={onSelectRow}
-          className="absolute inset-y-0 left-0 z-[3] w-2 cursor-pointer bg-card"
-        >
-          <span
-            className="absolute inset-0 bg-rose-500/12 [--off-stripe:rgb(244_63_94/0.55)] dark:bg-rose-400/12 dark:[--off-stripe:rgb(251_113_133/0.55)]"
-            style={OFF_STRIPES}
-          />
-          <span className="absolute inset-y-0 right-0 w-px bg-rose-500/50 dark:bg-rose-400/45" />
-          {cap ? (
-            <span className="absolute inset-x-0 top-0 h-0.5 bg-rose-600 dark:bg-rose-400" />
-          ) : null}
-        </UnstyledButton>
-      </TooltipTrigger>
-      <TooltipContent side="right" className="max-w-xs">
-        <p className="font-medium">Guardrails off</p>
-        <p className="opacity-70">
-          Since the agent's superyell at {clock(at)}: calls were not checked and
-          the label was not tracked.
-        </p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 /** Downloads the yell's diagnostic report (a gzipped JSON archive). */
 function DownloadReport({ yellId }: { yellId: string }) {
   const archive = useOpenAppaYellArchive();
@@ -397,7 +324,7 @@ function clock(ms: number) {
 }
 
 const SUPERYELL_EXPLANATION =
-  "A yell sent while break the glass is on. Besides reporting the problem, it broke the glass: guardrails turned off for the rest of this session.";
+  "A yell sent while an earlier release's break the glass setting was on. In that release it also turned guardrails off for the session; calls are checked now.";
 
 const ARROW =
   "flex w-7 shrink-0 cursor-pointer items-center justify-center outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset lg:w-6";
@@ -417,10 +344,4 @@ const TONES = {
     dot: "bg-rose-600 dark:bg-rose-400",
     text: "text-rose-700 dark:text-rose-300",
   },
-};
-
-const OFF_STRIPES = {
-  backgroundImage:
-    "linear-gradient(45deg, var(--off-stripe) 25%, transparent 25%, transparent 50%, var(--off-stripe) 50%, var(--off-stripe) 75%, transparent 75%, transparent)",
-  backgroundSize: "8px 8px",
 };

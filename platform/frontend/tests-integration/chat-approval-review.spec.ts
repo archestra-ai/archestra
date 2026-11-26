@@ -203,17 +203,19 @@ for (const viewport of [
       expect(layout.rightEdge).toBeLessThanOrEqual(viewport.width);
       expect(layout.noOverflow).toBe(true);
 
+      // The review reads as a question about the call, not as a tool call
+      // card: it names the call, and has no call status and no header to
+      // collapse. The arguments stay in view for as long as it is asked.
+      await expect(card).toContainText("Run github__delete_file?");
+      await expect(card.getByText("Arguments", { exact: true })).toBeVisible();
+      await expect(card.getByText("Approval requested")).toHaveCount(0);
+      await expect(
+        card.getByRole("button", { name: /github__delete_file/ }),
+      ).toHaveCount(0);
+
       if (viewport.width === 1280) {
         await card.screenshot({ path: testInfo.outputPath("review.png") });
       }
-      await card.getByRole("button", { name: /github__delete_file/ }).click();
-      await expect(card.getByRole("term")).toHaveCount(0);
-      await expect(consequences).toBeVisible();
-      await expect(approve).toBeEnabled();
-      await expect(deny).toBeEnabled();
-      await card.screenshot({
-        path: testInfo.outputPath("review-collapsed.png"),
-      });
     });
   });
 }

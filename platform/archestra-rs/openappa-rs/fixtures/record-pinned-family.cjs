@@ -45,6 +45,7 @@ requires = { trust = "trusted" }
 `;
 const session = {
   organization_id: 'opening-identity-pinned',
+  presenter: 'attended',
   caller_id: 'user:owner',
   session_id: 'opening-identity-pinned-session',
 };

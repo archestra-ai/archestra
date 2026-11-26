@@ -23,6 +23,7 @@ for (const withSanitizer of [false, true]) {
         );
         const root = {
           organization_id: organization,
+          presenter: "attended",
           caller_id: "user:synthetic",
           session_id: randomUUID() as string,
         };
@@ -84,6 +85,7 @@ builtin = "redact-email"
             await native.executeRemedyByOffer(
               JSON.stringify({
                 organization_id: organization,
+                presenter: "attended",
                 caller_id: root.caller_id,
                 trajectory: {
                   v: 1,
@@ -305,6 +307,7 @@ test.skipIf(!process.env.ARCHESTRA_OPENAPPA_TEST_DATABASE_URL)(
       );
       const parent = {
         organization_id: organization,
+        presenter: "attended",
         session_id: randomUUID(),
         caller_id: "user:synthetic",
       };
@@ -366,6 +369,7 @@ context_control = true
         await native.executeRemedyByOffer(
           JSON.stringify({
             organization_id: organization,
+            presenter: "attended",
             caller_id: parent.caller_id,
             trajectory: { v: 1, session_id: parent.session_id },
             execution_mode: "tracked",

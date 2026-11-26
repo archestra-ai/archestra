@@ -11,9 +11,8 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ConnectionSetupModel } from "@/models";
-import { recordWaivedCalls, waiverFor } from "@/openappa/break-the-glass";
 import { currentTrajectory } from "@/openappa/current-trajectory";
-import { NO_REMEDY_PLAN_HINT } from "@/openappa/no-remedy-plan-hint";
+import { refusalAction, refusalGuidance } from "@/openappa/refusal-outcome";
 import {
   endTurn,
   evaluateToolCalls,
@@ -48,10 +47,7 @@ import {
   subagentReplyNote,
 } from "@/services/cursor-guardrails-marks";
 import { CURSOR_WEB_SETUP_POLICY_TOOL } from "@/services/cursor-web-setup-tool-name";
-import {
-  breakTheGlassActiveIn,
-  getGuardrailsDeployment,
-} from "@/services/guardrails-deployment";
+import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
 import { disconnectReferenceInText } from "./connection-disconnect-reference";
 import { verifyConnectionHooksToken } from "./connection-hooks-token";
@@ -212,8 +208,8 @@ export async function handleCursorHook(params: {
 
   const answer = await withCapturedGuardrailsActivation("active", () =>
     webCall
-      ? answerWebChildStep({ step, event, session, deployment })
-      : answerStep({ step, event, session, deployment }),
+      ? answerWebChildStep({ step, event, session })
+      : answerStep({ step, event, session }),
   );
   return { answer };
 }
@@ -298,7 +294,6 @@ async function answerWebChildStep(params: {
   step: CursorHookRequest["step"];
   event: Record<string, unknown>;
   session: OpenAppaSession;
-  deployment: GuardrailsDeployment;
 }): Promise<CursorHookAnswer> {
   const { step, event, session } = params;
   // The CLI keeps a copy of each web result in its own data folder and
@@ -308,7 +303,7 @@ async function answerWebChildStep(params: {
   if (isWebResultCopy(event)) return {};
   switch (step) {
     case "preToolUse":
-      return ruleOnCall({ session, event, deployment: params.deployment });
+      return ruleOnCall({ session, event });
     case "postToolUse":
     case "postToolUseFailure":
       return reportResult(session, event, step === "postToolUseFailure");
@@ -339,7 +334,6 @@ async function answerStep(params: {
   step: CursorHookRequest["step"];
   event: Record<string, unknown>;
   session: OpenAppaSession;
-  deployment: GuardrailsDeployment;
 }): Promise<CursorHookAnswer> {
   const { step, event, session } = params;
   const generationId = stringField(event.generation_id);
@@ -362,7 +356,7 @@ async function answerStep(params: {
         await notePrompt(session, `prompt:${generationId}`);
       return {};
     case "preToolUse":
-      return ruleOnCall({ session, event, deployment: params.deployment });
+      return ruleOnCall({ session, event });
     case "postToolUse":
     case "postToolUseFailure":
       return withMarks(
@@ -475,9 +469,8 @@ async function openCalls(
 async function ruleOnCall(params: {
   session: OpenAppaSession;
   event: Record<string, unknown>;
-  deployment: GuardrailsDeployment;
 }): Promise<CursorHookAnswer> {
-  const { session, event, deployment } = params;
+  const { session, event } = params;
   const id = cursorCallId(event);
   const rawName = stringField(event.tool_name);
   if (!id || !rawName) {
@@ -596,27 +589,6 @@ async function ruleOnCall(params: {
         }
       : {};
   }
-  // Break the glass: the settings can let a denied call run anyway, with a
-  // yell on record. A person sits at a Cursor chat, so it is never unattended.
-  const waiver = waiverFor({
-    decision,
-    settings: deployment,
-    unattended: false,
-  });
-  if (waiver) {
-    const recorded = await recordWaivedCalls({
-      session,
-      calls: [{ toolCallId: id, tool: tool.name, kind: waiver }],
-      superyell: breakTheGlassActiveIn(deployment),
-    });
-    // The record marks the call as one the runtime does not see, so its
-    // result reaches the model as it is.
-    if (recorded) return {};
-    return deny(
-      guardrails() +
-        " could not record that it let this call through, so the call did not run. Retry the call.",
-    );
-  }
   if (decision.recorded) {
     // The call never runs, so its result is the ruling the runtime recorded.
     await processProxyResults({
@@ -625,14 +597,20 @@ async function ruleOnCall(params: {
       canonicalize: (name) => name,
     });
   }
-  const noPlan =
-    decision.recorded === true &&
-    decision.offers?.length === 0 &&
-    !decision.review?.length;
+  // The runtime's ruling states why it refused; a refusal before any ruling
+  // carries its own guidance.
+  const guidance = decision.recorded
+    ? refusalGuidance(
+        refusalAction({
+          outcome: decision.outcome,
+          offers: decision.offers,
+          review: decision.review,
+        }),
+      )
+    : "";
   // An MCP tool's result can be replaced before the model reads it, so every
   // plan of the ruling holds for a gateway tool and for a web tool.
-  if (tool.gateway)
-    return deny(decision.feedback + (noPlan ? NO_REMEDY_PLAN_HINT : ""));
+  if (tool.gateway) return deny(decision.feedback + guidance);
   // The ruling names the call as policy does; the model knows the tool by
   // the name Cursor lists it under.
   if (tool.web)
@@ -640,7 +618,7 @@ async function ruleOnCall(params: {
       decision.feedback.replaceAll(
         new RegExp(`\\b${tool.name}\\b`, "g"),
         rawName.replace(/^mcp:/i, ""),
-      ) + (noPlan ? NO_REMEDY_PLAN_HINT : ""),
+      ) + guidance,
     );
   // The offers of one of Cursor's own tools are remembered, so a sanitizer
   // plan among them is recognised when the model runs it.
@@ -653,10 +631,7 @@ async function ruleOnCall(params: {
       ),
     ),
   );
-  return deny(
-    withoutOutputSanitizerPlans(decision.feedback) +
-      (noPlan ? NO_REMEDY_PLAN_HINT : ""),
-  );
+  return deny(withoutOutputSanitizerPlans(decision.feedback) + guidance);
 }
 
 async function reportResult(
@@ -685,8 +660,8 @@ async function reportResult(
       isYellToolShortName(archestraMcpBranding.getToolShortName(tool.name)))
   )
     return {};
-  // The runtime never saw a call made while enforcement was off, nor the run
-  // of a denied call Break the glass let through: nothing to check it against.
+  // The runtime never saw a call made while enforcement was off: nothing to
+  // check it against.
   const unenforced = await findUnenforcedCalls({ session, toolCallIds: [id] });
   if (unenforced.reasons.has(id)) return {};
   const output = failed
@@ -710,22 +685,46 @@ async function reportResult(
       canonicalize: (name) => name,
     }));
   } catch (error) {
-    // The proxy fails such a request; here the output already reached the
-    // model, so the model is told it was not checked.
+    // The proxy fails such a request; here the call already ran and its
+    // output reached the model. The error's own advice, such as a retry, is
+    // for a call that has not run, so the model gets none of it.
     if (!(error instanceof ApiError)) throw error;
     logger.warn(
       { err: error, sessionId: session.session_id, toolCallId: id },
       "Guardrails could not check a Cursor tool result",
     );
+    const unchecked = `${guardrails()} could not check the result of tool call ${id}.`;
+    const ran = "The call already ran: do not make it again.";
+    // An MCP result is replaced before the model reads it, so it is withheld.
+    if (/^mcp:/i.test(rawName))
+      return {
+        updated_mcp_tool_output: `[${unchecked} Its result is withheld. ${ran}]`,
+      };
+    // One of Cursor's own tools has reached the model unchecked, so nothing
+    // the chat does next can be vouched for.
+    await cacheManager.set<UnvouchedReason>(
+      unvouchedChatKey(session),
+      "failed",
+      UNVOUCHED_CHAT_LIFETIME_MS,
+    );
     return {
-      additional_context: `${guardrails()} could not check the result of tool call ${id}: ${error.message} Treat that result as unchecked.`,
+      additional_context: `${unchecked} Treat that result as unchecked. ${ran} ${UNVOUCHED_CHAT_REFUSAL("failed")}`,
     };
   }
   const update = toolResultUpdates[id];
+  const admitted =
+    !update || (update.outputSource === "tool" && update.content === output);
+  // A result matching no released call is only unchecked; any other refusal
+  // withholds it.
+  const withheld =
+    !admitted &&
+    update.refused === true &&
+    update.code !== UNRELEASED_CALL_CODE;
   // The hook hands over only the start of a very long result, so the rest
   // was not checked. An MCP result is cut to the part that was. One of
-  // Cursor's own tools has reached the model whole, like a withheld one.
-  if (!failed && event.tool_output_truncated === true) {
+  // Cursor's own tools has reached the model whole, like a withheld one. A
+  // result the runtime refused is withheld whole, below.
+  if (!failed && event.tool_output_truncated === true && !withheld) {
     logger.warn(
       { sessionId: session.session_id, toolCallId: id, checked: output.length },
       "Guardrails checked only the start of a Cursor tool result",
@@ -743,8 +742,7 @@ async function reportResult(
       additional_context: `${guardrails()} could check only the first ${output.length} characters of the result of tool call ${id}, and Cursor had already shown you all of it. Do not use the rest. ${UNVOUCHED_CHAT_REFUSAL("unchecked")}`,
     };
   }
-  if (!update || (update.outputSource === "tool" && update.content === output))
-    return {};
+  if (admitted) return {};
   logger.info(
     { sessionId: session.session_id, toolCallId: id },
     "Guardrails did not admit a Cursor tool result",
@@ -757,7 +755,7 @@ async function reportResult(
   // the runtime knows nothing of is only unchecked. One the runtime withheld
   // or rewrote is different: the runtime keeps the chat's label as if the
   // model never read it, so nothing the chat does next can be vouched for.
-  if (update.refused && update.code !== UNRELEASED_CALL_CODE) {
+  if (withheld) {
     await cacheManager.set<UnvouchedReason>(
       unvouchedChatKey(session),
       "withheld",
@@ -776,8 +774,6 @@ async function reportResult(
   };
 }
 
-type GuardrailsDeployment = Awaited<ReturnType<typeof getGuardrailsDeployment>>;
-
 /** Gateway tools reach a hook under the names the gateway gave them. */
 const GATEWAY_TOOL_NAMES = {
   canonicalize: (name: string) => name,
@@ -794,9 +790,10 @@ const OUTPUT_SANITIZER_REFUSAL = () =>
 
 /**
  * Why nothing a chat does next can be vouched for: it read a result the
- * runtime withheld, or one the hook could only hand over in part.
+ * runtime withheld, one the hook could only hand over in part, or one whose
+ * check failed.
  */
-type UnvouchedReason = "withheld" | "unchecked";
+type UnvouchedReason = "withheld" | "unchecked" | "failed";
 
 // `true` is what a chat was marked with before the reasons were told apart.
 const UNVOUCHED_CHAT_REFUSAL = (reason: UnvouchedReason | true = "withheld") =>
@@ -804,7 +801,9 @@ const UNVOUCHED_CHAT_REFUSAL = (reason: UnvouchedReason | true = "withheld") =>
   " refuses the tool calls of this chat: it read a tool result " +
   (reason === "unchecked"
     ? "that was too large to check, and Cursor gives its own tools' results to you before they are checked. "
-    : "that your organization's policy required to be withheld, which Cursor does not allow for its own tools. ") +
+    : reason === "failed"
+      ? "that Guardrails could not check, and Cursor gives its own tools' results to you before they are checked. "
+      : "that your organization's policy required to be withheld, which Cursor does not allow for its own tools. ") +
   "Tell the user to continue in a new chat.";
 
 const OWN_TOOL_OFFER_LIFETIME_MS = TimeInMs.Day;
@@ -885,6 +884,7 @@ async function cursorSession(params: {
     organization_id: params.organizationId,
     caller_id: callerId,
     session_id: sessionId,
+    presenter: "attended",
   };
 }
 

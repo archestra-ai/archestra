@@ -1,6 +1,8 @@
 import config from "@/config";
+import db from "@/database";
 import DesktopDeviceServerModel from "@/models/desktop-device-server";
-import { describe, expect, type TestFixtures, test } from "@/test";
+import { SRE_CATALOG_ID } from "@/services/sre-agent/definition";
+import { describe, expect, type TestFixtures, test, vi } from "@/test";
 import { connectTestDevice, useServedProgramDir } from "@/test/desktop-mcp";
 import { useRouteTestApp } from "@/test/route-test-app";
 import type { DesktopMcpConfig } from "@/types";
@@ -269,6 +271,52 @@ describe("GET /v1/tunnels/:tunnelId", () => {
     });
 
     expect(response.statusCode).toBe(401);
+  });
+
+  test("checks a built-in catalog without rereading its agent policy during desktop sync", async ({
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    await makeInternalMcpCatalog({
+      id: SRE_CATALOG_ID,
+      organizationId: ctx.organizationId,
+      name: "Built-in diagnostics",
+      serverType: "local",
+    });
+    const desktop = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Synthetic desktop server",
+      serverType: "desktop_mcp",
+      desktopConfig: { command: "synthetic-mcp serve" },
+    });
+    await installFor(makeMcpServer, desktop.id, ctx.user.id);
+    const { tunnelId, headers } = await connectTestDevice({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+    });
+    const queries = vi.spyOn(db.$client, "query");
+    try {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/v1/tunnels/${tunnelId}`,
+        headers,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().catalog_items).toEqual([
+        expect.objectContaining({ id: desktop.id, enabled: true }),
+      ]);
+      const policyReads = queries.mock.calls.filter(
+        ([statement]) =>
+          typeof statement === "string" &&
+          statement.includes('from "resource_permission_policies"') &&
+          statement.includes('"scope" = $3'),
+      );
+      expect(policyReads).toHaveLength(2);
+    } finally {
+      queries.mockRestore();
+    }
   });
 });
 

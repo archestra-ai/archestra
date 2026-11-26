@@ -138,6 +138,9 @@ class RoutingPlanModel {
           summary: columns.summary,
           diagnostics: outcome.diagnostics,
           error: columns.error,
+          historyFrameId: fit.historyFrameId,
+          volumeFactor: fit.volumeFactor.toString(),
+          volumeSource: fit.volumeSource,
           // Taken under the lock, so newest-first follows publication order;
           // `now()` is the transaction's start, which may precede the lock wait.
           createdAt: sql`clock_timestamp()`,

@@ -119,10 +119,6 @@ import {
 import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
 import { sanitizeProviderBoundRequest } from "@/openappa/request";
 import { isAppaChatSource } from "@/openappa/service";
-import {
-  captureSoftBlockMode,
-  withSoftBlockRequest,
-} from "@/openappa/soft-block";
 import type { GovernedThread } from "@/openappa/thread-state";
 import { restoreTrajectoryStampText } from "@/openappa/trajectory-stamp";
 import { startedUnenforced } from "@/openappa/unenforced";
@@ -156,7 +152,11 @@ import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { configCache } from "@/services/config-cache";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
-import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
+import {
+  captureGuardrailsDispatchSettings,
+  getGuardrailsDeploymentFromSnapshot,
+  withGuardrailsRequest,
+} from "@/services/guardrails-deployment";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
 import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
@@ -566,7 +566,7 @@ export async function handleLLMProxy<
     stream: asRecord(body)?.stream === true,
   });
   try {
-    return await withSoftBlockRequest(() =>
+    return await withGuardrailsRequest(() =>
       handleObservedLLMProxy({
         body,
         request,
@@ -1553,15 +1553,15 @@ async function handleObservedLLMProxy<
       );
     }
   };
+  const guardrails = await getGuardrailsDeploymentFromSnapshot({
+    row: requestContext.guardrails,
+  });
   const {
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
     unsupportedClientAction,
-    unapprovableBlockMode,
-  } = await getGuardrailsDeploymentFromSnapshot({
-    row: requestContext.guardrails,
-  });
-  captureSoftBlockMode(unapprovableBlockMode);
+  } = guardrails;
+  captureGuardrailsDispatchSettings(guardrails);
   // Enforcement is off, but OpenAPPA records what it must know when enforcement
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
@@ -2027,10 +2027,7 @@ async function handleObservedLLMProxy<
       };
       if (appaActive && grokDeferred)
         pluginContext.resources.set(GROK_DEFERRED_TOOLS, grokDeferred);
-      if (
-        (admission.kind === "ungoverned" || admission.kind === "waived") &&
-        admission.withdrawnChildReturn
-      )
+      if (admission.kind === "ungoverned" && admission.withdrawnChildReturn)
         pluginContext.resources.set(APPA_WITHDRAWN_CHILD_RETURN, true);
       if (admission.kind !== "ungoverned") {
         const prepared = await prepareOpenappaRequest({

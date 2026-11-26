@@ -1,11 +1,6 @@
 import logger from "@/logging";
 import { prepareAppaRequest } from "@/openappa/request";
 import {
-  refuseSoftBlock,
-  softBlocksAllowed,
-  waiveSoftBlock,
-} from "@/openappa/soft-block";
-import {
   echoedCallsMessage,
   GovernedThread,
   readThreadRequest,
@@ -21,9 +16,7 @@ import { type AppaSessionIdentity, declaredToolEntries } from "@/openappa/wire";
 import type { OpenappaAdmission } from "@/proxy/plugins/appa-plugin-archestra/host/admission";
 import type { OpenappaIngress } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import {
-  APPA_PLUGIN_RETAINED_SHAPE,
   APPA_PLUGIN_TRUSTED_CONTEXT,
-  type AppaRetainedShape,
   type AppaTrustedContext,
 } from "@/proxy/plugins/appa-plugin-archestra/types";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
@@ -35,50 +28,8 @@ import {
 } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
 
-/**
- * Prepares the request OpenAPPA governs or observes for the plugin: the body
- * the ruling reads, the provider thread it continues, and the trusted
- * context the plugin binds the session from. Mutates `body` in place. A
- * thread continue the proxy cannot resume makes the client replay the
- * whole thread instead.
- */
-export async function prepareOpenappaRequest(
-  params: Omit<GovernedRequestParams, "admission"> & {
-    admission: Exclude<OpenappaAdmission, { kind: "ungoverned" }>;
-  },
-): Promise<PreparedOpenappaRequest> {
-  const { admission } = params;
-  if (admission.kind === "waived") {
-    retainWaivedRequestShape({ ...params, admission });
-    return { kind: "prepared" };
-  }
-  const governedParams = { ...params, admission };
-  if (!(await softBlocksAllowed()) || admission.kind !== "governed")
-    return governedRequest(governedParams);
-  const original = structuredClone(params.body);
-  try {
-    const result = await governedRequest(governedParams);
-    if (result.kind === "replay")
-      await refuseSoftBlock("OpenAPPA could not continue the provider thread");
-    return result;
-  } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !(await waiveSoftBlock(
-        admission.session,
-        "request_preparation",
-        error.message,
-      ))
-    )
-      throw error;
-    restoreBody(params.body, original);
-    params.context.resources.delete(APPA_PLUGIN_TRUSTED_CONTEXT);
-    return { kind: "prepared" };
-  }
-}
-
 type GovernedRequestParams = {
-  admission: Exclude<OpenappaAdmission, { kind: "ungoverned" | "waived" }>;
+  admission: Exclude<OpenappaAdmission, { kind: "ungoverned" }>;
   context: LlmProxyRequestContext;
   body: unknown;
   ingress: OpenappaIngress;
@@ -89,7 +40,14 @@ type GovernedRequestParams = {
   };
 };
 
-async function governedRequest(
+/**
+ * Prepares the request OpenAPPA governs or observes for the plugin: the body
+ * the ruling reads, the provider thread it continues, and the trusted
+ * context the plugin binds the session from. Mutates `body` in place. A
+ * thread continue the proxy cannot resume makes the client replay the
+ * whole thread instead.
+ */
+export async function prepareOpenappaRequest(
   params: GovernedRequestParams,
 ): Promise<PreparedOpenappaRequest> {
   const { admission, context, body, ingress, tools } = params;
@@ -249,48 +207,6 @@ async function governedRequest(
   return { kind: "prepared", ...(thread ? { thread } : {}) };
 }
 
-/**
- * Changing the tools or the system prompt mid-session would invalidate the
- * provider's prompt cache. This only rewrites the body: nothing is ruled on
- * and the plugin binds no session. A body it cannot rewrite goes out as sent.
- */
-function retainWaivedRequestShape(params: {
-  admission: Extract<OpenappaAdmission, { kind: "waived" }>;
-  context: LlmProxyRequestContext;
-  body: unknown;
-  ingress: OpenappaIngress;
-  tools: { identity: GatewayToolIdentity };
-}): void {
-  const { admission, context, body, ingress, tools } = params;
-  const original = structuredClone(body);
-  try {
-    // These carry a delta, which no governed request of the session reshaped.
-    if (
-      readThreadRequest(body)?.type === "continue" ||
-      (body as { previous_response_id?: unknown }).previous_response_id
-    )
-      return;
-    const isInternalChat = admission.facts.chatSource !== undefined;
-    const request = prepareBody({
-      body,
-      context,
-      ingress,
-      session: admission.identity,
-      identity: tools.identity,
-      isInternalChat,
-    });
-    if (ingress.clientCompaction && !isInternalChat) return;
-    context.resources.set(APPA_PLUGIN_RETAINED_SHAPE, {
-      adapter: admission.adapter,
-      identity: tools.identity,
-      request,
-    } satisfies AppaRetainedShape);
-  } catch (err) {
-    logger.debug({ err }, "OpenAPPA could not keep a waived request's shape");
-    restoreBody(body, original);
-  }
-}
-
 function prepareBody(params: {
   body: unknown;
   context: LlmProxyRequestContext;
@@ -318,14 +234,6 @@ function prepareBody(params: {
       : {}),
     ...(ingress.clientWire ? { clientWire: ingress.clientWire } : {}),
   });
-}
-
-function restoreBody(body: unknown, original: unknown): void {
-  if (!body || typeof body !== "object") return;
-  if (!original || typeof original !== "object") return;
-  for (const key of Object.keys(body))
-    delete (body as Record<string, unknown>)[key];
-  Object.assign(body, original);
 }
 
 // ===

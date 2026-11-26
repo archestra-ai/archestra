@@ -1618,7 +1618,21 @@ class LlmProviderApiKeyModel {
     organizationId: string,
     provider: SupportedProvider,
   ): Promise<LlmProviderApiKey | null> {
-    const [apiKey] = await db
+    const [apiKey] = await LlmProviderApiKeyModel.findOrganizationWideKeys(
+      organizationId,
+      provider,
+      1,
+    );
+    return apiKey ?? null;
+  }
+
+  /** Every key `findOrganizationWideKey` considers, in its order; at most `limit`. */
+  static async findOrganizationWideKeys(
+    organizationId: string,
+    provider: SupportedProvider,
+    limit?: number,
+  ): Promise<LlmProviderApiKey[]> {
+    const query = db
       .select()
       .from(schema.llmProviderApiKeysTable)
       .where(
@@ -1640,10 +1654,8 @@ class LlmProviderApiKeyModel {
       .orderBy(
         desc(schema.llmProviderApiKeysTable.isPrimary),
         asc(schema.llmProviderApiKeysTable.createdAt),
-      )
-      .limit(1);
-
-    return apiKey ?? null;
+      );
+    return limit === undefined ? query : query.limit(limit);
   }
 
   /**

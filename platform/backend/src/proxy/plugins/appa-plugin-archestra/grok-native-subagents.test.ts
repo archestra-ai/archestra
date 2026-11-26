@@ -152,6 +152,7 @@ context_control = true
           await native.executeRemedyByOffer(
             JSON.stringify({
               organization_id: organization,
+              presenter: "attended",
               caller_id: session.caller_id,
               trajectory: {
                 v: 1,
@@ -216,6 +217,7 @@ context_control = true
           if (sid && !parent) {
             parent = {
               organization_id: organization,
+              presenter: "attended",
               caller_id: "user:synthetic",
               session_id: sid,
             };
@@ -452,6 +454,7 @@ context_control = true
               const status = await native.getOpenappaStatus(
                 organization,
                 parent.session_id,
+                "attended",
                 policy,
               );
               expect(status?.trust).toBe("trusted");

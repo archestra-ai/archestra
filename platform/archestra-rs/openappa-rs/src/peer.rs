@@ -65,7 +65,7 @@ enum PeerKind {
 async fn peer_call(input: String, policy: DispatchPolicy, kind: PeerKind) -> napi::Result<String> {
     let parsed: PeerInput = serde_json::from_str(&input).map_err(invalid_input)?;
     validate_actor(&parsed)?;
-    let result = std::panic::AssertUnwindSafe(execute(parsed, policy.into(), kind))
+    let result = std::panic::AssertUnwindSafe(execute(parsed, policy.try_into()?, kind))
         .catch_unwind()
         .await;
     match result {
@@ -83,7 +83,18 @@ async fn execute(
     kind: PeerKind,
 ) -> napi::Result<Value> {
     let state = initialized().await?;
-    super::on_deployment(&state, &input.organization_id, &policy, |pinned| {
+    let root = acting_root(&Sql(&state.store), &input)?;
+    let line = super::lines::Line {
+        organization_id: input.organization_id.clone(),
+        variant: state
+            .variant_of(
+                &input.organization_id,
+                Some(&root),
+                input.presenter.beyond_review()?,
+            )
+            .await?,
+    };
+    super::on_deployment(&state, &line, &policy, |pinned| {
         execute_pinned(pinned, &input, kind)
     })
     .await
@@ -525,7 +536,8 @@ async fn read(
         Err(reason) => return Err(peer_failure(reason)),
     };
     match &outcome.decision {
-        HookDecision::DeliverValue { value } | HookDecision::ReplaceOutput { output: value } => {
+        HookDecision::DeliverValue { value }
+        | HookDecision::ReplaceOutput { output: value, .. } => {
             if value.is_empty() {
                 return Err(invariant(
                     "OpenAPPA returned an empty body for an admitted peer read",
@@ -577,7 +589,7 @@ async fn read(
         HookDecision::Ack => Err(invariant(
             "OpenAPPA acknowledged a peer read without binding its stored label",
         )),
-        HookDecision::Refuse { class, detail } => Err(failure(
+        HookDecision::Refuse { class, detail, .. } => Err(failure(
             Failure::Refused(*class),
             format!("OpenAPPA refused the peer read: {detail}"),
         )),
@@ -1316,6 +1328,8 @@ fn iso8601(time: SystemTime) -> String {
 #[serde(deny_unknown_fields)]
 struct PeerInput {
     organization_id: String,
+    /// Who presents the operation, as the host authenticated the request.
+    presenter: crate::lines::Presenter,
     #[serde(default)]
     caller_id: Option<String>,
     session_id: String,
@@ -1418,6 +1432,7 @@ mod tests {
     fn actor(caller_id: Option<&str>) -> PeerInput {
         PeerInput {
             organization_id: "org".to_owned(),
+            presenter: crate::lines::Presenter::Attended,
             caller_id: caller_id.map(str::to_owned),
             session_id: "session".to_owned(),
             parent_id: None,

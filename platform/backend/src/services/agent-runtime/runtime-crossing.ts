@@ -13,7 +13,6 @@ import {
   returnRuntimeValue,
   startRuntimeChild,
 } from "@/openappa/service";
-import { softBlocksAllowed, waiveSoftBlock } from "@/openappa/soft-block";
 import { isUnenforcedSession } from "@/openappa/unenforced";
 import {
   getGuardrailsDeployment,
@@ -99,7 +98,7 @@ export async function guardRuntimeCrossing(
     return { kind: "proof", crossing };
   }
   const { unsupportedClientAction } = await getGuardrailsDeployment();
-  if (unsupportedClientAction === "block" && !(await softBlocksAllowed())) {
+  if (unsupportedClientAction === "block") {
     return {
       kind: "refused",
       reason: reportCrossingRefusal({
@@ -120,8 +119,8 @@ export async function guardRuntimeCrossing(
  * the gateway cannot tell the parent from a stranger, so the refusal names the
  * missing proof, not a different session.
  *
- * A session that was superyelled, whose parent was, or that started while
- * enforcement was off gets no proof from the proxy, so its own calls and its
+ * A session that started while enforcement was off, or whose parent did,
+ * gets no proof from the proxy, so its own calls and its
  * parent's carry none. The gateway asks the same question the proxy does, but
  * only reads: the proxy records the session on its own next request.
  */
@@ -144,14 +143,6 @@ export async function refuseUnrecognizedCaller(params: {
   }
   if (!resolved.session.parent_id) return undefined;
   if (await isUnenforcedSession(resolved.session)) return undefined;
-  if (
-    await waiveSoftBlock(
-      resolved.session,
-      "runtime_access",
-      "OpenAPPA requires a parent crossing proof",
-    )
-  )
-    return undefined;
   return reportCrossingRefusal({
     reason: "proof_missing",
     message: UNPROVEN_CALLER_ON_BOUND_RUNTIME,
@@ -196,10 +187,6 @@ export async function bindRuntimeChild(params: {
     );
   }
   if (!params.crossing.spawn) {
-    if (
-      await waiveSoftBlock(params.crossing.source, "runtime_bind", NOT_A_SPAWN)
-    )
-      return undefined;
     throw new RuntimeCrossingRefusal(
       reportCrossingRefusal({
         reason: "not_a_spawn",
@@ -224,14 +211,6 @@ export async function bindRuntimeChild(params: {
     });
     return bound.contract;
   } catch (error) {
-    if (
-      await waiveSoftBlock(
-        params.crossing.source,
-        "runtime_bind",
-        error instanceof Error ? error.message : String(error),
-      )
-    )
-      return undefined;
     if (error instanceof RuntimeCrossingRefusal) throw error;
     if (error instanceof ApiError) {
       // A classified failure keeps its text, status and retry headers. It
@@ -266,8 +245,7 @@ export async function admitRuntimeSteer(params: {
   if (relation.kind === "refused") {
     throw new RuntimeCrossingRefusal(relation.reason);
   }
-  if (relation.kind === "producer" || relation.kind === "waived")
-    return relation.child;
+  if (relation.kind === "producer") return relation.child;
   try {
     await addressRuntimeChild({
       session: params.crossing.source,
@@ -275,15 +253,6 @@ export async function admitRuntimeSteer(params: {
       operationId: params.crossing.callId,
     });
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (await waiveSoftBlock(
-        params.crossing.source,
-        "runtime_steer",
-        error.message,
-      ))
-    )
-      return relation.child;
     if (error instanceof ApiError) {
       throw new RuntimeCrossingRefusal(
         reportCrossingRefusal({
@@ -305,7 +274,6 @@ export async function classifyRuntimeCaller(params: {
   workspaceId: string;
 }): Promise<
   | { kind: "producer"; child: OpenAppaSession }
-  | { kind: "waived"; child: OpenAppaSession }
   | { kind: "parent"; child: OpenAppaSession }
   | RuntimeCallerRefusal
 > {
@@ -339,28 +307,12 @@ export async function classifyRuntimeCaller(params: {
     return { kind: "producer", child: resolved.session };
   }
   if (!resolved.session.parent_id) {
-    if (
-      await waiveSoftBlock(
-        params.crossing.source,
-        "runtime_access",
-        "OpenAPPA runtime has no parent trajectory",
-      )
-    )
-      return { kind: "waived", child: resolved.session };
     return refuse(
       "unparented",
       `This run was started outside any Guardrails session, so this conversation cannot read its output or send it input; nothing from the run was returned. A person can read the output on the run page: ${config.frontendBaseUrl}/chat/runs/${params.workspaceId}.`,
     );
   }
   if (resolved.session.parent_id !== params.crossing.source.session_id) {
-    if (
-      await waiveSoftBlock(
-        params.crossing.source,
-        "runtime_access",
-        "OpenAPPA runtime belongs to another trajectory",
-      )
-    )
-      return { kind: "waived", child: resolved.session };
     return refuse("different_session", BOUND_TO_ANOTHER_SESSION);
   }
   return { kind: "parent", child: resolved.session };
@@ -383,7 +335,8 @@ export async function crossRuntimeOutput(params: {
   taskId: string;
 }): Promise<
   | { kind: "producer" }
-  | { kind: "waived" }
+  /** The child started while enforcement was off: its output is ungoverned. */
+  | { kind: "ungoverned" }
   | { kind: "admitted"; value: string }
   | { kind: "withheld"; reason: string }
   | RuntimeCallerRefusal
@@ -391,28 +344,14 @@ export async function crossRuntimeOutput(params: {
   const relation = await classifyRuntimeCaller(params);
   if (relation.kind === "refused") return relation;
   if (relation.kind === "producer") return { kind: "producer" };
-  if (relation.kind === "waived" || (await isUnenforcedSession(relation.child)))
-    return { kind: "waived" };
+  if (await isUnenforcedSession(relation.child)) return { kind: "ungoverned" };
   const prefix = `runtime-return:${params.taskId}:`;
-  let records: Awaited<ReturnType<typeof loadChildReturns>>;
-  try {
-    records = await loadChildReturns({
-      organizationId: params.organizationId,
-      parentSessionId: params.crossing.source.session_id,
-      childSessionId: relation.child.session_id,
-      operationPrefix: prefix,
-    });
-  } catch (error) {
-    if (
-      await waiveSoftBlock(
-        params.crossing.source,
-        "runtime_output",
-        error instanceof Error ? error.message : String(error),
-      )
-    )
-      return { kind: "waived" };
-    throw error;
-  }
+  const records = await loadChildReturns({
+    organizationId: params.organizationId,
+    parentSessionId: params.crossing.source.session_id,
+    childSessionId: relation.child.session_id,
+    operationPrefix: prefix,
+  });
   const matches = records.filter(
     (record) =>
       record.childSessionId === relation.child.session_id &&
@@ -430,14 +369,6 @@ export async function crossRuntimeOutput(params: {
     }),
   });
   if (!last) {
-    if (
-      await waiveSoftBlock(
-        params.crossing.source,
-        "runtime_output",
-        "No admitted runtime result",
-      )
-    )
-      return { kind: "waived" };
     return withheld(
       "This turn has no admitted result yet. The raw output was not returned.",
     );

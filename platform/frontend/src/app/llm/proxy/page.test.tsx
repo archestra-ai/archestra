@@ -360,6 +360,7 @@ describe("LLM Proxy dashboard", () => {
     server.use(
       http.get(`${API_ORIGIN}/api/guardrails-deployment`, () =>
         HttpResponse.json({
+          mode: "enforce",
           enabled: true,
           featureEnabled: true,
           active: true,
@@ -372,6 +373,23 @@ describe("LLM Proxy dashboard", () => {
     expect(
       within(card("Guardrails")).getByRole("link", { name: "Configure" }),
     ).toHaveAttribute("href", "/openappa");
+  });
+
+  it("shows Guardrails as observing, not enforced, under Observe", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/guardrails-deployment`, () =>
+        HttpResponse.json({
+          mode: "observe",
+          enabled: true,
+          featureEnabled: true,
+          active: true,
+        }),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText("Observe only")).toBeInTheDocument();
+    expect(card("Guardrails")).not.toHaveTextContent("Enforced");
   });
 });
 
@@ -396,6 +414,7 @@ describe("LLM Proxy dashboard for a member", () => {
     server.use(
       http.get(`${API_ORIGIN}/api/guardrails-deployment`, () =>
         HttpResponse.json({
+          mode: "enforce",
           enabled: true,
           featureEnabled: true,
           active: true,

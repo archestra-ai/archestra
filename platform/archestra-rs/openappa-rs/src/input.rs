@@ -1,3 +1,4 @@
+use crate::lines::Presenter;
 use crate::{
     errors::invalid_input,
     operations::{YellArguments, proposed, required_arguments},
@@ -53,6 +54,8 @@ pub(crate) struct OfferInput {
     #[serde(default)]
     pub(crate) caller_id: Option<String>,
     pub(crate) trajectory: TrajectoryStamp,
+    /// Who presents the remedy, as the host authenticated the request.
+    pub(crate) presenter: Presenter,
     /// Client tool call ID for binding durable remedy receipts.
     #[serde(default)]
     pub(crate) tool_call_id: Option<String>,
@@ -121,6 +124,8 @@ pub(crate) struct Input {
     /// initialized from that session's state. Mutually exclusive with `parent_id`.
     #[serde(default)]
     pub(crate) fork_of: Option<String>,
+    /// Who presents the event, as the host authenticated the request.
+    pub(crate) presenter: Presenter,
     pub(crate) event: HookEventKind,
     #[serde(default)]
     pub(crate) operation_id: Option<String>,
@@ -511,7 +516,7 @@ mod tests {
     fn a_remedy_takes_a_stamped_trajectory_and_rejects_owner_claims() {
         let accepted = serde_json::from_str::<crate::input::OfferInput>(
             r#"{
-                "organization_id": "organization",
+                "presenter": "attended", "organization_id": "organization",
                 "caller_id": "user:spender",
                 "trajectory": {"v": 1, "session_id": "session"},
                 "arguments": {"offer_id": "0123456789abcdef"},
@@ -533,7 +538,7 @@ mod tests {
         ] {
             let payload = format!(
                 r#"{{
-                    "organization_id": "organization",
+                    "presenter": "attended", "organization_id": "organization",
                     {claimed},
                     "trajectory": {{"v": 1, "session_id": "session"}},
                     "arguments": {{"offer_id": "0123456789abcdef"}},
@@ -552,7 +557,7 @@ mod tests {
     #[test]
     fn empty_child_completion_requires_a_child_and_cannot_carry_output() {
         let mut value = serde_json::json!({
-            "organization_id": "organization", "session_id": "child",
+            "presenter": "attended", "organization_id": "organization", "session_id": "child",
             "event": "child_turn_end", "operation_id": "empty-end",
         });
         let input = serde_json::from_value(value.clone()).unwrap();
@@ -573,7 +578,7 @@ mod tests {
         ] {
             for value in [String::new(), "tool\nname".to_owned(), "x".repeat(1025)] {
                 let mut json = serde_json::json!({
-                    "organization_id": "organization",
+                    "presenter": "attended", "organization_id": "organization",
                     "session_id": "session",
                     "event": "session_start",
                 });
@@ -589,7 +594,7 @@ mod tests {
 
     fn remedy_input(extra: Value) -> Input {
         let mut input = json!({
-            "organization_id": "organization",
+            "presenter": "attended", "organization_id": "organization",
             "session_id": "session",
             "caller_id": "user:caller",
             "event": "remedy",
@@ -634,7 +639,7 @@ mod tests {
 
     fn tool_call_input(spawn: bool, declares: Value) -> serde_json::Result<Input> {
         serde_json::from_value(json!({
-            "organization_id": "organization",
+            "presenter": "attended", "organization_id": "organization",
             "session_id": "session",
             "event": "tool_call",
             "operation_id": "call:spawn",

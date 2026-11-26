@@ -1,8 +1,9 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -15,11 +16,17 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import appConfig from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
+import {
+  GUARDRAILS_MODE_TOAST,
+  type GuardrailsMode,
+  type PersonApproval,
+} from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
-  OpenAppaBreakTheGlassSettings,
   OpenAppaClientCoverageSetting,
+  OpenAppaEnforcedMarksSetting,
   OpenAppaEnforcementSetting,
+  OpenAppaPersonApprovalSetting,
 } from "./openappa-settings-sections";
 
 vi.mock("@/lib/config/config.query");
@@ -28,19 +35,34 @@ vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
 const api = "http://localhost:9000/api";
 const server = setupServer();
-let enabled: boolean;
+type Update = archestraApiTypes.UpdateGuardrailsDeploymentData["body"];
+let mode: GuardrailsMode;
+let personApproval: PersonApproval;
+let enforcedMarks: string[];
+let environmentOverrides: archestraApiTypes.GetGuardrailsDeploymentResponses[200]["environmentOverrides"];
 let featureEnabled: boolean;
 let clientAction: "bypass" | "block";
-let breakTheGlass: {
-  humanApprovalMode: "block" | "unattended" | "everywhere";
-  unapprovableBlockMode: "refuse" | "allow";
-  breakTheGlassEnabled: boolean;
-  environmentOverrides: {
-    setting: "humanApprovalMode" | "unapprovableBlockMode";
-    variable: string;
-  }[];
-};
 let revision: number;
+let updates: Update[];
+let warnings: string[];
+function deployment() {
+  return {
+    mode,
+    personApproval,
+    enforcedMarks,
+    enabled: mode !== "off",
+    featureEnabled,
+    active: mode !== "off",
+    unsupportedClientAction: clientAction,
+    // Fields the deployment still carries for older clients; no control here.
+    humanApprovalMode: "block",
+    unapprovableBlockMode: "refuse",
+    breakTheGlassEnabled: true,
+    environmentOverrides,
+    annotatorModelId: null,
+    annotatorLlmApiKeyId: null,
+  };
+}
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   // The Guardrails status is read only while OpenAPPA is on.
@@ -56,26 +78,28 @@ beforeEach(() => {
     typeof useHasPermissions
   >);
   vi.mocked(useAppName).mockReturnValue("Archestra");
-  enabled = false;
+  mode = "off";
+  personApproval = "ask";
+  enforcedMarks = [];
+  environmentOverrides = [];
   featureEnabled = true;
   clientAction = "bypass";
-  breakTheGlass = {
-    humanApprovalMode: "unattended",
-    unapprovableBlockMode: "refuse",
-    breakTheGlassEnabled: true,
-    environmentOverrides: [],
-  };
   revision = 1;
+  updates = [];
+  warnings = [];
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
-      HttpResponse.json({
-        enabled,
-        featureEnabled,
-        active: enabled,
-        unsupportedClientAction: clientAction,
-        ...breakTheGlass,
-      }),
+      HttpResponse.json(deployment()),
     ),
+    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
+      const update = (await request.json()) as Update;
+      updates.push(update);
+      mode = update.mode ?? mode;
+      personApproval = update.personApproval ?? personApproval;
+      enforcedMarks = update.enforcedMarks ?? enforcedMarks;
+      clientAction = update.unsupportedClientAction ?? clientAction;
+      return HttpResponse.json({ ...deployment(), warnings });
+    }),
     http.get(`${api}/guardrails-policy`, () =>
       HttpResponse.json({
         organizationId: "org",
@@ -100,90 +124,182 @@ function show(content: React.ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={client}>{content}</QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>{content}</QueryClientProvider>,
+    ),
+  };
 }
+/** Every permission but changing organization settings. */
 function readOnly() {
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions) =>
       ({
-        data:
-          permissions.organizationSettings?.every(
-            (action) => action === "read",
-          ) ?? false,
+        data: !permissions.organizationSettings?.includes("update"),
       }) as ReturnType<typeof useHasPermissions>,
   );
 }
 
-test("the enforcement switch turns enforcement on and off", async () => {
-  const sent: boolean[] = [];
-  server.use(
-    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
-      const body = (await request.json()) as { enabled: boolean };
-      sent.push(body.enabled);
-      enabled = body.enabled;
-      return HttpResponse.json({
-        enabled,
-        featureEnabled: true,
-        active: enabled,
-        unsupportedClientAction: clientAction,
-      });
-    }),
-  );
+async function choose(name: string, option: RegExp) {
+  const selector = await screen.findByRole("combobox", { name });
+  await waitFor(() => expect(selector).toBeEnabled());
+  fireEvent.click(selector);
+  fireEvent.click(screen.getByRole("option", { name: option }));
+  return selector;
+}
+
+test("choosing Observe saves it and says so", async () => {
+  mode = "enforce";
+  vi.mocked(toast.success).mockClear();
   show(<OpenAppaEnforcementSetting />);
-  const toggle = await screen.findByRole("switch", {
-    name: "Enforce the policy",
-  });
-  await waitFor(() => expect(toggle).toBeEnabled());
-  fireEvent.click(toggle);
-  await waitFor(() => expect(toggle).toBeChecked());
-  expect(await screen.findByText(/Guardrails are on/)).toBeInTheDocument();
-  await waitFor(() => expect(toggle).toBeEnabled());
-  fireEvent.click(toggle);
-  await waitFor(() => expect(toggle).not.toBeChecked());
-  expect(sent).toEqual([true, false]);
+  const selector = await choose("Guardrails mode", /^Observe/);
+  await waitFor(() => expect(selector).toHaveTextContent("Observe"));
+  expect(updates).toEqual([{ mode: "observe" }]);
+  expect(vi.mocked(toast.success).mock.calls).toEqual([
+    [GUARDRAILS_MODE_TOAST.observe],
+  ]);
 });
 
-test("enforcement cannot be turned on before a policy exists", async () => {
+test("a save's warnings show as toasts", async () => {
+  mode = "enforce";
+  warnings = ["first warning", "second warning"];
+  vi.mocked(toast.warning).mockClear();
+  show(<OpenAppaPersonApprovalSetting />);
+  await choose("Approvals", /^Always automatic/);
+  await waitFor(() =>
+    expect(vi.mocked(toast.warning).mock.calls).toEqual([
+      ["first warning"],
+      ["second warning"],
+    ]),
+  );
+});
+
+test("the mode cannot be chosen before a policy exists", async () => {
   revision = 0;
   show(<OpenAppaEnforcementSetting />);
   expect(
     await screen.findByRole("link", { name: "Create your policy" }),
   ).toHaveAttribute("href", "/openappa");
   expect(
-    screen.getByRole("switch", { name: "Enforce the policy" }),
+    screen.getByRole("combobox", { name: "Guardrails mode" }),
   ).toBeDisabled();
 });
 
-test("members who cannot manage enforcement see the switch disabled", async () => {
+test.each([
+  ["Guardrails mode", <OpenAppaEnforcementSetting key="mode" />],
+  ["Approvals", <OpenAppaPersonApprovalSetting key="approvals" />],
+])("members who cannot manage it see %s disabled", async (name, block) => {
+  mode = "enforce";
   readOnly();
+  const { client } = show(block);
+  const selector = await screen.findByRole("combobox", { name });
+  // Until the policy loads, the mode is disabled for everyone.
+  await waitFor(() => expect(client.isFetching()).toBe(0));
+  expect(selector).toBeDisabled();
+});
+
+test("approvals can be set before switching to Enforce", async () => {
+  mode = "observe";
+  show(<OpenAppaPersonApprovalSetting />);
+  const selector = await choose("Approvals", /^Automatic in Agent Runtime/);
+  await waitFor(() =>
+    expect(selector).toHaveTextContent("Automatic in Agent Runtime"),
+  );
+  expect(updates).toEqual([{ personApproval: "auto_unattended" }]);
+});
+
+test("without reading the policy, an administrator still changes an active mode", async () => {
+  mode = "enforce";
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({ data: !permissions.guardrailsPolicy }) as ReturnType<
+        typeof useHasPermissions
+      >,
+  );
   show(<OpenAppaEnforcementSetting />);
-  const toggle = await screen.findByRole("switch", {
-    name: "Enforce the policy",
+  await choose("Guardrails mode", /^Observe/);
+  await waitFor(() => expect(updates).toEqual([{ mode: "observe" }]));
+});
+
+test("approvals an environment variable sets cannot be changed", async () => {
+  mode = "enforce";
+  environmentOverrides = [
+    { setting: "humanApprovalMode", variable: "APPROVAL_VARIABLE" },
+    { setting: "personApproval", variable: "APPROVAL_VARIABLE" },
+  ];
+  show(<OpenAppaPersonApprovalSetting />);
+  expect(
+    await screen.findByRole("combobox", { name: "Approvals" }),
+  ).toBeDisabled();
+  expect(screen.getByText("APPROVAL_VARIABLE")).toBeInTheDocument();
+});
+
+test("adding and removing a mark keeps marks saved elsewhere meanwhile", async () => {
+  enforcedMarks = ["pii"];
+  show(<OpenAppaEnforcedMarksSetting />);
+  const input = await screen.findByRole("textbox", {
+    name: "New enforced mark",
   });
-  // Let the policy load: until it does, the switch is disabled for everyone.
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  expect(toggle).toBeDisabled();
+  await waitFor(() => expect(input).toBeEnabled());
+  enforcedMarks = ["pii", "payment"];
+  fireEvent.change(input, { target: { value: "  secrets " } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(input).toHaveValue(""));
+  expect(await screen.findByText("secrets")).toBeInTheDocument();
+  enforcedMarks = [...enforcedMarks, "audit"];
+  fireEvent.click(screen.getByRole("button", { name: "Remove pii" }));
+  await waitFor(() =>
+    expect(screen.queryByText("pii")).not.toBeInTheDocument(),
+  );
+  expect(updates).toEqual([
+    { enforcedMarks: ["pii", "payment", "secrets"] },
+    { enforcedMarks: ["payment", "secrets", "audit"] },
+  ]);
+});
+
+test.each([
+  ["a blank mark", "   "],
+  ["a mark over 128 characters", "m".repeat(129)],
+  ["a mark with NUL", "p\u0000ii"],
+])("%s is not saved", async (_name, value) => {
+  enforcedMarks = ["pii"];
+  const { client } = show(<OpenAppaEnforcedMarksSetting />);
+  const input = await screen.findByRole("textbox", {
+    name: "New enforced mark",
+  });
+  await waitFor(() => expect(input).toBeEnabled());
+  fireEvent.change(input, { target: { value } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  // A save starts synchronously on Enter, so none is pending means none was sent.
+  expect(client.isMutating()).toBe(0);
+  expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+});
+
+test.each([
+  ["a mark already saved", ["pii"], 0],
+  [
+    "a mark past the 64 limit",
+    Array.from({ length: 64 }, (_, i) => `m${i}`),
+    1,
+  ],
+])("%s is not sent", async (_name, saved, errors) => {
+  enforcedMarks = saved;
+  vi.mocked(toast.error).mockClear();
+  const { client } = show(<OpenAppaEnforcedMarksSetting />);
+  const input = await screen.findByRole("textbox", {
+    name: "New enforced mark",
+  });
+  await waitFor(() => expect(input).toBeEnabled());
+  fireEvent.change(input, { target: { value: "pii" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(client.isMutating()).toBe(1);
+  await waitFor(() => expect(client.isMutating()).toBe(0));
+  expect(updates).toEqual([]);
+  expect(vi.mocked(toast.error)).toHaveBeenCalledTimes(errors);
 });
 
 test("an administrator blocks requests from other clients", async () => {
-  const updates: unknown[] = [];
-  server.use(
-    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
-      const body = (await request.json()) as {
-        unsupportedClientAction: "bypass" | "block";
-      };
-      updates.push(body);
-      clientAction = body.unsupportedClientAction;
-      return HttpResponse.json({
-        enabled,
-        featureEnabled,
-        active: enabled,
-        unsupportedClientAction: clientAction,
-      });
-    }),
-  );
   show(<OpenAppaClientCoverageSetting />);
   const selector = await screen.findByRole("combobox", {
     name: "Requests from other clients",
@@ -227,124 +343,6 @@ test.each([
       name: "Requests from other clients",
     }),
   ).toBeDisabled();
-});
-
-test("an administrator changes the Break the glass settings one at a time", async () => {
-  const updates: unknown[] = [];
-  server.use(
-    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
-      const body = (await request.json()) as Partial<typeof breakTheGlass>;
-      updates.push(body);
-      breakTheGlass = { ...breakTheGlass, ...body };
-      return HttpResponse.json({
-        enabled,
-        featureEnabled,
-        active: enabled,
-        unsupportedClientAction: clientAction,
-        ...breakTheGlass,
-      });
-    }),
-  );
-  show(<OpenAppaBreakTheGlassSettings />);
-  const change = async (
-    name: string,
-    from: string,
-    option: RegExp,
-    to: string,
-  ) => {
-    const selector = await screen.findByRole("combobox", { name });
-    expect(selector).toHaveTextContent(from);
-    fireEvent.click(selector);
-    fireEvent.click(screen.getByRole("option", { name: option }));
-    await waitFor(() => expect(selector).toHaveTextContent(to));
-  };
-  await change(
-    "Human approval",
-    "Waive in unattended sessions",
-    /Waive everywhere/,
-    "Waive everywhere",
-  );
-  await change(
-    "Other blocked calls",
-    "Keep the block",
-    /Waive the block/,
-    "Waive the block",
-  );
-  // The Yell tool row maps its two choices onto the stored boolean.
-  await change(
-    "Yell tool",
-    "Record and turn Guardrails off",
-    /Record only/,
-    "Record only",
-  );
-  // The Yell tool comes first of the three.
-  expect(
-    screen
-      .getAllByRole("combobox")
-      .map((box) => box.getAttribute("aria-label")),
-  ).toEqual(["Yell tool", "Human approval", "Other blocked calls"]);
-  expect(updates).toEqual([
-    { humanApprovalMode: "everywhere" },
-    { unapprovableBlockMode: "allow" },
-    { breakTheGlassEnabled: false },
-  ]);
-});
-
-test("describes Other blocked calls and says an explicit block never waives", async () => {
-  show(<OpenAppaBreakTheGlassSettings />);
-  expect(
-    await screen.findByText(/How to handle denials that can't be approved\./),
-  ).toBeVisible();
-  expect(screen.getByText("blocked", { selector: "code" })).toBeVisible();
-});
-
-test("a setting an environment variable sets is shown, locked, with how to unlock it", async () => {
-  breakTheGlass.humanApprovalMode = "block";
-  breakTheGlass.environmentOverrides = [
-    {
-      setting: "humanApprovalMode",
-      variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
-    },
-  ];
-  show(<OpenAppaBreakTheGlassSettings />);
-  const locked = await screen.findByRole("combobox", {
-    name: "Human approval",
-  });
-  expect(locked).toHaveTextContent("Block until approved");
-  expect(locked).toBeDisabled();
-  expect(locked).toHaveAccessibleDescription(
-    "Unset the environment variable to edit this setting.",
-  );
-  expect(
-    screen.getByText(
-      (_, element) =>
-        element?.tagName === "CODE" &&
-        element.textContent === "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE=block",
-    ),
-  ).toBeVisible();
-  expect(
-    screen.getByRole("button", { name: "Human approval environment values" }),
-  ).toBeEnabled();
-  // The settings no variable sets stay editable.
-  expect(
-    screen.getByRole("combobox", { name: "Other blocked calls" }),
-  ).toBeEnabled();
-  expect(screen.getByRole("combobox", { name: "Yell tool" })).toBeEnabled();
-});
-
-test.each([
-  ["members who cannot manage them", readOnly],
-  [
-    "without the feature flag",
-    () => {
-      featureEnabled = false;
-    },
-  ],
-])("the Break the glass settings are disabled for %s", async (_name, arrange) => {
-  arrange();
-  show(<OpenAppaBreakTheGlassSettings />);
-  for (const name of ["Yell tool", "Human approval", "Other blocked calls"])
-    expect(await screen.findByRole("combobox", { name })).toBeDisabled();
 });
 
 test("links 'more' to the clients page and 'OpenAPPA session headers' to session-headers", async () => {

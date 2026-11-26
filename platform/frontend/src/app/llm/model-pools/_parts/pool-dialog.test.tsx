@@ -2,6 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { createPool } = vi.hoisted(() => ({ createPool: vi.fn() }));
+
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("next/image", () => ({
@@ -14,7 +16,7 @@ vi.mock("next/image", () => ({
 }));
 vi.mock("@/lib/model-pools.query", () => ({
   useModelPools: vi.fn(),
-  useCreateModelPool: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateModelPool: () => ({ mutate: createPool, isPending: false }),
   useUpdateModelPool: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
@@ -73,6 +75,7 @@ function pool(benchedUntil: string | null): ModelPool {
 
 describe("PoolDialog", () => {
   beforeEach(() => {
+    createPool.mockReset();
     vi.mocked(useSession).mockReturnValue({ data: null } as ReturnType<
       typeof useSession
     >);
@@ -85,6 +88,76 @@ describe("PoolDialog", () => {
     vi.mocked(useAppearanceSettings).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useAppearanceSettings>);
+  });
+
+  it("creates a pool with timeouts, rate-limit retries and member overrides", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useModelPools).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useModelPools>);
+    const onOpenChange = vi.fn();
+    render(<PoolDialog pool={null} onOpenChange={onOpenChange} />);
+    await user.click(screen.getByRole("combobox", { name: "Model name" }));
+    await user.type(
+      screen.getByPlaceholderText("Search or type a model name"),
+      "glm-5{Enter}",
+    );
+    await user.click(screen.getByRole("button", { name: "Add member" }));
+    const failover = screen.getByRole("button", { name: "Failover" });
+    const submit = screen.getByRole("button", { name: "Create pool" });
+    expect(
+      screen.queryByRole("button", { name: "Connect" }),
+    ).not.toBeInTheDocument();
+    expect(submit).toBeEnabled();
+    await user.click(failover);
+
+    await user.type(screen.getByLabelText("Stream timeout"), "45");
+    const overrideRow = screen
+      .getByLabelText("Retries", { selector: "#member-0-retry-numRetries" })
+      .closest("li");
+    if (!overrideRow)
+      throw new Error("Retry override is outside its member row");
+    await user.click(
+      within(overrideRow).getByRole("button", {
+        name: "Retries by error type",
+      }),
+    );
+    await user.type(
+      screen.getByLabelText("Rate limits (429)", {
+        selector: "#member-0-retry-rateLimitError",
+      }),
+      "4",
+    );
+    await user.click(screen.getByRole("button", { name: "Pool" }));
+    expect(
+      screen.getByRole("combobox", { name: "Model name" }),
+    ).toHaveTextContent("glm-5");
+    // A rejected request does not call the success handler. The form stays
+    // open with its values so the user can correct the problem and retry.
+    await user.click(submit);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await user.click(failover);
+    expect(screen.getByLabelText("Stream timeout")).toHaveValue("45");
+
+    createPool.mockImplementationOnce((_input, { onSuccess }) => {
+      onSuccess(pool(null));
+    });
+    await user.click(submit);
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    expect(createPool).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        name: "glm-5",
+        streamTimeoutSeconds: 45,
+        members: [
+          expect.objectContaining({
+            providerApiKeyId: "key",
+            modelId: "glm-5",
+            retrySettings: { retryPolicy: { rateLimitError: 4 } },
+          }),
+        ],
+      }),
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
   });
 
   it("shows the retry defaults and keeps Save off for out-of-range values", async () => {

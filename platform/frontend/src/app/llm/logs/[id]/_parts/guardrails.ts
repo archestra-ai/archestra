@@ -61,6 +61,12 @@ export type TraceConsult = {
 
 export type LabelState = { trust: Trust; audience: Audience };
 
+/**
+ * The label in force at a time. `inferred`: no record precedes that time, so
+ * the label is the first available record's before-state.
+ */
+export type GutterLabel = LabelState & { inferred: boolean };
+
 export type LabelSegment = LabelState & {
   /** Epoch ms; the first segment starts at the session's first span. */
   start: number;
@@ -100,7 +106,10 @@ export type TraceYell = {
   key: string;
   id: string;
   message: string;
-  /** Sent while break the glass was on: guardrails were off from here. */
+  /**
+   * Sent while an earlier release's break the glass was on. A record of that
+   * release only: it turns nothing off now.
+   */
   superyell: boolean;
   withTrajectory: boolean;
   hasArchive: boolean;
@@ -119,14 +128,12 @@ export type GuardrailsData = {
   consults: TraceConsult[];
   /** Oldest first. */
   yells: TraceYell[];
-  /** When the first superyell turned guardrails off, epoch ms; else null. */
-  guardrailsOffAt: number | null;
   /** Contiguous, oldest first; empty when no label change was recorded. */
   labels: LabelSegment[];
   /** Maps an epoch-ms time onto the timeline's 0..1 axis (idle folds respected). */
   timeToX: (ms: number) => number;
   /** The label in force at a time, or null without a recorded history. */
-  labelAt: (ms: number) => LabelState | null;
+  labelAt: (ms: number) => GutterLabel | null;
 };
 
 /**
@@ -168,6 +175,10 @@ export function buildGuardrails({
     consults: traceConsults,
     timeToX,
   });
+  // Label history arrives oldest first.
+  const firstRecordAt = labelChanges[0]
+    ? new Date(labelChanges[0].createdAt).getTime()
+    : Number.POSITIVE_INFINITY;
   const spanKeys = new Set(timeline.spans.map((span) => span.key));
   const traceYells = yells
     .map((yell): TraceYell => {
@@ -193,7 +204,6 @@ export function buildGuardrails({
   return {
     consults: traceConsults,
     yells: traceYells,
-    guardrailsOffAt: traceYells.find((yell) => yell.superyell)?.at ?? null,
     labels,
     timeToX,
     labelAt: (ms) => {
@@ -201,7 +211,11 @@ export function buildGuardrails({
       const hit =
         [...labels].reverse().find((segment) => segment.start <= ms) ??
         labels[0];
-      return { trust: hit.trust, audience: hit.audience };
+      return {
+        trust: hit.trust,
+        audience: hit.audience,
+        inferred: ms < firstRecordAt,
+      };
     },
   };
 }

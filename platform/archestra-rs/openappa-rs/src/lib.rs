@@ -13,9 +13,11 @@ mod declarations;
 pub mod deferred_returns;
 mod deployments;
 mod errors;
+mod fragments;
 mod input;
 mod labels;
 mod lease;
+mod lines;
 mod metrics;
 mod operations;
 #[cfg_attr(test, allow(dead_code))]
@@ -46,13 +48,13 @@ use crate::{
         cancelled_call, claim_operation, claim_result, expected_actor, finish_operation,
         finish_remedy, operation_semantic, proposed, read_operation_state,
         recorded_call_presentation, recorded_declaration, remedy_binding, required_arguments,
-        tool_call_context,
+        result_untracked, tool_call_context,
     },
     remedy::{
         OutputSource, RemedyAct, authoritative_unexecuted_response, decision_text,
         inherited_result, proposed_recorded_call, recorded_call, remedy_operation, remedy_request,
         render_remedy_outcome, runtime_refusal, stored_approved_output, unknown_result_response,
-        with_approved_output, with_presentation_offers,
+        with_approved_output, with_presentation_offers, with_refusal_outcomes,
     },
     session::{
         SessionKey, check_session_identity, mark_busy_hold, operation_key, presentation_options,
@@ -73,8 +75,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, DeclaredReturn, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnKind,
-    SpawnRef, ToolOutcome, TrajectoryId,
+    Actor, DeclaredReturn, HookDecision, HookEvent, OutcomeBody, Outcomes, ProposedCall, Ruling,
+    SessionSettings, SpawnKind, SpawnRef, ToolOutcome, TrajectoryId,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -199,7 +201,7 @@ fn state_mutex() -> &'static Mutex<Option<State>> {
 /// again.
 async fn on_deployment<T, Work>(
     state: &State,
-    organization_id: &str,
+    line: &lines::Line,
     policy: &deployments::HostedPolicy,
     work: impl Fn(State) -> Work,
 ) -> napi::Result<T>
@@ -211,25 +213,17 @@ where
         .deployment(
             &state.runtime,
             &state.store,
-            organization_id,
+            line,
             policy,
             state.reporting.is_some(),
         )
         .await
-        .map_err(|refusal| match refusal {
-            deployments::DeploymentError::Superseded => policy_moved(),
-            deployments::DeploymentError::Diverged => Fault::binding(
-                BindingFailure::InvalidInput,
-                "OpenAPPA was handed two policy documents under one composition; the organization's deployment is unchanged",
-            )
-            .into(),
-            deployments::DeploymentError::Failed(fault) => fault.into(),
-        })?;
+        .map_err(deployment_refusal)?;
     match work(state.pinned(&deployment)).await {
         Err(moved) if is_policy_moved(&moved) => {
             let Some(head) = state
                 .deployments
-                .repin(&state.runtime, &state.store, organization_id, &deployment)
+                .repin(&state.runtime, &state.store, line, policy, &deployment)
                 .await?
             else {
                 return Err(policy_moved());
@@ -243,6 +237,18 @@ where
     }
 }
 
+fn deployment_refusal(refusal: deployments::DeploymentError) -> napi::Error {
+    match refusal {
+        deployments::DeploymentError::Superseded => policy_moved(),
+        deployments::DeploymentError::Diverged => Fault::binding(
+            BindingFailure::InvalidInput,
+            "OpenAPPA was handed two policy documents under one composition; the organization's deployment is unchanged",
+        )
+        .into(),
+        deployments::DeploymentError::Failed(fault) => fault.into(),
+    }
+}
+
 #[napi(js_name = "dispatchHook")]
 pub async fn dispatch_hook(
     input: String,
@@ -251,7 +257,7 @@ pub async fn dispatch_hook(
 ) -> napi::Result<String> {
     let input: Input = serde_json::from_str(&input).map_err(invalid_input)?;
     validate(&input)?;
-    run(input, policy.into(), encryption).await
+    run(input, policy.try_into()?, encryption).await
 }
 
 /// Runs one validated event through a view pinned to its organization's deployment.
@@ -262,9 +268,24 @@ async fn run(
 ) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
         let state = initialized().await?.encrypted(encryption)?;
-        on_deployment(&state, &input.organization_id, &policy, |pinned| {
-            let input = input.clone();
-            async move { pinned.dispatch(input).await }
+        let (root, family) = match state.family(&input, &policy.guardrails).await? {
+            Routed::Follows { root, family } => (root, family),
+            Routed::Opens {
+                root,
+                variant,
+                unattended,
+            } => (
+                root,
+                state.opening(&input, variant, unattended, &policy).await?,
+            ),
+        };
+        let line = lines::Line {
+            organization_id: input.organization_id.clone(),
+            variant: family.variant,
+        };
+        on_deployment(&state, &line, &policy, |pinned| {
+            let (input, root, family) = (input.clone(), root.clone(), family.clone());
+            async move { pinned.dispatch(input, root, family).await }
         })
         .await
     })
@@ -277,6 +298,36 @@ async fn run(
     }
 }
 
+/// A re-driven call's answer: completed, or not judged and left pending.
+enum Recovery {
+    Completed(CompletedOperation),
+    Unjudged(Value),
+}
+
+/// Whether the runtime decided `decision`: a denial for a fact it could not obtain decided
+/// nothing, so its receipt is not kept and the same request is judged afresh.
+/// `response`, once this dispatch's receipt is dropped unrecorded, so the next identical
+/// request is judged afresh.
+fn answered_unrecorded(receipts: &lease::Receipts, response: Value) -> napi::Result<Value> {
+    match receipts.discard().map_err(sql_failure)? {
+        lease::Guarded::Finished(()) => Ok(response),
+        lease::Guarded::Lost => Err(lease_lost()),
+    }
+}
+
+fn judged(decision: &HookDecision) -> bool {
+    !matches!(
+        decision,
+        HookDecision::DenyCall {
+            outcomes: Some(Outcomes::MissingFact(_)),
+            ..
+        } | HookDecision::Block {
+            outcomes: Some(Outcomes::MissingFact(_)),
+            ..
+        }
+    )
+}
+
 async fn initialized() -> napi::Result<State> {
     state_mutex()
         .lock()
@@ -286,7 +337,148 @@ async fn initialized() -> napi::Result<State> {
         .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))
 }
 
+/// Where a dispatch decides: in a family that already follows a line, or in a new root
+/// the deployment's settings give a line.
+enum Routed {
+    Follows {
+        root: String,
+        family: lines::Family,
+    },
+    Opens {
+        root: String,
+        variant: lines::Variant,
+        unattended: bool,
+    },
+}
+
 impl State {
+    /// The root a dispatch for `input` decides in, and the family it belongs to: the one
+    /// that root follows, or the one a fork's parent follows. Otherwise a new root opens
+    /// on the line the deployment's settings give this session.
+    async fn family(&self, input: &Input, guardrails: &lines::Guardrails) -> napi::Result<Routed> {
+        let presenter = input.presenter.beyond_review()?;
+        let organization_id = &input.organization_id;
+        let root = self.dispatch_root(input)?;
+        let resolved = match self.resolve(organization_id, &root, presenter).await? {
+            Some(family) => Some(family),
+            None => match &input.fork_of {
+                Some(fork_of) => {
+                    let parent = SessionKey::new(organization_id, fork_of);
+                    match recorded_root(&Sql(&self.store), &parent)? {
+                        Some(parent_root) => {
+                            self.resolve(organization_id, &parent_root, presenter)
+                                .await?
+                        }
+                        None => None,
+                    }
+                }
+                None => None,
+            },
+        };
+        Ok(match resolved {
+            Some(family) => Routed::Follows { root, family },
+            None => Routed::Opens {
+                root,
+                variant: guardrails.opening(presenter.opens_unattended()),
+                unattended: presenter.opens_unattended(),
+            },
+        })
+    }
+
+    /// The family a new root opens: on `variant`'s line, or on the Enforce line when that
+    /// line cannot carry its approvers.
+    async fn opening(
+        &self,
+        input: &Input,
+        variant: lines::Variant,
+        unattended: bool,
+        policy: &deployments::HostedPolicy,
+    ) -> napi::Result<lines::Family> {
+        if variant == lines::Variant::Enforce {
+            return Ok(lines::Family::opening(variant, unattended));
+        }
+        let line = lines::Line {
+            organization_id: input.organization_id.clone(),
+            variant,
+        };
+        let falls_back = self
+            .deployments
+            .falls_back(
+                &self.runtime,
+                &self.store,
+                &line,
+                policy,
+                self.reporting.is_some(),
+            )
+            .await
+            .map_err(deployment_refusal)?;
+        let variant = match falls_back {
+            true => lines::Variant::Enforce,
+            false => variant,
+        };
+        Ok(lines::Family::opening(variant, unattended))
+    }
+
+    /// The line a started family follows; the Enforce line when `root` names none yet.
+    async fn variant_of(
+        &self,
+        organization_id: &str,
+        root: Option<&str>,
+        presenter: lines::Presenter,
+    ) -> napi::Result<lines::Variant> {
+        let followed = match root {
+            Some(root) => self.resolve(organization_id, root, presenter).await?,
+            None => None,
+        };
+        Ok(followed.map_or(lines::Variant::Enforce, |family| family.variant))
+    }
+
+    /// The family `root` follows, or `None` before it opened: the one place an
+    /// operation on a family learns it, refused to a presenter that may not act in it.
+    async fn resolve(
+        &self,
+        organization_id: &str,
+        root: &str,
+        presenter: lines::Presenter,
+    ) -> napi::Result<Option<lines::Family>> {
+        match self.followed(organization_id, root).await? {
+            Some(family) if !family.continued_by(presenter) => Err(failure(
+                Failure::Binding(BindingFailure::UnattendedFamily),
+                "An Agent Runtime run opened this OpenAPPA session; only a request carrying that run's runtime binding acts in it",
+            )),
+            resolved => Ok(resolved),
+        }
+    }
+
+    /// The family `root` follows, read from its log, or `None` before it opened.
+    async fn followed(
+        &self,
+        organization_id: &str,
+        root: &str,
+    ) -> napi::Result<Option<lines::Family>> {
+        let families = &self.deployments.families;
+        if let Some(family) = families.get(organization_id, root) {
+            return Ok(Some(family));
+        }
+        let (store, trajectory) = (self.store.clone(), TrajectoryId(root.to_owned()));
+        let log = match tokio::task::spawn_blocking(move || store.log(&trajectory))
+            .await
+            .map_err(panicked)?
+        {
+            Ok(log) => log,
+            Err(appa_eventlog::ReadError::UnknownRoot { .. }) => return Ok(None),
+            Err(error) => return Err(errors::read_failure(error)),
+        };
+        let family = lines::Family::of_log(organization_id, &log).ok_or_else(|| {
+            invariant(format!(
+                "the family of {root} follows deployment {}, none of its organization's lines",
+                log.deployment()
+            ))
+        })?;
+        families.remember(organization_id, root, &family);
+        Ok(Some(family))
+    }
+
     /// Opens this session's root as a fork of `fork_of`.
     /// Freezes the parent session's policy revision, labels, effects, and
     /// denials into the new root. Returns the parent watermark bounding inherited results.
@@ -296,6 +488,7 @@ impl State {
         input: &Input,
         fork_of: &str,
         root: &str,
+        settings: &SessionSettings,
     ) -> napi::Result<Option<SystemTime>> {
         if input.parent_id.is_some() {
             return Err(invalid_input(
@@ -340,6 +533,7 @@ impl State {
                     &TrajectoryId(parent_root),
                     &TrajectoryId(parent_trajectory),
                     &TrajectoryId(root.to_owned()),
+                    settings.clone(),
                 )
                 .map_err(fork_refused)?;
             return Ok(None);
@@ -360,6 +554,7 @@ impl State {
                 &TrajectoryId(parent_root),
                 &TrajectoryId(parent_trajectory),
                 &TrajectoryId(root.to_owned()),
+                settings.clone(),
             )
             .map_err(fork_refused)?;
         Ok(Some(forked_at))
@@ -407,10 +602,14 @@ impl State {
         })
     }
 
-    async fn dispatch(&self, input: Input) -> napi::Result<Value> {
+    async fn dispatch(
+        &self,
+        input: Input,
+        root: String,
+        family: lines::Family,
+    ) -> napi::Result<Value> {
         let key = SessionKey::of(&input);
         let sql = Sql(&self.store);
-        let root = self.dispatch_root(&input)?;
         let consults = Arc::new(consults::ConsultBuffer::default());
         let recording = State {
             runtime: Arc::new(self.runtime.transcribing(consults.clone())),
@@ -424,7 +623,9 @@ impl State {
         };
         let child_return = input.event == HookEventKind::ChildReturn;
         let observation = self.label_observation(&input, &root);
-        let result = recording.dispatch_in_family(input, root, key).await;
+        let result = recording
+            .dispatch_in_family(input, root, key, &family)
+            .await;
         consults::store(&sql, attribution, &consults);
         if result.is_ok() {
             self.record_label(&sql, observation);
@@ -526,9 +727,11 @@ impl State {
         input: Input,
         root: String,
         key: SessionKey,
+        family: &lines::Family,
     ) -> napi::Result<Value> {
         let sql = Sql(&self.store);
         let pg = &sql;
+        let settings = &family.settings;
 
         let actor = expected_actor(&root, &input.session_id, input.parent_id.as_deref());
         let lookup = key.clone();
@@ -550,11 +753,22 @@ impl State {
             ?;
         if let Some(saved) = &existing {
             check_session_identity(saved, &root, &input)?;
+            // The family may have opened since this dispatch chose its line: the one
+            // that opened first is the one this event is handled against.
+            match self
+                .resolve(&input.organization_id, &root, input.presenter)
+                .await?
+            {
+                Some(durable) if durable.variant != family.variant => {
+                    return Err(policy_moved());
+                }
+                _ => {}
+            }
         } else {
             let forked_at = input
                 .fork_of
                 .as_deref()
-                .map(|fork_of| self.open_fork(pg, &input, fork_of, &root))
+                .map(|fork_of| self.open_fork(pg, &input, fork_of, &root, settings))
                 .transpose()?
                 .flatten();
             let start = if let Some(child) = &actor.child {
@@ -571,11 +785,29 @@ impl State {
                     title: None,
                     start: None,
                     launch: None,
+                    settings: settings.clone(),
                 }
             };
             let decision = hooks::handle(&self.runtime, start).await;
             if !matches!(decision, HookDecision::Ack | HookDecision::Context { .. }) {
+                // A concurrent opener's family refuses this start's token: answer as
+                // resolving that family would, refusing the presenter or retrying on it.
+                if actor.child.is_none()
+                    && let Some(durable) = self
+                        .resolve(&input.organization_id, &root, input.presenter)
+                        .await?
+                    && (durable.variant, durable.unattended())
+                        != (family.variant, family.unattended())
+                {
+                    return Err(policy_moved());
+                }
                 return Err(invariant(wire(&decision)?));
+            }
+            // A start that acked opened or continued this very family.
+            if actor.child.is_none() {
+                self.deployments
+                    .families
+                    .remember(&input.organization_id, &root, family);
             }
             // A child opens under its fork's seed: the parent's label when it spawned
             // the child. A parent that addressed the child before this first event may
@@ -770,12 +1002,17 @@ impl State {
             .await;
             require_decision(&gate)?;
             if !matches!(gate, HookDecision::PassControl) {
-                let text = match gate {
-                    HookDecision::DenyCall { feedback, .. } => feedback,
-                    HookDecision::Block { reason } => reason,
+                let text = match &gate {
+                    HookDecision::DenyCall { feedback, .. } => feedback.clone(),
+                    HookDecision::Block { reason, .. } => reason.clone(),
                     _ => return Err(invariant("unexpected remedy control decision")),
                 };
-                let response = runtime_refusal(text)?;
+                let response = with_refusal_outcomes(runtime_refusal(text)?, &gate)?;
+                if !judged(&gate) && result_key.is_none() {
+                    // Keyed by its arguments, like an unanswered remedy below: the retry
+                    // passes the gate afresh.
+                    return answered_unrecorded(receipts, response);
+                }
                 return finish_remedy(
                     &self.store,
                     receipts,
@@ -838,10 +1075,7 @@ impl State {
                 // An untracked remedy is keyed by its arguments, so a completed receipt would
                 // answer an identical retry with this notice instead of running it. The attempt
                 // committed nothing the receipt guards: the retry vouches afresh.
-                return match receipts.discard().map_err(sql_failure)? {
-                    lease::Guarded::Finished(()) => Ok(response),
-                    lease::Guarded::Lost => Err(lease_lost()),
-                };
+                return answered_unrecorded(receipts, response);
             }
             return finish_remedy(
                 &self.store,
@@ -909,7 +1143,7 @@ impl State {
         {
             return Ok(decision);
         }
-        let decision = if let Some((reporting, args, endpoint)) = report {
+        let (decision, judged) = if let Some((reporting, args, endpoint)) = report {
             let result = appa_runtime::yell::embedded::send(
                 &self.runtime,
                 appa_runtime::yell::embedded::Request {
@@ -926,9 +1160,12 @@ impl State {
                 Ok(receipt) => (false, format!("[appa] Reported. Receipt {receipt}.")),
                 Err(reason) => (true, format!("[appa] Not reported: {reason}")),
             };
-            json!({ "decision": "mcp_result", "result": { "isError": is_error, "content": [{ "type": "text", "text": message }] } })
+            (
+                json!({ "decision": "mcp_result", "result": { "isError": is_error, "content": [{ "type": "text", "text": message }] } }),
+                true,
+            )
         } else if input.event == HookEventKind::ChildAddress {
-            self.address_child(pg, &input, &actor).await?
+            (self.address_child(pg, &input, &actor).await?, true)
         } else {
             let event = match input.event {
                 HookEventKind::ToolCall => HookEvent::ToolCall {
@@ -994,13 +1231,19 @@ impl State {
                 presentation_options(&input),
             )
             .await;
-            self.decided(
-                &actor,
-                &operation,
-                input.declares.as_ref(),
-                &outcome.decision,
-            )?
+            (
+                self.decided(
+                    &actor,
+                    &operation,
+                    input.declares.as_ref(),
+                    &outcome.decision,
+                )?,
+                judged(&outcome.decision),
+            )
         };
+        if !judged {
+            return answered_unrecorded(receipts, decision);
+        }
         finish_operation(
             &self.store,
             receipts,
@@ -1096,6 +1339,16 @@ impl State {
             return Ok(withheld);
         }
         let key = processed_result_key(input, call_id.clone());
+        let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
+        // A replayed result of a call nobody recorded answers the same each time, so it is
+        // answered without claiming a receipt for it.
+        let inherited = match result_untracked(pg, &key, &operation)? {
+            true => match inherited_result(pg, input, &call_id)? {
+                None => return Ok(unknown_result_response()),
+                found => found,
+            },
+            false => None,
+        };
         // A recovered receipt is this same result, claimed by a dispatch that
         // stopped mid-processing. It is driven again and completed.
         if let ResultClaim::Complete(decision) =
@@ -1103,7 +1356,6 @@ impl State {
         {
             return Ok(decision);
         }
-        let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
         let released = match read_operation_state(pg, &operation)? {
             OperationState::Complete(completed) => completed,
             OperationState::Pending {
@@ -1134,15 +1386,31 @@ impl State {
                         decision: completed,
                     }
                 } else {
-                    self.recover_call(input, actor, receipts, &operation, recorded, context)
+                    match self
+                        .recover_call(input, actor, receipts, &operation, recorded, context)
                         .await?
+                    {
+                        Recovery::Completed(completed) => completed,
+                        // Neither the call nor its result is decided: both are asked again.
+                        Recovery::Unjudged(decision) => {
+                            let response = authoritative_unexecuted_response(decision)?;
+                            return answered_unrecorded(receipts, response);
+                        }
+                    }
                 }
             }
             OperationState::Absent => {
                 // A fork replays the history of the session it forks: a result from before the
                 // fork comes back as that session processed it, never as an unknown call.
-                let response =
-                    inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
+                let inherited = match inherited {
+                    Some(found) => Some(found),
+                    None => inherited_result(pg, input, &call_id)?,
+                };
+                let Some(response) = inherited else {
+                    // No call holds this id yet, and one judged under it later must not find
+                    // this answer, as a call the runtime could not judge would.
+                    return answered_unrecorded(receipts, unknown_result_response());
+                };
                 let approved = decision_text(&response)?;
                 self.store
                     .complete_processed_result(key, approved, response.clone(), receipts.owner())
@@ -1217,8 +1485,8 @@ impl State {
         if cancelled && !matches!(decision, HookDecision::Ack) {
             // Only the runtime's own refusal text is named: any other answer carries output.
             let answered = match &decision {
-                HookDecision::Block { reason } => format!("a block: {reason}"),
-                HookDecision::Refuse { class, detail } => {
+                HookDecision::Block { reason, .. } => format!("a block: {reason}"),
+                HookDecision::Refuse { class, detail, .. } => {
                     format!("a refusal ({class:?}): {detail}")
                 }
                 other => wire(other)?
@@ -1243,11 +1511,11 @@ impl State {
             HookDecision::DeliverValue { value } | HookDecision::ChildReturn { value } => {
                 value.clone()
             }
-            HookDecision::ReplaceOutput { output } => output.clone(),
-            HookDecision::Block { reason } => {
+            HookDecision::ReplaceOutput { output, .. } => output.clone(),
+            HookDecision::Block { reason, .. } => {
                 format!("[appa] Tool output withheld: {reason}")
             }
-            HookDecision::Refuse { class, detail } => {
+            HookDecision::Refuse { class, detail, .. } => {
                 return Err(failure(
                     Failure::Refused(*class),
                     format!("OpenAPPA result refused: {detail}"),
@@ -1338,7 +1606,8 @@ impl State {
     /// Re-drives a call whose receipt an interrupted dispatch left pending,
     /// then completes that receipt with the answer. The runtime replays a
     /// decision it committed and decides afresh one it never recorded, so the
-    /// completed receipt holds exactly the answer the first dispatch owed.
+    /// completed receipt holds exactly the answer the first dispatch owed. A
+    /// call the runtime could not judge comes back unjudged, uncompleted.
     async fn recover_call(
         &self,
         input: &Input,
@@ -1347,7 +1616,7 @@ impl State {
         operation: &OperationKey,
         recorded: Value,
         context: Option<Value>,
-    ) -> napi::Result<CompletedOperation> {
+    ) -> napi::Result<Recovery> {
         let call = recorded_call(context.clone(), recorded.clone())?;
         let declares = recorded_declaration(&recorded)?;
         let event = HookEvent::ToolCall {
@@ -1371,14 +1640,17 @@ impl State {
             declares.as_ref(),
             &outcome.decision,
         )?;
+        if !judged(&outcome.decision) {
+            return Ok(Recovery::Unjudged(decision));
+        }
         self.store
             .complete_operation(operation.clone(), decision.clone(), receipts.owner())
             .map_err(receipt_failure)?;
-        Ok(CompletedOperation {
+        Ok(Recovery::Completed(CompletedOperation {
             input: recorded,
             context,
             decision,
-        })
+        }))
     }
 }
 

@@ -452,11 +452,6 @@ export default function ModelPoolsPage() {
           onOpenChange={(open) => {
             if (!open) setCreating(false);
           }}
-          // Like a new virtual key, a new pool opens on how to call it.
-          onCreated={(created) => {
-            setCreating(false);
-            openPool(created, "connect");
-          }}
         />
       ) : null}
       {editingPool ? (

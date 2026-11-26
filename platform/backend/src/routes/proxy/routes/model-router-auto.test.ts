@@ -2859,6 +2859,9 @@ async function publishPlan(
     scorerVersionId: scorer.id,
     coreVersion: "0.1.0",
     planFormatVersion: 1,
+    historyFrameId: null,
+    volumeFactor: 1,
+    volumeSource: "live",
     outcome: {
       status: "active",
       plan: edit(JSON.parse(planJson)),

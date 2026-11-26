@@ -240,12 +240,16 @@ export function RemoveUserDialog({
           type="button"
           variant="destructive"
           disabled={!canConfirm}
-          onClick={async () => {
-            await removeMember.mutateAsync({
-              memberId: member.id,
-              newOwnerId: hasShared ? newOwnerId : undefined,
-            });
-            onOpenChange(false);
+          onClick={() => {
+            // `mutate`, not `mutateAsync`: the hook already toasts failures,
+            // and the dialog stays open so the removal can be retried.
+            removeMember.mutate(
+              {
+                memberId: member.id,
+                newOwnerId: hasShared ? newOwnerId : undefined,
+              },
+              { onSuccess: () => onOpenChange(false) },
+            );
           }}
         >
           {removeMember.isPending ? "Removing..." : "Remove user"}

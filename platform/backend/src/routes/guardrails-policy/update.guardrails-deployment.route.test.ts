@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import type { GuardrailsSettings } from "@archestra/openappa-rs";
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
@@ -12,10 +13,16 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
-  breakTheGlassActiveIn,
+  captureGuardrailsDispatchSettings,
   getGuardrailsDeployment,
+  guardrailsDispatchSettings,
   isGuardrailsV2Active,
+  LINE_CHECK_ELSEWHERE,
+  LINE_CHECK_INCOMPLETE,
+  lineWarnings,
+  withGuardrailsRequest,
 } from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
@@ -68,6 +75,9 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         const response = await set(enabled);
         expect(response.statusCode, response.body).toBe(200);
         expect(response.json()).toEqual({
+          mode: enabled ? "enforce" : "off",
+          personApproval: "ask",
+          enforcedMarks: [],
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
@@ -78,6 +88,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           annotatorLlmApiKeyId: null,
           featureEnabled,
           active: enabled && featureEnabled,
+          warnings: [],
         });
         expect(await isGuardrailsV2Active()).toBe(enabled && featureEnabled);
       }
@@ -132,28 +143,21 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       active: true,
       breakTheGlassEnabled: false,
     });
-    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
-    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
-    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(true);
-    await set(false);
-    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
   });
 
-  test("administrators can let blocked calls through with a yell, and the change is audited", async () => {
+  test("administrators can let approvals through with a yell, and the change is audited", async () => {
     await set(true);
     const response = await app.inject({
       method: "PUT",
       url: "/api/guardrails-deployment",
-      payload: {
-        humanApprovalMode: "everywhere",
-        unapprovableBlockMode: "allow",
-      },
+      payload: { humanApprovalMode: "everywhere" },
     });
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
       enabled: true,
+      personApproval: "auto_everywhere",
       humanApprovalMode: "everywhere",
-      unapprovableBlockMode: "allow",
+      unapprovableBlockMode: "refuse",
     });
     await vi.waitFor(async () => {
       const rows = await db
@@ -163,13 +167,10 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       expect(rows).toContainEqual(
         expect.objectContaining({
           action: "organization.updated",
-          before: expect.objectContaining({
-            humanApprovalMode: "block",
-            unapprovableBlockMode: "refuse",
-          }),
+          before: expect.objectContaining({ humanApprovalMode: "block" }),
           after: expect.objectContaining({
+            personApproval: "auto_everywhere",
             humanApprovalMode: "everywhere",
-            unapprovableBlockMode: "allow",
           }),
         }),
       );
@@ -200,6 +201,10 @@ describe("Deployment-wide Guardrails v2 switch", () => {
             setting: "humanApprovalMode",
             variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
           },
+          {
+            setting: "personApproval",
+            variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+          },
         ],
       });
       const refused = await app.inject({
@@ -213,11 +218,16 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       const other = await app.inject({
         method: "PUT",
         url: "/api/guardrails-deployment",
-        payload: { unapprovableBlockMode: "allow" },
+        payload: { mode: "observe" },
       });
       expect(other.statusCode, other.body).toBe(200);
       expect(other.json()).toMatchObject({
+        mode: "observe",
         humanApprovalMode: "block",
+        unapprovableBlockMode: "allow",
+      });
+      expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+        humanApprovalMode: "everywhere",
         unapprovableBlockMode: "allow",
       });
     } finally {
@@ -231,6 +241,293 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(stored.json()).toMatchObject({
       humanApprovalMode: "everywhere",
       environmentOverrides: [],
+    });
+  });
+
+  test("with no mode saved, the settings derive from the legacy columns", async () => {
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      humanApprovalMode: "unattended",
+      unapprovableBlockMode: "allow",
+    });
+    const read = await app.inject({
+      method: "GET",
+      url: "/api/guardrails-deployment",
+    });
+    expect(read.json()).toMatchObject({
+      mode: "enforce",
+      personApproval: "auto_unattended",
+      enforcedMarks: [],
+      enabled: true,
+    });
+  });
+
+  const put = (payload: Record<string, unknown>) =>
+    app.inject({ method: "PUT", url: "/api/guardrails-deployment", payload });
+  const saved = async (payload: Record<string, unknown>) => {
+    const response = await put(payload);
+    expect(response.statusCode, response.body).toBe(200);
+  };
+  const stored = async () => {
+    const row = await GuardrailsDeploymentModel.get();
+    return {
+      mode: row.mode,
+      personApproval: row.personApproval,
+      enforcedMarks: row.enforcedMarks,
+      enabled: row.enabled,
+      humanApprovalMode: row.humanApprovalMode,
+      unapprovableBlockMode: row.unapprovableBlockMode,
+    };
+  };
+  const read = async () =>
+    (
+      await app.inject({ method: "GET", url: "/api/guardrails-deployment" })
+    ).json();
+
+  test("a legacy switch-on from Off rebuilds the legacy columns from the saved settings", async () => {
+    await saved({ mode: "observe", personApproval: "ask" });
+    await saved({ mode: "off" });
+    expect(await stored()).toEqual({
+      mode: "off",
+      personApproval: "ask",
+      enforcedMarks: [],
+      enabled: false,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+    await saved({ enabled: true });
+    expect(await stored()).toEqual({
+      mode: "enforce",
+      personApproval: "ask",
+      enforcedMarks: [],
+      enabled: true,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+    expect(await read()).toMatchObject({
+      mode: "enforce",
+      personApproval: "ask",
+      active: true,
+    });
+  });
+
+  test("Ask a legacy row derives survives Observe and back to Enforce", async () => {
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      humanApprovalMode: "block",
+    });
+    await saved({ mode: "observe", enforcedMarks: ["payments"] });
+    expect(await stored()).toEqual({
+      mode: "observe",
+      personApproval: "ask",
+      enforcedMarks: ["payments"],
+      enabled: true,
+      humanApprovalMode: "everywhere",
+      unapprovableBlockMode: "allow",
+    });
+    await saved({ mode: "enforce" });
+    expect(await stored()).toEqual({
+      mode: "enforce",
+      personApproval: "ask",
+      enforcedMarks: ["payments"],
+      enabled: true,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+    // The legacy switch turns Observe off; turned back on, it is Enforce.
+    await saved({ mode: "observe" });
+    await saved({ enabled: false });
+    expect(await stored()).toEqual({
+      mode: "off",
+      personApproval: "ask",
+      enforcedMarks: ["payments"],
+      enabled: false,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+    await saved({ enabled: true });
+    expect(await stored()).toEqual({
+      mode: "enforce",
+      personApproval: "ask",
+      enforcedMarks: ["payments"],
+      enabled: true,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+  });
+
+  test("person approval saved while Off is written to the legacy approval column", async () => {
+    await saved({ mode: "enforce", personApproval: "auto_everywhere" });
+    await saved({ mode: "off" });
+    expect((await stored()).humanApprovalMode).toBe("everywhere");
+    await saved({ personApproval: "ask" });
+    expect(await stored()).toMatchObject({
+      mode: "off",
+      personApproval: "ask",
+      enabled: false,
+      humanApprovalMode: "block",
+    });
+  });
+
+  test("concurrent saves leave the switch and the mode in step", async () => {
+    await saved({ mode: "off" });
+    const responses = await Promise.all([
+      put({ personApproval: "ask" }),
+      put({ mode: "enforce" }),
+      put({ enabled: false }),
+    ]);
+    for (const response of responses)
+      expect(response.statusCode, response.body).toBe(200);
+    const row = await stored();
+    expect(row.enabled).toBe(row.mode !== "off");
+    expect(row.unapprovableBlockMode).toBe("refuse");
+  });
+
+  test("a switch an older replica writes alone is honoured on read", async () => {
+    await saved({ mode: "observe" });
+    await GuardrailsDeploymentModel.set({ enabled: false });
+    expect(await read()).toMatchObject({ mode: "off", active: false });
+    await GuardrailsDeploymentModel.set({ enabled: true });
+    expect(await read()).toMatchObject({ mode: "observe", active: true });
+    await saved({ mode: "off" });
+    await GuardrailsDeploymentModel.set({ enabled: true });
+    expect(await read()).toMatchObject({ mode: "enforce", active: true });
+  });
+
+  test("contradicting fields in one request are refused and change nothing", async () => {
+    await saved({ mode: "enforce" });
+    const before = await stored();
+    for (const payload of [
+      { enabled: false, mode: "enforce" },
+      { enabled: true, mode: "off" },
+      { humanApprovalMode: "block", personApproval: "auto_everywhere" },
+      { unapprovableBlockMode: "allow" },
+      { mode: "observe", unapprovableBlockMode: "refuse" },
+    ])
+      expect((await put(payload)).statusCode, JSON.stringify(payload)).toBe(
+        400,
+      );
+    expect(await stored()).toEqual(before);
+  });
+
+  test("enforced marks are refused when duplicated or holding NUL", async () => {
+    for (const enforcedMarks of [
+      ["payments", "payments"],
+      ["pay\u0000ments"],
+      [""],
+    ])
+      expect((await put({ enforcedMarks })).statusCode).toBe(400);
+    expect((await put({ mode: "audit" })).statusCode).toBe(400);
+    expect((await stored()).enforcedMarks).toBeNull();
+  });
+
+  test("the variables win at read and pin their settings, while a save stores what was chosen", async () => {
+    await saved({ mode: "observe", personApproval: "ask" });
+    config.openappa.breakTheGlassOverrides = {
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    };
+    expect(await read()).toMatchObject({
+      mode: "observe",
+      personApproval: "ask",
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+      environmentOverrides: [
+        {
+          setting: "humanApprovalMode",
+          variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+        },
+        {
+          setting: "personApproval",
+          variable: "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+        },
+        {
+          setting: "unapprovableBlockMode",
+          variable: "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",
+        },
+      ],
+    });
+    for (const payload of [
+      { personApproval: "auto_unattended" },
+      { humanApprovalMode: "everywhere" },
+      { unapprovableBlockMode: "allow" },
+    ])
+      expect((await put(payload)).statusCode, JSON.stringify(payload)).toBe(
+        400,
+      );
+    // An unrelated save keeps Observe's columns, which differ from the pins.
+    await saved({ unsupportedClientAction: "block" });
+    expect(await stored()).toEqual({
+      mode: "observe",
+      personApproval: "ask",
+      enforcedMarks: [],
+      enabled: true,
+      humanApprovalMode: "everywhere",
+      unapprovableBlockMode: "allow",
+    });
+    // Enforce is written whole, so unsetting the pins surfaces Enforce/Ask.
+    await saved({ mode: "enforce" });
+    expect(await stored()).toEqual({
+      mode: "enforce",
+      personApproval: "ask",
+      enforcedMarks: [],
+      enabled: true,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+  });
+
+  test("an older replica's stricter approval wins over the saved one, and a later save keeps it", async () => {
+    await saved({ mode: "enforce", personApproval: "auto_everywhere" });
+    await GuardrailsDeploymentModel.set({ humanApprovalMode: "block" });
+    expect(await read()).toMatchObject({
+      mode: "enforce",
+      personApproval: "ask",
+    });
+    await saved({ unsupportedClientAction: "block" });
+    expect(await stored()).toEqual({
+      mode: "enforce",
+      personApproval: "ask",
+      enforcedMarks: [],
+      enabled: true,
+      humanApprovalMode: "block",
+      unapprovableBlockMode: "refuse",
+    });
+    expect(await read()).toMatchObject({
+      personApproval: "ask",
+      humanApprovalMode: "block",
+    });
+  });
+
+  test("the switch turns Guardrails back on in Enforce after an older replica turned them off", async () => {
+    await saved({ mode: "observe", personApproval: "ask" });
+    await GuardrailsDeploymentModel.set({ enabled: false });
+    expect(await read()).toMatchObject({ mode: "off" });
+    await saved({ enabled: true });
+    expect(await read()).toMatchObject({ mode: "enforce", active: true });
+  });
+
+  test("an older replica's soft-block refusal under Observe reads as Enforce", async () => {
+    await saved({ mode: "observe", personApproval: "auto_unattended" });
+    await GuardrailsDeploymentModel.set({ unapprovableBlockMode: "refuse" });
+    expect(await read()).toMatchObject({
+      mode: "enforce",
+      personApproval: "auto_unattended",
+      active: true,
+    });
+  });
+
+  test("under Observe the legacy approval only restates Observe's own value", async () => {
+    await saved({ mode: "observe", personApproval: "ask" });
+    expect((await put({ humanApprovalMode: "block" })).statusCode).toBe(400);
+    await saved({ humanApprovalMode: "everywhere" });
+    expect(await stored()).toEqual({
+      mode: "observe",
+      personApproval: "ask",
+      enforcedMarks: [],
+      enabled: true,
+      humanApprovalMode: "everywhere",
+      unapprovableBlockMode: "allow",
     });
   });
 
@@ -389,6 +686,180 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
     // Turning it off is never refused.
     expect((await set(false)).statusCode).toBe(200);
+  });
+
+  test("a settings save warns when a line it routes sessions to can't carry its approvers", async () => {
+    const capped = `[policy]\nversion = 2\n[policy.limits]\nplanner_cap = 1\n[[policy.tool]]\nname = "read"\ndelta = {}\nrequires = { attention = ["review"] }\n[[policy.authority]]\nname = "human-approval"\n[policy.authority.permits]\nattention = ["*"]\n[externals.authorities.human-approval]\nbuiltin = "hitl"\n`;
+    await GuardrailsPolicyModel.saveDeclarationMigration({
+      organizationId,
+      content: capped,
+      contentHash: createHash("sha256").update(capped).digest("hex"),
+      expectedRevision: 0,
+    });
+    await openappaBatteriesService.recompile(organizationId);
+    const save = async (payload: Record<string, unknown>) => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json().warnings as string[];
+    };
+
+    expect(await save({ mode: "enforce", personApproval: "ask" })).toEqual([]);
+    expect(await save({ personApproval: "auto_unattended" })).toHaveLength(1);
+    expect(await save({ mode: "observe" })).toHaveLength(1);
+    expect(
+      await save({ unsupportedClientAction: "block" }),
+      "a save that routes no session checks nothing",
+    ).toEqual([]);
+    expect(
+      await save({ mode: "off", personApproval: "auto_unattended" }),
+      "Off opens no family on a line with approvers",
+    ).toEqual([]);
+    const observe: GuardrailsSettings = {
+      mode: "observe",
+      personApproval: "ask",
+      enforcedMarks: [],
+    };
+    expect(
+      await lineWarnings(observe, { deadlineMs: 0 }),
+      "a scan past its deadline answers that it is incomplete",
+    ).toEqual([LINE_CHECK_INCOMPLETE]);
+    expect(await lineWarnings(observe)).toHaveLength(1);
+    expect(
+      await lineWarnings(observe, { viewer: randomUUID() }),
+      "another organization's reasons stay in the log",
+    ).toEqual([LINE_CHECK_ELSEWHERE]);
+    const uncapped = capped.replace("planner_cap = 1", "planner_cap = 8");
+    await GuardrailsPolicyModel.saveDeclarationMigration({
+      organizationId,
+      content: uncapped,
+      contentHash: createHash("sha256").update(uncapped).digest("hex"),
+      expectedRevision: 1,
+    });
+    expect(
+      await lineWarnings(observe),
+      "a composition the saved root moved past is not checked as current",
+    ).toContain(LINE_CHECK_INCOMPLETE);
+    await openappaBatteriesService.recompile(organizationId);
+    expect(await lineWarnings(observe)).toEqual([]);
+    await save({ personApproval: "auto_everywhere" });
+    expect(await guardrailsDispatchSettings()).toEqual({
+      mode: "enforce",
+      personApproval: "ask",
+      enforcedMarks: [],
+    });
+  });
+
+  test("a settings save warns when an enforced tool withholds a mark other tools require", async () => {
+    const shared = (other: string) =>
+      `[policy]\nversion = 2\n[[policy.tool]]\nname = "export"\ntags = ["enforced"]\ndelta = {}\nrequires = { attention = ["pii"] }\n[[policy.tool]]\nname = "share"\ndelta = {}\nrequires = { attention = ["${other}"] }\n`;
+    const serve = async (content: string, expectedRevision: number) => {
+      await GuardrailsPolicyModel.saveDeclarationMigration({
+        organizationId,
+        content,
+        contentHash: createHash("sha256").update(content).digest("hex"),
+        expectedRevision,
+      });
+      await openappaBatteriesService.recompile(organizationId);
+    };
+    const save = async (payload: Record<string, unknown>) => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json().warnings as string[];
+    };
+
+    await serve(shared("pii"), 0);
+    expect(await save({ mode: "observe" })).toHaveLength(1);
+    expect(
+      await save({ enforcedMarks: ["pii"] }),
+      "a mark the settings enforce is withheld by choice",
+    ).toEqual([]);
+    await save({ enforcedMarks: [] });
+    expect(
+      await save({ mode: "enforce", personApproval: "ask" }),
+      "Enforce adds no approvers to skip it",
+    ).toEqual([]);
+    await serve(shared("review"), 1);
+    expect(
+      await save({ mode: "observe" }),
+      "a mark only the enforced tool requires surprises no one",
+    ).toEqual([]);
+  });
+
+  test("a composition of a shipped root the release has since changed is not checked as current", async () => {
+    await openappaBatteriesService.recompile(organizationId);
+    const observe: GuardrailsSettings = {
+      mode: "observe",
+      personApproval: "ask",
+      enforcedMarks: [],
+    };
+    expect(await lineWarnings(observe)).not.toContain(LINE_CHECK_INCOMPLETE);
+    const [stored] = await db
+      .select({
+        fingerprint: schema.openappaEffectivePoliciesTable.installFingerprint,
+      })
+      .from(schema.openappaEffectivePoliciesTable)
+      .where(
+        eq(
+          schema.openappaEffectivePoliciesTable.organizationId,
+          organizationId,
+        ),
+      );
+    await db
+      .update(schema.openappaEffectivePoliciesTable)
+      .set({
+        installFingerprint: stored.fingerprint.replace(
+          /:[0-9a-f]+$/,
+          ":shipped-before",
+        ),
+      })
+      .where(
+        eq(
+          schema.openappaEffectivePoliciesTable.organizationId,
+          organizationId,
+        ),
+      );
+    expect(await lineWarnings(observe)).toContain(LINE_CHECK_INCOMPLETE);
+  });
+
+  test("a request dispatches on the settings it captured, rereading only the enforced marks on a retry", async () => {
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      mode: "observe",
+      humanApprovalMode: "everywhere",
+      unapprovableBlockMode: "allow",
+      personApproval: "auto_unattended",
+      enforcedMarks: [],
+    });
+    await withGuardrailsRequest(async () => {
+      captureGuardrailsDispatchSettings(await getGuardrailsDeployment());
+      await GuardrailsDeploymentModel.set({
+        mode: "enforce",
+        personApproval: "ask",
+        enforcedMarks: ["review"],
+      });
+      expect(await guardrailsDispatchSettings()).toEqual({
+        mode: "observe",
+        personApproval: "auto_unattended",
+        enforcedMarks: [],
+      });
+      const retried = {
+        mode: "observe",
+        personApproval: "auto_unattended",
+        enforcedMarks: ["review"],
+      };
+      expect(await guardrailsDispatchSettings({ freshMarks: true })).toEqual(
+        retried,
+      );
+      expect(await guardrailsDispatchSettings()).toEqual(retried);
+    });
   });
 
   test("refuses writes without management permission", async () => {

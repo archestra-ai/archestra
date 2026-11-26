@@ -10,6 +10,10 @@ import {
 import type { RuntimeIdentitySnapshot } from "@/models/proxy-request-context";
 import { scopedSessionId } from "@/openappa/actor";
 import type { OpenAppaSession } from "@/openappa/service";
+import {
+  agentRunGatewayTokenId,
+  isAgentRunGatewayToken,
+} from "@/services/agent-runtime/runtime-contract";
 import { type AgentRunActorKind, type AgentRunRecord, ApiError } from "@/types";
 import type { AgentWorkspace } from "@/types/agent-workspace";
 
@@ -83,6 +87,7 @@ type RuntimeBindingClaims = {
 };
 
 type GatewayTokenActor = {
+  tokenId?: string | null;
   userId?: string;
   teamId?: string | null;
   isOrganizationToken: boolean;
@@ -131,9 +136,35 @@ export function runtimeOpenAppaSession(params: {
     organization_id: params.organizationId,
     caller_id: callerId,
     session_id: scopedSessionId(callerId, params.workloadName),
+    presenter: "runtime",
     // parentId is already a full session id. Do not scope it again.
     ...(params.parentId ? { parent_id: params.parentId } : {}),
   };
+}
+
+/**
+ * Whether `sessionId` is the OpenAPPA session of a persisted workspace in the
+ * organization: only a request carrying that run's binding may open it.
+ */
+export async function isRuntimeWorkspaceSession(params: {
+  organizationId: string;
+  sessionId: string;
+}): Promise<boolean> {
+  // A workspace's session is always scoped to its actor; an unscoped one is none.
+  const scope = params.sessionId.lastIndexOf("|");
+  if (scope < 0) return false;
+  const workloadName = params.sessionId.slice(scope + 1);
+  const workspace = await AgentWorkspaceModel.findByWorkloadName(workloadName);
+  return (
+    workspace?.organizationId === params.organizationId &&
+    runtimeOpenAppaSession({
+      organizationId: workspace.organizationId,
+      workspaceId: workspace.id,
+      workloadName: workspace.workloadName,
+      actorKind: workspace.actorKind,
+      actorId: workspace.actorId,
+    }).session_id === params.sessionId
+  );
 }
 
 /**
@@ -353,7 +384,9 @@ export async function resolveGatewayRuntimeSession(params: {
   runTaskId?: string;
   now?: number;
 }): Promise<GatewayRuntimeDecision> {
-  if (params.token.userId) return { kind: "none" };
+  // A user credential vouches for no run, except the one a run was issued.
+  if (params.token.userId && !isAgentRunGatewayToken(params.token))
+    return { kind: "none" };
   if (!params.bindingToken) return { kind: "none" };
   const claims = readRuntimeBinding({
     token: params.bindingToken,
@@ -382,7 +415,12 @@ export async function resolveGatewayRuntimeSession(params: {
   }
   const run = await AgentRunModel.findByTaskId(claims.taskId);
   const workspace = await AgentWorkspaceModel.findById(claims.workspaceId);
-  if (!run || !workspace) {
+  if (
+    !run ||
+    !workspace ||
+    (params.token.userId &&
+      params.token.tokenId !== agentRunGatewayTokenId(run.id))
+  ) {
     return { kind: "reject", message: "Invalid runtime binding" };
   }
   const identity = associationFrom(workspace, run);

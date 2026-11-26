@@ -551,6 +551,7 @@ describe("ConnectPage guardrails chip", () => {
       active: boolean;
       unsupportedClientAction: "bypass" | "block";
       featureEnabled?: boolean;
+      mode?: "observe" | "enforce";
     },
   ) {
     window.localStorage.clear();
@@ -584,6 +585,7 @@ describe("ConnectPage guardrails chip", () => {
     deployment: {
       active: boolean;
       unsupportedClientAction: "bypass" | "block";
+      mode?: "observe" | "enforce";
     },
   ) {
     renderPage(clientId, deployment);
@@ -606,6 +608,26 @@ describe("ConnectPage guardrails chip", () => {
     expect(
       setup("claude-code", { active: true, unsupportedClientAction: "block" }),
     ).toHaveTextContent("Enforced");
+  });
+
+  it("under Observe a recognized agent reads as observed, not enforced", () => {
+    const chip = setup("claude-code", {
+      active: true,
+      unsupportedClientAction: "block",
+      mode: "observe",
+    });
+    expect(chip).toHaveTextContent("Observe only");
+    expect(chip).not.toHaveTextContent("Enforced");
+  });
+
+  it("under Observe an agent the guardrails don't recognize is still blocked", () => {
+    expect(
+      setup("n8n", {
+        active: true,
+        unsupportedClientAction: "block",
+        mode: "observe",
+      }),
+    ).toHaveTextContent("Blocked");
   });
 
   it.each(

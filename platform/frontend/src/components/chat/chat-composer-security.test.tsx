@@ -21,7 +21,12 @@ import {
 import { ChatComposerSecurity } from "./chat-composer-security";
 
 const mocks = vi.hoisted(() => ({
-  deployment: { active: true, enabled: true, featureEnabled: true },
+  deployment: { active: true, enabled: true, featureEnabled: true } as {
+    active: boolean;
+    enabled: boolean;
+    featureEnabled: boolean;
+    mode?: "off" | "observe" | "enforce";
+  },
   permissions: { guardrailsPolicy: true },
 }));
 
@@ -133,6 +138,24 @@ it("opens the labels as today, with the title linking to the Guardrails page", a
   expect(
     screen.getByRole("link", { name: "Guardrails are enabled" }),
   ).toHaveAttribute("href", "/openappa");
+  view.unmount();
+  client.clear();
+});
+
+it("under Observe names the chat observed, not enforced", async () => {
+  mocks.deployment = { ...mocks.deployment, mode: "observe" };
+  respondWith({ trust: "trusted", audience: "public", policyRevision: 7 });
+  const { client, view } = renderPeek("observed");
+  await userEvent.click(
+    await screen.findByRole("button", { name: /^Guardrails:/ }),
+  );
+  await screen.findByRole("dialog");
+  expect(
+    screen.getByRole("link", { name: "Guardrails observe this chat" }),
+  ).toHaveAttribute("href", "/openappa");
+  expect(
+    screen.queryByRole("link", { name: "Guardrails are enabled" }),
+  ).toBeNull();
   view.unmount();
   client.clear();
 });

@@ -137,6 +137,7 @@ The `permits` table defines the specific categories of preconditions an authorit
 | `trust_below` | Authorizes calls where trajectory trust is below the required rank (up to the rank specified here). |
 | `audience_missing` | Authorizes sharing data with recipients outside the trajectory's audience (up to the audience specified here). |
 | `effects_containing` | Authorizes calls blocked by an `excludes` effect precondition when that effect is already present. |
+| `prior_effects_containing` | Authorizes calls blocked by a `contains` effect precondition when that effect is not yet present. |
 | `attention` | Authorizes declared attention marks (or all declared marks except `blocked` when set to `["*"]`). |
 
 Example granting broad authority across trust, audience, effect, and attention boundaries:
@@ -184,7 +185,7 @@ Authorities can use built-in handlers, HTTP endpoints, or local executables. Con
 | `builtin = "hitl"` | Routes requests to an interactive human reviewer displaying call details and requested exceptions. |
 | `builtin = "approve"` | Automatically approves matching requests within `permits`. If a blocked call requires only automatic approvals, OpenAPPA applies them transparently without interrupting the agent. (Plans requiring narrowing acceptance are still returned to the agent.) |
 | `builtin = "claude-code"` or `builtin = "llm"` | Uses an LLM to evaluate approval requests against the declaration and unmet preconditions. |
-| `builtin = "<module>"` | Executes a shared library module loaded from `--modules-dir`. |
+| `builtin = "<module>"` | Executes a shared library module loaded from `--modules-dir`. The module runs in the OpenAPPA process with no time limit. |
 | `url` or `command` | Dispatches approval requests to an external service or executable. |
 
 All authority implementations, including automatic approvers, remain strictly constrained by declared `permits`.

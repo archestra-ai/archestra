@@ -76,6 +76,7 @@ test("reads the current status of an accessible protected conversation", async (
   expect(statusRead).toHaveBeenCalledWith({
     organizationId,
     sessionId: conversationId,
+    presenter: "attended",
   });
 });
 

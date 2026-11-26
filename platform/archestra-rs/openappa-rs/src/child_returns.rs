@@ -493,7 +493,7 @@ mod runtime_child_tests {
 
     fn event_input(event: &str, extra: Value) -> Input {
         let mut input = json!({
-            "organization_id": "organization",
+            "presenter": "attended", "organization_id": "organization",
             "session_id": "child-session",
             "parent_id": "parent-session",
             "event": event,
@@ -611,6 +611,7 @@ mod runtime_child_tests {
         let blocked = wire(&HookDecision::Block {
             reason: "the child has a call still open; report its outcome before the child ends"
                 .into(),
+            outcomes: None,
         })
         .unwrap();
         assert_eq!(blocked["decision"], "block");
@@ -784,6 +785,7 @@ mod runtime_child_tests {
             title: None,
             start: None,
             launch: None,
+            settings: Default::default(),
         }
     }
 
@@ -917,7 +919,7 @@ mod runtime_child_tests {
             },
         )
         .await;
-        let HookDecision::Block { reason } = blocked else {
+        let HookDecision::Block { reason, .. } = blocked else {
             panic!("an open call must hold the return, got {blocked:?}");
         };
         // The binding marks exactly this hold as busy (`mark_busy_hold`), so

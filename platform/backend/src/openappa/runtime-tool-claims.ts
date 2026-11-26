@@ -130,6 +130,8 @@ export function verifyRuntimeToolProof(params: {
         session_id: claims.session_id,
         ...(claims.caller_id ? { caller_id: claims.caller_id } : {}),
         ...(claims.parent_id ? { parent_id: claims.parent_id } : {}),
+        // The host signed this proof into the one session it names.
+        presenter: "delegated",
       },
       toolCallId: claims.call_id,
       spawn: claims.spawn,

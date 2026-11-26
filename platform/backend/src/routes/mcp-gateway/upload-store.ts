@@ -12,7 +12,7 @@ import { isObject } from "@/clients/mcp-files/is-object";
  */
 
 /** `MissingRequiredClientCapabilityError` from the base protocol. */
-export const MISSING_REQUIRED_CLIENT_CAPABILITY_ERROR_CODE = -32021;
+const MISSING_REQUIRED_CLIENT_CAPABILITY_ERROR_CODE = -32021;
 
 /** Path segment under `/v1/mcp/:profileId` that relayed uploads go to. */
 export const FILE_UPLOAD_PATH_SEGMENT = "files";

@@ -47,9 +47,14 @@ describe("MCP gateway - File Uploads for built-in tools", () => {
     app = undefined;
   });
 
-  async function setUp(fixtures: Fixtures) {
+  async function setUp(
+    fixtures: Fixtures,
+    options: { assign?: boolean; inputDelayMs?: number } = {},
+  ) {
     const run = await seedRetainedRun(fixtures);
-    const pod = fakeWorkspacePod();
+    const pod = fakeWorkspacePod(undefined, {
+      inputDelayMs: options.inputDelayMs,
+    });
     const gatewayAgent = await fixtures.makeAgent({
       organizationId: run.actor.organizationId,
       agentType: "mcp_gateway",
@@ -58,10 +63,12 @@ describe("MCP gateway - File Uploads for built-in tools", () => {
       accessAllSubagents: true,
     });
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-    await ToolModel.assignArchestraToolsToAgent(
-      gatewayAgent.id,
-      ARCHESTRA_MCP_CATALOG_ID,
-    );
+    if (options.assign ?? true) {
+      await ToolModel.assignArchestraToolsToAgent(
+        gatewayAgent.id,
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+    }
     const { value: token } = await UserTokenModel.create(
       run.actor.id,
       run.actor.organizationId as string,
@@ -97,7 +104,6 @@ describe("MCP gateway - File Uploads for built-in tools", () => {
     });
 
     const first = await upload(fileInput());
-    console.error("DEBUG", JSON.stringify(first.body.result.content));
     expect(first.body.result).toMatchObject({
       resultType: "upload_required",
       uploads: [
@@ -163,6 +169,27 @@ describe("MCP gateway - File Uploads for built-in tools", () => {
     });
   });
 
+  test("a refused call to a tool the gateway does not offer records no file bytes", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const fixtures = { makeOrganization, makeUser, makeMember, makeAgent };
+    const { upload, gatewayAgentId, pod } = await setUp(fixtures, {
+      assign: false,
+    });
+    const result = await upload(
+      fileInput({ data: FILE_BYTES.toString("base64") }),
+    );
+    expect(result.body.result.isError).toBe(true);
+    expect(pod.staged.size).toBe(0);
+    const [row] = await toolCallRows(gatewayAgentId, TRANSFER);
+    expect(row.toolCall?.arguments).toMatchObject({
+      file: { data: `[${FILE_BYTES.length} bytes omitted]` },
+    });
+  });
+
   test("a retry before the file arrived does not run the tool and keeps the state redeemable", async ({
     makeOrganization,
     makeUser,
@@ -185,6 +212,30 @@ describe("MCP gateway - File Uploads for built-in tools", () => {
     expect(retry.body.result.structuredContent).toMatchObject({
       status: "stored",
     });
+  });
+
+  test("two simultaneous retries with one state: exactly one is answered", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const fixtures = { makeOrganization, makeUser, makeMember, makeAgent };
+    const { gateway, upload } = await setUp(fixtures);
+    const first = await upload(fileInput());
+    await gateway.upload(first.body.result.uploads[0].path, FILE_BYTES);
+    const { requestState } = first.body.result;
+    const answers = await Promise.all([
+      upload(fileInput(), requestState),
+      upload(fileInput(), requestState),
+    ]);
+    const stored = answers.filter(
+      (answer) => answer.body.result?.structuredContent?.status === "stored",
+    );
+    const spent = answers.filter(
+      (answer) => answer.body.error?.code === -32602,
+    );
+    expect([stored.length, spent.length]).toEqual([1, 1]);
   });
 
   test("the retry must repeat the call exactly", async ({
@@ -257,6 +308,51 @@ describe("MCP gateway - File Uploads for built-in tools", () => {
     expect(pod.finalized).toEqual([
       [expect.any(String), "inbox/q3.csv", hex(FILE_BYTES), "-", "0"],
     ]);
+  });
+
+  test("bytes that fail before the workspace starts reading them are refused, and the target still works", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const fixtures = { makeOrganization, makeUser, makeMember, makeAgent };
+    const { gateway, upload, pod } = await setUp(fixtures, {
+      inputDelayMs: 50,
+    });
+    const first = await upload(
+      fileInput({
+        digest: { algorithm: "sha-256", value: base64url(FILE_BYTES) },
+      }),
+    );
+    const { path } = first.body.result.uploads[0];
+    // Shorter than declared: checked and failed on the first chunk.
+    expect((await gateway.upload(path, Buffer.from("x"))).status).toBe(400);
+    expect(pod.finalized).toEqual([]);
+    expect((await gateway.upload(path, FILE_BYTES)).status).toBe(200);
+    expect(pod.finalized).toHaveLength(1);
+  });
+
+  test("inline data that does not match its digest is refused, and nothing is stored", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const fixtures = { makeOrganization, makeUser, makeMember, makeAgent };
+    const { upload, pod } = await setUp(fixtures);
+    const result = await upload(
+      fileInput({
+        data: FILE_BYTES.toString("base64"),
+        digest: {
+          algorithm: "sha-256",
+          value: base64url(Buffer.from("other")),
+        },
+      }),
+    );
+    expect(result.body.result.isError).toBe(true);
+    expect(result.body.result.content[0].text).toMatch(/sha-256 digest/);
+    expect(pod.staged.size).toBe(0);
   });
 
   test("a caller that cannot upload gets MissingRequiredClientCapability, and one without the extension cannot pass a file", async ({

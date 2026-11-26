@@ -285,6 +285,91 @@ describe("search_tools", () => {
     expect(returnedToolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 
+  test("a caller that cannot send files is not offered another server's file tool, and sees a built-in without its file argument", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeAgentTool,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    await seedAndAssignArchestraTools(agent.id);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Docs MCP",
+    });
+    const fileTool = await makeTool({
+      name: "docs__save_document",
+      description: "Save a document to the archive.",
+      catalogId: catalog.id,
+      parameters: {
+        type: "object",
+        properties: {
+          document: { type: "object", "x-mcp-file": {} },
+        },
+        required: ["document"],
+      },
+    });
+    await makeAgentTool(agent.id, fileTool.id);
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const search = async (query: string, accepted: boolean) => {
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query, limit: 20 },
+        {
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+          ...(accepted && {
+            files: {
+              accepted: true,
+              take: () => {
+                throw new Error("search_tools reads no files");
+              },
+              requireUpload: () => {
+                throw new Error("search_tools reads no files");
+              },
+            },
+          }),
+        },
+      );
+      return (result.structuredContent as SearchToolsStructuredContent).tools;
+    };
+    const transfer = "archestra__transfer_workspace_file";
+
+    const plain = await search(
+      "save document archive transfer workspace",
+      false,
+    );
+    expect(plain.map((tool) => tool.toolName)).not.toContain(
+      "docs__save_document",
+    );
+    expect(plain.map((tool) => tool.toolName)).toContain(transfer);
+    expect(
+      plain.find((tool) => tool.toolName === transfer)?.params,
+    ).not.toMatch(/\bfile\?/);
+
+    const withFiles = await search(
+      "save document archive transfer workspace",
+      true,
+    );
+    expect(withFiles.map((tool) => tool.toolName)).toContain(
+      "docs__save_document",
+    );
+    expect(
+      withFiles.find((tool) => tool.toolName === transfer)?.params,
+    ).toMatch(/\bfile\?/);
+  });
+
   test("gives a long parameter description once per result, and points later tools to it", async ({
     makeAgent,
     makeInternalMcpCatalog,

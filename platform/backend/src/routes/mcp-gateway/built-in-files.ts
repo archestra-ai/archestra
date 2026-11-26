@@ -68,8 +68,9 @@ import {
 
 /**
  * One call's view of its file arguments, for `context.files`. The gateway
- * calls `spend` once the tool has finished: an input round in between leaves
- * the upload session for the retry after it.
+ * runs the tool through `run`: a retry claims its upload session when the
+ * tool first reads a file, and a call that does not finish — an input round,
+ * say — puts it back for the retry after it.
  */
 export function createBuiltInFiles(params: {
   agentId: string;
@@ -80,21 +81,26 @@ export function createBuiltInFiles(params: {
   declaration: FilesDeclaration | null;
   /** Set on the retry that follows an upload request. */
   uploadSessionId?: string;
-}): BuiltInFiles & { spend(): Promise<void> } {
-  // Read once per leg, so a tool that takes several files reads them all
+}): BuiltInFiles & { run<T>(call: () => Promise<T>): Promise<T> } {
+  // Claimed once per leg, so a tool that takes several files reads them all
   // from the same session.
   let claimed: Promise<ClaimedSession> | undefined;
 
   return {
-    async spend() {
-      if (!claimed || !params.uploadSessionId) return;
-      if ((await claimed).kind !== "claimed") return;
-      // Two retries with one state can both get here; only one answers.
-      const spent = await cacheManager.getAndDelete<BuiltInSession>(
-        sessionKey(params.uploadSessionId),
-        { throwOnError: true },
-      );
-      if (!spent) throw spentStateError();
+    async run(call) {
+      try {
+        return await call();
+      } catch (error) {
+        const session = claimed && (await claimed.catch(() => undefined));
+        if (session?.kind === "claimed" && params.uploadSessionId) {
+          await cacheManager.set(
+            sessionKey(params.uploadSessionId),
+            session.session,
+            FILE_UPLOAD_STATE_TTL_MS,
+          );
+        }
+        throw error;
+      }
     },
     accepted: params.declaration !== null,
     async take({ name, value, descriptor }): Promise<TakenFile> {
@@ -374,12 +380,16 @@ type BuiltInSession = {
 type UploadSessionRecord = BuiltInSession | { kind?: "upstream" };
 
 type ClaimedSession =
-  | { kind: "claimed"; receipts: Map<string, BuiltInFileReceipt> }
+  | {
+      kind: "claimed";
+      session: BuiltInSession;
+      receipts: Map<string, BuiltInFileReceipt>;
+    }
   | { kind: "refused"; message: string };
 
 /**
- * Check a retry's upload session: it must be this call's, and every file in
- * it must have arrived. It is spent by `spend`, once the tool has finished.
+ * Check a retry's upload session and claim it: it must be this call's, and
+ * every file in it must have arrived first.
  */
 async function claimSession(
   params: { agentId: string; wireName: string; principal: string },
@@ -417,7 +427,15 @@ async function claimSession(
     }
     receipts.set(fileId, done.receipt);
   }
-  return { kind: "claimed", receipts };
+  // Two retries with one state can both get here; only one runs the tool.
+  const spent = await cacheManager.getAndDelete<BuiltInSession>(
+    sessionKey(sessionId),
+    { throwOnError: true },
+  );
+  if (!spent) {
+    throw new BuiltInFileAnswer({ kind: "error", error: spentStateError() });
+  }
+  return { kind: "claimed", session, receipts };
 }
 
 function transferredFile(input: FileInput): TransferredFile {

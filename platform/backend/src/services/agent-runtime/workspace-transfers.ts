@@ -386,8 +386,10 @@ class WorkspaceTransferTickets {
       childSessionId: string;
       operationId: string;
     };
-  }): Promise<{ ticketId: string; path: string; expiresAt: number }> {
+  }): Promise<{ ticketId: string; expiresAt: number }> {
     const fields = await this.uploadFields(params);
+    // Taken before the write, so the ticket never outlives what it reports.
+    const expiresAt = Date.now() + params.ttlMs;
     const { stored } = await this.persistNew(
       {
         ...fields,
@@ -396,11 +398,7 @@ class WorkspaceTransferTickets {
       },
       params.ttlMs,
     );
-    return {
-      ticketId: stored.id,
-      path: ticketPath(stored),
-      expiresAt: Date.now() + params.ttlMs,
-    };
+    return { ticketId: stored.id, expiresAt };
   }
 
   private async uploadFields(params: {
@@ -555,53 +553,61 @@ class WorkspaceTransferTickets {
       });
     }
     const driver = resolveAgentRuntimeBackendDriver(session.backend);
-    const body = limitBytes(params.body, params.ticket.size);
+    // A relayed ticket takes several attempts, and the helper stages each
+    // entry exclusively: every attempt stages under its own id, so one that
+    // left something behind cannot block the next.
+    const ticket: StoredTicket = params.ticket.relayed
+      ? { ...params.ticket, entryId: randomBytes(16).toString("hex") }
+      : params.ticket;
+    const body = limitBytes(params.body, ticket.size);
     const written = await driver
       .runWorkspaceTransferCommand({
         session,
-        args: helperArgs(
-          params.ticket.root,
-          "write-stream",
-          params.ticket.entryId,
-        ),
+        args: helperArgs(ticket.root, "write-stream", ticket.entryId),
         stdin: body.stream,
         timeoutMs: TRANSFER_TIMEOUT_MS,
       })
       .catch(async (error: unknown) => {
-        // Whatever was staged before the body failed is not an upload.
-        await this.discard(params.ticket);
+        // Whatever was staged before the body failed is not an upload. The
+        // failure to report is the upload's, not the cleanup's.
+        await this.discard(ticket).catch((discardError: unknown) =>
+          logger.warn(
+            { err: discardError, ticketId: ticket.id },
+            "Could not discard a failed workspace upload",
+          ),
+        );
         throw error;
       });
     const receipt = WorkspaceUploadReceiptSchema.parse(camelize(written));
     if (body.exceeded()) {
-      await this.discard(params.ticket);
+      await this.discard(ticket);
       throw new ApiError(413, "Upload is larger than the size it declared");
     }
-    const expectedSha256 = params.ticket.sha256 ?? params.sha256?.();
+    const expectedSha256 = ticket.sha256 ?? params.sha256?.();
     if (expectedSha256 === undefined) {
-      await this.discard(params.ticket);
+      await this.discard(ticket);
       throw new Error("An upload ticket without a digest needs one at receipt");
     }
-    if (receipt.size !== params.ticket.size) {
-      await this.discard(params.ticket);
+    if (receipt.size !== ticket.size) {
+      await this.discard(ticket);
       throw new ApiError(422, "Uploaded bytes do not match the declared size");
     }
     if (receipt.sha256 !== expectedSha256) {
-      await this.discard(params.ticket);
+      await this.discard(ticket);
       throw new ApiError(
         422,
         "Uploaded bytes do not match the expected checksum",
       );
     }
-    const destination = params.ticket.destination;
+    const destination = ticket.destination;
     const result = await driver
       .runWorkspaceTransferCommand({
         session,
         args: helperArgs(
-          params.ticket.root,
+          ticket.root,
           "finalize",
-          params.ticket.entryId,
-          params.ticket.path,
+          ticket.entryId,
+          ticket.path,
           expectedSha256,
           destination.present ? destination.ino : "-",
           destination.present ? destination.mtimeNs : "0",
@@ -619,8 +625,8 @@ class WorkspaceTransferTickets {
         }
         throw error;
       });
-    await this.forget(params.ticket.id);
-    return { ...(camelize(result) as object), path: ticketPath(params.ticket) };
+    await this.forget(ticket.id);
+    return { ...(camelize(result) as object), path: ticketPath(ticket) };
   }
 
   /** Remove a staging entry so an abandoned transfer leaves nothing behind. */
@@ -1171,6 +1177,9 @@ function limitBytes(
   // mid-upload, bytes that fail a check on the way) must end the helper's
   // input with that failure, not leave it waiting for more.
   body.once("error", (error) => stream.destroy(error));
+  // The helper's exec may attach to the stream only after the failure: it
+  // reads `stream.errored` then. Until it does, the failure is not unhandled.
+  stream.on("error", () => {});
   body.pipe(stream);
   return { stream, exceeded: () => exceeded };
 }

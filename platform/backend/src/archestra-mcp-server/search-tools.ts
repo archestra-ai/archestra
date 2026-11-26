@@ -29,7 +29,10 @@ import type {
   TargetInstallCaller,
   TokenAuthContext,
 } from "@/clients/mcp-client";
-import { withoutFileArguments } from "@/clients/mcp-files/file-input";
+import {
+  schemaDeclaresFileInput,
+  withoutFileArguments,
+} from "@/clients/mcp-files/file-input";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -696,6 +699,16 @@ async function getSearchableTools(params: {
         )
       : null;
     if (isKnowledge && !knowledgeDescription) continue;
+    // A caller that cannot send files is not offered another server's file
+    // tool, as tools/list does not list it; a built-in is shown without its
+    // file argument instead.
+    if (
+      !params.includeFileArguments &&
+      tool.catalogId !== ARCHESTRA_MCP_CATALOG_ID &&
+      schemaDeclaresFileInput(tool.parameters ?? null)
+    ) {
+      continue;
+    }
     candidates.set(
       tool.name,
       toAssignedToolCandidate({

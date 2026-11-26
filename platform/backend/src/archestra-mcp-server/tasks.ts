@@ -1521,9 +1521,7 @@ const registry = defineArchestraTools([
         .min(1)
         .max(4096)
         .optional()
-        .describe(
-          "Absolute path on this machine, used to build the command. Required unless file is passed.",
-        ),
+        .describe("Absolute path on this machine, used to build the command."),
       size: z
         .number()
         .int()
@@ -3042,10 +3040,6 @@ async function runtimeCrossingForStart(
 }
 
 /**
- * Only metadata and a command cross this boundary. The file itself moves over
- * HTTP, so its bytes never reach a model context.
- */
-/**
  * An upload whose bytes come with the call, under the MCP File Uploads
  * extension: inline, or uploaded to the gateway, which streams them into a
  * ticket minted here. The ticket is the same authority a command would get,
@@ -3127,6 +3121,10 @@ async function uploadFileArgument(params: {
   }
 }
 
+/**
+ * Only metadata and a command cross this boundary. The file itself moves over
+ * HTTP, so its bytes never reach a model context.
+ */
 function transferResult(params: {
   args: { direction: "download" | "upload"; local_path: string };
   minted: Awaited<ReturnType<typeof workspaceTransferTickets.mintUpload>>;

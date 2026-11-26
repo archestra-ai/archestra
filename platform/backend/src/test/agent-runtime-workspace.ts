@@ -18,8 +18,16 @@ import type { Agent } from "@/types";
  * @public — test double, consumed only by tests.
  */
 
-/** The in-Pod helper, as far as the ticket service can tell. */
-export function fakeWorkspacePod(file: Buffer = Buffer.alloc(0)) {
+/**
+ * The in-Pod helper, as far as the ticket service can tell. Like the real
+ * one, it stages an entry exclusively and keeps what arrived before its input
+ * failed. `inputDelayMs` holds off reading the input, as a Pod lookup before
+ * the exec does.
+ */
+export function fakeWorkspacePod(
+  file: Buffer = Buffer.alloc(0),
+  options: { inputDelayMs?: number } = {},
+) {
   vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
   const staged = new Map<string, Buffer>();
   const finalized: string[][] = [];
@@ -31,10 +39,24 @@ export function fakeWorkspacePod(file: Buffer = Buffer.alloc(0)) {
         case "stat":
           return { ok: true, path: rest[0], present: false };
         case "write-stream": {
+          if (staged.has(rest[0])) {
+            throw new Error(`[Errno 17] File exists: ${rest[0]}`);
+          }
+          staged.set(rest[0], Buffer.alloc(0));
+          if (options.inputDelayMs) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, options.inputDelayMs),
+            );
+          }
           const parts: Buffer[] = [];
-          for await (const chunk of stdin ?? []) parts.push(Buffer.from(chunk));
+          try {
+            for await (const chunk of stdin ?? []) {
+              parts.push(Buffer.from(chunk));
+            }
+          } finally {
+            staged.set(rest[0], Buffer.concat(parts));
+          }
           const stored = Buffer.concat(parts);
-          staged.set(rest[0], stored);
           return {
             ok: true,
             upload_id: rest[0],
@@ -62,6 +84,7 @@ export function fakeWorkspacePod(file: Buffer = Buffer.alloc(0)) {
             ino: "1",
           };
         case "discard":
+          staged.delete(rest[0]);
           return { ok: true, discarded: rest[0] };
         default:
           throw new Error(`unexpected helper command: ${args.join(" ")}`);

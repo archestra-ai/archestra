@@ -178,6 +178,25 @@ test("input that fails mid-stream ends the command with that failure", async () 
   expect(boundary.terminate).toHaveBeenCalledOnce();
 });
 
+test("input that failed before the command started ends it with that failure", async () => {
+  const boundary = connection();
+  const stdin = new PassThrough();
+  stdin.on("error", () => {});
+  stdin.destroy(new Error("caller went away"));
+  // The failure has been emitted and is gone by the time the command starts.
+  await new Promise((resolve) => setImmediate(resolve));
+  await expect(
+    execAgentRuntimeCommand({
+      exec: boundary,
+      namespace: "test",
+      podName: "workspace",
+      container: "agent-runtime",
+      command: ["cat"],
+      stdin,
+    }),
+  ).rejects.toThrow("caller went away");
+});
+
 function connection() {
   const terminate = vi.fn();
   const socket = Object.assign(new EventEmitter(), {

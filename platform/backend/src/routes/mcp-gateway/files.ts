@@ -360,15 +360,14 @@ export class GatewayFileCall {
     sessionId: string,
   ): Promise<UpstreamHttpCallOutcome> {
     const { agentId, toolName, principal } = this.context;
-    const session = await cacheManager.get<UploadSession>(
-      sessionKey(sessionId),
-      {
-        throwOnError: true,
-      },
-    );
+    const session = await cacheManager.get<
+      UploadSession | { kind: "built-in" }
+    >(sessionKey(sessionId), {
+      throwOnError: true,
+    });
     if (!session) return this.answerWith(rpcError(spentStateError()));
     if (
-      session.kind !== "upstream" ||
+      session.kind === "built-in" ||
       session.agentId !== agentId ||
       session.toolName !== toolName ||
       session.principal !== principal
@@ -652,7 +651,8 @@ export async function relayFileUpload(params: {
 // === Internal helpers ===
 
 type UploadSession = {
-  kind: "upstream";
+  /** Absent on records written before built-in tools took files. */
+  kind?: "upstream";
   agentId: string;
   toolName: string;
   principal: string;
@@ -662,7 +662,8 @@ type UploadSession = {
 };
 
 type RelayRecord = {
-  kind: "upstream";
+  /** Absent on records written before built-in tools took files. */
+  kind?: "upstream";
   relayId: string;
   agentId: string;
   toolName: string;
@@ -693,7 +694,7 @@ async function offerAgain(relay: RelayRecord | BuiltInRelay, sending: boolean) {
   if (remaining <= 0) return;
   if (
     sending &&
-    relay.kind === "upstream" &&
+    relay.kind !== "built-in" &&
     (relay.target.method ?? "PUT") !== "PUT"
   ) {
     return;

@@ -189,7 +189,8 @@ describe("relayed upload tickets", () => {
       sha256: digest(bytes),
     });
     expect(pod.finalized).toEqual([
-      [ticket.entryId, "inbox/relayed.txt", digest(bytes), "-", "0"],
+      // Each attempt at a relayed ticket stages under its own id.
+      [expect.any(String), "inbox/relayed.txt", digest(bytes), "-", "0"],
     ]);
     await expect(
       workspaceTransferTickets.resolveRelayed(minted.ticketId),

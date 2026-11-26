@@ -1232,7 +1232,7 @@ export async function createAgentServer(params: {
               toolCall: {
                 id: `blocked-${Date.now()}`,
                 name,
-                arguments: args || {},
+                arguments: redactBuiltInFileArguments(name, args ?? {}),
               },
               toolResult: blockedResult,
               userId: tokenAuth?.userId ?? null,
@@ -1293,72 +1293,72 @@ export async function createAgentServer(params: {
           });
 
           // Handle Archestra and agent delegation tools directly
-          const response = await startActiveMcpSpan({
-            toolName: name,
-            mcpServerName,
-            agent,
-            teams,
-            userTeams,
-            agentType: agent.agentType,
-            toolCallId: `archestra-${Date.now()}`,
-            toolArgs: recordedArgs,
-            user: mcpUser,
-            callback: async (span) => {
-              const runArchestraTool = () =>
-                executeArchestraTool(name, args, {
-                  openappaSession: params.openappaSession,
-                  currentToolCallId: params.currentToolCallId,
-                  agent: { id: agent.id, name: agent.name },
-                  agentId: agent.id,
-                  userId: tokenAuth?.serviceAccountId
-                    ? serviceAccountUserId(tokenAuth.serviceAccountId)
-                    : tokenAuth?.userId,
-                  organizationId: tokenAuth?.organizationId,
-                  tokenAuth,
-                  ...(runId ? { runId } : {}),
-                  mrtr: {
-                    enabled: mrtrEnabled,
-                    inputResponses: builtInMrtr?.inputResponses,
-                    clientCapabilities: mrtr?.clientCapabilities,
-                    round: mrtr?.round,
-                  },
-                  files: builtInFiles,
-                  inspectableReviewForm: params.cursorForms === true,
-                  elicitation: {
-                    elicit: createGatewayUserElicit({
-                      extra,
-                      mrtr: builtInMrtr,
-                      mrtrEnabled,
-                      cursorForms: params.cursorForms === true,
-                      agentId,
-                      toolName: name,
-                      requestMeta: request.params._meta as
-                        | Record<string, unknown>
-                        | undefined,
-                    }),
-                  },
+          const response = await builtInFiles.run(() =>
+            startActiveMcpSpan({
+              toolName: name,
+              mcpServerName,
+              agent,
+              teams,
+              userTeams,
+              agentType: agent.agentType,
+              toolCallId: `archestra-${Date.now()}`,
+              toolArgs: recordedArgs,
+              user: mcpUser,
+              callback: async (span) => {
+                const runArchestraTool = () =>
+                  executeArchestraTool(name, args, {
+                    openappaSession: params.openappaSession,
+                    currentToolCallId: params.currentToolCallId,
+                    agent: { id: agent.id, name: agent.name },
+                    agentId: agent.id,
+                    userId: tokenAuth?.serviceAccountId
+                      ? serviceAccountUserId(tokenAuth.serviceAccountId)
+                      : tokenAuth?.userId,
+                    organizationId: tokenAuth?.organizationId,
+                    tokenAuth,
+                    ...(runId ? { runId } : {}),
+                    mrtr: {
+                      enabled: mrtrEnabled,
+                      inputResponses: builtInMrtr?.inputResponses,
+                      clientCapabilities: mrtr?.clientCapabilities,
+                      round: mrtr?.round,
+                    },
+                    files: builtInFiles,
+                    inspectableReviewForm: params.cursorForms === true,
+                    elicitation: {
+                      elicit: createGatewayUserElicit({
+                        extra,
+                        mrtr: builtInMrtr,
+                        mrtrEnabled,
+                        cursorForms: params.cursorForms === true,
+                        agentId,
+                        toolName: name,
+                        requestMeta: request.params._meta as
+                          | Record<string, unknown>
+                          | undefined,
+                      }),
+                    },
+                  });
+                // run_tool reaches upstream servers, so its call can fail on an
+                // expired connection just like a direct one.
+                const result = await recoverExpiredAuthWithUrlElicitation({
+                  result: await runArchestraTool(),
+                  clientCapabilities: mrtr?.clientCapabilities,
+                  mrtrEnabled,
+                  inputResponses: mrtr?.inputResponses,
+                  extra: reauthExtra,
+                  rerun: runArchestraTool,
+                  agentId,
+                  toolName: name,
                 });
-              // run_tool reaches upstream servers, so its call can fail on an
-              // expired connection just like a direct one.
-              const result = await recoverExpiredAuthWithUrlElicitation({
-                result: await runArchestraTool(),
-                clientCapabilities: mrtr?.clientCapabilities,
-                mrtrEnabled,
-                inputResponses: mrtr?.inputResponses,
-                extra: reauthExtra,
-                rerun: runArchestraTool,
-                agentId,
-                toolName: name,
-              });
-              span.setAttribute(
-                ATTR_MCP_IS_ERROR_RESULT,
-                result.isError ?? false,
-              );
-              return result;
-            },
-          });
-
-          await builtInFiles.spend();
+                span.setAttribute(
+                  ATTR_MCP_IS_ERROR_RESULT,
+                  result.isError ?? false,
+                );
+                return result;
+              },
+            }),
+          );
 
           const durationSeconds = (Date.now() - startTime) / 1000;
           metrics.mcp.reportMcpToolCall({

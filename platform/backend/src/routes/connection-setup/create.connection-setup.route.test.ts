@@ -7,6 +7,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import {
   ConnectionSetupModel,
   LlmProviderApiKeyModel,
+  OrganizationModel,
   VirtualApiKeyModel,
 } from "@/models";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
@@ -140,6 +141,43 @@ describe("POST /api/connection-setups", () => {
       payload: selection,
     });
     expect(forbidden.statusCode, forbidden.body).toBe(403);
+  });
+
+  test("refuses Grok native-session setup when SuperGrok is turned off, while still allowing API-key passthrough", async () => {
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: {
+        xai: { plans: { personal: { hidden: true } } },
+      },
+    });
+
+    const nativeSetup = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "grok-build",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "xai",
+        proxyAuth: "native-session",
+      },
+    });
+    expect(nativeSetup.statusCode, nativeSetup.body).toBe(400);
+    expect(nativeSetup.json().error.message).toContain(
+      "SuperGrok is turned off",
+    );
+
+    const passthroughSetup = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "grok-build",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "xai",
+        proxyAuth: "provider-key",
+      },
+    });
+    expect(passthroughSetup.statusCode, passthroughSetup.body).toBe(200);
   });
 
   test.each([

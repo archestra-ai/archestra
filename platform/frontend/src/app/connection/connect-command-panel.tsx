@@ -416,12 +416,23 @@ export function ConnectCommandPanel({
   // OpenCode and Kilo Code get one virtual key for many providers. Other
   // clients get a virtual key when an admin mapped keys for them, and
   // otherwise keep the user's own provider key or subscription.
+  const grokNativeSessionAllowed =
+    !providerCatalog.isPersonalSubscriptionHidden("xai");
   const [grokAuthChoice, setGrokAuthChoice] = useState<
     "native-session" | "provider-key" | "virtual-key" | null
   >(null);
+  const effectiveGrokAuthChoice =
+    grokAuthChoice === "native-session" && !grokNativeSessionAllowed
+      ? null
+      : grokAuthChoice;
   const proxyAuth: ConnectProxyAuth =
     client.id === "grok-build"
-      ? (grokAuthChoice ?? "native-session")
+      ? (effectiveGrokAuthChoice ??
+        (grokNativeSessionAllowed
+          ? "native-session"
+          : adminMappedProviders.size > 0 && canAttribute === true
+            ? "virtual-key"
+            : "provider-key"))
       : client.id === "cursor" || client.id === "pi" || openCodeFamily
         ? "primary-providers"
         : adminMappedProviders.size > 0 && canAttribute === true
@@ -1378,9 +1389,11 @@ export function ConnectCommandPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="native-session">
-              {`Your ${providerCatalog.personalSubscriptionLabel("xai")} subscription (native login)`}
-            </SelectItem>
+            {grokNativeSessionAllowed ? (
+              <SelectItem value="native-session">
+                {`Your ${providerCatalog.personalSubscriptionLabel("xai")} subscription (native login)`}
+              </SelectItem>
+            ) : null}
             <SelectItem value="provider-key">
               Your own API key (passthrough)
             </SelectItem>
@@ -1578,12 +1591,7 @@ export function ConnectCommandPanel({
               </span>
             ) : effectiveProxyAuth === "native-session" ? (
               <span>
-                Reuses your native SuperGrok login, model names and model
-                selection. Grok refreshes its original credentials directly;
-                nothing is copied. Use /login inside Grok to renew your login.
-                {appName} protection appears in the session receipt. No API key
-                or organization model catalog is required. MCP authorization is
-                a separate sign-in.
+                {`Reuses your native ${providerCatalog.personalSubscriptionLabel("xai")} login, model names and model selection. Grok refreshes its original credentials directly; nothing is copied. Use /login inside Grok to renew your login. ${appName} protection appears in the session receipt. No API key or organization model catalog is required. MCP authorization is a separate sign-in.`}
               </span>
             ) : effectiveProxyAuth === "provider-key" ? (
               client.id === "claude-desktop" ? (
@@ -1593,7 +1601,7 @@ export function ConnectCommandPanel({
                 </span>
               ) : client.id === "grok-build" ? (
                 <span>
-                  {`Requests use your own ${provider === "xai" ? "XAI_API_KEY" : provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"}. The key stays on your computer until Grok sends it through the proxy. Choose native login instead to use your SuperGrok subscription.`}
+                  {`Requests use your own ${provider === "xai" ? "XAI_API_KEY" : provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"}. The key stays on your computer until Grok sends it through the proxy.${grokNativeSessionAllowed ? ` Choose native login instead to use your ${providerCatalog.personalSubscriptionLabel("xai")} subscription.` : ""}`}
                   {passthroughAttributes ? (
                     <span>
                       {" "}

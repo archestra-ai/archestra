@@ -92,6 +92,7 @@ import {
   CursorHookRequestSchema,
   handleCursorHook,
 } from "@/services/cursor-guardrails-hooks";
+import { assertPersonalSubscriptionAllowed } from "@/services/integration-overrides";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import {
@@ -713,6 +714,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let llmProxyId: string | null = null;
       if (provider || allPrimary) {
         assertConnectLlmProxyEnabled(organization);
+        if (proxyAuth === "native-session") {
+          await assertPersonalSubscriptionAllowed({
+            organizationId,
+            provider: "xai",
+          });
+        }
         llmProxyId = (
           await requireLlmProxyAccess({ organizationId, userId: user.id })
         ).id;

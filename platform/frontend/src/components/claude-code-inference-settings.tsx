@@ -50,7 +50,7 @@ export function ClaudeCodeInferenceSettings({
   const appName = useAppName();
   return (
     <AgentAccountWays
-      label="Accounts that can run it"
+      label="Credentials to use"
       // Each person's own sign-in and model are theirs to set, on the
       // agent's page. Here the option only says the way is allowed.
       subscription={CLAUDE_SUBSCRIPTION_CARD}

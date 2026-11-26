@@ -1033,8 +1033,8 @@ function RuntimeAccountsRow({
     <ConfigurationRow
       id={id}
       value="accounts"
-      title="Accounts that can run it"
-      description="Which accounts agents on this runtime may allow. Changes apply to every agent as soon as you save."
+      title="Credentials to use"
+      description="Which credentials agents on this runtime may allow. Changes apply to every agent as soon as you save."
       summary={accounts.summary}
       attention={accounts.noAccount ? "Select at least one option." : undefined}
     >

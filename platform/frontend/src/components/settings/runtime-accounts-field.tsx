@@ -204,7 +204,7 @@ export function runtimeAccountsAfter(params: {
 
 // ===
 
-const LABEL = "Accounts that can run it";
+const LABEL = "Credentials to use";
 
 /**
  * The fixed connection or model was deleted since it was saved: said in the

@@ -224,7 +224,7 @@ describe("an agent's account lock at run time", () => {
 
         if (ignored) {
           expect(choiceIgnored).toBe(
-            `This agent is locked to ${lock === "key" ? "a company API key" : "each person's own subscription"}, so your own choice is not used.`,
+            `This agent is locked to ${lock === "key" ? "an API key" : "each person's own subscription"}, so your own choice is not used.`,
           );
           expect(account.source).toBe("agent");
         } else {
@@ -332,7 +332,7 @@ describe("an agent's account lock at run time", () => {
       await expect(launch({ agent, runtime })).rejects.toMatchObject({
         statusCode: 409,
         message: expect.stringContaining(
-          "locked to a company API key, but this run would use another key than the one set for it, or none",
+          "locked to an API key, but this run would use another key than the one set for it, or none",
         ),
       });
     });
@@ -538,7 +538,7 @@ describe("an agent's account lock at run time", () => {
       await expect(launch({ agent, runtime })).rejects.toMatchObject({
         statusCode: 409,
         message: expect.stringContaining(
-          "locked to a company API key, but this run would use a personal subscription",
+          "locked to an API key, but this run would use a personal subscription",
         ),
       });
     });

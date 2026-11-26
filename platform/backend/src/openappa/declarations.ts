@@ -569,16 +569,22 @@ class OpenAppaDeclarations {
       settings?.enforcedMarks ??
       (await GuardrailsDeploymentModel.get()).enforcedMarks ??
       [];
-    const refusals = await native.checkOpenappaLines(
+    const { refusals, withheld } = await native.checkOpenappaLines(
       content,
       enforcedMarks,
       settings && [...settings.lines],
     );
-    return refusals.map(({ variant, error }) =>
-      variant === "observe"
-        ? `Observe can't run with this policy, so new sessions follow Enforce: ${error}`
-        : `Automatic approval for requests a person would answer can't run with this policy, so those requests still ask a person: ${error}`,
-    );
+    return [
+      ...refusals.map(({ variant, error }) =>
+        variant === "observe"
+          ? `Observe can't run with this policy, so new sessions follow Enforce: ${error}`
+          : `Automatic approval for requests a person would answer can't run with this policy, so those requests still ask a person: ${error}`,
+      ),
+      ...withheld.map(
+        ({ mark, enforcedTools, otherTools }) =>
+          `Mark ${JSON.stringify(mark)} is withheld because ${toolList("the enforced", enforcedTools)} may require it, so the approvers Observe and automatic approval add skip it for every tool, including ${toolList("untagged", otherTools)}.`,
+      ),
+    ];
   }
 
   /**
@@ -819,5 +825,11 @@ export function grantKey(grant: Pick<Grant, "battery" | "variable">): string {
 }
 
 const loadNative = () => import("@archestra/openappa-rs");
+
+/** `the enforced tool "a"`, or `untagged tools "a", "b"`. */
+function toolList(qualifier: string, tools: string[]): string {
+  const names = tools.map((tool) => JSON.stringify(tool)).join(", ");
+  return `${qualifier} ${tools.length === 1 ? "tool" : "tools"} ${names}`;
+}
 
 const RESOLVE_CONCURRENCY = 4;

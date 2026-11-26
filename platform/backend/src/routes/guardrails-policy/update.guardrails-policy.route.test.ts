@@ -328,6 +328,26 @@ describe("guardrails policy authoring", () => {
     expect(capped.warnings).toHaveLength(2);
   });
 
+  test("validation warns when an enforced tool withholds a mark other tools require", async () => {
+    const shared = (other: string) =>
+      `[policy]\nversion = 2\n[[policy.tool]]\nname = "export"\ntags = ["enforced"]\ndelta = {}\nrequires = { attention = ["pii"] }\n[[policy.tool]]\nname = "share"\ndelta = {}\nrequires = { attention = ["${other}"] }\n`;
+    const validate = async (text: string) =>
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/guardrails-policy/validate",
+          payload: { content: text },
+        })
+      ).json();
+    const withheld = await validate(shared("pii"));
+    expect(withheld.valid).toBe(true);
+    expect(withheld.warnings).toHaveLength(1);
+    expect(await validate(shared("review"))).toMatchObject({
+      valid: true,
+      warnings: [],
+    });
+  });
+
   test("rejects invalid contracts and container access without replacing a saved policy", async () => {
     await app.inject({
       method: "PUT",

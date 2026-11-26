@@ -753,6 +753,46 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     });
   });
 
+  test("a settings save warns when an enforced tool withholds a mark other tools require", async () => {
+    const shared = (other: string) =>
+      `[policy]\nversion = 2\n[[policy.tool]]\nname = "export"\ntags = ["enforced"]\ndelta = {}\nrequires = { attention = ["pii"] }\n[[policy.tool]]\nname = "share"\ndelta = {}\nrequires = { attention = ["${other}"] }\n`;
+    const serve = async (content: string, expectedRevision: number) => {
+      await GuardrailsPolicyModel.saveDeclarationMigration({
+        organizationId,
+        content,
+        contentHash: createHash("sha256").update(content).digest("hex"),
+        expectedRevision,
+      });
+      await openappaBatteriesService.recompile(organizationId);
+    };
+    const save = async (payload: Record<string, unknown>) => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json().warnings as string[];
+    };
+
+    await serve(shared("pii"), 0);
+    expect(await save({ mode: "observe" })).toHaveLength(1);
+    expect(
+      await save({ enforcedMarks: ["pii"] }),
+      "a mark the settings enforce is withheld by choice",
+    ).toEqual([]);
+    await save({ enforcedMarks: [] });
+    expect(
+      await save({ mode: "enforce", personApproval: "ask" }),
+      "Enforce adds no approvers to skip it",
+    ).toEqual([]);
+    await serve(shared("review"), 1);
+    expect(
+      await save({ mode: "observe" }),
+      "a mark only the enforced tool requires surprises no one",
+    ).toEqual([]);
+  });
+
   test("a composition of a shipped root the release has since changed is not checked as current", async () => {
     await openappaBatteriesService.recompile(organizationId);
     const observe: GuardrailsSettings = {

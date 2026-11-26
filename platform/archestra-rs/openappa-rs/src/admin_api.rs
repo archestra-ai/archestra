@@ -228,16 +228,34 @@ pub struct LineRefusal {
     pub error: String,
 }
 
+/// A mark the approvers a line adds skip for every tool, because an `enforced` tool may
+/// require it, that tools without the tag require too.
+#[napi(object)]
+pub struct WithheldMark {
+    pub mark: String,
+    pub enforced_tools: Vec<String>,
+    pub other_tools: Vec<String>,
+}
+
+/// What a line check found: the lines that cannot carry their approvers, and the marks
+/// the approvers of the lines that do skip beyond the tools that caused it.
+#[napi(object)]
+pub struct LineCheck {
+    pub refusals: Vec<LineRefusal>,
+    pub withheld: Vec<WithheldMark>,
+}
+
 /// Composes the named variant lines (absent: each one) over a document already composed
 /// by the host, as a dispatch would, and says why any of them cannot carry its
 /// approvers. Such a line serves the document alone, and sessions meant for it open on
-/// the Enforce line.
+/// the Enforce line. A line that adds approvers also reports the marks they withhold
+/// from tools without the `enforced` tag.
 #[napi(js_name = "checkOpenappaLines")]
 pub async fn check_openappa_lines(
     content: String,
     enforced_marks: Vec<String>,
     #[napi(ts_arg_type = "Array<'observe' | 'enforce-approved'>")] variants: Option<Vec<String>>,
-) -> napi::Result<Vec<LineRefusal>> {
+) -> napi::Result<LineCheck> {
     let enforced: std::collections::BTreeSet<String> = enforced_marks.into_iter().collect();
     let checked: Vec<crate::lines::Variant> = match variants {
         None => crate::lines::VARIANTS.to_vec(),
@@ -253,19 +271,32 @@ pub async fn check_openappa_lines(
     };
     tokio::task::spawn_blocking(move || {
         std::panic::catch_unwind(|| {
-            checked
-                .into_iter()
-                .filter_map(|variant| {
-                    crate::fragments::compose(&content, variant, &enforced)
-                        .err()
-                        .map(|error| LineRefusal {
-                            variant: variant.token().to_owned(),
-                            error,
-                        })
-                })
-                .collect()
+            let mut refusals = Vec::new();
+            let mut adds_approvers = false;
+            for variant in checked {
+                match crate::fragments::compose(&content, variant, &enforced) {
+                    Ok(composed) => adds_approvers |= composed != content,
+                    Err(error) => refusals.push(LineRefusal {
+                        variant: variant.token().to_owned(),
+                        error,
+                    }),
+                }
+            }
+            let withheld = match adds_approvers {
+                true => crate::fragments::shared_withheld_marks(&content, &enforced)
+                    .map_err(invalid_input)?
+                    .into_iter()
+                    .map(|shared| WithheldMark {
+                        mark: shared.mark,
+                        enforced_tools: shared.enforced_tools,
+                        other_tools: shared.other_tools,
+                    })
+                    .collect(),
+                false => Vec::new(),
+            };
+            Ok(LineCheck { refusals, withheld })
         })
-        .map_err(|_| panicked("OpenAPPA line check failed"))
+        .map_err(|_| panicked("OpenAPPA line check failed"))?
     })
     .await
     .map_err(panicked)?

@@ -54,9 +54,10 @@ export interface BatteryTargetView {
  * Composes the named variant lines (absent: each one) over a document already composed
  * by the host, as a dispatch would, and says why any of them cannot carry its
  * approvers. Such a line serves the document alone, and sessions meant for it open on
- * the Enforce line.
+ * the Enforce line. A line that adds approvers also reports the marks they withhold
+ * from tools without the `enforced` tag.
  */
-export declare function checkOpenappaLines(content: string, enforcedMarks: Array<string>, variants?: Array<'observe' | 'enforce-approved'>): Promise<Array<LineRefusal>>
+export declare function checkOpenappaLines(content: string, enforcedMarks: Array<string>, variants?: Array<'observe' | 'enforce-approved'>): Promise<LineCheck>
 
 export interface ChildAddressRecord {
   /** Fully scoped session id of the parent that addressed the child. */
@@ -268,6 +269,15 @@ export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): 
  */
 export declare function inspectOpenappaPolicyTests(input: string): Promise<string>
 
+/**
+ * What a line check found: the lines that cannot carry their approvers, and the marks
+ * the approvers of the lines that do skip beyond the tools that caused it.
+ */
+export interface LineCheck {
+  refusals: Array<LineRefusal>
+  withheld: Array<WithheldMark>
+}
+
 /** A line that cannot carry its approvers over a composed document. */
 export interface LineRefusal {
   variant: 'observe' | 'enforce-approved'
@@ -452,3 +462,13 @@ export interface TokenEnvReader {
  * Validation defers secret lookup and opens no store or network connection.
  */
 export declare function validateHostedOpenappaPolicy(content: string): Promise<Array<string>>
+
+/**
+ * A mark the approvers a line adds skip for every tool, because an `enforced` tool may
+ * require it, that tools without the tag require too.
+ */
+export interface WithheldMark {
+  mark: string
+  enforcedTools: Array<string>
+  otherTools: Array<string>
+}

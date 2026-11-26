@@ -171,29 +171,78 @@ fn enforced_exception(registry: &Registry) -> Vec<String> {
     }
 }
 
+/// The marks a tool may require: those it declares, or every mark its annotator may
+/// answer (whose omitted `marks` the registry reads as every declared mark).
+fn required_marks<'a>(registry: &'a Registry, tool: &'a ToolDeclaration) -> Vec<&'a str> {
+    match tool {
+        ToolDeclaration::Declared(annotation) => annotation
+            .requires
+            .attention
+            .iter()
+            .map(|mark| mark.as_str())
+            .collect(),
+        ToolDeclaration::Annotated { annotator, .. } => registry
+            .annotators()
+            .filter(|(name, _)| *name == annotator)
+            .flat_map(|(_, mandate)| mandate.marks().map(|mark| mark.as_str()))
+            .collect(),
+    }
+}
+
 /// The marks no injected approver attends: the enforced ones, and every mark an
-/// `enforced` tool may require, declared or answered by its annotator (whose omitted
-/// `marks` the registry reads as every declared mark), since attention routes by mark
-/// and never reads tags.
+/// `enforced` tool may require, since attention routes by mark and never reads tags.
 fn withheld_marks(registry: &Registry, enforced_marks: &BTreeSet<String>) -> BTreeSet<String> {
     registry
         .tools()
         .filter(|tool| enforced(tool))
-        .flat_map(|tool| match tool {
-            ToolDeclaration::Declared(annotation) => annotation
-                .requires
-                .attention
-                .iter()
-                .map(|mark| mark.as_str().to_owned())
-                .collect::<Vec<_>>(),
-            ToolDeclaration::Annotated { annotator, .. } => registry
-                .annotators()
-                .filter(|(name, _)| *name == annotator)
-                .flat_map(|(_, mandate)| mandate.marks().map(|mark| mark.as_str().to_owned()))
-                .collect(),
-        })
+        .flat_map(|tool| required_marks(registry, tool))
+        .map(str::to_owned)
         .chain(enforced_marks.iter().cloned())
         .collect()
+}
+
+/// A mark [`withheld_marks`] takes from an `enforced` tool that tools without the tag
+/// require too: the injected approvers skip it for them as well.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct SharedWithheldMark {
+    pub(crate) mark: String,
+    pub(crate) enforced_tools: Vec<String>,
+    pub(crate) other_tools: Vec<String>,
+}
+
+/// Every [`SharedWithheldMark`] of the composed document. A mark the settings enforce
+/// is withheld by choice, and `blocked` is never attended, so neither is reported.
+pub(crate) fn shared_withheld_marks(
+    content: &str,
+    enforced_marks: &BTreeSet<String>,
+) -> Result<Vec<SharedWithheldMark>, String> {
+    let document: toml::Table = toml::from_str(content).map_err(|error| error.to_string())?;
+    let read = Read::of(content, &document)?;
+    let registry = read.policy.engine().registry();
+    let mut requirers: BTreeMap<&str, (BTreeSet<&str>, BTreeSet<&str>)> = BTreeMap::new();
+    for tool in registry.tools() {
+        for mark in required_marks(registry, tool) {
+            if mark == appa_engine::names::MarkName::BLOCKED || enforced_marks.contains(mark) {
+                continue;
+            }
+            let (enforced_tools, other_tools) = requirers.entry(mark).or_default();
+            match enforced(tool) {
+                true => enforced_tools,
+                false => other_tools,
+            }
+            .insert(tool.name().as_str());
+        }
+    }
+    Ok(requirers
+        .into_iter()
+        .filter_map(|(mark, (enforced_tools, other_tools))| {
+            (!enforced_tools.is_empty() && !other_tools.is_empty()).then(|| SharedWithheldMark {
+                mark: mark.to_owned(),
+                enforced_tools: enforced_tools.into_iter().map(str::to_owned).collect(),
+                other_tools: other_tools.into_iter().map(str::to_owned).collect(),
+            })
+        })
+        .collect())
 }
 
 /// The marks an injected approver may attend: the given ones, never `blocked` or a
@@ -707,6 +756,64 @@ url = "https://judge.example/rule"
         assert_eq!(
             compose(&none, Variant::EnforceApproved, &BTreeSet::new()).unwrap(),
             none
+        );
+    }
+
+    /// HITL with `export` tagged `enforced` and `share`, untagged, requiring `pii` too.
+    fn shared_pii() -> String {
+        HITL.replace(
+            "name = \"host/archestra/export\"\n",
+            "name = \"host/archestra/export\"\ntags = [\"enforced\"]\n",
+        ) + "\n[[policy.tool]]\nname = \"host/archestra/share\"\ndelta = {}\nrequires = { attention = [\"pii\", \"review\"] }\n"
+    }
+
+    #[test]
+    fn a_mark_an_enforced_tool_withholds_from_an_untagged_tool_is_reported() {
+        let content = shared_pii();
+        assert_eq!(
+            shared_withheld_marks(&content, &enforced(&[])).unwrap(),
+            vec![SharedWithheldMark {
+                mark: "pii".to_owned(),
+                enforced_tools: vec!["host/archestra/export".to_owned()],
+                other_tools: vec!["host/archestra/share".to_owned()],
+            }],
+            "review is required by no enforced tool, so it is not withheld"
+        );
+        let observe = composed(&content, Variant::Observe, &[]);
+        let attention = list(
+            &permits(&authority(&observe, OBSERVE_APPROVER).expect("the observe approver")),
+            "attention",
+        );
+        assert_eq!(
+            attention,
+            Some(vec!["review".to_owned()]),
+            "the reported mark is the one the approver skips"
+        );
+    }
+
+    #[test]
+    fn a_mark_withheld_by_choice_or_only_from_enforced_tools_is_not_reported() {
+        assert_eq!(
+            shared_withheld_marks(&shared_pii(), &enforced(&["pii"])).unwrap(),
+            Vec::new(),
+            "the settings enforce pii, so withholding it is no surprise"
+        );
+        let alone = HITL.replace(
+            "name = \"host/archestra/export\"\n",
+            "name = \"host/archestra/export\"\ntags = [\"enforced\"]\n",
+        );
+        assert_eq!(
+            shared_withheld_marks(&alone, &enforced(&[])).unwrap(),
+            Vec::new()
+        );
+        let blocked = HITL.replace(
+            "name = \"host/archestra/wipe\"\n",
+            "name = \"host/archestra/wipe\"\ntags = [\"enforced\"]\n",
+        ) + "\n[[policy.tool]]\nname = \"host/archestra/purge\"\ndelta = {}\nrequires = { attention = [\"blocked\"] }\n";
+        assert_eq!(
+            shared_withheld_marks(&blocked, &enforced(&[])).unwrap(),
+            Vec::new(),
+            "no approver attends blocked anyway"
         );
     }
 

@@ -721,7 +721,7 @@ jobs:
       # credentials unpersisted and scope the read-only job token to this
       # pinned action via Git's runtime configuration.
       - name: Check new Cargo dependency release ages
-        uses: archestra-ai/.github/actions/cargo-release-age@v1.31.1
+        uses: archestra-ai/.github/actions/cargo-release-age@v1.32.0
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -826,7 +826,7 @@ jobs:
 
       - name: Check new Cargo dependency release ages
         if: runner.os == 'Linux' && steps.base-lockfile.outputs.present == 'true'
-        uses: archestra-ai/.github/actions/cargo-release-age@v1.31.1
+        uses: archestra-ai/.github/actions/cargo-release-age@v1.32.0
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -1352,7 +1352,7 @@ jobs:
       # variable (it has actions_variables:write).
       - name: Generate token for the kill switch
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@v1.31.1
+        uses: archestra-ai/.github/actions/github-app-token@v1.32.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}

@@ -131,7 +131,7 @@ jobs:
       # release-publisher; an older line's patch keeps the newer line latest.
       - name: Publish GitHub release
         id: publish
-        uses: archestra-ai/.github/actions/release-finalize@v1.31.1
+        uses: archestra-ai/.github/actions/release-finalize@v1.32.0
         with:
           operation: publish
           token: ${{ github.token }}
@@ -210,7 +210,7 @@ jobs:
       # The App token makes the new pull request run ordinary CI.
       - name: Generate releaser token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@v1.31.1
+        uses: archestra-ai/.github/actions/github-app-token@v1.32.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

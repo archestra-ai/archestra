@@ -1,18 +1,32 @@
 import { E2eTestId } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   bulkDeleteMembers: vi.fn(),
   canImpersonate: vi.fn(() => false),
   impersonateUser: vi.fn(),
+  removeMember: vi.fn(),
 }));
 
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/organization.query");
-vi.mock("@/lib/member.query", () => ({
+vi.mock("sonner");
+vi.mock("@/lib/clients/auth/auth-client", () => ({
+  authClient: { organization: { removeMember: mocks.removeMember } },
+}));
+vi.mock("@/lib/member.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/member.query")>()),
   useAllMatchingMembers: vi.fn(() => ({ data: [], isFetching: false })),
   useBulkDeleteMembers: vi.fn(() => ({
     mutate: mocks.bulkDeleteMembers,
@@ -25,7 +39,6 @@ vi.mock("@/lib/member.query", () => ({
     isFetching: false,
   })),
   useCancelInvitationMutation: vi.fn(() => ({ mutateAsync: vi.fn() })),
-  useRemoveMember: vi.fn(() => ({ mutateAsync: vi.fn() })),
   useUpdateMemberRole: vi.fn(() => ({
     mutateAsync: vi.fn(),
     isPending: false,
@@ -169,6 +182,54 @@ beforeEach(() => {
 });
 
 describe("Users settings — members table", () => {
+  it("keeps failed removals retryable without an unhandled rejection and closes only after success", async () => {
+    const member = makeMember(1);
+    let refuseRemoval!: (response: unknown) => void;
+    mocks.removeMember.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          refuseRemoval = resolve;
+        }),
+    );
+    renderPage({ members: [member], total: 1 });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Remove user ${member.email}` }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Remove User" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", { name: "Removing..." }),
+      ).toBeDisabled(),
+    );
+    expect(mocks.removeMember).toHaveBeenCalledWith({
+      memberIdOrEmail: member.id,
+    });
+
+    await act(async () =>
+      refuseRemoval({ error: { message: "User is no longer a member" } }),
+    );
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Failed to remove member", {
+        description: "User is no longer a member",
+      }),
+    );
+    expect(dialog).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Remove" }),
+    ).toBeEnabled();
+    expect(toast.success).not.toHaveBeenCalled();
+
+    mocks.removeMember.mockResolvedValueOnce({ data: { id: member.id } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(mocks.removeMember).toHaveBeenCalledTimes(2);
+    expect(toast.success).toHaveBeenCalledWith("Member removed");
+  });
+
   it("offers view-as for every listed member except the caller", () => {
     mocks.canImpersonate.mockReturnValue(true);
     const self = { ...makeMember(1), userId: CURRENT_USER_ID };

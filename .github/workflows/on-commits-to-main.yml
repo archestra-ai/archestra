@@ -24,67 +24,6 @@ permissions: {}
 #     queued deploys collapse to the newest commit
 
 jobs:
-  deploy-dev-platform-images:
-    name: Build Platform Staging and MCP Server Base Images
-    # A newer commit's build supersedes an in-flight one, so cancel it and let
-    # the build for the newest commit start immediately (it can also run while
-    # the previous commit's deploy is still in progress)
-    concurrency:
-      group: on-commits-to-main-build-${{ github.ref }}
-      cancel-in-progress: true
-    uses: $/.github/workflows/deploy-dev-platform-images.yml
-    permissions:
-      contents: read # Required to invoke the reusable image publishing workflow.
-      packages: write # Publish development images and build caches to GHCR.
-      id-token: write # Required for Workload Identity Federation.
-      attestations: write # Passed to the image build, which attests CI images.
-    with:
-      version: ${{ github.sha }}
-    secrets:
-      DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-      # Passed by name so the staging-build environment can supply the value.
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
-
-  deploy-to-staging:
-    name: Deploy to staging
-    needs: [deploy-dev-platform-images]
-    # Do not cancel an in-flight Helm upgrade; pending runs collapse to the latest commit.
-    concurrency:
-      group: on-commits-to-main-deploy-${{ github.ref }}
-      cancel-in-progress: false
-    uses: $/.github/workflows/deploy-platform-environment.yml
-    permissions:
-      contents: read # Required by the reusable workflow to check out the chart.
-      id-token: write # Required for Google Workload Identity Federation.
-    with:
-      environment: staging
-      version: ${{ github.sha }}
-    secrets:
-      GCP_DEPLOY_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
-  deploy-to-demo:
-    name: Deploy demo instance
-    needs: [deploy-dev-platform-images]
-    concurrency:
-      group: on-commits-to-main-demo-${{ github.ref }}
-      cancel-in-progress: false
-    uses: $/.github/workflows/deploy-platform-environment.yml
-    permissions:
-      contents: read # Required by the reusable workflow to check out the chart.
-      id-token: write # Required for Google Workload Identity Federation.
-    with:
-      environment: demo
-      version: ${{ github.sha }}
-    secrets:
-      GCP_DEPLOY_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
-  # Publishes an exact-source cache of backend NAPI binaries on main so fresh
-  # PR and merge-group runs can skip the much larger Cargo target restore.
-  # On a miss, the existing Cargo cache and build remain the fallback.
-  # See backend-test-dependencies in on-pull-requests.yml for the consumer.
   warm-backend-build-cache:
     name: Warm Backend Build Cache
     runs-on: ${{ true && 'archestra-gce-8core-spot' || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.

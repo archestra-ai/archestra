@@ -513,6 +513,33 @@ describe("discoverGithubMarketplace", () => {
     );
   });
 
+  test("says a missing repository was not found when the quota is used up as well", async () => {
+    // The API refuses for the quota, so the lookup goes over Git, and Git
+    // answers in its own words for a terminal.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { message: "API rate limit exceeded for 203.0.113.7." },
+          { status: 403, headers: { "x-ratelimit-remaining": "0" } },
+        ),
+      ),
+    );
+    gitFallback.resolvePublicGithubCommit.mockRejectedValue(
+      new Error(
+        "Public Git ref lookup failed for nobody/missing@HEAD: remote: Repository not found.\nfatal: repository 'https://github.com/nobody/missing.git/' not found",
+      ),
+    );
+
+    const failure = await discoverGithubMarketplace({
+      repoUrl: "nobody/missing",
+    }).catch((error: Error) => error);
+
+    expect((failure as Error).message).toBe(
+      "Repository nobody/missing was not found.",
+    );
+  });
+
   test("falls back to public Git when the anonymous REST quota is exhausted", async () => {
     const fetchMock = stubGithub([
       {

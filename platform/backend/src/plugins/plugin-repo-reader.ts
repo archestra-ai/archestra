@@ -280,8 +280,14 @@ class GithubCloudReader implements PluginRepoReader {
         signal: params.signal,
       });
     } catch (error) {
+      // Git's own words ("remote: Repository not found. fatal: ...") are for
+      // a terminal. A repository Git cannot find is the same answer the API
+      // gives with 404; anything else is the quota, which is why this path
+      // ran at all.
       throw new Error(
-        `Could not resolve ref "${params.ref}" in ${params.repository.slug} after the anonymous GitHub API quota was exhausted: ${errorMessage(error)}`,
+        /repository[^\n]*not found/i.test(errorMessage(error))
+          ? `Repository ${params.repository.slug} was not found.`
+          : `Could not read ${params.repository.slug}: GitHub's request limit is used up, and reading it over Git failed too. Try again later.`,
       );
     }
   }

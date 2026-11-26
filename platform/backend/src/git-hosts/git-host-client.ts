@@ -541,9 +541,11 @@ async function toError(
         response.headers.get("ratelimit-remaining") === "0" ||
         /rate limit/i.test(detail)))
   ) {
+    // Without `what`: for most callers it is the request URL, which says
+    // nothing more than the caller's own "could not read <repository>".
     return new GitHostError(
       response.status,
-      `${what}: the host's request limit is used up. Try again later.`,
+      "the host's request limit is used up. Try again later.",
     );
   }
   const reason =

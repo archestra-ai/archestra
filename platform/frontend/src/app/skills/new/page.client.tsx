@@ -52,6 +52,7 @@ import {
 } from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
 import { SkillBackLink } from "../_parts/skill-page-shell";
+import { useNoVisibleSkills } from "../_parts/use-no-visible-skills";
 import { useSkillNameProblem } from "../_parts/use-skill-name-problem";
 
 type CreateStep = "source" | "configure";
@@ -105,6 +106,10 @@ function NewSkillWizard() {
     ? CREATE_STEPS.filter((s) => s.id !== "source")
     : CREATE_STEPS;
   const stepIndex = steps.findIndex((s) => s.id === effectiveStep);
+  // With no skill to list, this page is where Skills opens. Its first step
+  // then says what a skill is, and has no list to go back to.
+  const noSkills = useNoVisibleSkills();
+  const isFirstSkill = noSkills.hasNoSkills && stepIndex === 0;
 
   const [blankDraft] = useState<SkillDraft>(blankSkillDraft);
   const [draft, setDraft] = useState<SkillDraft>(blankDraft);
@@ -208,7 +213,11 @@ function NewSkillWizard() {
       <PageLayout
         title="Add a new skill"
         description={STEP_DESCRIPTIONS[effectiveStep]}
-        backLink={<SkillBackLink href="/skills" label="Skills" />}
+        backLink={
+          isFirstSkill ? undefined : (
+            <SkillBackLink href="/skills" label="Skills" />
+          )
+        }
         actionButton={
           <WizardStepper
             compact
@@ -223,8 +232,23 @@ function NewSkillWizard() {
         contentOverflowX="clip"
       >
         <div className="space-y-6">
-          {isOrganizationPending ? null : (
+          {/* Held until it is known whether any skill exists, so the step does
+              not jump down when the introduction arrives above it. */}
+          {isOrganizationPending || noSkills.isPending ? null : (
             <>
+              {isFirstSkill && (
+                <div className="max-w-2xl space-y-2">
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    Teach your agent
+                  </h2>
+                  <p className="leading-relaxed text-pretty text-muted-foreground">
+                    A skill is a set of reusable instructions, with optional
+                    scripts and reference files, that your agent loads when a
+                    task calls for it. Add ready skills from Git repositories or
+                    write your own. Then use them in chat as slash commands.
+                  </p>
+                </div>
+              )}
               {effectiveStep === "source" && (
                 <div className="space-y-8">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -362,9 +386,15 @@ function NewSkillWizard() {
                   />
                   <WizardFooter>
                     {catalogDisabled ? (
-                      <Button variant="outline" asChild>
-                        <Link href="/skills">Cancel</Link>
-                      </Button>
+                      noSkills.hasNoSkills ? (
+                        // No list to cancel back to; the empty item keeps
+                        // Create on the right.
+                        <span aria-hidden />
+                      ) : (
+                        <Button variant="outline" asChild>
+                          <Link href="/skills">Cancel</Link>
+                        </Button>
+                      )
                     ) : (
                       <Button
                         variant="outline"

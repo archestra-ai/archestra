@@ -250,6 +250,88 @@ describe("SkillsPage rows", () => {
     mockSkills([MINE]);
   });
 
+  describe("with no skill to list", () => {
+    const replace = vi.fn();
+    beforeEach(() => {
+      replace.mockClear();
+      vi.mocked(useRouter).mockReturnValue({
+        push: vi.fn(),
+        replace,
+      } as unknown as ReturnType<typeof useRouter>);
+      mockSkills([]);
+    });
+
+    it("opens the page that adds the first skill", () => {
+      render(<SkillsPage />);
+
+      // Replaced, so Back does not return to a page that sends forward again.
+      expect(replace).toHaveBeenCalledWith("/skills/new");
+      // Nothing of a list, and no landing panel, on the way there.
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(screen.queryByText("No skills yet")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /Add new skill/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("stays on the list while a skill from an MCP server is visible", () => {
+      vi.mocked(useExternalMcpSkills).mockReturnValue({
+        data: [
+          {
+            source: "external_mcp",
+            id: "22222222-2222-4222-8222-222222222222",
+            catalogId: "33333333-3333-4333-8333-333333333333",
+            mcpServerId: "44444444-4444-4444-8444-444444444444",
+            scope: "org",
+            serverName: "Release server",
+            icon: null,
+            name: "release-notes",
+            description: "Prepare release notes.",
+            uri: "skill://release/SKILL.md",
+            resources: null,
+          },
+        ],
+        isFetching: false,
+        // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+      } as any);
+      render(<SkillsPage />);
+
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it("tells a reader who cannot add a skill who shares them, and sends them nowhere", () => {
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions: Record<string, string[]>) =>
+          ({
+            data: !(permissions.skill ?? []).includes("create"),
+            // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+          }) as any,
+      );
+      render(<SkillsPage />);
+
+      expect(replace).not.toHaveBeenCalled();
+      expect(screen.getByText("No skills yet")).toBeVisible();
+      expect(
+        screen.getByText("Your admins haven't shared a skill yet."),
+      ).toBeVisible();
+    });
+
+    it("waits for permissions before sending anyone on", () => {
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions: Record<string, string[]>) =>
+          ({
+            data: undefined,
+            isPending: (permissions.skill ?? []).includes("create"),
+            // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+          }) as any,
+      );
+      render(<SkillsPage />);
+
+      expect(replace).not.toHaveBeenCalled();
+      expect(screen.queryByText("No skills yet")).not.toBeInTheDocument();
+    });
+  });
+
   /**
    * Skills used to render five icon buttons in the row, Delete among them,
    * where the agent rows render two and a menu. Same table, same job, two

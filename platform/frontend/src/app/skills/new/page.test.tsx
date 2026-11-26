@@ -29,6 +29,8 @@ import {
 import { useOrganization } from "@/lib/organization.query";
 import {
   useCreateSkill,
+  useExternalMcpSkills,
+  usePluginSkills,
   useSearchSkillCatalog,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
@@ -67,6 +69,16 @@ beforeEach(() => {
     // biome-ignore lint/suspicious/noExplicitAny: partial session is enough
   } as any);
   mockOwnSkills([]);
+  // No MCP or plugin skills either way; whether any skill exists is then the
+  // standalone total, which `mockOwnSkills` leaves unknown (so: not "none").
+  for (const hook of [useExternalMcpSkills, usePluginSkills]) {
+    vi.mocked(hook).mockReturnValue({
+      data: [],
+      isPending: false,
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+  }
   vi.mocked(useSearchSkillCatalog).mockReturnValue({
     data: undefined,
     isLoading: false,
@@ -353,5 +365,78 @@ describe("NewSkillPage name check", () => {
       screen.queryByText("This name cannot be used"),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create skill" })).toBeEnabled();
+  });
+});
+
+describe("NewSkillPage as the first skill's page", () => {
+  /** The viewer can see no skill of any kind. */
+  function mockNoSkillsAtAll() {
+    vi.mocked(useSkillsPaginated).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isPending: false,
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+  }
+
+  it("introduces skills, with no list to go back to, while there are none", () => {
+    mockOrganization(true);
+    mockNoSkillsAtAll();
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Teach your agent" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/A skill is a set of reusable instructions/),
+    ).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Skills" })).toBeNull();
+    // The step itself is unchanged under the introduction.
+    expect(screen.getByText("Blank template")).toBeVisible();
+  });
+
+  it("drops the introduction and links back to the list once a skill exists", () => {
+    mockOrganization(true);
+    vi.mocked(useSkillsPaginated).mockReturnValue({
+      data: { data: [], pagination: { total: 3 } },
+      isPending: false,
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    renderPage();
+
+    expect(screen.queryByText("Teach your agent")).toBeNull();
+    expect(screen.getByRole("link", { name: "Skills" })).toHaveAttribute(
+      "href",
+      "/skills",
+    );
+  });
+
+  it("counts a skill served by an MCP server as a skill that exists", () => {
+    mockOrganization(true);
+    mockNoSkillsAtAll();
+    vi.mocked(useExternalMcpSkills).mockReturnValue({
+      data: [{ id: "external-1" }],
+      isPending: false,
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    renderPage();
+
+    expect(screen.queryByText("Teach your agent")).toBeNull();
+  });
+
+  it("holds the step until it knows whether skills exist, so nothing jumps", () => {
+    mockOrganization(true);
+    vi.mocked(useSkillsPaginated).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isFetching: true,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    renderPage();
+
+    expect(screen.queryByText("Blank template")).toBeNull();
+    expect(screen.queryByText("Teach your agent")).toBeNull();
   });
 });

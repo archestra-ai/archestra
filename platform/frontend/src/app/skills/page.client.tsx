@@ -653,6 +653,32 @@ function SkillsList() {
     !(showPluginSkills && isPluginSkillsFetching) &&
     !hasVisibleSkills &&
     !hasActiveFilters;
+  // `showEmptyState` already says no MCP or plugin skill is visible and the
+  // list's own skills are empty. But the list opens on "Mine · Shared with
+  // me", so that is not yet "no skills": the question is asked again without
+  // the access filter. Only when the viewer can see no skill at all is there
+  // nothing to list.
+  const everySkill = useSkillsPaginated(
+    { limit: 1, offset: 0, includeContent: false },
+    { enabled: showEmptyState, toastOnError: false },
+  );
+  const isCheckingForAnySkill =
+    showEmptyState && everySkill.isPending && everySkill.isFetching;
+  const hasNoSkills =
+    showEmptyState && everySkill.data?.pagination?.total === 0;
+  const createPermission = useHasPermissions({ skill: ["create"] });
+  // Undefined while the permissions are still loading: nobody is sent on, and
+  // nobody is told they cannot add a skill, before that is known.
+  const canCreate = createPermission.isPending
+    ? undefined
+    : createPermission.data;
+  // With no skills there is no list to show, so the page to add the first one
+  // opens in its place; it introduces skills while there are none. Replaced,
+  // not pushed, so Back does not land here and bounce forward again.
+  const opensAddPage = hasNoSkills && canCreate === true;
+  useEffect(() => {
+    if (opensAddPage) router.replace("/skills/new");
+  }, [opensAddPage, router]);
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
     for (const key of [
@@ -990,7 +1016,7 @@ function SkillsList() {
         description={SKILLS_DESCRIPTION}
         actionButton={
           <div className="flex items-center gap-2">
-            {!showEmptyState && !isInitialSkillsLoad && (
+            {!hasNoSkills && !isInitialSkillsLoad && !isCheckingForAnySkill && (
               <PermissionButton
                 permissions={{ skill: ["create"] }}
                 size="sm"
@@ -1007,8 +1033,18 @@ function SkillsList() {
         }
       >
         <TableCardView storageKey="archestra-skills-view" defaultMode="table">
-          {isInitialSkillsLoad ? null : showEmptyState ? (
-            <SkillsEmptyState />
+          {isInitialSkillsLoad ||
+          isCheckingForAnySkill ||
+          // On its way to the page that adds the first skill, or still
+          // learning whether the viewer may add one.
+          (hasNoSkills && canCreate !== false) ? null : hasNoSkills ? (
+            // Someone who cannot add a skill is told who can.
+            <EmptyState
+              className="min-h-[60vh]"
+              icon={BookOpen}
+              title="No skills yet"
+              description="Your admins haven't shared a skill yet."
+            />
           ) : (
             <>
               <CollectionFilters>
@@ -1641,25 +1677,6 @@ function ListedSkillIcon({
     >
       <SkillSourceGlyph skill={item.skill} appIconLogo={appIconLogo} />
     </span>
-  );
-}
-
-function SkillsEmptyState() {
-  return (
-    <EmptyState
-      className="min-h-[60vh]"
-      icon={BookOpen}
-      title="No skills yet"
-      description="A skill is a set of instructions and files. Agents pick the right one by name and follow it on demand."
-      action={
-        <PermissionButton permissions={{ skill: ["create"] }} size="sm" asChild>
-          <Link href="/skills/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add your first skill
-          </Link>
-        </PermissionButton>
-      }
-    />
   );
 }
 

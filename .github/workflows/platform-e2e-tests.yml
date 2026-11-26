@@ -138,7 +138,7 @@ jobs:
   platform-e2e-build:
     needs: [platform-e2e-inputs]
     name: Build ${{ matrix.name }} Image
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ vars.GCE_RUNNERS_PR_CI == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-16core' || 'archestra-gce-16core-spot') || matrix.runner }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS_PR_CI kill switch; never for fork PRs.
     if: ${{ needs.platform-e2e-inputs.outputs.run == 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e')) }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
@@ -444,7 +444,7 @@ jobs:
     name: Capture Docs Screenshots (validation)
     needs: [platform-e2e-build]
     if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e')
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS_PR_CI == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-8core' || 'archestra-gce-8core-spot') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS_PR_CI kill switch; never for fork PRs.
     timeout-minutes: 25
     permissions:
       contents: read
@@ -507,7 +507,7 @@ jobs:
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     # Setup dominates this environment; keep the existing 8-vCPU runner.
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS_PR_CI == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-8core' || 'archestra-gce-8core-spot') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS_PR_CI kill switch; never for fork PRs.
     timeout-minutes: 60
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -681,7 +681,7 @@ jobs:
     name: Platform E2E Tests (Hibernation ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e' }}
-    runs-on: ubuntu-24.04-16core
+    runs-on: ${{ vars.GCE_RUNNERS_PR_CI == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-16core' || 'archestra-gce-16core-spot') || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS_PR_CI kill switch; never for fork PRs.
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -812,7 +812,7 @@ jobs:
     # full lite stack and then runs Playwright next to it: the pre-migration
     # single lite job ran 6.9 min on 8 vcpu where the 4-vcpu legs ran 8-9
     # min each.
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS_PR_CI == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-8core' || 'archestra-gce-8core-spot') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS_PR_CI kill switch; never for fork PRs.
     # Leave room for cold image pulls and platform startup.
     timeout-minutes: 45
     strategy:
@@ -1038,7 +1038,7 @@ jobs:
     # The test steps are short; image loads and platform startup dominate
     # this job. Match the other E2E legs' 8-vCPU runner so image extraction
     # and first-run initialization are not CPU-bound.
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS_PR_CI == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-8core' || 'archestra-gce-8core-spot') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS_PR_CI kill switch; never for fork PRs.
     # Covers cold image pulls and both environments.
     timeout-minutes: 50
     permissions:
@@ -1509,7 +1509,7 @@ jobs:
   platform-rust-napi-musl-smoke:
     name: Platform Rust NAPI musl Smoke
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    runs-on: ubuntu-24.04-16core
+    runs-on: ${{ vars.GCE_RUNNERS_PR_CI == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-16core' || 'archestra-gce-16core-spot') || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS_PR_CI kill switch; never for fork PRs.
     timeout-minutes: 30
     permissions:
       contents: read

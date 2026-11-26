@@ -753,7 +753,10 @@ describe("RuntimeTemplateSection", () => {
       const dialog = await openAccounts(user, "Engineering workspace");
       // One account, so nothing to tick.
       expect(within(dialog).queryByRole("checkbox")).toBeNull();
-      expect(within(dialog).getByText("Provider API key")).toBeVisible();
+      expect(
+        within(dialog).getByRole("button", { name: /^Credentials to use/ }),
+      ).toHaveTextContent("Provider API key");
+      expect(within(dialog).getAllByText("Provider API key")).toHaveLength(2);
       await pick(user, connectionField(dialog), /Company OpenAI/);
       await saveRuntime(user, dialog);
       expect(settings.templates[0].accounts).toEqual({
@@ -799,6 +802,9 @@ describe("RuntimeTemplateSection", () => {
       dialog = await openAccounts(user, "Claude workspace");
       await user.click(card(dialog, /Provider API key/));
       await user.click(card(dialog, /Each person's Claude subscription/));
+      expect(
+        within(dialog).getByRole("button", { name: /^Credentials to use/ }),
+      ).toHaveTextContent("Provider API key");
       await saveRuntime(user, dialog);
       expect(settings.templates[0]).toMatchObject({
         accounts: { kind: "key" },

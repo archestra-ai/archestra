@@ -232,7 +232,9 @@ export function CompanyConnectionPickers({
       {!connectionFixed && (
         <div
           className={
-            compact ? COMPACT_FIELD : "min-w-0 max-w-full space-y-2 sm:max-w-80"
+            compact
+              ? COMPACT_FIELD
+              : "w-fit min-w-0 max-w-full space-y-2 sm:max-w-80"
           }
         >
           <Label
@@ -266,13 +268,16 @@ export function CompanyConnectionPickers({
               companyKeyId && !lockedConnection ? onApiKeyClear : undefined
             }
             clearLabel="Clear key"
+            fitContent={!compact}
           />
         </div>
       )}
       {!modelFixed && (
         <div
           className={
-            compact ? COMPACT_FIELD : "min-w-0 max-w-full space-y-2 sm:max-w-80"
+            compact
+              ? COMPACT_FIELD
+              : "w-fit min-w-0 max-w-full space-y-2 sm:max-w-80"
           }
         >
           <Label id={`${id}-model`} className={compact ? "sr-only" : undefined}>
@@ -306,6 +311,7 @@ export function CompanyConnectionPickers({
               companyKeyId && modelId && !modelLocked ? onModelClear : undefined
             }
             clearLabel="Clear model"
+            fitContent={!compact}
           />
         </div>
       )}
@@ -489,6 +495,7 @@ function PickerField({
   onClear,
   clearLabel,
   locked = null,
+  fitContent = false,
 }: {
   labelId: string;
   icon: ReactNode;
@@ -505,11 +512,14 @@ function PickerField({
    * hover and to assistive technology.
    */
   locked?: string | null;
+  /** Size the button to its content up to its container's width instead of filling it. */
+  fitContent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const valueRef = useRef<HTMLSpanElement>(null);
   const displayText = value ?? placeholder;
+  const widthClass = fitContent ? "w-fit max-w-full" : "w-full";
   if (locked) {
     return (
       <TooltipProvider>
@@ -517,7 +527,7 @@ function PickerField({
           <TooltipTrigger asChild>
             {/* The span takes the pointer while the field is disabled, so
                 the reason still shows. */}
-            <span className="flex w-full min-w-0">
+            <span className={cn("flex min-w-0", widthClass)}>
               <Button
                 type="button"
                 aria-labelledby={`${labelId} ${labelId}-value`}
@@ -525,7 +535,10 @@ function PickerField({
                 variant="outline"
                 size="sm"
                 disabled
-                className="w-full min-w-0 justify-start gap-2 font-normal"
+                className={cn(
+                  widthClass,
+                  "min-w-0 justify-start gap-2 font-normal",
+                )}
               >
                 <span aria-hidden className="flex shrink-0 items-center">
                   {icon}
@@ -587,7 +600,8 @@ function PickerField({
                 size="sm"
                 disabled={disabled}
                 className={cn(
-                  "w-full min-w-0 justify-start gap-2 font-normal",
+                  widthClass,
+                  "min-w-0 justify-start gap-2 font-normal",
                   // Room for the clear control, which sits over the field's end.
                   onClear && "pr-8",
                 )}
@@ -630,7 +644,7 @@ function PickerField({
     // The clear control is a button of its own beside the field's, as on the
     // model selector: it takes the keyboard after the field, and a click on
     // it does not open the list.
-    <div className="relative">
+    <div className={cn("relative", fitContent && "w-fit max-w-full")}>
       {field}
       <UnstyledButton
         type="button"

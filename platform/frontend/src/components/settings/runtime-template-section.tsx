@@ -1081,7 +1081,7 @@ function useRuntimeAccountCards(params: {
       : lock === "subscription"
         ? "Personal subscriptions"
         : lock === "key" || !namesKind
-          ? "Company API key"
+          ? "Provider API key"
           : "Each agent chooses",
     change: (change: RuntimeAccountsChange) => {
       if (change.lock === "none") {

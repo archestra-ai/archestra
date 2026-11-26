@@ -50,7 +50,10 @@ export function OpenAppaEnforcementSetting() {
     organizationSettings: ["update"],
   });
   const { isFresh } = useOpenAppaSetupState();
-  const approvalSaving = useIsGuardrailsSettingSaving("personApproval");
+  // Keyed, so a save started before a remount still locks both selectors.
+  const saving =
+    useIsGuardrailsSettingSaving("mode") ||
+    useIsGuardrailsSettingSaving("personApproval");
   const enabled = Boolean(deployment.data?.enabled);
   const observing = deployment.data?.mode === "observe";
   return (
@@ -96,8 +99,7 @@ export function OpenAppaEnforcementSetting() {
               !canManage ||
               !deployment.data.featureEnabled ||
               (deployment.data.mode === "off" && isFresh !== false) ||
-              approvalSaving ||
-              update.isPending
+              saving
             }
             onChange={update.mutate}
           />
@@ -119,7 +121,9 @@ export function OpenAppaPersonApprovalSetting() {
   const pinnedBy = deployment.data?.environmentOverrides.find(
     ({ setting }) => setting === "personApproval",
   )?.variable;
-  const modeSaving = useIsGuardrailsSettingSaving("mode");
+  const saving =
+    useIsGuardrailsSettingSaving("mode") ||
+    useIsGuardrailsSettingSaving("personApproval");
   return (
     <SettingsBlock
       id="person-approval"
@@ -145,8 +149,7 @@ export function OpenAppaPersonApprovalSetting() {
               !canManage ||
               !deployment.data.featureEnabled ||
               pinnedBy !== undefined ||
-              modeSaving ||
-              update.isPending
+              saving
             }
             onChange={update.mutate}
           />

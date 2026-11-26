@@ -15,11 +15,11 @@ token_env = "APPA_APPROVER_TOKEN"
 ```
 
 Deployment settings:
-- `timeout_ms`: Maximum execution time per consult request (default: 5,000 ms).
-- `max_body_bytes`: Maximum accepted response payload size (default: 65,536 bytes).
-- `review_timeout_ms`: Maximum duration human review requests remain pending (default: 600,000 ms).
+- `timeout_ms`: Maximum time for one `url` or `command` consult or recorder delivery, including the wait for a free slot (default: 5,000 ms).
+- `max_body_bytes`: Maximum size of an external response or a model's output (default: 65,536 bytes). The same cap applies to every tool result. OpenAPPA replaces a larger result with a placeholder that states the limit, so the model does not see that output.
+- `review_timeout_ms`: Maximum time a human review that OpenAPPA opens through MCP elicitation stays pending (default: 600,000 ms). An MCP session stays open for this time plus 60 seconds.
 
-These settings apply to the whole deployment; a binding cannot override them. [Model implementations](#model-implementations) and [Jev](#jev) configure their own `timeout_ms` and `max_concurrent` limits in their own sections. `max_concurrent` bounds concurrent requests to a backend across all active sessions.
+These settings apply to the whole deployment; a binding cannot override them. [Model implementations](#model-implementations) and [Jev](#jev) configure their own `timeout_ms` and `max_concurrent` limits in their own sections. `max_concurrent` bounds concurrent requests to a backend across all active sessions. The shared `timeout_ms` does not apply to an authority, sanitizer, or annotator with `builtin = "claude-code"` or `builtin = "llm"`: it uses the `timeout_ms` of `[externals.claude_code]` or `[externals.llm]` (default: 60,000 ms). Jev uses the shared `timeout_ms` unless `[externals.jev]` sets its own. A module loaded from `--modules-dir` has no time limit.
 
 Implementation requirements by component type:
 
@@ -46,7 +46,7 @@ If the endpoint requires authentication, set `token_env` to the name of an envir
 
 Set `command` to an array specifying the executable and arguments (e.g. `command = ["python3", "./sanitize.py"]`). OpenAPPA executes the process directly without an intermediate shell, launching it with the configuration directory as its working directory and terminating child processes upon completion. Commands referencing `appa` invoke the runtime's own binary to execute built-in plugins (such as `appa file-tracker`).
 
-Commands read a single JSON consult request from standard input and write a JSON response to standard output within `timeout_ms` and `max_body_bytes`. When OpenAPPA reaches the end of standard output, it closes standard input, so a command that needs the whole request must read it before it closes standard output. `APPA_CONSULT_TIMEOUT_MS` informs the process of remaining execution time (accounting for queue wait). The runtime limits concurrent local program executions to eight.
+Commands read a single JSON consult request from standard input and write a JSON response to standard output within `timeout_ms` and `max_body_bytes`. When OpenAPPA reaches the end of standard output, it closes standard input, so a command that needs the whole request must read it before it closes standard output. `APPA_CONSULT_TIMEOUT_MS` informs the process of remaining execution time (accounting for queue wait). The runtime limits concurrent local program executions to eight consults and, separately, two recorder deliveries.
 
 If a command requires credentials, specify `token_env` with an environment variable name prefixed with `APPA_PROVIDER_`. OpenAPPA passes that variable into the process environment while filtering out other internal `APPA_*` variables. On Windows, where variable names ignore case, the filter also ignores case.
 

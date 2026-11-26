@@ -33,7 +33,6 @@ import { openappaActor } from "@/openappa/actor";
 import { openappaFailure } from "@/openappa/failure";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
-import { superyellSession } from "@/openappa/unenforced";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import {
   createRuntimeCredentialDefinition,
@@ -690,7 +689,7 @@ describe("model-facing runtime tools", () => {
   });
 
   for (const superyelled of ["run", "parent"] as const) {
-    test(`no proof reads, steers and writes a bound run after its ${superyelled} was superyelled`, async ({
+    test(`a superyell record from an earlier release on the ${superyelled} no longer frees a bound run from its proof`, async ({
       makeAgent,
       makeMember,
       makeOrganization,
@@ -704,22 +703,18 @@ describe("model-facing runtime tools", () => {
         makeUser,
         seedAndAssignArchestraTools,
       });
-      await superyellSession(
+      const legacy: openappa.OpenAppaSession =
         superyelled === "run"
           ? { ...seeded.child, parent_id: PARENT }
-          : proofSession(seeded.organizationId),
-      );
-      await db.insert(schema.a2aArtifactsTable).values({
-        taskId: seeded.task.id,
-        name: "agent-response",
-        parts: [{ text: "RAW ARTIFACT" }],
+          : proofSession(seeded.organizationId);
+      await db.insert(schema.openappaUnenforcedSessionsTable).values({
+        organizationId: legacy.organization_id,
+        sessionId: legacy.session_id,
+        parentId: legacy.parent_id ?? null,
+        reason: "superyell",
       });
       const steer = vi.spyOn(backend, "steer").mockResolvedValue();
-      const write = vi
-        .spyOn(workspaceFiles, "accessAgentWorkspaceFile")
-        .mockResolvedValue({ path: "note.txt", size: 10, sha256: "0" });
-      // The proxy signs no proof for a session OpenAPPA no longer governs, so
-      // the run's own calls and its parent's both arrive without one.
+      const write = vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile");
       const context = { ...seeded.context, openappaRuntimeCall: undefined };
 
       const read = await executeArchestraTool(
@@ -729,69 +724,21 @@ describe("model-facing runtime tools", () => {
       );
       const steered = await executeArchestraTool(
         TOOL_STEER_AGENT_RUN_FULL_NAME,
-        { run_id: seeded.task.id, message: "Carry on" },
+        { run_id: seeded.task.id, message: "SECRET STEER" },
         context,
       );
       const written = await executeArchestraTool(
         TOOL_WRITE_WORKSPACE_FILE_FULL_NAME,
-        { run_id: seeded.task.id, path: "note.txt", content: "PLAIN FILE" },
+        { run_id: seeded.task.id, path: "note.txt", content: "SECRET FILE" },
         context,
       );
 
-      for (const result of [read, steered, written]) {
-        expect(result.isError).not.toBe(true);
-      }
-      expect(read.structuredContent).toMatchObject({ output: "RAW ARTIFACT" });
-      expect(steer).toHaveBeenCalledOnce();
-      expect(write).toHaveBeenCalledOnce();
-      // The gateway only reads: the run's own record is the proxy's to write.
-      const records = await OpenAppaUnenforcedModel.findSessions({
-        organizationId: seeded.organizationId,
-        sessionIds: [seeded.child.session_id],
-      });
-      expect(records).toHaveLength(superyelled === "run" ? 1 : 0);
+      for (const result of [read, steered, written])
+        expect(result.isError).toBe(true);
+      expect(steer).not.toHaveBeenCalled();
+      expect(write).not.toHaveBeenCalled();
     });
   }
-
-  test("a proof from another session is still refused by a superyelled run", async ({
-    makeAgent,
-    makeMember,
-    makeOrganization,
-    makeUser,
-    seedAndAssignArchestraTools,
-  }) => {
-    const seeded = await seededRun({
-      makeAgent,
-      makeMember,
-      makeOrganization,
-      makeUser,
-      seedAndAssignArchestraTools,
-    });
-    await superyellSession({ ...seeded.child, parent_id: PARENT });
-    const steer = vi.spyOn(backend, "steer").mockResolvedValue();
-    const stranger = {
-      ...seeded.context,
-      openappaRuntimeCall: {
-        session: {
-          organization_id: seeded.organizationId,
-          caller_id: "user:stranger",
-          session_id: "user:stranger|conversation",
-        },
-        toolCallId: "call-1",
-        spawn: false,
-      },
-    };
-
-    const steered = await executeArchestraTool(
-      TOOL_STEER_AGENT_RUN_FULL_NAME,
-      { run_id: seeded.task.id, message: "SECRET STEER" },
-      stranger,
-    );
-
-    expect(steered.isError).toBe(true);
-    expect(JSON.stringify(steered)).toContain("bound to a different session");
-    expect(steer).not.toHaveBeenCalled();
-  });
 
   test("a classified spawn that resolves in-process is refused", async ({
     makeAgent,
@@ -1393,59 +1340,10 @@ describe("model-facing runtime tools", () => {
 });
 
 describe("crossRuntimeOutput", () => {
-  test("waives a failed first return lookup and retrieves the raw output with yell disabled", async ({
-    makeAgent,
-    makeMember,
-    makeOrganization,
-    makeUser,
-    seedAndAssignArchestraTools,
-  }) => {
-    config.openappa.enabled = true;
-    config.openappa.breakTheGlassOverrides = {
-      ...config.openappa.breakTheGlassOverrides,
-      unapprovableBlockMode: "allow",
-    };
-    config.openappa.yellEnabled = false;
-    await GuardrailsDeploymentModel.setEnabled(true);
-    const seeded = await seededRun({
-      makeAgent,
-      makeMember,
-      makeOrganization,
-      makeUser,
-      seedAndAssignArchestraTools,
-    });
-    await db.insert(schema.a2aArtifactsTable).values({
-      taskId: seeded.task.id,
-      name: "agent-response",
-      parts: [{ text: "RAW RETURN AFTER LOOKUP FAILURE" }],
-    });
-    const lookup = vi
-      .spyOn(openappa, "loadChildReturns")
-      .mockRejectedValue(new Error("Native return lookup unavailable"));
-
-    const result = await executeArchestraTool(
-      TOOL_GET_AGENT_RUN_FULL_NAME,
-      { run_id: seeded.task.id },
-      seeded.context,
-    );
-
-    expect(lookup).toHaveBeenCalledOnce();
-    expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({
-      output: "RAW RETURN AFTER LOOKUP FAILURE",
-    });
-    expect(
-      await OpenAppaUnenforcedModel.findSessions({
-        organizationId: seeded.organizationId,
-        sessionIds: [PARENT],
-      }),
-    ).toHaveLength(1);
-  });
-
   test.for([
     null,
     "another-parent",
-  ])("waived runtime access releases raw output with parent %s", async (parentId, {
+  ])("a soft-block setting no longer releases raw output of a run with parent %s", async (parentId, {
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1456,7 +1354,6 @@ describe("crossRuntimeOutput", () => {
       ...config.openappa.breakTheGlassOverrides,
       unapprovableBlockMode: "allow",
     };
-    config.openappa.yellEnabled = false;
     config.openappa.enabled = true;
     await GuardrailsDeploymentModel.setEnabled(true);
     const seeded = await seededRun({
@@ -1477,14 +1374,13 @@ describe("crossRuntimeOutput", () => {
       { run_id: seeded.task.id },
       seeded.context,
     );
-    expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({ output: "WAIVED OUTPUT" });
+    expect(JSON.stringify(result)).not.toContain("WAIVED OUTPUT");
     expect(
       await OpenAppaUnenforcedModel.findSessions({
         organizationId: seeded.organizationId,
         sessionIds: [PARENT],
       }),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   });
 
   test.for([

@@ -146,7 +146,7 @@ describe("OpenAPPA yells", () => {
       });
     const first = await yellCall("toolu_1");
     const second = await yellCall("toolu_2");
-    const inSession = (toolCallId: string, superyell = false) =>
+    const inSession = (toolCallId: string) =>
       OpenAppaYellModel.record({
         organizationId,
         callerId: `user:${user.id}`,
@@ -154,10 +154,9 @@ describe("OpenAPPA yells", () => {
         toolCallId,
         message: toolCallId,
         withTrajectory: false,
-        superyell,
       });
     const yell = await inSession("toolu_1");
-    const superyell = await inSession("toolu_2", true);
+    const other = await inSession("toolu_2");
     const unlogged = await record("From a session with no logged requests");
 
     const list = (
@@ -175,7 +174,7 @@ describe("OpenAPPA yells", () => {
       ),
     ).toEqual({
       [yell.id]: { llmSessionId: "chat-1", mcpToolCallId: first.id },
-      [superyell.id]: { llmSessionId: "chat-1", mcpToolCallId: second.id },
+      [other.id]: { llmSessionId: "chat-1", mcpToolCallId: second.id },
     });
     const all = (
       await app.inject({ url: "/api/openappa/yells?status=all" })
@@ -218,7 +217,6 @@ describe("OpenAPPA yells", () => {
         toolCallId: "toolu_1",
         message: "Blocked",
         withTrajectory: false,
-        superyell: false,
       });
 
       const body = (

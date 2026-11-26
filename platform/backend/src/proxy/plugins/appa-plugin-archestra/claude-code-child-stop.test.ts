@@ -473,6 +473,7 @@ async function startRoot(
     // What the model's declare-ahead remedy call runs at the gateway.
     const declare = { label: {} };
     const declared = await executeRemedyByOffer({
+      presenter: "attended",
       organizationId,
       callerId,
       sessionId: parentId,

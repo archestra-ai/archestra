@@ -300,6 +300,7 @@ export function useOpenAppaProxyHarness(): OpenAppaProxyHarness {
             decision: "deny_call",
             feedback:
               "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+            offers: [{ offer_id: "test-offer" }],
           });
         }
         if (event.event === "tool_result") {
@@ -312,6 +313,7 @@ export function useOpenAppaProxyHarness(): OpenAppaProxyHarness {
                   approved_output:
                     "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
                   output_source: "runtime",
+                  offers: [{ offer_id: "test-offer" }],
                 }
               : {
                   decision: "replace_output",

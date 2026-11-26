@@ -130,7 +130,7 @@ builtin = "hitl"
   });
 
   const organization_id = `smoke-${randomUUID()}`;
-  const scope = (caller_id = 'user:owner', session_id = randomUUID()) => ({ organization_id, caller_id, session_id });
+  const scope = (caller_id = 'user:owner', session_id = randomUUID()) => ({ organization_id, presenter: 'attended', caller_id, session_id });
   const hook = async (session, event) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
   const call = (session, id, tool, arguments_ = {}) => hook(session, {
     event: 'tool_call', operation_id: `call:${id}`, tool, arguments: arguments_,
@@ -166,6 +166,7 @@ builtin = "hitl"
     } = event;
     return {
       organization_id: session.organization_id,
+      presenter: 'attended',
       ...(session.caller_id ? { caller_id: session.caller_id } : {}),
       trajectory: {
         v: 1,
@@ -520,7 +521,7 @@ builtin = "hitl"
     await call(session, 'unknown', 'read_plain');
     assert.match((await result(session, 'unknown', 'unchecked body', 'unknown')).approved_output, /withheld/);
     const email = await call(session, 'email', 'send_email', { to: 'recipient@example.com' });
-    const review = await native.loadOfferReview(session.organization_id, session.session_id, email.review[0].offer_id);
+    const review = await native.loadOfferReview(session.organization_id, session.session_id, email.review[0].offer_id, 'attended');
     assert.ok(review, 'loadOfferReview found the review entry');
     assert.equal(review.offerId, email.review[0].offer_id);
     assert.match(review.text, /email/);
@@ -553,7 +554,7 @@ builtin = "hitl"
     );
     const binaryEmail = await call(session, 'binary-email', 'send_email', { to: 'recipient\u0000@example.com' });
     assert.ok(binaryEmail.review?.length > 0, JSON.stringify(binaryEmail));
-    const binaryReview = await native.loadOfferReview(session.organization_id, session.session_id, binaryEmail.review[0].offer_id);
+    const binaryReview = await native.loadOfferReview(session.organization_id, session.session_id, binaryEmail.review[0].offer_id, 'attended');
     assert.equal(binaryReview?.tool, 'send_email', JSON.stringify(binaryReview));
     assert.deepEqual(JSON.parse(binaryReview.arguments), { to: 'recipient\u0000@example.com' });
     assert.deepEqual(JSON.parse(binaryReview.scope), binaryEmail.review[0].scope);
@@ -1409,7 +1410,7 @@ builtin = "hitl"
     const organization_id = `smoke-org-${randomUUID()}`;
     await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
     st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
-    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID() };
+    const session = { organization_id, presenter: 'attended', caller_id: 'user:owner', session_id: randomUUID() };
     assert.equal((await call(session, 'annotated-1', 'annotated_read', { a: 1 })).decision, 'allow_call');
 
     const { rows } = await client.query(
@@ -1448,7 +1449,7 @@ builtin = "hitl"
     const organization_id = `smoke-org-${randomUUID()}`;
     await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
     st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
-    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID() };
+    const session = { organization_id, presenter: 'attended', caller_id: 'user:owner', session_id: randomUUID() };
     assert.equal((await call(session, 'plain-1', 'read_plain')).decision, 'allow_call');
     await result(session, 'plain-1', 'nothing to see');
     // Reading untrusted content narrows trust: the call is held until the
@@ -1463,7 +1464,7 @@ builtin = "hitl"
       'SELECT event, call_id, trust_before, audience_before, trust_after, audience_after, session_id FROM openappa_label_changes WHERE organization_id = $1 ORDER BY created_at, id',
       [organization_id],
     );
-    const status = await native.getOpenappaStatus(organization_id, session.session_id, policy);
+    const status = await native.getOpenappaStatus(organization_id, session.session_id, 'attended', policy);
     assert.equal(rows[0].event, 'session_start');
     assert.equal(rows[0].trust_before, rows[0].trust_after);
     assert.equal(rows[0].audience_before, rows[0].audience_after);
@@ -1497,7 +1498,7 @@ builtin = "hitl"
     await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
     st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
     // The host resolves the setting and says so on the dispatch.
-    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID(), withhold_consult_content: true };
+    const session = { organization_id, presenter: 'attended', caller_id: 'user:owner', session_id: randomUUID(), withhold_consult_content: true };
     assert.equal((await call(session, 'annotated-1', 'annotated_read', { a: 1 })).decision, 'allow_call');
 
     const { rows } = await client.query('SELECT * FROM openappa_external_consults WHERE organization_id = $1', [organization_id]);

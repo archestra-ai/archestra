@@ -631,7 +631,6 @@ export function RequestWaterfall({
                     gutter: gutterFor(entry),
                     note: notesByKey.get(entry.key) ?? null,
                     yell: yellByKey.get(span.key) ?? null,
-                    guardrailsOffAt: guardrails?.guardrailsOffAt ?? null,
                     highlighted: span.key === highlightedKey,
                     ranOn: ranOn
                       ? {
@@ -894,8 +893,6 @@ type RowProps = {
   note?: LabelChange[] | null;
   /** The yell this row's call sent. */
   yell?: TraceYell | null;
-  /** When a superyell turned guardrails off, epoch ms. */
-  guardrailsOffAt?: number | null;
   highlighted: boolean;
   /** Where this row ran, when the session was handed to Agent Runtime. */
   ranOn?: {
@@ -917,7 +914,6 @@ function RowShell({
   gutter = null,
   note = null,
   yell = null,
-  guardrailsOffAt = null,
   highlighted,
   ranOn = null,
   buttonRef,
@@ -949,21 +945,15 @@ function RowShell({
   const grid = GRIDS[layout];
   const tools = layout === "tools";
   const latencyPlacement = placeLatency(span);
-  const off =
-    Boolean(yell?.superyell) ||
-    (guardrailsOffAt !== null && span.start >= guardrailsOffAt);
   return (
     <li className="relative">
       {ranOn ? <RanOnLane runtime={ranOn.runtime} knob={ranOn.knob} /> : null}
       {edge}
-      {yell || off ? (
+      {yell ? (
         <YellRowMarks
           yell={yell}
-          off={off}
-          guardrailsOffAt={guardrailsOffAt}
           hasGutter={Boolean(gutter)}
           selected={selected}
-          onSelectRow={onSelect}
         />
       ) : null}
       {gutter ? <LabelRail {...gutter} onSelectRow={onSelect} /> : null}
@@ -972,7 +962,7 @@ function RowShell({
         tabIndex={selected ? 0 : -1}
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
-        aria-label={`${label}${gutterWords(gutter, note)}${off ? ", guardrails off" : ""}`}
+        aria-label={`${label}${gutterWords(gutter, note)}`}
         className={cn(
           "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-10",
           grid,

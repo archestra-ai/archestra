@@ -46,7 +46,6 @@ import {
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { openappaActor } from "@/openappa/actor";
-import { superyellSession } from "@/openappa/unenforced";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -2027,31 +2026,26 @@ describe("run tools", () => {
         config.openappa.enabled = originalOpenappa;
       });
 
-      test("a bound run's own proofless call is refused until its session is superyelled", async () => {
+      test("a bound run's own proofless call stays refused under a superyell record from an earlier release", async () => {
         const task = await seedRuntimeTask();
         const child = await bindToParent(task.id);
         await writeFile(path.join(root, "workspace", "demo.mp4"), "video");
+        await db.insert(schema.openappaUnenforcedSessionsTable).values({
+          organizationId: child.organization_id,
+          sessionId: child.session_id,
+          parentId: child.parent_id ?? null,
+          reason: "superyell",
+        });
 
-        const governed = await postRunFile({
+        const result = await postRunFile({
           task_id: task.id,
           path: "demo.mp4",
         });
-        expect(governed.isError).toBe(true);
-        expect(JSON.stringify(governed.content)).toContain(
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(
           "carried no proof of its source",
         );
         expect(upload).not.toHaveBeenCalled();
-
-        await superyellSession(child);
-        const superyelled = await postRunFile({
-          task_id: task.id,
-          path: "demo.mp4",
-        });
-        expect(superyelled.isError).toBeFalsy();
-        expect(upload.mock.calls[0][0]).toMatchObject({
-          filename: "demo.mp4",
-          data: Buffer.from("video"),
-        });
       });
 
       test("the parent session still cannot post its child's file", async () => {

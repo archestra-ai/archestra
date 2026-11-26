@@ -111,6 +111,18 @@ pub struct DispatchPolicy {
     /// dispatch whose composition is no longer the stored one publishes nothing
     /// and is refused as retryable; absent, nothing is checked.
     pub composition_hash: Option<String>,
+    /// Absent, every new session opens on the Enforce line.
+    pub guardrails: Option<GuardrailsSettings>,
+}
+
+/// The deployment's Guardrails settings, as the host resolved them.
+#[napi(object)]
+pub struct GuardrailsSettings {
+    #[napi(ts_type = "'observe' | 'enforce'")]
+    pub mode: String,
+    #[napi(ts_type = "'ask' | 'auto_unattended' | 'auto_everywhere'")]
+    pub person_approval: String,
+    pub enforced_marks: Vec<String>,
 }
 
 #[napi(object)]
@@ -121,13 +133,25 @@ pub struct OpenappaStatus {
     pub policy_revision: i64,
 }
 
-impl From<DispatchPolicy> for deployments::HostedPolicy {
-    fn from(policy: DispatchPolicy) -> Self {
-        deployments::HostedPolicy {
+impl TryFrom<DispatchPolicy> for deployments::HostedPolicy {
+    type Error = napi::Error;
+
+    fn try_from(policy: DispatchPolicy) -> napi::Result<Self> {
+        let guardrails = match policy.guardrails {
+            Some(GuardrailsSettings {
+                mode,
+                person_approval,
+                enforced_marks,
+            }) => crate::lines::Guardrails::parse(&mode, &person_approval, enforced_marks)
+                .map_err(invalid_input)?,
+            None => crate::lines::Guardrails::enforce(),
+        };
+        Ok(deployments::HostedPolicy {
             content: policy.content,
             credentials: deployments::HostCredentials::new(policy.credentials),
             composition: policy.composition_hash,
-        }
+            guardrails,
+        })
     }
 }
 
@@ -191,6 +215,88 @@ pub async fn validate_hosted_openappa_policy(content: String) -> napi::Result<Ve
         std::panic::catch_unwind(|| policy::validate_hosted(&content))
             .map(|result| result.err().into_iter().collect())
             .map_err(|_| panicked("OpenAPPA hosted policy validation failed"))
+    })
+    .await
+    .map_err(panicked)?
+}
+
+/// A line that cannot carry its approvers over a composed document.
+#[napi(object)]
+pub struct LineRefusal {
+    #[napi(ts_type = "'observe' | 'enforce-approved'")]
+    pub variant: String,
+    pub error: String,
+}
+
+/// A mark the approvers a line adds skip for every tool, because an `enforced` tool may
+/// require it, that tools without the tag require too.
+#[napi(object)]
+pub struct WithheldMark {
+    pub mark: String,
+    pub enforced_tools: Vec<String>,
+    pub other_tools: Vec<String>,
+}
+
+/// What a line check found: the lines that cannot carry their approvers, and the marks
+/// the approvers of the lines that do skip beyond the tools that caused it.
+#[napi(object)]
+pub struct LineCheck {
+    pub refusals: Vec<LineRefusal>,
+    pub withheld: Vec<WithheldMark>,
+}
+
+/// Composes the named variant lines (absent: each one) over a document already composed
+/// by the host, as a dispatch would, and says why any of them cannot carry its
+/// approvers. Such a line serves the document alone, and sessions meant for it open on
+/// the Enforce line. A line that adds approvers also reports the marks they withhold
+/// from tools without the `enforced` tag.
+#[napi(js_name = "checkOpenappaLines")]
+pub async fn check_openappa_lines(
+    content: String,
+    enforced_marks: Vec<String>,
+    #[napi(ts_arg_type = "Array<'observe' | 'enforce-approved'>")] variants: Option<Vec<String>>,
+) -> napi::Result<LineCheck> {
+    let enforced: std::collections::BTreeSet<String> = enforced_marks.into_iter().collect();
+    let checked: Vec<crate::lines::Variant> = match variants {
+        None => crate::lines::VARIANTS.to_vec(),
+        Some(tokens) => tokens
+            .iter()
+            .map(|token| {
+                crate::lines::VARIANTS
+                    .into_iter()
+                    .find(|variant| variant.token() == token)
+                    .ok_or_else(|| invalid_input(format!("unknown line variant {token:?}")))
+            })
+            .collect::<napi::Result<_>>()?,
+    };
+    tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| {
+            let mut refusals = Vec::new();
+            let mut adds_approvers = false;
+            for variant in checked {
+                match crate::fragments::compose(&content, variant, &enforced) {
+                    Ok(composed) => adds_approvers |= composed != content,
+                    Err(error) => refusals.push(LineRefusal {
+                        variant: variant.token().to_owned(),
+                        error,
+                    }),
+                }
+            }
+            let withheld = match adds_approvers {
+                true => crate::fragments::shared_withheld_marks(&content, &enforced)
+                    .map_err(invalid_input)?
+                    .into_iter()
+                    .map(|shared| WithheldMark {
+                        mark: shared.mark,
+                        enforced_tools: shared.enforced_tools,
+                        other_tools: shared.other_tools,
+                    })
+                    .collect(),
+                false => Vec::new(),
+            };
+            Ok(LineCheck { refusals, withheld })
+        })
+        .map_err(|_| panicked("OpenAPPA line check failed"))?
     })
     .await
     .map_err(panicked)?
@@ -618,9 +724,11 @@ pub async fn openappa_root_kinds(roots: Vec<String>) -> napi::Result<Vec<Option<
 pub async fn get_openappa_status(
     organization_id: String,
     session_id: String,
+    #[napi(ts_arg_type = "'runtime' | 'attended' | 'delegated' | 'unknown'")] presenter: String,
     policy: DispatchPolicy,
     encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OpenappaStatus>> {
+    let presenter = crate::lines::Presenter::parse(&presenter)?.beyond_review()?;
     if organization_id.is_empty()
         || organization_id.len() > 512
         || organization_id.chars().any(char::is_control)
@@ -631,7 +739,7 @@ pub async fn get_openappa_status(
     {
         return Err(invalid_input("invalid session identity"));
     }
-    let policy: deployments::HostedPolicy = policy.into();
+    let policy: deployments::HostedPolicy = policy.try_into()?;
     let result = AssertUnwindSafe(async move {
         let state = initialized().await?.encrypted(encryption)?;
         let session = SessionKey::new(&organization_id, &session_id);
@@ -641,10 +749,23 @@ pub async fn get_openappa_status(
                 .await
                 .map_err(panicked)??;
         // An unstarted session has no status, and is no reason to publish.
-        if root.is_none() {
+        let Some(root) = root else {
             return Ok(None);
-        }
-        on_deployment(&state, &organization_id, &policy, |pinned| {
+        };
+        // A family opened under the earlier policy model has no label to report:
+        // its next event is refused with `legacy_family`.
+        let variant = match state
+            .variant_of(&organization_id, Some(&root), presenter)
+            .await
+        {
+            Err(error) if crate::errors::is_legacy_family(&error) => return Ok(None),
+            variant => variant?,
+        };
+        let line = crate::lines::Line {
+            organization_id: organization_id.clone(),
+            variant,
+        };
+        on_deployment(&state, &line, &policy, |pinned| {
             let key = SessionKey::new(&organization_id, &session_id);
             async move { session_status(pinned, key).await }
         })

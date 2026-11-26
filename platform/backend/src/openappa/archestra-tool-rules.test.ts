@@ -397,7 +397,13 @@ function step(name: string, args: unknown = {}): string {
   return `${name} {\n${lines.join("")}}\nexpect allow\n`;
 }
 
-type Step = { status: string; actual: string | null; error?: string };
+type Step = {
+  status: string;
+  actual: string | null;
+  error?: string;
+  /** The externals a step that could not run asked without an answer. */
+  unanswered?: { role: string; name: string }[];
+};
 
 /** Each call's contract, `<adds>/<needs>`, or what decided the call alone instead. */
 async function contracts(
@@ -454,7 +460,10 @@ async function contracts(
 
 function decidedBy(alone: Step): string {
   if (alone.actual === "deny") return "refused";
-  const annotator = /annotator=(\S+) error=/.exec(alone.error ?? "")?.[1];
+  const annotator = (alone.unanswered ?? [])
+    .filter(({ role }) => role === "annotator")
+    .map(({ name }) => name)
+    .join("+");
   if (annotator === "archestra.llm-annotator") return "catch-all";
   return annotator ? `annotator ${annotator}` : `${alone.actual}`;
 }
@@ -462,7 +471,9 @@ function decidedBy(alone: Step): string {
 /** What a call refused after a requester-only read needs: `internal` asks its source. */
 function needsAfterSelf(after: Step | undefined): string {
   return after?.status === "cannot_run" &&
-    /audience source "archestra" gave no answer/.test(after.error ?? "")
+    after.unanswered?.some(
+      ({ role, name }) => role === "audience_source" && name === "archestra",
+    )
     ? "internal"
     : "public";
 }

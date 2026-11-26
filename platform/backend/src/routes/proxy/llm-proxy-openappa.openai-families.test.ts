@@ -1369,6 +1369,8 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         return JSON.stringify({
           decision: "deny_call",
           feedback: "[appa] This tool is blocked by policy",
+          // A remedy only the MCP gateway's tools can carry out.
+          offers: [{ offer_id: "offer-1" }],
         });
       return dispatch?.(raw);
     });

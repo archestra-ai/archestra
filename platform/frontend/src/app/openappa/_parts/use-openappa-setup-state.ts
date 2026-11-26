@@ -14,6 +14,7 @@ export function useOpenAppaSetupState() {
   const deployment = useGuardrailsDeployment({ poll: true });
   const policy = useGuardrailsPolicy();
   const enabled = deployment.data?.enabled;
+  const mode = deployment.data?.mode;
   // Revision 0 is the unsaved starter policy the API answers with.
   const hasPolicy = Boolean(policy.data?.revision);
   const isFresh =
@@ -22,5 +23,5 @@ export function useOpenAppaSetupState() {
       : (canReadSettings ? enabled === false : true) &&
         policy.isSuccess &&
         !hasPolicy;
-  return { enabled, hasPolicy, isFresh };
+  return { enabled, mode, hasPolicy, isFresh };
 }

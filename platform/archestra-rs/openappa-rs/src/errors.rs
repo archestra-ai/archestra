@@ -42,6 +42,9 @@ pub(crate) enum BindingFailure {
     InvalidInput,
     /// The binding or the runtime panicked; nothing was released.
     Panicked,
+    /// An Agent Runtime run opened the family, and the request holds no runtime or
+    /// delegated binding to act in it.
+    UnattendedFamily,
     /// Spelled as the runtime's `RefusalClass::EngineInvariant`: the runtime
     /// answered in a shape the binding does not expect.
     EngineInvariant,
@@ -185,6 +188,16 @@ pub(crate) fn policy_moved() -> napi::Error {
 /// which [`failure`] stamps as the code `policy_moved`. A failure without that
 /// code is matched on OpenAPPA's `EventError::PolicyMoved` display text, as an
 /// unclassed refusal carries it.
+/// Whether `error` refuses a family opened under the earlier policy model.
+pub(crate) fn is_legacy_family(error: &napi::Error) -> bool {
+    serde_json::from_str::<Value>(&error.reason)
+        .ok()
+        .and_then(|envelope| envelope.get("code").cloned())
+        == Some(
+            serde_json::to_value(Failure::Refused(RefusalClass::LegacyFamily)).unwrap_or_default(),
+        )
+}
+
 pub(crate) fn is_policy_moved(error: &napi::Error) -> bool {
     let envelope = serde_json::from_str::<Value>(&error.reason).ok();
     let field = |name: &str| {
@@ -217,8 +230,8 @@ pub(crate) fn receipt_failure(reason: ReceiptError) -> napi::Error {
 #[cfg(test)]
 mod failure_tests {
     use super::{
-        BindingFailure, Failure, failure, is_policy_moved, lease_lost, policy_moved, read_failure,
-        status_read_failure,
+        BindingFailure, Failure, failure, is_legacy_family, is_policy_moved, lease_lost,
+        policy_moved, read_failure, status_read_failure,
     };
     use crate::SqlError;
     use appa_eventlog::postgres::PostgresError;
@@ -261,6 +274,11 @@ mod failure_tests {
     fn a_legacy_family_is_its_own_code_and_never_a_moved_policy() {
         let kind = Failure::Refused(RefusalClass::LegacyFamily);
         assert_eq!(serde_json::to_value(kind).unwrap(), json!("legacy_family"));
+        assert!(is_legacy_family(&failure(
+            kind,
+            "opened before live policy revisions"
+        )));
+        assert!(!is_legacy_family(&policy_moved()));
         assert!(!is_policy_moved(&failure(
             kind,
             "this trajectory family was opened before live policy revisions; open a new one"

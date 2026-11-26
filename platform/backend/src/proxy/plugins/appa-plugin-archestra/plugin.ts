@@ -38,14 +38,6 @@ import OpenAppaSpawnCorrelationModel, {
 } from "@/models/openappa-spawn-correlation";
 import { reportAgentRuntimeObservedReads } from "@/observability/metrics/agent-runtime";
 import { childSessionId, clientSessionId } from "@/openappa/actor";
-import {
-  isUnattendedRequest,
-  recordWaivedCalls,
-  rememberUnattendedSession,
-  unattendedNoteMatters,
-  type WaivedCall,
-  waiverFor,
-} from "@/openappa/break-the-glass";
 import { policyCallId } from "@/openappa/call-id";
 import {
   type AppaChildReturnCompletion,
@@ -109,6 +101,11 @@ import {
   previewAppToolTarget,
 } from "@/openappa/policy-arguments";
 import {
+  receiptRefusalAction,
+  refusalAction,
+  refusalGuidance,
+} from "@/openappa/refusal-outcome";
+import {
   isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
@@ -116,6 +113,7 @@ import {
 } from "@/openappa/runtime-tool-claims";
 import {
   type AppaChildReturnRecord,
+  type AppaHostedCallDecision,
   admitPeerMessage,
   approveSpawnReturn,
   cancelCalls,
@@ -143,14 +141,6 @@ import {
   UNDELIVERABLE_RETURN_CONTRACT,
   withCapturedGuardrailsActivation,
 } from "@/openappa/service";
-import {
-  isHardBlock,
-  refuseSoftBlock,
-  softBlockReason,
-  softBlocksAllowed,
-  softBlockTools,
-  waiveSoftBlock,
-} from "@/openappa/soft-block";
 import {
   subagentChildSession,
   subagentReturnPrefix,
@@ -204,11 +194,7 @@ import {
   submittedRunNextStep,
 } from "@/services/agent-runtime/run-handle";
 import { callerHasCandidateRuntimeSubagents } from "@/services/agent-subagent-exclusions";
-import {
-  breakTheGlassActiveIn,
-  getGuardrailsDeployment,
-  readGuardrailsV2Activation,
-} from "@/services/guardrails-deployment";
+import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type {
   RuntimeLaunchFailureReason,
@@ -235,7 +221,6 @@ import { nativeId, referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
-  APPA_PLUGIN_RETAINED_SHAPE,
   APPA_PLUGIN_TRUSTED_CONTEXT,
   APPA_WITHDRAWN_CHILD_RETURN,
   type AppaChildTrajectory,
@@ -295,8 +280,6 @@ type AppaPluginBinding = {
    */
   compaction: boolean;
   requestHeaders: IncomingHttpHeaders;
-  /** No person is there to answer this request's approvals. */
-  unattended: boolean;
   /** A verified user-question result needs trusted workflow continuation. */
   requiresQuestionContinuation: boolean;
   /** A remedy notice requires an immediate control-tool call. */
@@ -317,8 +300,6 @@ type AppaPluginBinding = {
   child?: AppaChildTrajectory;
   /** Child return contract for this request, injected before the provider call. */
   returnContract?: string;
-  /** Retained across fallback outcomes so a generic reason cannot waive a hard denial. */
-  hardBlockSeen?: boolean;
   /**
    * Unscoped client session id for trajectory stamps. Captured before child
    * overlay so stamps never encode a minted parent:child id.
@@ -393,7 +374,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   readonly finalizesToolCalls = true;
   private readonly bindings = new WeakMap<object, AppaPluginBinding>();
   private readonly observers = new WeakMap<object, AppaPluginObserver>();
-  /** Outlives a binding, so a waiver cannot change this request's shape. */
+  /** The request shape the guidance inserted before the model reads. */
   private readonly requestShapes = new WeakMap<object, AppaRequestShape>();
 
   constructor(private readonly clientAdapters: readonly AppaClientAdapter[]) {}
@@ -404,18 +385,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     this.bindings.delete(context.resources);
     this.observers.delete(context.resources);
     this.requestShapes.delete(context.resources);
-    const retained = context.resources.get(APPA_PLUGIN_RETAINED_SHAPE) as
-      | AppaRetainedShape
-      | undefined;
-    if (retained) {
-      this.requestShapes.set(context.resources, {
-        ...retained,
-        requestHeaders: context.headers,
-        requestBody: context.requestBody,
-        threadContinue: false,
-      });
-      return;
-    }
     const trustedContext = getTrustedContext(context.resources);
     if (!trustedContext) return;
     const enforcement = await enforcementFor(trustedContext);
@@ -467,12 +436,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         trustedContext.compaction === true || isSummaryRequest(trustedContext),
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
-      unattended:
-        trajectory.adapter?.isUnattended?.(context.headers) === true ||
-        isUnattendedRequest({
-          headers: context.headers,
-          agentRuntimeRun: trustedContext.agentRuntimeRun === true,
-        }),
       requiresQuestionContinuation: false,
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
@@ -540,14 +503,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ],
     });
     // The runtime never saw a call the model made while enforcement was off,
-    // nor the run of a denied call Break the glass let through, so OpenAPPA
-    // ignores its result: the result reaches the model as it is.
-    const toolResults = answers.filter((result) => {
-      const reason = binding.unenforcedCalls.reasons.get(
-        withoutTrajectoryStamp(result.id),
-      );
-      return reason !== "made" && reason !== "waived";
-    });
+    // so OpenAPPA ignores its result: the result reaches the model as it is.
+    const toolResults = answers.filter(
+      (result) =>
+        binding.unenforcedCalls.reasons.get(
+          withoutTrajectoryStamp(result.id),
+        ) !== "made",
+    );
     const childResultUpdates: Record<string, string> = Object.create(null);
     const ordinaryResultUpdates: Record<string, string> = Object.create(null);
     const ordinary = binding.adapter?.nativeQuestion?.ordinaryResultFromAskUser;
@@ -621,7 +583,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         backgroundLaunches,
       });
     } catch (error) {
-      if (error instanceof Error) await refuseSoftBlock(softBlockReason(error));
       const family = appaWireFamily(context.interactionType);
       const recovery =
         (error instanceof ChildReturnRefusal ||
@@ -920,8 +881,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const settled = result.toolResultUpdates[id];
       // Specialize the runtime's generic failure status using the verified
       // rejection. It reports a retained ChildEnd rejection, not withheld
-      // tool output. Replaying this fixed status must not waive the parent.
-      // An unrecognized dispatch or a policy-denied call retains its ruling.
+      // tool output. An unrecognized dispatch or a policy-denied call retains
+      // its ruling.
       if (
         settled?.outputSource === "runtime" &&
         !settled.denied &&
@@ -931,13 +892,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         delete settled.refused;
       }
     }
-    // Keep the native hard ruling before any metadata/cache lookup can fail.
-    // A later generic exception must not release the original client bytes.
-    binding.hardBlockSeen ||= Object.values(result.toolResultUpdates).some(
-      (value) =>
-        (value.refused || value.denied) &&
-        (isHardBlock(value.content) || isHardBlock(value.diagnostic ?? "")),
-    );
     for (const [index, answer] of context.toolResults.entries()) {
       if (result.toolResultUpdates[answer.id]?.code !== "unreleased_call")
         continue;
@@ -960,7 +914,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         outputSource: "runtime",
         denied: true,
       };
-      binding.hardBlockSeen ||= isHardBlock(notice);
     }
     const carriedKeys = toolResults.map((answer) =>
       carriedRulingKey({
@@ -971,7 +924,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const carriedRulings = binding.adapter?.answersUndeclaredCalls
       ? await cacheManager.getMany<string>(carriedKeys)
       : new Map<AllowedCacheKey, string>();
-    binding.hardBlockSeen ||= [...carriedRulings.values()].some(isHardBlock);
     for (const [index, answer] of toolResults.entries()) {
       // Read, not consumed: the client sends this result on every later
       // request, and the model must read the same text each time.
@@ -990,9 +942,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
       const approved = result.toolResultUpdates[answer.id];
       if (approved?.denied) {
-        binding.hardBlockSeen ||=
-          isHardBlock(approved.content) ||
-          isHardBlock(approved.diagnostic ?? "");
         const clarification = await cacheManager.get<string>(
           deniedCallClarificationKey({
             session: this.governedSession(binding),
@@ -1000,9 +949,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           }),
         );
         if (clarification) approved.content += clarification;
-        if (approved.offers?.length === 0 && !approved.review?.length) {
-          approved.content += NO_REMEDY_PLAN_HINT;
-        }
+        approved.content += refusalGuidance(
+          refusalAction({
+            outcome: approved.outcome,
+            offers: approved.offers,
+            review: approved.review,
+          }),
+        );
       }
       // Already complete, and with no plan this client could act on.
       const carried = carriedRulings.get(carriedKeys[index]);
@@ -1024,35 +977,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     });
     binding.requiresRemedyContinuation =
       binding.pendingRemedyContinuation !== undefined;
-    // A denied call's receipt is history, not withheld output: waiving it
-    // would disable enforcement just because a client replayed an old block.
-    // Keep those receipts even when a separate result admission is waived.
-    const refusedResults = Object.entries(result.toolResultUpdates).filter(
-      ([, value]) => value.refused,
-    );
-    binding.hardBlockSeen ||= refusedResults.some(
-      ([, value]) =>
-        isHardBlock(value.content) || isHardBlock(value.diagnostic ?? ""),
-    );
-    if (
-      refusedResults.length > 0 &&
-      !binding.hardBlockSeen &&
-      (await waiveSoftBlock(
-        binding.session,
-        "onToolResults",
-        refusedResults
-          .map(([, value]) => value.diagnostic ?? value.content)
-          .join("\n"),
-        toolResults
-          .filter((result) => refusedResults.some(([id]) => id === result.id))
-          .map((result) => result.name),
-      ))
-    ) {
-      for (const [id] of refusedResults) delete result.toolResultUpdates[id];
-      this.bindings.delete(context.resources);
-      this.observers.delete(context.resources);
-      enterCapturedGuardrailsActivation("inactive");
-    }
     if (result.returnContract) {
       binding.returnContract = result.returnContract;
     }
@@ -1132,21 +1056,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
         binding.returnContract = started.contract ?? binding.returnContract;
         binding.sessionInitialized = true;
-      }
-      if (
-        (await softBlocksAllowed()) &&
-        ((await isUnenforcedSession(binding.session)) ||
-          (binding.returnContract &&
-            (await waiveSoftBlock(
-              binding.session,
-              "child_return_contract",
-              binding.returnContract,
-            ))))
-      ) {
-        this.bindings.delete(context.resources);
-        this.observers.delete(context.resources);
-        enterCapturedGuardrailsActivation("inactive");
-        return;
       }
       // A runtime or bound subagent got its contract in its task; a wire the
       // proxy cannot write guidance into keeps it there.
@@ -1586,37 +1495,33 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             lineage: binding.child?.lineage,
           }),
         );
-    // Keep the hard ruling even when its model-facing feedback is generic.
-    // Later notice construction or wrapper fallbacks must not waive it.
-    binding.hardBlockSeen ||= decisions.some(
-      (decision) =>
-        decision.kind === "hold" &&
-        (isHardBlock(decision.feedback) ||
-          ("diagnostic" in decision &&
-            typeof decision.diagnostic === "string" &&
-            isHardBlock(decision.diagnostic))),
-    );
     const held = calls.flatMap((call, index) => {
-      const decision = decisions[index];
-      return decision.kind === "hold"
-        ? [{ call, feedback: decision.feedback }]
-        : [];
+      const decision: AppaHostedCallDecision = decisions[index];
+      return decision.kind === "hold" ? [{ call, ...decision }] : [];
     });
-    if (held.length === 0) return { decision: "release" };
-    const hostedRefusals = decisions.flatMap((decision) =>
-      decision.kind === "hold"
-        ? [
-            ("diagnostic" in decision ? decision.diagnostic : undefined) ??
-              decision.feedback,
-          ]
-        : [],
+    // A notice an earlier refusal of an id left must not answer for the call now
+    // decided under it.
+    await forgetSupersededRulings(
+      this.governedSession(binding),
+      calls.map((call, index) => {
+        const decision: AppaHostedCallDecision = decisions[index];
+        return {
+          callId: call.id,
+          keepsNotice:
+            decision.kind === "hold" && decision.proxyNotice === true,
+        };
+      }),
     );
-    if (!binding.hardBlockSeen) {
-      await refuseSoftBlock(
-        hostedRefusals.join("\n"),
-        held.map(({ call }) => call.name),
-      );
-    }
+    if (held.length === 0) return { decision: "release" };
+    // As for a proposed call, the runtime holds no record of a call refused
+    // before any ruling, so the notice's result is answered from here.
+    for (const { call, feedback, proxyNotice } of held)
+      if (proxyNotice)
+        await retainUnansweredNotice({
+          session: this.governedSession(binding),
+          callId: call.id,
+          notice: feedback,
+        });
     // The client must run the notices, so the turn stays open.
     binding.turnOpen = true;
     const notices = held.map(({ call, feedback }) => ({
@@ -1738,6 +1643,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
                     organizationId: binding.session.organization_id,
                     sessionId: binding.session.session_id,
                     offerId,
+                    presenter: binding.session.presenter ?? "unknown",
                   })
                 )?.tool)
               : undefined;
@@ -1903,11 +1809,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           evaluateToolCalls(session, relayCandidates, evaluateOptions, policy),
         )
       : [];
-    binding.hardBlockSeen ||= relayEvaluations.some(
-      (decision) =>
-        decision.kind === "deny" &&
-        isHardBlock(decision.diagnostic ?? decision.feedback),
-    );
     const admittedRelayIds = new Set<string>();
     const withheldRelayDecisions = new Map<
       string,
@@ -1953,11 +1854,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           evaluateToolCalls(session, rest, evaluateOptions, policy),
         )
       : [];
-    binding.hardBlockSeen ||= decisions.some(
-      (decision) =>
-        decision.kind === "deny" &&
-        isHardBlock(decision.diagnostic ?? decision.feedback),
-    );
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
@@ -1974,18 +1870,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // call, so the result the client sends back is answered from here and
       // never ruled on as a call that ran. Without the retained reason the
       // runtime answers that result as withheld, so a failed write is not fatal.
-      if (decision.kind === "deny" && decision.unanswered) {
-        try {
-          await cacheManager.set(
-            unansweredNoticeKey({ session, callId: id }),
-            decision.feedback,
-            TimeInMs.Day,
-          );
-        } catch (err) {
-          logger.warn({ err }, "OpenAPPA could not retain a denial's reason");
-        }
-      }
+      if (decision.kind === "deny" && decision.proxyNotice)
+        await retainUnansweredNotice({
+          session,
+          callId: id,
+          notice: decision.feedback,
+        });
     }
+    // A notice an earlier refusal of an id left must not answer for the call now
+    // decided under it.
+    await forgetSupersededRulings(session, [
+      ...[...decisionById].map(([callId, decision]) => ({
+        callId,
+        keepsNotice: decision.kind === "deny" && decision.proxyNotice === true,
+      })),
+      ...[...admittedRelayIds].map((callId) => ({
+        callId,
+        keepsNotice: false,
+      })),
+    ]);
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
     }
@@ -2017,42 +1920,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       );
     }
 
-    const refusals = [...decisionById.values()].flatMap((decision) =>
-      decision.kind === "deny"
-        ? [decision.diagnostic ?? decision.feedback]
-        : [],
-    );
-    binding.hardBlockSeen ||= refusals.some(isHardBlock);
-    if (
-      refusals.length &&
-      !binding.hardBlockSeen &&
-      !calls.some((call) => isChildContinuationCall(binding.adapter, call))
-    )
-      await refuseSoftBlock(
-        refusals.join("\n"),
-        context.toolCalls
-          .filter((call) => decisionById.get(call.id)?.kind === "deny")
-          .map((call) => call.name),
-      );
     const notice = binding.request.tools?.notice;
-    // Only the ordinary calls the runtime ruled on here can be waived.
-    const evaluatedIds = new Set([
-      ...rest.map((call) => call.id),
-      ...withheldRelayDecisions.keys(),
-    ]);
     // The calls the runtime admitted; a batch that never reaches the client
     // cancels them, so no call stays open that will never run.
     const admittedCalls = () =>
       rest.flatMap((each) =>
         decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
       );
-    // Read once for the batch, by the first denial.
-    let breakTheGlass: ReturnType<typeof getGuardrailsDeployment> | undefined;
-    let unattendedNoted = false;
-    // The denied calls Break the glass lets through, recorded together once
-    // the batch is complete.
-    const waived: WaivedCall[] = [];
-    let waiverSuperyell = false;
     // Resolved once for the batch, by the first denial that has no notice tool.
     let pendingServersTool:
       | Promise<{ name: string; arguments: string } | undefined>
@@ -2081,7 +1955,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         decisionById.set(call.id, {
           kind: "deny",
           feedback: handback.feedback,
-          unanswered: true,
+          proxyNotice: true,
         });
         await cacheManager.set(
           unansweredNoticeKey({ session, callId: call.id }),
@@ -2238,64 +2112,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
         continue;
       }
-      // Break the glass: a denied ordinary call can run anyway, with a yell.
-      // Runtime, spawn and relay calls need the runtime's own release or
-      // rewrite, so they stay denied. The record is written after the loop,
-      // once the batch is known to reach the client.
-      if (decision.kind === "deny" && evaluatedIds.has(call.id)) {
-        breakTheGlass ??= getGuardrailsDeployment();
-        let settings: Awaited<typeof breakTheGlass>;
-        try {
-          settings = await breakTheGlass;
-        } catch (error) {
-          await cancelCalls(session, admittedCalls(), policy);
-          throw error;
-        }
-        // The gateway decides a remedy plan's review without the runtime
-        // credential or the client's headers, so it learns from the proxy
-        // whether a person answers for this session: noted once per denied
-        // batch, whatever the denied call (a runtime call's review is decided
-        // there too), and only in the mode that reads the note.
-        if (!unattendedNoted && unattendedNoteMatters(settings)) {
-          unattendedNoted = true;
-          try {
-            await rememberUnattendedSession(
-              binding.session,
-              binding.unattended,
-            );
-          } catch (error) {
-            await cancelCalls(session, admittedCalls(), policy);
-            throw error;
-          }
-        }
-        if (
-          runtimeCalls.has(call.id) ||
-          withheldRelayDecisions.has(call.id) ||
-          (binding.adapter &&
-            (isChildSpawnCall(binding.adapter, call) ||
-              isChildContinuationCall(binding.adapter, call)))
-        ) {
-          // Lifecycle calls still need their host binding. An ordinary-call
-          // waiver must not release a continuation without that binding.
-        } else {
-          const waiver = waiverFor({
-            decision,
-            settings,
-            unattended: binding.unattended,
-          });
-          if (waiver) {
-            waived.push({
-              toolCallId: call.id,
-              tool: this.policyIdentity(binding, call).name,
-              kind: waiver,
-            });
-            // A platform yell does what the agent's own yell does.
-            waiverSuperyell = breakTheGlassActiveIn(settings);
-            released.push(call);
-            continue;
-          }
-        }
-      }
       // The registry pins `blocked` to the wire batch: the entry names the
       // call as given. The identity the runtime ruled on — the dispatch's
       // target — is what the notice and the refusal describe.
@@ -2312,24 +2128,41 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : "run_tool";
         clarification = `\n\n[appa] This call already went through the ${wrapper} wrapper ${JSON.stringify(identity.dispatch)}${namespace}, with tool_name targeting ${JSON.stringify(identity.name)}. Calling the target directly or retrying the same wrapper call is the same blocked call, not a routing correction.`;
       }
-      // Only a recorded policy denial can establish that no remedy is offered.
-      // Local failures and pending reviews retain their own recovery guidance.
-      const noPlan =
-        decision.recorded === true &&
-        decision.offers?.length === 0 &&
-        !decision.review?.length;
-      // The runtime could not rule on the call (its annotator failed), so the
-      // call did not run and there is no ruling to remedy: the notice itself
-      // says whether to retry, and the gateway's remedy tools would change
-      // nothing. It is passed on as it is, and nothing is held against the
-      // client for not carrying those tools.
-      const unanswered = decision.unanswered === true;
+      // The runtime's own ruling states why it refused; the host acts on that
+      // and on nothing else. A notice the proxy answers was refused before
+      // any ruling, so it says itself whether to retry.
+      const action = decision.recorded
+        ? refusalAction({
+            outcome: decision.outcome,
+            offers: decision.offers,
+            review: decision.review,
+          })
+        : undefined;
+      // The call was not judged, or was refused before any ruling, so there
+      // is no ruling to remedy: the gateway's remedy tools would change
+      // nothing, and nothing is held against the client for not carrying
+      // them.
+      const unjudged =
+        decision.proxyNotice === true || action?.kind === "refuse_unjudged";
+      const noPlan = action?.kind === "refuse" && action.why !== "unstated";
+      // A ruling that states nothing, such as a cancelled call's replayed
+      // receipt, goes to the model as it is: no remedy can reopen it.
+      const unstated = action?.kind === "refuse" && action.why === "unstated";
+      // Only a ruling with remedies is worth carrying on a stand-in call or
+      // loading the remedy tools for.
+      const offersRemedies = action?.kind === "offer_remedies";
       // Raw transcript access is a host boundary, with no policy remedy.
       // Loading gateway tools cannot change it and must not cause a retry.
       const transcriptRefusal = blockedTranscriptCalls.has(call.id);
-      const needsRemedyTools = !unanswered && !transcriptRefusal;
+      const needsRemedyTools = !unjudged && !unstated && !transcriptRefusal;
+      // Asking for a resend, and blaming the client when one does not help,
+      // is worth it only for remedies, or for a denial with no ruling to say.
+      const recoversRemedyTools =
+        needsRemedyTools && (action === undefined || offersRemedies);
       const ruling =
-        decision.feedback + clarification + (noPlan ? NO_REMEDY_PLAN_HINT : "");
+        decision.feedback +
+        clarification +
+        (action ? refusalGuidance(action) : "");
       if (decision.recorded && clarification) {
         // The next request restores the runtime's ruling, not the client's
         // notice result. Retain only our addition; never replace that ruling.
@@ -2356,10 +2189,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // denial the runtime did not record has no ruling to answer with, so
         // it is refused below.
         let wait: { name: string; arguments: string } | undefined;
-        if (
-          decision.recorded &&
-          !(binding.adapter?.id === "grok-build" && noPlan)
-        ) {
+        if (offersRemedies) {
           pendingServersTool ??= this.pendingServersTool(
             binding,
             session,
@@ -2384,13 +2214,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         let transient: boolean;
         try {
           transient =
-            needsRemedyTools &&
+            recoversRemedyTools &&
             !binding.request.defersTools &&
             binding.request.declaredTools.length > 0 &&
             !(await this.remedyToolsMissingBefore(session));
           // A client that defers tools has not failed to receive remedies: it
           // has not loaded the tools yet.
-          if (needsRemedyTools && !transient && !binding.request.defersTools) {
+          if (
+            recoversRemedyTools &&
+            !transient &&
+            !binding.request.defersTools
+          ) {
             await recordOpenAppaClientFailure({
               session,
               toolCallId: call.id,
@@ -2414,7 +2248,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           : !needsRemedyTools
             ? ruling
             : binding.request.defersTools
-              ? noPlan
+              ? !offersRemedies
                 ? ruling
                 : `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
               : noPlan
@@ -2459,8 +2293,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           refusal: {
             refusalMessage: contentMessage,
             contentMessage,
-            reason: unanswered
-              ? "openappa_unanswered_annotation"
+            reason: unjudged
+              ? decision.outcome?.kind === "integrity"
+                ? "openappa_integrity"
+                : "openappa_unanswered_annotation"
               : transcriptRefusal
                 ? "openappa_child_transcript_access"
                 : "openappa_no_notice_tool",
@@ -2491,24 +2327,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       });
     }
 
-    // The waived calls' markers, yells and session bypass are written in one
-    // transaction, only for a batch that reaches the client: a batch refused
-    // above leaves no record of a call that never ran. A record that fails
-    // keeps the batch from the client too, so no released call runs
-    // unrecorded; the resent batch is ruled again.
-    if (
-      !(await recordWaivedCalls({
-        session,
-        calls: waived,
-        superyell: waiverSuperyell,
-      }))
-    ) {
-      await cancelCalls(session, admittedCalls(), policy);
-      throw new ApiError(
-        503,
-        "OpenAPPA could not record the calls it let through; retry the request",
-      );
-    }
     // Keep turn open while tool calls are awaiting client execution.
     binding.turnOpen = true;
     const stamp = trajectoryStamper(binding, context);
@@ -2613,10 +2431,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // The answer stays in this subagent's own conversation; its parent
       // reads the runtime's notice and decides.
       if (outcome.kind === "deferred") return { decision: "release" };
-      if (outcome.kind === "held") {
-        await refuseSoftBlock(outcome.reason);
+      if (outcome.kind === "held")
         return { decision: "replace", responseText: outcome.reason };
-      }
       return outcome.value === context.responseText
         ? { decision: "release" }
         : { decision: "replace", responseText: outcome.value };
@@ -2668,7 +2484,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       admitted =
         outcome.decision === "release" ? context.responseText : outcome.content;
       if (!outcome.crossed) {
-        await refuseSoftBlock(admitted);
         return {
           decision: "replace",
           responseText:
@@ -2689,13 +2504,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ? { decision: "release" }
         : { decision: "replace", responseText: admitted };
     }
-    // A waived return has no engine crossing to attest. Its parent waives at
-    // its own admission boundary instead of trusting a fabricated receipt.
-    if (
-      (await softBlocksAllowed()) &&
-      (await isUnenforcedSession(binding.session))
-    )
-      return { decision: "release" };
     const marker = mintChildReturnMarker({
       organizationId: binding.session.organization_id,
       callerId: binding.session.caller_id,
@@ -2713,12 +2521,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   async onSessionInit(context: LlmProxyRequestContext): Promise<void> {
-    return this.withSoftBlockWaiver(
-      context,
-      "onSessionInit",
-      () => this.guardedSessionInit(context),
-      () => undefined,
-    );
+    return this.guardedSessionInit(context);
   }
 
   async onToolResults(
@@ -2732,12 +2535,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return ids.toolResultsOutcome(
         await this.onToolResults({ ...context, toolResults }),
       );
-    return this.withSoftBlockWaiver(
-      context,
-      "onToolResults",
-      () => this.guardedToolResults(context),
-      () => undefined,
-    );
+    return this.guardedToolResults(context);
   }
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
@@ -2762,14 +2560,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         );
       }
     }
-    await this.withSoftBlockWaiver(
-      context,
-      "onBeforeModel",
-      () => this.guardedBeforeModel(context),
-      () => undefined,
-    );
-    // A waiver above returns early or restores the request. Insertion is
-    // idempotent, so the ordinary path is unchanged.
+    await this.guardedBeforeModel(context);
+    // Insertion is idempotent, so the ordinary path is unchanged.
     insertGovernedGuidance(context, this.requestShapes.get(context.resources));
     if (
       !trusted?.compaction &&
@@ -2778,7 +2570,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         (session?.parent_id && (await isUnenforcedSession(session))))
     ) {
       // Removing today's contract does not remove it from retained reasoning
-      // or a provider-owned thread. Withdraw it on every waived child request.
+      // or a provider-owned thread. Withdraw it on every request of a child
+      // out of OpenAPPA.
       deliverReturnContract({
         request: context.request,
         interactionType: context.interactionType,
@@ -2798,38 +2591,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         await this.onToolCalls({ ...context, toolCalls }),
       );
     rejectSummaryToolCalls(context.resources, context.toolCalls.length);
-    const adapter = this.bindings.get(context.resources)?.adapter;
-    if (
-      context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
-    ) {
-      // The generic failure fallback releases original wire calls. A resumed
-      // child must instead retain its host binding, including on policy or
-      // runtime failure, so neither waiver path may release it unchanged.
-      return this.guardedToolCalls(context);
-    }
-    return this.withSoftBlockWaiver(
-      context,
-      "onToolCalls",
-      async () => {
-        const result = await this.guardedToolCalls(context);
-        if (this.bindings.get(context.resources)?.hardBlockSeen) return result;
-        if (result?.decision === "refuse")
-          await refuseSoftBlock(result.refusal.refusalMessage, [
-            result.refusal.blockedToolName,
-          ]);
-        if (
-          result?.decision === "allow" &&
-          result.blocked?.length &&
-          !result.blocked.some((block) => isHardBlock(block.reason))
-        )
-          await refuseSoftBlock(
-            result.blocked.map((block) => block.reason).join("\n"),
-            result.blocked.map((block) => block.name),
-          );
-        return result;
-      },
-      () => ({ decision: "allow", toolCalls: context.toolCalls }),
-    );
+    return this.guardedToolCalls(context);
   }
 
   async onHostedToolCalls(
@@ -2844,35 +2606,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         await this.onHostedToolCalls({ ...context, hostedToolCalls }),
       );
     rejectSummaryToolCalls(context.resources, context.hostedToolCalls.length);
-    return this.withSoftBlockWaiver(
-      context,
-      "onHostedToolCalls",
-      async () => {
-        const result = await this.guardedHostedToolCalls(context);
-        if (this.bindings.get(context.resources)?.hardBlockSeen) return result;
-        if (
-          result?.decision === "hold" &&
-          !result.blocked.some((block) => isHardBlock(block.reason))
-        )
-          await refuseSoftBlock(
-            result.blocked.map((block) => block.reason).join("\n"),
-            result.blocked.map((block) => block.name),
-          );
-        return result;
-      },
-      () => ({ decision: "release" }),
-    );
+    return this.guardedHostedToolCalls(context);
   }
 
   async onBufferedModelResponse(
     context: LlmProxyBufferedModelResponseContext,
   ): Promise<LlmProxyBufferedModelResponseOutcome | undefined> {
-    return this.withSoftBlockWaiver(
-      context,
-      "onBufferedModelResponse",
-      () => this.guardedBufferedModelResponse(context),
-      () => ({ decision: "release" }),
-    );
+    return this.guardedBufferedModelResponse(context);
   }
 
   async onPrepareToolCalls(
@@ -2885,105 +2625,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         await this.onPrepareToolCalls({ ...context, toolCalls }),
       );
     // Preparation runs before the finalizer, so the summary check runs here
-    // first, outside the waiver.
+    // first.
     rejectSummaryToolCalls(context.resources, context.toolCalls.length);
-    const adapter = this.bindings.get(context.resources)?.adapter;
-    if (
-      context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
-    ) {
-      // Preparation failures must not erase the binding needed by the later
-      // continuation check and release the original resume unchanged.
-      return this.guardedPrepareToolCalls(context);
-    }
-    return this.withSoftBlockWaiver(
-      context,
-      "onPrepareToolCalls",
-      async () => {
-        const result = await this.guardedPrepareToolCalls(context);
-        if (result?.decision === "refuse")
-          await refuseSoftBlock(result.refusal.refusalMessage, [
-            result.refusal.blockedToolName,
-          ]);
-        return result;
-      },
-      () => ({ decision: "allow", toolCalls: context.toolCalls }),
-    );
+    return this.guardedPrepareToolCalls(context);
   }
 
   async onModelResponse(
     context: LlmProxyModelResponseContext,
   ): Promise<undefined> {
-    return this.withSoftBlockWaiver(
-      context,
-      "onModelResponse",
-      () => this.guardedModelResponse(context),
-      () => undefined,
-    );
+    return this.guardedModelResponse(context);
   }
 
   async onCleanup(context: LlmProxyRequestContext): Promise<void> {
     this.bindings.delete(context.resources);
     this.observers.delete(context.resources);
-  }
-
-  private async withSoftBlockWaiver<T>(
-    context: LlmProxyRequestContext,
-    boundary: string,
-    run: () => Promise<T>,
-    release: () => T,
-  ): Promise<T> {
-    if (!(await softBlocksAllowed())) return run();
-    const originalBody = structuredClone(context.requestBody);
-    const providerRequest = "request" in context ? context.request : undefined;
-    const originalRequest = structuredClone(providerRequest);
-    try {
-      return await run();
-    } catch (error) {
-      // Authentication failures are never policy waivers. The host still owns
-      // the unmodified provider bytes here; no client tool has been executed.
-      if (
-        !(error instanceof Error) ||
-        (error instanceof ApiError && error.statusCode === 401) ||
-        this.bindings.get(context.resources)?.hardBlockSeen
-      )
-        throw error;
-      const trusted = getTrustedContext(context.resources);
-      const session =
-        this.bindings.get(context.resources)?.session ?? trusted?.session;
-      const attributedTools = softBlockTools(error);
-      const contextTools =
-        "toolCalls" in context && Array.isArray(context.toolCalls)
-          ? context.toolCalls.map((call) => call.name)
-          : "toolResults" in context && Array.isArray(context.toolResults)
-            ? context.toolResults.map((result) => result.name)
-            : "hostedToolCalls" in context &&
-                Array.isArray(context.hostedToolCalls)
-              ? context.hostedToolCalls.map((call) => call.name)
-              : [];
-      if (
-        !session ||
-        !(await waiveSoftBlock(
-          session,
-          boundary,
-          softBlockReason(error),
-          attributedTools.length ? attributedTools : contextTools,
-        ))
-      )
-        throw error;
-      restoreSoftBlockRequest(context.requestBody, originalBody);
-      restoreSoftBlockRequest(providerRequest, originalRequest);
-      if (providerRequest) {
-        this.bindings
-          .get(context.resources)
-          ?.adapter?.stripCarrierMetadata(providerRequest);
-        stripPeerProofs(providerRequest);
-        stripRuntimeToolProofs(providerRequest);
-      }
-      this.bindings.delete(context.resources);
-      this.observers.delete(context.resources);
-      enterCapturedGuardrailsActivation("inactive");
-      return release();
-    }
   }
 
   // === Internal helpers ===
@@ -3413,13 +3068,57 @@ function waitFailure(wait: CommonToolResult): string {
   return ` The wait itself failed, and the client reported:\n${reported}\n`;
 }
 
+/** Without the retained notice the runtime answers its result as withheld. */
+async function retainUnansweredNotice(params: {
+  session: OpenAppaSession;
+  callId: string;
+  notice: string;
+}): Promise<void> {
+  try {
+    await cacheManager.set(
+      unansweredNoticeKey(params),
+      params.notice,
+      TimeInMs.Day,
+    );
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not retain a denial's reason");
+  }
+}
+
+/**
+ * Drops what earlier rulings of these ids left for their results: the runtime
+ * decided each one now. A call that keeps a notice keeps the one just retained.
+ */
+async function forgetSupersededRulings(
+  session: OpenAppaSession,
+  decided: readonly { callId: string; keepsNotice: boolean }[],
+): Promise<void> {
+  if (decided.length === 0) return;
+  try {
+    // A ruling carried on a stand-in call goes too: the id now names another call.
+    await cacheManager.getAndDeleteMany(
+      decided.flatMap(({ callId, keepsNotice }) => [
+        notLoadedRulingKey({ session, callId }),
+        carriedRulingKey({ session, callId }),
+        ...(keepsNotice ? [] : [unansweredNoticeKey({ session, callId })]),
+      ]),
+    );
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not drop superseded denial reasons");
+  }
+}
+
 function unansweredNoticeKey(params: {
   session: OpenAppaSession;
   callId: string;
 }): AllowedCacheKey {
   return sessionScopedCacheKey(
     CacheKey.OpenAppaUnansweredAnnotationNotice,
-    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+    JSON.stringify([
+      params.session.organization_id,
+      params.session.session_id,
+      withoutTrajectoryStamp(params.callId),
+    ]),
   );
 }
 
@@ -4474,7 +4173,6 @@ async function approveChildReturnCarriers(params: {
         !params.backgroundLaunches?.has(record.spawnCallId)
       )
         throw error;
-      await refuseSoftBlock(softBlockReason(error));
       logger.warn(
         {
           client: adapter.id,
@@ -4802,7 +4500,6 @@ async function admitRelayArrivals(params: {
       continue;
     }
     if (arrival.kind === "session" || arrival.peer === "malformed") {
-      await refuseSoftBlock("OpenAPPA withheld a peer arrival");
       arrival.replace(WITHHELD_RELAY);
       continue;
     }
@@ -4836,9 +4533,6 @@ async function admitRelayArrivals(params: {
     });
     const { withheld } = arrival.admit(records);
     if (withheld) {
-      await refuseSoftBlock(
-        "OpenAPPA withheld a peer message without a crossing record",
-      );
       logger.info(
         { sessionId: session.session_id, kind: arrival.kind },
         "OpenAPPA withheld a message with no record of crossing from its sender",
@@ -5482,6 +5176,7 @@ async function persistedSession(
     session_id: row.sessionId,
     ...(row.callerId ? { caller_id: row.callerId } : {}),
     ...(row.parentId ? { parent_id: row.parentId } : {}),
+    ...(sender.presenter ? { presenter: sender.presenter } : {}),
   };
 }
 
@@ -5526,7 +5221,6 @@ async function admitPeerArrival(params: {
 }): Promise<void> {
   const trailer = params.arrival.peer;
   if (!trailer || trailer === "malformed") {
-    await refuseSoftBlock("OpenAPPA withheld a peer arrival");
     params.arrival.replace(WITHHELD_RELAY);
     return;
   }
@@ -5536,7 +5230,6 @@ async function admitPeerArrival(params: {
     arrival: params.arrival,
   });
   if (!senderSessionId) {
-    await refuseSoftBlock("OpenAPPA withheld a peer arrival");
     params.arrival.replace(WITHHELD_RELAY);
     return;
   }
@@ -5554,13 +5247,11 @@ async function admitPeerArrival(params: {
     return;
   }
   if (admitted.kind === "held") {
-    await refuseSoftBlock("OpenAPPA held a peer message");
     params.arrival.replace(
       await heldPeerNotice(admitted.notices, params.tools),
     );
     return;
   }
-  await refuseSoftBlock("OpenAPPA withheld a peer arrival");
   params.arrival.replace(WITHHELD_RELAY);
 }
 
@@ -5774,9 +5465,6 @@ async function admitStructuredRelay(params: {
   if (arrival.recorded?.(records)) {
     const { withheld } = arrival.admit(records);
     if (withheld) {
-      await refuseSoftBlock(
-        "OpenAPPA withheld a peer message without a crossing record",
-      );
       logger.info(
         { sessionId: params.session.session_id, kind: arrival.kind },
         "OpenAPPA withheld a message with no record of crossing from its sender",
@@ -5784,9 +5472,6 @@ async function admitStructuredRelay(params: {
     }
     return;
   }
-  await refuseSoftBlock(
-    "OpenAPPA withheld a peer message pending inbox discovery",
-  );
   arrival.replace(
     inboxDiscoveryNotice(params.tools, protocolRequestId(arrival.body)),
   );
@@ -5797,7 +5482,6 @@ async function heldPeerNotice(
   tools: { list?: string; read?: string },
   requestId?: string,
 ): Promise<string> {
-  await refuseSoftBlock("OpenAPPA held a peer message");
   const ids = notices.map((notice) => notice.messageId).join(", ");
   const expiry = notices
     .map((notice) => notice.expiresAt)
@@ -6065,7 +5749,8 @@ async function holdConflictingRemedyCalls(params: {
       params.decisionById.set(call.id, {
         kind: "deny",
         feedback: CONFLICTING_REMEDY_OFFERS_FEEDBACK,
-        unanswered: true,
+        outcome: { kind: "integrity" },
+        proxyNotice: true,
       });
     }
   }
@@ -6189,9 +5874,7 @@ function isSummaryRequest(trusted: AppaTrustedContext): boolean {
 }
 
 /**
- * Refuses a summary's calls before any hook can waive them as a soft block
- * (which would release them and exempt the session) or an observer can
- * record them. Not retryable: the same summary would only be paid for again.
+ * Refuses a summary's calls before any hook or observer can record them. Not retryable: the same summary would only be paid for again.
  */
 function rejectSummaryToolCalls(
   resources: ReadonlyMap<PropertyKey, unknown>,
@@ -6350,19 +6033,6 @@ function isChildSpawnCall(adapter: AppaClientAdapter, call: ToolCall): boolean {
       message: "probe",
       items: [{ type: "text", text: "probe" }],
     }) !== undefined
-  );
-}
-
-function isChildContinuationCall(
-  adapter: AppaClientAdapter | undefined,
-  call: ToolCall,
-): boolean {
-  return (
-    adapter?.isChildContinuationTool?.(
-      call.name,
-      call.namespace,
-      call.arguments,
-    ) === true
   );
 }
 
@@ -8218,15 +7888,8 @@ async function hasRemedyOfferResult(params: {
     const decision = recorded.get(id)?.decision;
     const offeredRuling =
       isRecord(decision) &&
-      decision.decision === "deny_call" &&
       typeof decision.feedback === "string" &&
-      Array.isArray(decision.offers) &&
-      decision.offers.some(
-        (offer) =>
-          isRecord(offer) &&
-          typeof offer.offer_id === "string" &&
-          offer.offer_id.length > 0,
-      )
+      receiptRefusalAction(decision)?.kind === "offer_remedies"
         ? decision.feedback
         : undefined;
     if (
@@ -8252,11 +7915,19 @@ async function hasRemedyOfferResult(params: {
       return [];
     if (
       approved.denied &&
-      (approved.offers !== undefined || approved.review?.length)
+      (approved.outcome !== undefined ||
+        approved.offers !== undefined ||
+        approved.review?.length)
     ) {
       // Current denial metadata outranks both the original journal offer and
       // generic remedy hints. Unknown metadata still uses the scoped fallback.
-      return approved.offers?.length || approved.review?.length ? [index] : [];
+      return refusalAction({
+        outcome: approved.outcome,
+        offers: approved.offers,
+        review: approved.review,
+      }).kind === "offer_remedies"
+        ? [index]
+        : [];
     }
     if (
       offeredRuling === undefined &&
@@ -9114,19 +8785,6 @@ function tracesLineage(session: OpenAppaSession, chat: boolean): boolean {
 }
 
 /** Restore in place: adapters retain references to the provider request. */
-function restoreSoftBlockRequest(target: unknown, original: unknown): void {
-  if (
-    !target ||
-    typeof target !== "object" ||
-    !original ||
-    typeof original !== "object"
-  )
-    return;
-  for (const key of Object.keys(target))
-    delete (target as Record<string, unknown>)[key];
-  if (Array.isArray(target)) target.length = 0;
-  Object.assign(target, original);
-}
 
 /**
  * Agent Runtime's `archestra-grok-llm` strips Grok's `search_tool`/`use_tool`

@@ -223,6 +223,7 @@ OpenAPPA transmits consult requests detailing the proposed tool call and unmet p
 | Public audience | `{"kind":"audience","required":"public"}` |
 | Restricted audience | `{"kind":"audience","required":["internal","@finance","alice@corp.com"]}` (ordered by built-in audience, `@` references, then literal reader IDs). |
 | Effect exclusion | `{"kind":"effect","excludes":"email.sent"}` |
+| Required prior effect | `{"kind":"prior","contains":"backup.completed"}` |
 | Attention | `{"kind":"attention","mark":"finance-signoff"}` |
 
 Consult requests do not disclose the trajectory's current label or existing audience members.

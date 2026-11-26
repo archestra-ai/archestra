@@ -43,7 +43,7 @@ function verify(
 describe("runtime tool origin proofs", () => {
   it("retains the native child source instead of the gateway's root", () => {
     expect(verify()).toEqual({
-      session,
+      session: { ...session, presenter: "delegated" },
       toolCallId: "call-start",
       spawn: true,
     });
@@ -61,7 +61,7 @@ describe("runtime tool origin proofs", () => {
         secret: request.secret,
       }),
     ).toEqual({
-      session,
+      session: { ...session, presenter: "delegated" },
       toolCallId: "call-start",
       spawn: false,
       observed: true,

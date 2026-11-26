@@ -5,6 +5,7 @@ import config from "@/config";
 import db, * as database from "@/database";
 import { InteractionModel, ModelModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildReturnMarker } from "@/openappa/child-return";
 import {
@@ -14,7 +15,6 @@ import {
 import { mintDelegationMarker } from "@/openappa/delegation";
 import * as appaService from "@/openappa/service";
 import { stampToolCallId } from "@/openappa/trajectory-stamp";
-import { superyellSession } from "@/openappa/unenforced";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -2221,9 +2221,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     // recover, a refusal there blocked every command that needed an approval.
     test.for([
       {
-        state: "the requester was superyelled",
+        state: "the requester was recorded off",
         requester: "root-thread",
-        setup: "superyell root",
+        setup: "record off root",
         passes: true,
       },
       {
@@ -2233,27 +2233,21 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         passes: true,
       },
       {
-        state: "the root of the subagent requester was superyelled",
+        state: "the root of the subagent requester was recorded off",
         requester: "worker-thread",
-        setup: "superyell root, then the subagent runs",
+        setup: "record off root, then the subagent runs",
         passes: true,
       },
       {
-        state: "the subagent requester was superyelled",
+        state: "the subagent requester was recorded off",
         requester: "worker-thread",
-        setup: "superyell subagent",
+        setup: "record off subagent",
         passes: true,
       },
       {
-        state: "the root of a governed subagent requester was superyelled",
-        requester: "worker-thread",
-        setup: "governed subagent, then superyell root",
-        passes: true,
-      },
-      {
-        state: "a nested subagent requester was superyelled",
+        state: "a nested subagent requester was recorded off",
         requester: "helper-thread",
-        setup: "superyell nested subagent",
+        setup: "record off nested subagent",
         passes: true,
       },
       {
@@ -2263,33 +2257,33 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         passes: false,
       },
       {
-        state: "another user superyelled a session with the requester's id",
+        state: "another user recorded off a session with the requester's id",
         requester: "root-thread",
-        setup: "superyell another user's root",
+        setup: "record off another user's root",
         passes: false,
       },
       {
         state: "two sessions under the root end with the requester's id",
         requester: "helper-thread",
-        setup: "superyell two sessions with the requester's id",
+        setup: "record off two sessions with the requester's id",
         passes: false,
       },
       {
         state: "the requester is recorded under another root",
         requester: "worker-thread",
-        setup: "superyell a subagent of another root",
+        setup: "record off a subagent of another root",
         passes: false,
       },
       {
         state: "the requester's id only ends a recorded subagent's own id",
         requester: "1",
-        setup: "superyell subagents whose ids end with the requester's",
+        setup: "record off subagents whose ids end with the requester's",
         passes: false,
       },
       {
-        state: "a thread that is not a review shares the superyelled root",
+        state: "a thread that is not a review shares the recorded off root",
         requester: undefined,
-        setup: "superyell root",
+        setup: "record off root",
         passes: false,
       },
     ] as const)("a Codex auto-review is out of OpenAPPA only while the session it reviews is: $state", async ({
@@ -2369,16 +2363,17 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       const scoped = (id: string) => `user:${h.userId}|${id}`;
       const root = { session_id: "root-thread", thread_id: "root-thread" };
 
-      const superyell = (id: string, parent?: string) =>
-        superyellSession({
-          organization_id: h.agent.organizationId,
-          session_id: scoped(id),
-          ...(parent ? { parent_id: scoped(parent) } : {}),
+      // A record that the session started while enforcement was off.
+      const recordOff = (id: string, parent?: string) =>
+        OpenAppaUnenforcedModel.recordSession({
+          organizationId: h.agent.organizationId,
+          sessionId: scoped(id),
+          parentId: parent ? scoped(parent) : undefined,
         });
       const opened = [{ role: "user", content: "Go" }];
       switch (setup) {
-        case "superyell root":
-          await superyell("root-thread");
+        case "record off root":
+          await recordOff("root-thread");
           break;
         case "root starts while enforcement is off": {
           await GuardrailsDeploymentModel.setEnabled(false);
@@ -2387,9 +2382,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           await GuardrailsDeploymentModel.setEnabled(true);
           break;
         }
-        case "superyell root, then the subagent runs": {
+        case "record off root, then the subagent runs": {
           // The subagent's own request records it under the root it follows.
-          await superyell("root-thread");
+          await recordOff("root-thread");
           const worker = await send(
             {
               session_id: "root-thread",
@@ -2402,30 +2397,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           expect(worker.statusCode, worker.body).toBe(200);
           break;
         }
-        case "superyell subagent":
-          await superyell("root-thread:worker-thread", "root-thread");
+        case "record off subagent":
+          await recordOff("root-thread:worker-thread", "root-thread");
           break;
-        case "governed subagent, then superyell root": {
-          // The runtime's own rows: the root, and the subagent it governs.
-          const rootId = scoped("root-thread");
-          for (const [id, parent] of [
-            [rootId, undefined],
-            [scoped("root-thread:worker-thread"), rootId],
-          ] as const)
-            await db.insert(database.schema.openappaSessionsTable).values({
-              actor: openappaActor(id),
-              root: openappaActor(rootId),
-              organizationId: h.agent.organizationId,
-              callerId: `user:${h.userId}`,
-              sessionId: id,
-              ...(parent ? { parentId: parent } : {}),
-              startDecision: { decision: "ack" },
-            });
-          await superyell("root-thread");
-          break;
-        }
-        case "superyell nested subagent":
-          await superyell(
+        case "record off nested subagent":
+          await recordOff(
             "root-thread:worker-thread:helper-thread",
             "root-thread:worker-thread",
           );
@@ -2435,27 +2411,28 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           expect(first.statusCode, first.body).toBe(200);
           break;
         }
-        case "superyell another user's root":
-          await superyellSession({
-            organization_id: h.agent.organizationId,
-            session_id: `user:${crypto.randomUUID()}|root-thread`,
+        case "record off another user's root":
+          await OpenAppaUnenforcedModel.recordSession({
+            organizationId: h.agent.organizationId,
+            sessionId: `user:${crypto.randomUUID()}|root-thread`,
+            parentId: undefined,
           });
           break;
-        case "superyell two sessions with the requester's id":
-          await superyell("root-thread:helper-thread", "root-thread");
-          await superyell(
+        case "record off two sessions with the requester's id":
+          await recordOff("root-thread:helper-thread", "root-thread");
+          await recordOff(
             "root-thread:worker-thread:helper-thread",
             "root-thread:worker-thread",
           );
           break;
-        case "superyell a subagent of another root":
-          await superyell("other-root:worker-thread", "other-root");
+        case "record off a subagent of another root":
+          await recordOff("other-root:worker-thread", "other-root");
           break;
-        case "superyell subagents whose ids end with the requester's":
+        case "record off subagents whose ids end with the requester's":
           // `worker-1`, and `a:1`: an id can hold a colon, so its parent
           // decides where it starts.
-          await superyell("root-thread:worker-1", "root-thread");
-          await superyell("root-thread:a:1", "root-thread");
+          await recordOff("root-thread:worker-1", "root-thread");
+          await recordOff("root-thread:a:1", "root-thread");
           break;
       }
       h.providerRequests.length = 0;
@@ -2994,29 +2971,21 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         );
       });
 
-      test("no message is sent to a subagent out of OpenAPPA, and a malformed one is refused", async () => {
+      test("a malformed message to a subagent is refused", async () => {
         await recordFamily();
-        await superyellSession({
-          organization_id: h.agent.organizationId,
-          session_id: scoped("root-thread:worker-thread"),
-          parent_id: scoped("root-thread"),
-        });
-        for (const call of [
-          sendMessageCall("worker"),
+        output = [
           {
             ...sendMessageCall("worker"),
             arguments: JSON.stringify({ target: "worker" }),
           },
-        ]) {
-          output = [call];
-          const response = await send({
-            thread: "root-thread",
-            agentName: "/root",
-            input: [{ role: "user", content: "Tell the worker" }],
-          });
-          expect(response.statusCode, response.body).toBe(200);
-          expect(response.body).not.toContain('"name":"send_message"');
-        }
+        ];
+        const response = await send({
+          thread: "root-thread",
+          agentName: "/root",
+          input: [{ role: "user", content: "Tell the worker" }],
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).not.toContain('"name":"send_message"');
         expect(appaService.sendPeerMessage).not.toHaveBeenCalled();
       });
 

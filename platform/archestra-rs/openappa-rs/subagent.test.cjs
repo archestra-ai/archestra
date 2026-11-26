@@ -28,6 +28,13 @@ delta = { trust = "suspicious" }
 name = "publish"
 delta = {}
 requires = { trust = "trusted" }
+[[policy.tool]]
+name = "read_salaries"
+delta = { audience = ["hr"] }
+[[policy.tool]]
+name = "post_public"
+delta = {}
+requires = { audience = { contains = ["public"] } }
 [[policy.sanitizer]]
 name = "attest-schema"
 on = ["tool_output"]
@@ -47,7 +54,7 @@ const schema = {
 
 function family() {
   const organization = `subagent-${randomUUID()}`;
-  const parent = { organization_id: organization, caller_id: 'user:test', session_id: `user:test|${randomUUID()}` };
+  const parent = { organization_id: organization, presenter: 'attended', caller_id: 'user:test', session_id: `user:test|${randomUUID()}` };
   const hook = async (session, event) =>
     JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
   const remedy = async (session, toolCallId, args) =>
@@ -55,6 +62,7 @@ function family() {
       await native.executeRemedyByOffer(
         JSON.stringify({
           organization_id: organization,
+          presenter: 'attended',
           caller_id: session.caller_id,
           trajectory: {
             v: 1,
@@ -179,6 +187,7 @@ test('a subagent under a deferred return reads what narrows it, and its answer w
   const lookup = {
     organizationId: run.organization,
     sessionId: run.parent.session_id,
+    presenter: 'attended',
     spawnCallId: 's1',
     controlTool: presentation.control_tool,
     supportsDelegation: true,
@@ -365,6 +374,43 @@ test('a child returning as spoken may not read untrusted data', { skip: !databas
   assert.deepEqual(read.offers ?? [], [], 'no remedy lets its free text carry untrusted data to the parent');
 });
 
+test('a child that reads protected data hands it to its parent only under its label', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const asSpoken = family();
+  await startSpawn(asSpoken);
+  await asSpoken.hook(asSpoken.child, { event: 'session_start', spawn_call_id: 's1' });
+  const refused = await asSpoken.hook(asSpoken.child, asSpoken.call('r1', 'read_salaries'));
+  assert.equal(refused.decision, 'deny_call');
+  assert.deepEqual(refused.offers ?? [], [], 'no remedy lets its free text carry protected data to the parent');
+  assert.equal((await asSpoken.hook(asSpoken.parent, asSpoken.call('p1', 'post_public'))).decision, 'allow_call');
+
+  const floored = family();
+  const spawned = await floored.hook(floored.parent, floored.spawnCall('s1', { declares: { label: { audience: ['hr'] } } }));
+  assert.equal(spawned.decision, 'allow_call', JSON.stringify(spawned));
+  await floored.hook(floored.child, { event: 'session_start', spawn_call_id: 's1' });
+  const held = await floored.hook(floored.child, floored.call('r1', 'read_salaries'));
+  assert.equal(held.decision, 'deny_call', 'the child accepts the narrowing first');
+  await floored.remedy(floored.child, 'r1:accept', { offer_id: held.offers[0].offer_id });
+  assert.equal((await floored.hook(floored.child, floored.call('r2', 'read_salaries'))).decision, 'allow_call');
+  await floored.hook(floored.child, { event: 'tool_result', tool_call_id: 'r2', output: 'salary bands', outcome: 'success' });
+  const returned = await floored.hook(floored.child, { event: 'child_return', operation_id: 'runtime-return:s1:r1', output: 'salary bands' });
+  assert.equal(returned.decision, 'ack');
+  const [record] = await crossedReturns(floored);
+  const result = await floored.hook(floored.parent, {
+    event: 'tool_result',
+    tool_call_id: 's1',
+    spawned_id: floored.child.session_id,
+    output: record.value,
+    outcome: 'success',
+  });
+  assert.equal(result.decision, 'ack', JSON.stringify(result));
+  const status = await native.getOpenappaStatus(floored.organization, floored.parent.session_id, 'attended', policy);
+  assert.equal(status.audience, 'hr', 'the return narrowed the parent to its readers');
+  const sent = await floored.hook(floored.parent, floored.call('p1', 'post_public'));
+  assert.equal(sent.decision, 'deny_call', 'the parent cannot send what its child read to a wider audience');
+  assert.deepEqual(sent.outcomes, ['hard_block']);
+});
+
 // A child that answers a follow-up returns again under the same spawn call.
 // The LLM proxy approves such a child once, with its newest return, and it
 // accepts the return the spawn call kept. It also ends a turn that has no text
@@ -542,5 +588,81 @@ test('a rewritten child return answers child_return, crosses through its echo, a
     }
   } finally {
     await client.end();
+  }
+});
+
+// A background subagent returns as spoken, under its parent's label as a floor. Enforce refuses a
+// read below that floor with no plan. The Observe line accepts the read, records the acceptance,
+// and the child's return narrows the parent.
+test('the Observe line accepts and records a background child read below its floor, and the parent narrows', { skip: !databaseUrl }, async (t) => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const db = new Client({ connectionString: databaseUrl });
+  await db.connect();
+  const organizations = [];
+  t.after(async () => {
+    await db.query('DELETE FROM organization WHERE id = ANY($1)', [organizations]);
+    await db.end();
+  });
+  const observe = { ...policy, guardrails: { mode: 'observe', personApproval: 'ask', enforcedMarks: [] } };
+  const acceptances = async (run) => {
+    const { rows } = await db.query(
+      `SELECT convert_from(payload, 'UTF8') AS payload FROM openappa_events
+       WHERE root = (SELECT root FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2)`,
+      [run.organization, run.child.session_id],
+    );
+    return rows
+      .map((row) => JSON.parse(row.payload))
+      .flatMap((entry) => (Array.isArray(entry) ? entry : entry.facts))
+      .filter((fact) => fact.Acceptance);
+  };
+  const organized = async (run) => {
+    organizations.push(run.organization);
+    await db.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [run.organization]);
+    return run;
+  };
+  for (const { tool, narrowed } of [
+    { tool: 'read_inbox', narrowed: { trust: 'suspicious', audience: 'public' } },
+    { tool: 'read_salaries', narrowed: { trust: 'trusted', audience: 'hr' } },
+  ]) {
+    const enforced = await organized(family());
+    await startSpawn(enforced);
+    await enforced.hook(enforced.child, { event: 'session_start', spawn_call_id: 's1' });
+    const refused = await enforced.hook(enforced.child, enforced.call('r1', tool));
+    assert.equal(refused.decision, 'deny_call', `${tool} under Enforce`);
+    assert.deepEqual(refused.outcomes, ['hard_block'], `${tool} under Enforce`);
+    assert.deepEqual(refused.offers ?? [], [], `${tool} under Enforce`);
+    assert.deepEqual(await acceptances(enforced), [], `${tool} under Enforce accepts nothing`);
+
+    const run = await organized(family());
+    const hook = async (session, event) =>
+      JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), observe));
+    const spawned = await hook(run.parent, run.spawnCall('s1', declaring()));
+    assert.equal(spawned.decision, 'allow_call', JSON.stringify(spawned));
+    await hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
+    const read = await hook(run.child, run.call('r1', tool));
+    assert.equal(read.decision, 'allow_call', `${tool} under Observe: ${JSON.stringify(read)}`);
+    assert.equal((await acceptances(run)).length, 1, `${tool}: the narrowing below the floor is recorded`);
+    await hook(run.child, { event: 'tool_result', tool_call_id: 'r1', output: 'the data', outcome: 'success' });
+
+    const returned = await hook(run.child, { event: 'child_return', operation_id: 'runtime-return:s1:r1', output: 'the data' });
+    assert.equal(returned.decision, 'ack', JSON.stringify(returned));
+    const [record] = await crossedReturns(run);
+    assert.ok(record, `${tool}: the return crosses to the parent`);
+    const result = await hook(run.parent, {
+      event: 'tool_result',
+      tool_call_id: 's1',
+      spawned_id: run.child.session_id,
+      output: record.value,
+      outcome: 'success',
+    });
+    assert.equal(result.decision, 'ack', JSON.stringify(result));
+    const status = await native.getOpenappaStatus(run.organization, run.parent.session_id, 'attended', observe);
+    assert.deepEqual({ trust: status.trust, audience: status.audience }, narrowed, `${tool}: the parent takes the narrower label`);
+    const { rows } = await db.query(
+      `SELECT trust_after AS trust, audience_after AS audience FROM openappa_label_changes
+       WHERE organization_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [run.organization],
+    );
+    assert.deepEqual(rows, [narrowed], `${tool}: the session trace records the parent's narrower label`);
   }
 });

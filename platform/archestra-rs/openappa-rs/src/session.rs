@@ -37,7 +37,7 @@ pub(crate) fn wire(decision: &HookDecision) -> napi::Result<Value> {
 }
 
 pub(crate) fn require_decision(decision: &HookDecision) -> napi::Result<()> {
-    if let HookDecision::Refuse { class, detail } = decision {
+    if let HookDecision::Refuse { class, detail, .. } = decision {
         return Err(failure(
             Failure::Refused(*class),
             format!("OpenAPPA processing interrupted: {detail}"),

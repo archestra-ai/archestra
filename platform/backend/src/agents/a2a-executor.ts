@@ -468,8 +468,6 @@ export async function executeA2AMessage(
       modelPoolId,
       autoRouterId,
       appaSubagentToken: params.appaSubagent?.token,
-      // A Scheduled task run has no person to answer approvals.
-      unattended: scheduleTriggerRunId !== undefined,
     });
     const authorizeModel = (model: typeof providerModel) =>
       authorizeA2AModel({
@@ -623,7 +621,6 @@ export async function executeA2AMessage(
         modelPoolId,
         autoRouterId,
         appaSubagentToken: params.appaSubagent?.token,
-        unattended: scheduleTriggerRunId !== undefined,
       }).then((created) => authorizeModel(created.model)));
     const stepContextGuard = createStepContextGuard({
       contextLength,

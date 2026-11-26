@@ -254871,6 +254871,28 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "observe",
+                        "enforce"
+                      ]
+                    },
+                    "personApproval": {
+                      "type": "string",
+                      "enum": [
+                        "ask",
+                        "auto_unattended",
+                        "auto_everywhere"
+                      ]
+                    },
+                    "enforcedMarks": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -254908,6 +254930,7 @@
                             "type": "string",
                             "enum": [
                               "humanApprovalMode",
+                              "personApproval",
                               "unapprovableBlockMode"
                             ]
                           },
@@ -254942,6 +254965,9 @@
                     }
                   },
                   "required": [
+                    "mode",
+                    "personApproval",
+                    "enforcedMarks",
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
@@ -255210,6 +255236,31 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "observe",
+                      "enforce"
+                    ]
+                  },
+                  "personApproval": {
+                    "type": "string",
+                    "enum": [
+                      "ask",
+                      "auto_unattended",
+                      "auto_everywhere"
+                    ]
+                  },
+                  "enforcedMarks": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
                   "enabled": {
                     "type": "boolean"
                   },
@@ -255264,6 +255315,28 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "observe",
+                        "enforce"
+                      ]
+                    },
+                    "personApproval": {
+                      "type": "string",
+                      "enum": [
+                        "ask",
+                        "auto_unattended",
+                        "auto_everywhere"
+                      ]
+                    },
+                    "enforcedMarks": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -255301,6 +255374,7 @@
                             "type": "string",
                             "enum": [
                               "humanApprovalMode",
+                              "personApproval",
                               "unapprovableBlockMode"
                             ]
                           },
@@ -255332,9 +255406,18 @@
                     },
                     "active": {
                       "type": "boolean"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
+                    "mode",
+                    "personApproval",
+                    "enforcedMarks",
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
@@ -255344,7 +255427,8 @@
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
-                    "active"
+                    "active",
+                    "warnings"
                   ],
                   "additionalProperties": false
                 }

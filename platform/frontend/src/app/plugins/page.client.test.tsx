@@ -403,6 +403,25 @@ describe("PluginsPage", () => {
     });
   });
 
+  it("asks once before deleting: the title asks, the text says what stays behind", async () => {
+    access.grants.push({
+      resource: "plugin",
+      action: "delete",
+      scope: PLUGIN.id,
+    });
+    render(<PluginsPage />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete Policy Runtime" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Delete plugin?" });
+    expect(dialog).toHaveTextContent(
+      "Installed copies stay on developer machines until you uninstall them.",
+    );
+    expect(dialog).not.toHaveTextContent('Delete "Policy Runtime"?');
+  });
+
   it("puts every row action on the row, with no one-item menu", () => {
     access.grants.push({
       resource: "plugin",

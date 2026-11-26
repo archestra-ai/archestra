@@ -892,7 +892,8 @@ function DeletePluginDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Delete plugin?"
-      description={`Delete "${plugin.displayName}"? Installed copies stay on developer machines until you uninstall them.`}
+      // The title asks the question; the text says what it leaves behind.
+      description="Installed copies stay on developer machines until you uninstall them."
       isPending={deletePlugin.isPending}
       onConfirm={handleDelete}
     />

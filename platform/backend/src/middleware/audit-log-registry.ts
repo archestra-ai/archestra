@@ -897,6 +897,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "skill.bulk_deleted",
     resourceIdSource: "organizationContext",
   },
+  // Bulk restore is the same shape as bulk delete above: the handler sets
+  // both snapshots itself.
+  "/api/skills/bulk-restore": {
+    resourceType: "skill",
+    action: "skill.bulk_restored",
+    resourceIdSource: "organizationContext",
+  },
   // Restore is a POST carrying :id; register it directly so the hook captures
   // the target id and the before/after (deletedAt) snapshots. findByIdForAudit
   // returns soft-deleted rows, so the "before" is the still-deleted skill.

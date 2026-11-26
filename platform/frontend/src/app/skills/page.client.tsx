@@ -106,6 +106,7 @@ import {
   type SkillUsageReference,
   useAllMatchingSkills,
   useBulkDeleteSkills,
+  useBulkRestoreSkills,
   useExternalMcpSkills,
   usePermanentlyDeleteSkill,
   usePluginSkills,
@@ -597,6 +598,18 @@ function SkillsList() {
     setBulkDeleteOpen(false);
   });
 
+  const bulkRestoreSkills = useBulkRestoreSkills();
+  // No confirmation, like a row's own Restore: nothing is lost by it. One
+  // request per click, for the reason the bulk delete gives above.
+  const bulkRestore = useSingleFlight(async () => {
+    const result = await bulkRestoreSkills
+      .mutateAsync(selectedSkills.map((skill) => skill.id))
+      // A rejection is reported by the mutation's own `onError`.
+      .catch(() => null);
+    if (!result || result.succeeded.length === 0) return;
+    clearSelection();
+  });
+
   // Deep-link support: /skills?openEdit=<name> opens the matching skill's page
   // (e.g. from the chat SkillPill). The name resolves to an id once the items
   // it was searched by have loaded.
@@ -873,10 +886,8 @@ function SkillsList() {
   };
 
   const columns: ColumnDef<ListedSkill>[] = [
-    // A deleted row can only be restored or purged, neither of which this
-    // selection drives, so the trash view keeps its rows unselectable rather
-    // than offering a checkbox with nothing to apply.
-    ...(isDeletedView ? [] : [selectColumn]),
+    // Selectable in the deleted view too: the bar offers Restore there.
+    selectColumn,
     {
       id: "name",
       accessorKey: "name",
@@ -1225,15 +1236,32 @@ function SkillsList() {
                         : selection.selectAllMatching
                     }
                   >
-                    <PermissionButton
-                      permissions={{ skill: ["delete"] }}
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setBulkDeleteOpen(true)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span>Delete</span>
-                    </PermissionButton>
+                    {isDeletedView ? (
+                      // The grant a row's own Restore asks for.
+                      <PermissionButton
+                        permissions={{ skill: ["delete"] }}
+                        size="sm"
+                        disabled={bulkRestoreSkills.isPending}
+                        onClick={bulkRestore}
+                      >
+                        <ArchiveRestore className="h-4 w-4" />
+                        <span>
+                          {bulkRestoreSkills.isPending
+                            ? "Restoring..."
+                            : ACTION_LABEL.restore}
+                        </span>
+                      </PermissionButton>
+                    ) : (
+                      <PermissionButton
+                        permissions={{ skill: ["delete"] }}
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setBulkDeleteOpen(true)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Delete</span>
+                      </PermissionButton>
+                    )}
                   </BulkActions>
 
                   <SkillCollection

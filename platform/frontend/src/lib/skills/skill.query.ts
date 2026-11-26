@@ -24,6 +24,7 @@ import {
 
 const {
   bulkDeleteSkills,
+  bulkRestoreSkills,
   getSkills,
   getSkill,
   getExternalMcpSkill,
@@ -547,6 +548,37 @@ export function useBulkDeleteSkills() {
         verb: "Deleted",
         failureVerb: "delete",
       });
+    },
+    onError: (error) => handleApiError(error),
+  });
+}
+
+/**
+ * Restore several deleted skills in one request. Like the bulk delete, the
+ * answer is per skill, so one that cannot come back (its name was taken since,
+ * or it is not the caller's to restore) does not hold up the rest.
+ */
+export function useBulkRestoreSkills() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (skillIds: string[]) => {
+      const { data, error } = await bulkRestoreSkills({ body: { skillIds } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    // Returning the refetch keeps the mutation pending until the lists have
+    // been read again, so the bar's button stays busy until the restored rows
+    // have left the deleted view (see `useRestoreSkill`).
+    onSuccess: async (data) => {
+      if (!data) return;
+      reportBulkSkillOutcome(data, {
+        verb: "Restored",
+        failureVerb: "restore",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["skills"] });
     },
     onError: (error) => handleApiError(error),
   });

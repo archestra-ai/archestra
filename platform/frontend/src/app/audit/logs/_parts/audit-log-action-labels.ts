@@ -218,6 +218,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "skill.deleted": "Skill deleted",
   "skill.bulk_deleted": "Skills bulk deleted",
   "skill.restored": "Skill restored",
+  "skill.bulk_restored": "Skills bulk restored",
   "skill.purged": "Skill permanently deleted",
   "skill.imported": "Skill imported",
   "skillShareLink.created": "Skill snapshot link created",

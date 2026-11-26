@@ -22,6 +22,7 @@ vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/skills/skill.query", () => ({
   useAllMatchingSkills: () => ({ data: [] }),
   useBulkDeleteSkills: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useBulkRestoreSkills: vi.fn(),
   useSkillsList: vi.fn(),
   useSkillsPaginated: vi.fn(),
   useSkillSourceRepos: vi.fn(),
@@ -62,6 +63,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
+  useBulkRestoreSkills,
   useExternalMcpSkills,
   usePermanentlyDeleteSkill,
   usePluginSkills,
@@ -175,6 +177,7 @@ function mockPermissions({ skillAdmin }: { skillAdmin: boolean }) {
 }
 
 const restoreMutateAsync = vi.fn();
+const bulkRestoreMutateAsync = vi.fn();
 
 /**
  * A reader who holds every permission except managing all skills
@@ -230,6 +233,11 @@ describe("SkillsPage rows", () => {
     } as any);
     vi.mocked(useRestoreSkill).mockReturnValue({
       mutateAsync: restoreMutateAsync,
+      // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
+    } as any);
+    vi.mocked(useBulkRestoreSkills).mockReturnValue({
+      mutateAsync: bulkRestoreMutateAsync,
+      isPending: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
     } as any);
     vi.mocked(usePermanentlyDeleteSkill).mockReturnValue({
@@ -921,6 +929,38 @@ describe("SkillsPage rows", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("restores the ticked deleted skills from the bulk bar, without a confirmation", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockPermissions({ skillAdmin: true });
+    mockSkills([{ ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" }]);
+    bulkRestoreMutateAsync.mockResolvedValue({
+      succeeded: [{ id: MINE.id, name: MINE.name }],
+      failed: [],
+    });
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    );
+    // Deleting is not what a deleted skill is ticked for.
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    // The bar's button: a row's own is named "Restore pdf-tools".
+    await userEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    expect(bulkRestoreMutateAsync).toHaveBeenCalledExactlyOnceWith([MINE.id]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // What was restored is no longer selected.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+      ).not.toBeChecked(),
+    );
   });
 
   it("sends one restore for a double click, and holds the button until it settles", async () => {

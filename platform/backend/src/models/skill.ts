@@ -518,7 +518,13 @@ class SkillModel {
     return result ?? null;
   }
 
-  static async findByIds(ids: string[]): Promise<Skill[]> {
+  static async findByIds(
+    ids: string[],
+    options?: {
+      /** Also return soft-deleted skills, for the routes that restore them. */
+      includeDeleted?: boolean;
+    },
+  ): Promise<Skill[]> {
     if (ids.length === 0) return [];
     return await db
       .select()
@@ -526,7 +532,7 @@ class SkillModel {
       .where(
         and(
           inArray(schema.skillsTable.id, ids),
-          notDeleted(schema.skillsTable),
+          options?.includeDeleted ? undefined : notDeleted(schema.skillsTable),
           enabledSkillPredicate(),
         ),
       );

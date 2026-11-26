@@ -208,6 +208,9 @@ export const AuditEventNameSchema = z.enum([
   // rather than a burst of unrelated edits.
   "skill.bulk_deleted",
   "skill.restored",
+  // Restored across a batch of deleted skills in one request, for the same
+  // reason the bulk delete has its own action.
+  "skill.bulk_restored",
   "skill.purged",
   "skill.imported",
   "skillShareLink.created",

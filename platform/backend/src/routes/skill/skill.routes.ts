@@ -1286,6 +1286,81 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    "/api/skills/bulk-restore",
+    {
+      schema: {
+        operationId: RouteId.BulkRestoreSkills,
+        description:
+          "Restore several soft-deleted skills in one request. Each id is " +
+          "authorized exactly as the single-skill restore authorizes its own: " +
+          "an id the caller cannot see or modify is reported in `failed` and " +
+          "the rest of the batch still applies. So is a skill whose name an " +
+          "active skill of the same author has taken since. A skill that is " +
+          "already active counts as restored.",
+        tags: ["Skills"],
+        body: z.object({ skillIds: BulkSkillIdsSchema }),
+        response: constructResponseSchema(BulkSkillOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      const skillIds = dedupe(body.skillIds);
+
+      const context = await loadBulkSkillContext({
+        skillIds,
+        userId: user.id,
+        organizationId,
+        includeDeleted: true,
+      });
+      request.auditBefore = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+
+      const succeeded: BulkSkillOutcomeEntry[] = [];
+      const failed: BulkSkillFailure[] = [];
+
+      // One skill at a time, unlike the bulk delete's single statement: a
+      // restore claims a name, so each one can be refused on its own, by an
+      // active skill or by an earlier skill of this same batch.
+      for (const id of skillIds) {
+        const skill = context.skillsById.get(id);
+        if (
+          !skill ||
+          (!context.isVisible(skill) &&
+            !context.checker.allowsScoped?.(id, "delete"))
+        ) {
+          failed.push({ id, name: null, error: "Skill not found" });
+          continue;
+        }
+        try {
+          requireSkillModifyPermission({
+            checker: context.checker,
+            skillId: id,
+            action: "delete",
+          });
+          // Already active (a repeated request, or someone else restored it
+          // first): nothing to write, and what was asked for is true.
+          if (skill.deletedAt) await restoreDeletedSkill(skill);
+        } catch (error) {
+          if (error instanceof ApiError) {
+            failed.push({ id, name: skill.name, error: error.message });
+            continue;
+          }
+          throw error;
+        }
+        succeeded.push({ id, name: skill.name });
+      }
+
+      request.auditAfter = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+      return reply.send({ succeeded, failed });
+    },
+  );
+
+  fastify.post(
     "/api/skills/:id/restore",
     {
       schema: {
@@ -1331,26 +1406,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "delete",
       });
 
-      const conflictMessage = await SkillModel.getRestoreConflictMessage(skill);
-      if (conflictMessage) {
-        throw new ApiError(409, conflictMessage);
-      }
-
-      let success: boolean;
-      try {
-        success = await SkillModel.restore(id);
-      } catch (error) {
-        // The pre-check is advisory; the partial unique index is the real
-        // guard. A create can claim the freed name between the check and this
-        // UPDATE — map that violation to a 409 rather than a 500.
-        if (isUniqueConstraintError(error, "skills_org_author_name_idx")) {
-          throw skillNameConflict(skill.name);
-        }
-        throw error;
-      }
-      if (!success) {
-        throw new ApiError(404, "Skill not found");
-      }
+      await restoreDeletedSkill(skill);
 
       // The row is active again, so the normal detail path is safe.
       const restored = await findSkillOrThrow(id, organizationId);
@@ -2263,6 +2319,8 @@ async function loadBulkSkillContext(params: {
   skillIds: string[];
   userId: string;
   organizationId: string;
+  /** Also load soft-deleted skills: the batch is about to restore them. */
+  includeDeleted?: boolean;
 }): Promise<{
   checker: SkillPermissionChecker;
   userTeamIds: string[];
@@ -2275,7 +2333,7 @@ async function loadBulkSkillContext(params: {
 
   const checker = await getSkillPermissionChecker({ userId, organizationId });
   const [skills, userTeamIds, accessibleIds] = await Promise.all([
-    SkillModel.findByIds(skillIds),
+    SkillModel.findByIds(skillIds, { includeDeleted: params.includeDeleted }),
     checker.isAdmin
       ? Promise.resolve<string[]>([])
       : TeamModel.getUserTeamIds(userId),
@@ -2469,6 +2527,34 @@ async function assertNewSkillNameUsable(
 ): Promise<void> {
   const problem = await findNewSkillNameProblem(params);
   if (problem) throw new ApiError(problem.status, problem.message);
+}
+
+/**
+ * Make one soft-deleted skill active again, or throw the reason it cannot
+ * come back. The single and the bulk restore both write through here, so a
+ * skill is refused for the same reasons and in the same words either way.
+ */
+async function restoreDeletedSkill(skill: Skill): Promise<void> {
+  const conflictMessage = await SkillModel.getRestoreConflictMessage(skill);
+  if (conflictMessage) {
+    throw new ApiError(409, conflictMessage);
+  }
+
+  let success: boolean;
+  try {
+    success = await SkillModel.restore(skill.id);
+  } catch (error) {
+    // The pre-check is advisory; the partial unique index is the real
+    // guard. A create can claim the freed name between the check and this
+    // UPDATE — map that violation to a 409 rather than a 500.
+    if (isUniqueConstraintError(error, "skills_org_author_name_idx")) {
+      throw skillNameConflict(skill.name);
+    }
+    throw error;
+  }
+  if (!success) {
+    throw new ApiError(404, "Skill not found");
+  }
 }
 
 function skillNameConflict(name: string): ApiError {

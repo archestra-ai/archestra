@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -15,6 +16,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import appConfig from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
+import { GUARDRAILS_SWITCH_TOAST } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   OpenAppaClientCoverageSetting,
@@ -119,6 +121,7 @@ test("the enforcement switch turns enforcement on and off", async () => {
       enabled = body.enabled;
       return HttpResponse.json({
         enabled,
+        mode: enabled ? mode : "off",
         featureEnabled: true,
         active: enabled,
         unsupportedClientAction: clientAction,
@@ -140,6 +143,7 @@ test("the enforcement switch turns enforcement on and off", async () => {
 });
 
 test("under Observe the switch says so, and turning it back on enforces", async () => {
+  vi.mocked(toast.success).mockClear();
   enabled = true;
   mode = "observe";
   server.use(
@@ -175,6 +179,11 @@ test("under Observe the switch says so, and turning it back on enforces", async 
       screen.getByRole("switch", { name: "Enforce the policy" }),
     ).toBeChecked(),
   );
+  // Each save names the mode its response runs in.
+  expect(vi.mocked(toast.success).mock.calls).toEqual([
+    [GUARDRAILS_SWITCH_TOAST.off],
+    [GUARDRAILS_SWITCH_TOAST.enforce],
+  ]);
 });
 
 test("enforcement cannot be turned on before a policy exists", async () => {

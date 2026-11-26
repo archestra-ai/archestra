@@ -7,6 +7,18 @@ import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export const guardrailsDeploymentQueryKey = ["guardrails-deployment"];
 const queryKey = guardrailsDeploymentQueryKey;
+
+export type GuardrailsMode =
+  archestraApiTypes.GetGuardrailsDeploymentResponses[200]["mode"];
+
+/** What the switch's save says, by the mode the saved settings run in. */
+export const GUARDRAILS_SWITCH_TOAST: Record<GuardrailsMode, string> = {
+  off: "Guardrails are off. Your policy isn't applied, so agents can call any tool.",
+  observe:
+    "Guardrails are on in Observe. Every tool call is checked and recorded, but calls your policy would block still run.",
+  enforce:
+    "Guardrails are on in Enforce. Every tool call is checked against your policy before it runs.",
+};
 /**
  * `anyMember`: read it without organization settings access. Every member can
  * read the status (the Connect page shows it); other callers keep it to the
@@ -54,11 +66,7 @@ export function useUpdateGuardrailsDeployment() {
     onSuccess: (data) => {
       client.setQueryData(queryKey, data);
       client.invalidateQueries({ queryKey });
-      toast.success(
-        data?.active
-          ? "OpenAPPA enforcement is on"
-          : "OpenAPPA enforcement is off. Existing guardrails remain active.",
-      );
+      if (data) toast.success(GUARDRAILS_SWITCH_TOAST[data.mode]);
     },
   });
 }

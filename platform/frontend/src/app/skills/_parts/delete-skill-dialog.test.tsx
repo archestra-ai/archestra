@@ -2,9 +2,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/skills/skill.query", () => ({ useDeleteSkill: vi.fn() }));
 
+import { usePathname, useSearchParams } from "next/navigation";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDeleteSkill } from "@/lib/skills/skill.query";
 import { DeleteSkillDialog } from "./delete-skill-dialog";
@@ -19,19 +21,30 @@ function mockCanOpenDeletedView(canOpen: boolean) {
   } as any);
 }
 
+const onOpenChange = vi.fn();
+
 function renderDialog() {
   return render(
     <DeleteSkillDialog
       skill={{ id: "skill-1", name: "pdf-tools" }}
       open
-      onOpenChange={vi.fn()}
+      onOpenChange={onOpenChange}
     />,
+  );
+}
+
+/** The page the dialog is opened on. */
+function mockLocation(pathname: string, query = "") {
+  vi.mocked(usePathname).mockReturnValue(pathname);
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams(query) as ReturnType<typeof useSearchParams>,
   );
 }
 
 describe("DeleteSkillDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLocation("/skills");
     vi.mocked(useDeleteSkill).mockReturnValue({
       mutateAsync,
       isPending: false,
@@ -39,20 +52,50 @@ describe("DeleteSkillDialog", () => {
     } as any);
   });
 
-  it("says the skill is kept and can be restored, not that it is gone for good", () => {
+  it("says what is lost and where deleted skills are restored, in two short rows", () => {
     mockCanOpenDeletedView(true);
     renderDialog();
 
     const dialog = screen.getByRole("dialog");
+    expect(
+      screen.getByText("Agents will no longer be able to use it."),
+    ).toBeVisible();
     expect(dialog).toHaveTextContent(
-      "Its instructions, files and versions are kept.",
+      "You can restore deleted skills from the Deleted filter on this page.",
     );
-    expect(dialog).toHaveTextContent(
-      "set the status filter of the skills list to Deleted",
-    );
+    // The title asks; the text does not ask again or name the skill.
+    expect(dialog).not.toHaveTextContent('Delete "pdf-tools"?');
     // What the dialog used to promise, and the delete never did.
     expect(dialog).not.toHaveTextContent("cannot be undone");
-    expect(dialog).not.toHaveTextContent("removes its instructions");
+  });
+
+  it("links Deleted to the list as it stands, every parameter kept, with the Deleted filter on", async () => {
+    mockCanOpenDeletedView(true);
+    mockLocation("/skills", "search=pdf&labels=team%3Adocs&page=2");
+    renderDialog();
+
+    const link = screen.getByRole("link", { name: "Deleted" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/skills?search=pdf&labels=team%3Adocs&page=2&status=deleted",
+    );
+    // Following it leaves the question behind.
+    await userEvent.click(link);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("links to the Skills list from a skill's own page, and says so", () => {
+    mockCanOpenDeletedView(true);
+    mockLocation("/skills/skill-1", "section=settings");
+    renderDialog();
+
+    expect(screen.getByRole("link", { name: "Deleted" })).toHaveAttribute(
+      "href",
+      "/skills?status=deleted",
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "You can restore deleted skills from the Deleted filter on the Skills page.",
+    );
   });
 
   it("points a reader without the deleted view to an admin instead of a filter they do not have", () => {
@@ -60,8 +103,8 @@ describe("DeleteSkillDialog", () => {
     renderDialog();
 
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("An admin can restore it.");
-    expect(dialog).not.toHaveTextContent("status filter");
+    expect(dialog).toHaveTextContent("An admin can restore deleted skills.");
+    expect(screen.queryByRole("link", { name: "Deleted" })).toBeNull();
   });
 
   it("sends one delete for a double click on the confirm button", async () => {

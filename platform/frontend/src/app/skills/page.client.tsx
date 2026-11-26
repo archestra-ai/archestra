@@ -125,7 +125,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { PluginSourceIcon } from "../plugins/_parts/plugin-source-icon";
 import {
   DeleteSkillDialog,
-  skillDeleteDescription,
+  SkillDeleteDescription,
 } from "./_parts/delete-skill-dialog";
 import {
   getSkillActionModel,
@@ -1311,15 +1311,20 @@ function SkillsList() {
         <DeleteConfirmDialog
           open={bulkDeleteOpen}
           onOpenChange={setBulkDeleteOpen}
-          title={selectedSkills.length === 1 ? "Delete skill" : "Delete skills"}
-          description={skillDeleteDescription({
-            subject:
-              selectedSkills.length === 1
-                ? "1 skill"
-                : `${selectedSkills.length} skills`,
-            count: selectedSkills.length,
-            canOpenDeletedView: isSkillAdmin === true,
-          })}
+          // The count used to open the text; the text no longer repeats the
+          // question, so the title carries it.
+          title={
+            selectedSkills.length === 1
+              ? "Delete skill"
+              : `Delete ${selectedSkills.length} skills`
+          }
+          description={
+            <SkillDeleteDescription
+              count={selectedSkills.length}
+              canOpenDeletedView={isSkillAdmin === true}
+              onOpenDeletedView={() => setBulkDeleteOpen(false)}
+            />
+          }
           isPending={bulkDeleteSkills.isPending}
           onConfirm={confirmBulkDelete}
           confirmLabel={

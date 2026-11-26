@@ -697,16 +697,21 @@ export function LlmProviderApiKeyForm({
               key as CreateLlmProviderApiKeyBody["provider"],
             ),
         )
-        // Providers the admins turned off are not offered. The one already
-        // selected stays in the list even when hidden, so an existing key's
-        // disabled trigger still renders its own provider.
-        .filter(
-          ([key]) =>
-            key === provider ||
-            !providerCatalog.isHidden(
-              key as CreateLlmProviderApiKeyBody["provider"],
-            ),
-        )
+        // Providers the admins turned off are not offered, and neither is a
+        // provider whose credential kind this form adds is off: its API keys,
+        // or its personal subscription. The one already selected stays in the
+        // list even when hidden, so an existing key's disabled trigger still
+        // renders its own provider.
+        .filter(([key]) => {
+          const candidate = key as CreateLlmProviderApiKeyBody["provider"];
+          if (candidate === provider) return true;
+          if (isSubscriptionFlow) {
+            return providerCatalog.canAddPersonalSubscription(candidate);
+          }
+          return allowPersonalSubscriptions
+            ? providerCatalog.canAddKey(candidate)
+            : providerCatalog.canAddApiKey(candidate);
+        })
         .map(([key, config]) => {
           const providerKey = key as CreateLlmProviderApiKeyBody["provider"];
           return {
@@ -774,12 +779,30 @@ export function LlmProviderApiKeyForm({
       forEmbedding,
       geminiVertexAiEnabled,
       hideUnavailableProviders,
+      isSubscriptionFlow,
       ollamaListedTransport,
       provider,
       providerCatalog,
     ],
   );
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
+
+  // Which auth-mode tabs a credential-level subscription provider (OpenAI,
+  // xAI) offers: each needs its own switch on. An existing key keeps the tab
+  // of the credential it already holds.
+  const apiKeyModeOffered =
+    providerCatalog.canAddApiKey(provider) ||
+    (isEditMode && !existingKey?.subscriptionKind);
+  const subscriptionModeOffered =
+    providerCatalog.canAddPersonalSubscription(provider) ||
+    (isEditMode && !!existingKey?.subscriptionKind);
+  const showAuthMethodTabs =
+    isCredentialLevelSubscriptionProvider(provider) &&
+    !!providerSubscriptionKind &&
+    allowPersonalSubscriptions &&
+    credentialMode === undefined &&
+    apiKeyModeOffered &&
+    subscriptionModeOffered;
 
   const existingPrimaryKey = useMemo(() => {
     if (!existingKeys) {
@@ -961,6 +984,40 @@ export function LlmProviderApiKeyForm({
       }
     />
   );
+
+  // With only one auth mode on for a credential-level subscription provider,
+  // the form opens on that mode: a provider with API keys off and its personal
+  // subscription on signs in, and the reverse takes an API key.
+  useEffect(() => {
+    if (
+      isEditMode ||
+      credentialMode !== undefined ||
+      !allowPersonalSubscriptions ||
+      !isCredentialLevelSubscriptionProvider(provider)
+    )
+      return;
+    if (
+      authMethod === "api-key" &&
+      !apiKeyModeOffered &&
+      subscriptionModeOffered
+    )
+      form.setValue("authMethod", "subscription");
+    else if (
+      authMethod === "subscription" &&
+      !subscriptionModeOffered &&
+      apiKeyModeOffered
+    )
+      form.setValue("authMethod", "api-key");
+  }, [
+    allowPersonalSubscriptions,
+    apiKeyModeOffered,
+    authMethod,
+    credentialMode,
+    form,
+    isEditMode,
+    provider,
+    subscriptionModeOffered,
+  ]);
 
   // Rendered either above "Advanced" or inside it, depending on
   // `showBaseUrlUpFront`, so the field itself is defined once.
@@ -1403,43 +1460,37 @@ export function LlmProviderApiKeyForm({
                 </div>
               )}
 
-              {isCredentialLevelSubscriptionProvider(provider) &&
-                providerSubscriptionKind &&
-                allowPersonalSubscriptions &&
-                credentialMode === undefined && (
-                  <Tabs
-                    value={authMethod}
-                    onValueChange={(value) => {
-                      form.setValue(
-                        "authMethod",
-                        value as "api-key" | "subscription",
-                        { shouldDirty: true },
-                      );
-                      // Clear any credential carried over from the other auth mode:
-                      // a typed API key must not leak into subscription mode
-                      // (false "connected" card / submit-before-sign-in), and an
-                      // OAuth credential must not surface in the visible API Key
-                      // field when switching back. Fires only on user interaction,
-                      // so it never wipes prefilled defaults.
-                      form.setValue("apiKey", null, { shouldDirty: true });
-                    }}
-                  >
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="api-key" disabled={isPending}>
-                        API Key
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="subscription"
-                        disabled={isPending || Boolean(byosEnabled)}
-                      >
-                        {
-                          SUBSCRIPTION_CREDENTIALS[providerSubscriptionKind]
-                            .label
-                        }
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                )}
+              {showAuthMethodTabs && providerSubscriptionKind && (
+                <Tabs
+                  value={authMethod}
+                  onValueChange={(value) => {
+                    form.setValue(
+                      "authMethod",
+                      value as "api-key" | "subscription",
+                      { shouldDirty: true },
+                    );
+                    // Clear any credential carried over from the other auth mode:
+                    // a typed API key must not leak into subscription mode
+                    // (false "connected" card / submit-before-sign-in), and an
+                    // OAuth credential must not surface in the visible API Key
+                    // field when switching back. Fires only on user interaction,
+                    // so it never wipes prefilled defaults.
+                    form.setValue("apiKey", null, { shouldDirty: true });
+                  }}
+                >
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="api-key" disabled={isPending}>
+                      API Key
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="subscription"
+                      disabled={isPending || Boolean(byosEnabled)}
+                    >
+                      {providerCatalog.personalSubscriptionLabel(provider)}
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
 
               {!isBedrockSigV4 &&
                 bedrockAuthMethod !== "iam" &&

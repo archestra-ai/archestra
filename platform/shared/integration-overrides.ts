@@ -4,9 +4,15 @@ import AGENT_CATALOG_IMAGE_NAMES from "./agent-catalog-images.json";
 import { CONNECTOR_TYPE_LABELS, type ConnectorType } from "./knowledge-base";
 import {
   providerDisplayNames,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "./model-constants";
+import {
+  isPersonalSubscriptionProvider,
+  PERSONAL_SUBSCRIPTION_LABELS,
+  type SubscriptionCredentialKind,
+} from "./subscription-credentials";
 
 /**
  * Messaging channels an admin can hide or relabel. Mirrors the tabs on
@@ -72,11 +78,49 @@ export type IntegrationToggle = z.infer<typeof IntegrationToggleSchema>;
 export const StoredIntegrationToggleSchema = z.object(integrationToggleShape);
 
 /**
+ * The ways into a provider an admin can turn off on their own: ordinary API
+ * keys (`apiKey`) and a person's own subscription (`personal`).
+ */
+export const ProviderPlanSchema = z.enum(["apiKey", "personal"]);
+export type ProviderPlan = z.infer<typeof ProviderPlanSchema>;
+
+/**
+ * The providers that offer more than one way in, and which ones. Every other
+ * provider has one way in, so its provider switch is the whole story.
+ */
+const PROVIDER_PLANS = {
+  anthropic: ["apiKey", "personal"],
+  openai: ["apiKey", "personal"],
+  xai: ["apiKey", "personal"],
+} as const satisfies Partial<
+  Record<SupportedProvider, readonly ProviderPlan[]>
+>;
+
+type MultiPlanProvider = keyof typeof PROVIDER_PLANS;
+
+/** The plans a provider offers, or none when it has one way in. */
+export function providerPlans(
+  provider: SupportedProvider,
+): readonly ProviderPlan[] {
+  return Object.hasOwn(PROVIDER_PLANS, provider)
+    ? PROVIDER_PLANS[provider as MultiPlanProvider]
+    : [];
+}
+
+/**
  * Model providers additionally take the organization's own name for the
  * provider, which replaces the built-in one everywhere it is rendered.
  * Messaging channels and knowledge connectors are deliberately toggle-only:
  * they name a single external service each, so there is nothing to rename that
  * would not make the setup instructions harder to follow.
+ *
+ * `plans` is for the providers in {@link PROVIDER_PLANS}; the input schema
+ * refuses it on any other provider, and refuses a plan the provider does not
+ * offer. A personal subscription on a provider that also takes API keys
+ * (ChatGPT, Claude Code, SuperGrok) has a name of its own in
+ * `plans.personal.displayName`; the provider's `displayName` names its API
+ * keys. GitHub Copilot and Microsoft 365 Copilot are personal-subscription-only
+ * providers, so they use the provider-level switch and name.
  */
 const modelProviderOverrideShape = {
   ...integrationToggleShape,
@@ -87,17 +131,55 @@ const modelProviderOverrideShape = {
     .nullish(),
 };
 
-export const ModelProviderOverrideSchema = z.strictObject(
-  modelProviderOverrideShape,
-);
+export const ModelProviderOverrideSchema = z.strictObject({
+  ...modelProviderOverrideShape,
+  plans: z
+    .strictObject({
+      apiKey: IntegrationToggleSchema.optional(),
+      personal: z.strictObject(modelProviderOverrideShape).optional(),
+    })
+    .optional(),
+});
 export type ModelProviderOverride = z.infer<typeof ModelProviderOverrideSchema>;
 
 // ---- Input: what PATCH /api/organization/integration-settings accepts ----
 
-export const ModelProviderOverridesSchema = z.partialRecord(
-  SupportedProvidersSchema,
-  ModelProviderOverrideSchema,
-);
+export const ModelProviderOverridesSchema = z
+  .partialRecord(SupportedProvidersSchema, ModelProviderOverrideSchema)
+  .superRefine((overrides, ctx) => {
+    for (const [key, override] of Object.entries(overrides)) {
+      const plans = override?.plans;
+      if (!plans) continue;
+      const provider = key as SupportedProvider;
+      const offered = providerPlans(provider);
+      const label = builtInProviderLabel(provider);
+      if (offered.length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: [provider, "plans"],
+          message: `${label} has one way to connect, so it has no plans to turn off.`,
+        });
+        continue;
+      }
+      for (const plan of ProviderPlanSchema.options) {
+        if (plans[plan] === undefined || offered.includes(plan)) continue;
+        ctx.addIssue({
+          code: "custom",
+          path: [provider, "plans", plan],
+          message: `${label} has no ${PLAN_NOUNS[plan]}.`,
+        });
+      }
+      // Every plan off is the provider off. Keep one switch for that, so
+      // every place that asks whether the provider is offered gets one answer.
+      if (offered.every((plan) => plans[plan]?.hidden === true)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [provider, "plans"],
+          message: `To turn off both plans, turn off ${label} as a provider.`,
+        });
+      }
+    }
+  });
 
 export const MessagingChannelOverridesSchema = z.partialRecord(
   MessagingChannelIdSchema,
@@ -150,7 +232,15 @@ export type PopularAgentOverrides = z.infer<
 
 export const StoredModelProviderOverridesSchema = z.partialRecord(
   SupportedProvidersSchema,
-  z.object(modelProviderOverrideShape),
+  z.object({
+    ...modelProviderOverrideShape,
+    plans: z
+      .object({
+        apiKey: StoredIntegrationToggleSchema.optional(),
+        personal: z.object(modelProviderOverrideShape).optional(),
+      })
+      .optional(),
+  }),
 );
 export type ModelProviderOverrides = z.infer<
   typeof StoredModelProviderOverridesSchema
@@ -202,6 +292,171 @@ export function isIntegrationHidden<Id extends string>(
 }
 
 /**
+ * True when one way into a provider is not offered: the provider is off, or
+ * an admin turned off this plan. A plan the provider does not offer reads the
+ * provider switch alone.
+ */
+export function isProviderPlanHidden(
+  overrides: ModelProviderOverrides | null,
+  provider: SupportedProvider,
+  plan: ProviderPlan,
+): boolean {
+  const override = overrides?.[provider];
+  if (override?.hidden === true) return true;
+  return (
+    providerPlans(provider).includes(plan) &&
+    override?.plans?.[plan]?.hidden === true
+  );
+}
+
+/**
+ * True when people cannot connect a new personal subscription of this
+ * provider: the provider is off, or an admin turned off just its personal
+ * subscriptions. A provider with no personal subscription follows its provider
+ * switch.
+ */
+export function isPersonalSubscriptionHidden(
+  overrides: ModelProviderOverrides | null,
+  provider: SupportedProvider,
+): boolean {
+  return isProviderPlanHidden(overrides, provider, "personal");
+}
+
+/**
+ * True when people cannot add a new ordinary API key for this provider: the
+ * provider is off, or an admin turned off just its API keys. GitHub Copilot
+ * and Microsoft 365 Copilot take no API keys, so the answer there is always
+ * true.
+ */
+export function isProviderApiKeyHidden(
+  overrides: ModelProviderOverrides | null,
+  provider: SupportedProvider,
+): boolean {
+  if (providerRequiresPerUserCredential(provider)) return true;
+  return isProviderPlanHidden(overrides, provider, "apiKey");
+}
+
+/**
+ * True when a provider key belongs to something an admin turned off. Each
+ * plan's switch alone decides its keys:
+ * - OpenAI and xAI: a key holding a ChatGPT or SuperGrok sign-in
+ *   (`subscriptionKind`) is a personal subscription, any other key an API key.
+ * - Anthropic: a key carrying server-resolved `plan: "personal"` (`sk-ant-oat…`)
+ *   is a personal subscription, any other key an API key.
+ * - GitHub Copilot and Microsoft 365 Copilot: every key is a personal subscription.
+ */
+export function isProviderKeyHidden(
+  overrides: ModelProviderOverrides | null,
+  key: {
+    provider: SupportedProvider;
+    plan?: ProviderPlan | null;
+    subscriptionKind?: SubscriptionCredentialKind | null;
+  },
+): boolean {
+  return isProviderPlanHidden(overrides, key.provider, providerKeyPlan(key));
+}
+
+/**
+ * The plan a provider key belongs to, for the providers that offer more than
+ * one. Every other key gets `apiKey`, which reads the provider switch. When
+ * the server already resolved `plan` (for instance an Anthropic `sk-ant-oat…`
+ * OAuth token), trust it directly.
+ */
+export function providerKeyPlan(key: {
+  provider: SupportedProvider;
+  plan?: ProviderPlan | null;
+  subscriptionKind?: SubscriptionCredentialKind | null;
+}): ProviderPlan {
+  if (key.plan) return key.plan;
+  if (providerRequiresPerUserCredential(key.provider)) return "personal";
+  return key.subscriptionKind ? "personal" : "apiKey";
+}
+
+/**
+ * The name a personal subscription shows under: the admin's, or the one it
+ * ships with ("Claude Code", "ChatGPT", "GitHub Copilot", "SuperGrok",
+ * "Microsoft 365 Copilot"). GitHub Copilot and Microsoft 365 Copilot are
+ * personal subscriptions as a whole, so they take the provider's name.
+ */
+export function personalSubscriptionLabel(
+  overrides: ModelProviderOverrides | null,
+  provider: SupportedProvider,
+  /** The name to use when the admins gave none, instead of the shipped one. */
+  fallback?: string,
+): string {
+  const builtIn =
+    fallback ??
+    (isPersonalSubscriptionProvider(provider)
+      ? PERSONAL_SUBSCRIPTION_LABELS[provider]
+      : builtInProviderLabel(provider));
+  if (!providerPlans(provider).includes("apiKey")) {
+    return integrationLabel(overrides, provider, builtIn);
+  }
+  const custom = overrides?.[provider]?.plans?.personal?.displayName?.trim();
+  return custom ? custom : builtIn;
+}
+
+/**
+ * What a person reads when the personal subscription they asked for is
+ * turned off: "ChatGPT is turned off for this organization…".
+ */
+export function personalSubscriptionTurnedOffMessage(
+  overrides: ModelProviderOverrides | null,
+  provider: SupportedProvider,
+): string {
+  return `${personalSubscriptionLabel(overrides, provider)} is turned off for this organization. ${askAnAdministrator("it")}`;
+}
+
+/**
+ * What a person reads when new API keys of a provider are turned off:
+ * "OpenAI API keys are turned off for this organization…".
+ */
+export function providerApiKeyTurnedOffMessage(
+  overrides: ModelProviderOverrides | null,
+  provider: SupportedProvider,
+): string {
+  const label = integrationLabel(
+    overrides,
+    provider,
+    builtInProviderLabel(provider),
+  );
+  return `${label} API keys are turned off for this organization. ${askAnAdministrator("them")}`;
+}
+
+/**
+ * What a person reads when a plan they asked for is turned off: the plan's own
+ * message, or the provider's when the provider has one way in.
+ */
+export function providerPlanTurnedOffMessage(
+  overrides: ModelProviderOverrides | null,
+  provider: SupportedProvider,
+  plan: ProviderPlan,
+): string {
+  if (plan === "personal") {
+    return personalSubscriptionTurnedOffMessage(overrides, provider);
+  }
+  if (providerPlans(provider).includes("apiKey")) {
+    return providerApiKeyTurnedOffMessage(overrides, provider);
+  }
+  const label = integrationLabel(
+    overrides,
+    provider,
+    builtInProviderLabel(provider),
+  );
+  return `${label} is turned off for this organization. ${askAnAdministrator("it")}`;
+}
+
+/** The plan names the Model Providers page uses for its sections. */
+const PLAN_NOUNS: Record<ProviderPlan, string> = {
+  apiKey: "API keys",
+  personal: "personal subscriptions",
+};
+
+function askAnAdministrator(pronoun: "it" | "them"): string {
+  return `Ask an administrator to turn ${pronoun} on under Settings → LLM → Model providers.`;
+}
+
+/**
  * The label to render for a catalog entry: the admin's override when they set
  * one, otherwise the built-in name.
  */
@@ -230,10 +485,12 @@ export function pruneIntegrationOverrides<Id extends string>(
     if (!override) continue;
     const displayName = override.displayName?.trim() || null;
     const hidden = override.hidden === true;
-    if (!hidden && !displayName) continue;
+    const plans = prunePlans(override.plans);
+    if (!hidden && !displayName && !plans) continue;
     pruned[id] = {
       ...(hidden ? { hidden: true } : {}),
       ...(displayName ? { displayName } : {}),
+      ...(plans ? { plans } : {}),
     };
   }
   return Object.keys(pruned).length > 0 ? pruned : null;
@@ -308,4 +565,28 @@ export function withOrderedPopularAgentIds(
     // Not part of the order, so reordering leaves its switch as it was.
     ...(customImage && { [CUSTOM_IMAGE_RUNTIME_ID]: customImage }),
   };
+}
+// ===================================================================
+// Internal
+// ===================================================================
+
+/**
+ * The plans an admin turned off or named, or undefined when every plan is
+ * offered under its default name. A plan's name is kept while the plan is
+ * off, so switching it back on restores it.
+ */
+function prunePlans(
+  plans: ModelProviderOverride["plans"],
+): ModelProviderOverride["plans"] {
+  const pruned: NonNullable<ModelProviderOverride["plans"]> = {};
+  if (plans?.apiKey?.hidden === true) pruned.apiKey = { hidden: true };
+  const personalHidden = plans?.personal?.hidden === true;
+  const personalName = plans?.personal?.displayName?.trim() || null;
+  if (personalHidden || personalName) {
+    pruned.personal = {
+      ...(personalHidden ? { hidden: true } : {}),
+      ...(personalName ? { displayName: personalName } : {}),
+    };
+  }
+  return Object.keys(pruned).length > 0 ? pruned : undefined;
 }

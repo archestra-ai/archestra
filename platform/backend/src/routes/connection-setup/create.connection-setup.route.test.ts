@@ -3,7 +3,11 @@ import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
+import {
+  ConnectionSetupModel,
+  OrganizationModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -62,6 +66,55 @@ describe("POST /api/connection-setups", () => {
     expect(response.json().error.message).toContain("at least one");
   });
 
+  test("refuses Claude Desktop subscription passthrough when Claude Code is turned off, while still allowing virtual-key setup", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: {
+        anthropic: { plans: { personal: { hidden: true } } },
+      },
+    });
+
+    const passthrough = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-desktop",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "anthropic",
+        proxyAuth: "provider-key",
+        model: "claude-haiku-4-5-20251001",
+      },
+    });
+    expect(passthrough.statusCode, passthrough.body).toBe(400);
+    expect(passthrough.json().error.message).toContain(
+      "Claude Code is turned off",
+    );
+
+    const secret = await makeSecret({
+      secret: { apiKey: "sk-ant-api03-company-key" },
+    });
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      name: "Company Anthropic Key",
+    });
+
+    const virtualKey = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-desktop",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "anthropic",
+        proxyAuth: "virtual-key",
+        model: "claude-haiku-4-5-20251001",
+      },
+    });
+    expect(virtualKey.statusCode, virtualKey.body).toBe(200);
+  });
   test("OpenCode primary routing provisions all accessible primaries without a selected provider", async ({
     makeLlmProviderApiKey,
     makeSecret,

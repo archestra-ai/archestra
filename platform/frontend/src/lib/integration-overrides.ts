@@ -7,9 +7,17 @@ import {
   type IntegrationToggle,
   integrationLabel,
   isIntegrationHidden,
+  isPersonalSubscriptionHidden,
+  isPersonalSubscriptionProvider,
+  isProviderApiKeyHidden,
+  isProviderKeyHidden,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
   type ModelProviderOverride,
+  type ModelProviderOverrides,
+  type ProviderPlan,
+  personalSubscriptionLabel,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -38,6 +46,45 @@ export type NamedIntegrationCatalog<Id extends string> =
     overrides: Partial<Record<Id, ModelProviderOverride>> | null;
     /** The organization's name for an entry, or the built-in one. */
     label: (id: Id) => string;
+    /**
+     * A key whose provider, or plan, the admin turned off: its API keys or its
+     * personal subscription (`subscriptionKind` or server-resolved `plan`).
+     * Never offer it.
+     */
+    isKeyHidden: (key: {
+      provider: SupportedProvider;
+      plan?: ProviderPlan | null;
+      subscriptionKind?: SubscriptionCredentialKind | null;
+    }) => boolean;
+    /**
+     * The provider's personal subscription (Claude Code, ChatGPT, GitHub
+     * Copilot, SuperGrok, Microsoft 365 Copilot) is off, alone or with the
+     * provider itself.
+     */
+    isPersonalSubscriptionHidden: (id: SupportedProvider) => boolean;
+    /**
+     * New API keys of the provider are off, alone or with the provider
+     * itself. Always true for providers that take no API keys.
+     */
+    isProviderApiKeyHidden: (id: SupportedProvider) => boolean;
+    /** Whether a person may add a new ordinary API key for this provider. */
+    canAddApiKey: (id: SupportedProvider) => boolean;
+    /** Whether a person may connect this provider's personal subscription. */
+    canAddPersonalSubscription: (id: SupportedProvider) => boolean;
+    /**
+     * The personal subscription's name: the admin's, or the built-in one
+     * (`fallback` when given, for surfaces with a longer built-in name such
+     * as "ChatGPT Subscription").
+     */
+    personalSubscriptionLabel: (
+      id: SupportedProvider,
+      fallback?: string,
+    ) => string;
+    /**
+     * Whether a person may add a new key or subscription for this provider:
+     * an API key or a personal subscription.
+     */
+    canAddKey: (id: SupportedProvider) => boolean;
   };
 
 /**
@@ -76,6 +123,24 @@ export function useModelProviderCatalog(
       overrides,
       label: (id: SupportedProvider) =>
         integrationLabel(overrides, id, builtInProviderLabel(id)),
+      isKeyHidden: (key: {
+        provider: SupportedProvider;
+        plan?: ProviderPlan | null;
+        subscriptionKind?: SubscriptionCredentialKind | null;
+      }) => isProviderKeyHidden(overrides, key),
+      isPersonalSubscriptionHidden: (id: SupportedProvider) =>
+        isPersonalSubscriptionHidden(overrides, id),
+      isProviderApiKeyHidden: (id: SupportedProvider) =>
+        isProviderApiKeyHidden(overrides, id),
+      canAddApiKey: (id: SupportedProvider) =>
+        !isProviderApiKeyHidden(overrides, id),
+      canAddPersonalSubscription: (id: SupportedProvider) =>
+        canAddPersonalSubscription(overrides, id),
+      personalSubscriptionLabel: (id: SupportedProvider, fallback?: string) =>
+        personalSubscriptionLabel(overrides, id, fallback),
+      canAddKey: (id: SupportedProvider) =>
+        !isProviderApiKeyHidden(overrides, id) ||
+        canAddPersonalSubscription(overrides, id),
     }),
     [overrides],
   );
@@ -110,6 +175,16 @@ export function useKnowledgeConnectorCatalog(): IntegrationCatalog<ConnectorType
 // ===================================================================
 // Internal
 // ===================================================================
+
+function canAddPersonalSubscription(
+  overrides: ModelProviderOverrides | null,
+  id: SupportedProvider,
+): boolean {
+  return (
+    isPersonalSubscriptionProvider(id) &&
+    !isPersonalSubscriptionHidden(overrides, id)
+  );
+}
 
 function buildCatalog<Id extends string>(
   overrides: Partial<Record<Id, IntegrationToggle>> | null,

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  personalSubscriptionTurnedOffMessage,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   subscriptionKindForProvider,
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
@@ -41,7 +43,7 @@ interface ProviderAuthRequiredCardProps {
  */
 export function ProviderAuthRequiredCard({
   provider,
-  providerLabel,
+  providerLabel: builtInLabel,
   agentName,
   variant = "error",
   onConnected,
@@ -59,6 +61,16 @@ export function ProviderAuthRequiredCard({
   // falls back to the Model Providers link.
   const subscriptionKind = subscriptionKindForProvider(provider);
   const byosEnabled = useFeature("byosEnabled") === true;
+  // The organization's name for the subscription, and whether it may still
+  // be connected: a turned-off subscription says so instead of a sign-in
+  // the server would refuse.
+  const providerCatalog = useModelProviderCatalog();
+  const providerLabel = subscriptionKind
+    ? providerCatalog.personalSubscriptionLabel(provider, builtInLabel)
+    : builtInLabel;
+  const turnedOff =
+    subscriptionKind !== null &&
+    !providerCatalog.canAddPersonalSubscription(provider);
   // The user's existing personal key for this subscription, if any. A sign-in
   // then RECONNECTS that key in place instead of minting a duplicate row: the
   // card most often appears because an existing key's sign-in expired, and a
@@ -104,7 +116,14 @@ export function ProviderAuthRequiredCard({
           </InlineNoticeText>
         </div>
 
-        {subscriptionKind && byosEnabled ? (
+        {turnedOff ? (
+          <InlineNoticeText className="block">
+            {personalSubscriptionTurnedOffMessage(
+              providerCatalog.overrides,
+              provider,
+            )}
+          </InlineNoticeText>
+        ) : subscriptionKind && byosEnabled ? (
           // Not a nested <InlineNotice>: the card around it is already the
           // alert, so a second one would draw a box inside a box and have a
           // screen reader announce the same notice twice.
@@ -119,7 +138,10 @@ export function ProviderAuthRequiredCard({
             kind={subscriptionKind}
             disabled={createKey.isPending || reconnectKey.isPending}
             onSecret={async (secret) => {
-              const { label } = SUBSCRIPTION_CREDENTIALS[subscriptionKind];
+              const label = providerCatalog.personalSubscriptionLabel(
+                provider,
+                SUBSCRIPTION_CREDENTIALS[subscriptionKind].label,
+              );
               // The mutation hooks surface provider/validation failures. Let
               // a rejected promise reach the device-flow component so it
               // resets to a retryable state instead of claiming success.

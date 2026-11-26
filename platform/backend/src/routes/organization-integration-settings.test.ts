@@ -185,6 +185,70 @@ describe("PATCH /api/organization/integration-settings", () => {
     ).toBe(400);
   });
 
+  test("stores a personal subscription plan turned off and records it in the audit log", async () => {
+    const plans = { personal: { hidden: true } };
+    const response = await patch({
+      modelProviderOverrides: { openai: { plans } },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().modelProviderOverrides).toEqual({
+      openai: { plans },
+    });
+    await vi.waitFor(async () => {
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "organization",
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(1);
+      expect(data[0]).toMatchObject({
+        action: "organization.updated",
+        outcome: "success",
+        before: { modelProviderOverrides: null },
+        after: { modelProviderOverrides: { openai: { plans } } },
+      });
+    });
+  });
+
+  test("stores a renamed personal subscription beside its provider's API keys", async () => {
+    const response = await patch({
+      modelProviderOverrides: {
+        openai: {
+          displayName: "OpenAI (company)",
+          plans: { personal: { hidden: true, displayName: "My ChatGPT" } },
+        },
+        xai: { plans: { apiKey: { hidden: true } } },
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().modelProviderOverrides).toEqual({
+      openai: {
+        displayName: "OpenAI (company)",
+        plans: { personal: { hidden: true, displayName: "My ChatGPT" } },
+      },
+      xai: { plans: { apiKey: { hidden: true } } },
+    });
+  });
+
+  test.each([
+    { gemini: { plans: { apiKey: { hidden: true } } } },
+    { "github-copilot": { plans: { personal: { hidden: true } } } },
+    { "microsoft-365-copilot": { plans: { personal: { hidden: true } } } },
+    { anthropic: { plans: { enterprise: { hidden: true } } } },
+    {
+      openai: {
+        plans: { apiKey: { hidden: true }, personal: { hidden: true } },
+      },
+    },
+  ])("rejects plans that cannot be stored: %j", async (modelProviderOverrides) => {
+    expect((await patch({ modelProviderOverrides })).statusCode).toBe(400);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.modelProviderOverrides,
+    ).toBeNull();
+  });
   test("restarts the ChatOps providers when the channel overrides change", async () => {
     await patch({ messagingChannelOverrides: { slack: { hidden: true } } });
 

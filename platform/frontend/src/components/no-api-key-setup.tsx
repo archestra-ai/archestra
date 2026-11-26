@@ -48,17 +48,34 @@ export function NoApiKeySetup({
   onKeyAdded?: () => void;
 }) {
   const [setupOption, setSetupOption] = useState<SetupOption | null>(null);
-  // Nothing here may offer a provider the admins turned off: the create dialog
-  // refuses one, so the button would only open a dead end.
+  // Nothing here may offer a provider, its API keys, or a personal
+  // subscription the admins turned off: the create dialog refuses one, so the
+  // button would only open a dead end. A subscription the admins renamed
+  // signs in under that name.
   const providerCatalog = useModelProviderCatalog();
   const subscriptionOptions = useMemo(
     () =>
-      SUBSCRIPTION_SETUP_OPTIONS.filter(
-        (option) => !providerCatalog.isHidden(option.provider),
-      ),
+      SUBSCRIPTION_SETUP_OPTIONS.filter((option) =>
+        providerCatalog.canAddPersonalSubscription(option.provider),
+      ).map((option) => {
+        const builtInName = option.defaultValues.name ?? "";
+        const name = providerCatalog.personalSubscriptionLabel(
+          option.provider,
+          builtInName,
+        );
+        return name === builtInName
+          ? option
+          : {
+              ...option,
+              title: `Sign in with ${name}`,
+              defaultValues: { ...option.defaultValues, name },
+            };
+      }),
     [providerCatalog],
   );
-  const hasVisibleProviders = providerCatalog.visibleIds.length > 0;
+  const hasVisibleProviders = providerCatalog.visibleIds.some(
+    providerCatalog.canAddApiKey,
+  );
 
   return (
     <div className="flex h-full w-full items-center justify-center p-8">

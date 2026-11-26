@@ -5,6 +5,7 @@ import {
   DocsPage,
   OPENCODE_PRIMARY_PROVIDERS,
   PROVIDERS_REQUIRING_BASE_URL,
+  personalSubscriptionTurnedOffMessage,
   providerRequiresPerUserCredential,
   resolveMcpClientServerName,
   type SupportedProvider,
@@ -423,8 +424,15 @@ export function ConnectCommandPanel({
 
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
-  const { data: availableKeys, isPending: availableKeysPending } =
+  // An account whose plan the admins turned off (API keys or a personal
+  // subscription) is never offered, so a setup can't bind it: each plan's own
+  // switch decides, as the server's check does.
+  const { data: allAvailableKeys, isPending: availableKeysPending } =
     useAvailableLlmProviderApiKeys();
+  const availableKeys = useMemo(
+    () => allAvailableKeys?.filter((key) => !providerCatalog.isKeyHidden(key)),
+    [allAvailableKeys, providerCatalog],
+  );
   const usableOpenCodeKeys = useMemo(
     () =>
       (availableKeys ?? []).filter(
@@ -469,6 +477,11 @@ export function ConnectCommandPanel({
     proxyAuth,
   ]);
 
+  const claudeDesktopSubscriptionHidden =
+    client.id === "claude-desktop" &&
+    proxyAuth === "provider-key" &&
+    providerCatalog.isPersonalSubscriptionHidden("anthropic");
+
   // A virtual key can only be minted against a configured key, so virtual-key
   // mode never offers a provider the command would fail on. Passthrough needs
   // no key (the user brings their own at runtime).
@@ -484,6 +497,7 @@ export function ConnectCommandPanel({
             );
       return supportedProviders.filter((provider) => backing.has(provider));
     }
+    if (claudeDesktopSubscriptionHidden) return [];
     if (proxyAuth !== "virtual-key") return supportedProviders;
     // Virtual-key mode means an admin mapped keys for this client, so its
     // providers are the mapped ones. Per-user providers (GitHub Copilot) stay:
@@ -498,6 +512,7 @@ export function ConnectCommandPanel({
     proxyAuth,
     configuredProviders,
     allPrimaryProviders,
+    claudeDesktopSubscriptionHidden,
     usableOpenCodeKeys,
     adminMappedProviders,
   ]);
@@ -986,10 +1001,18 @@ export function ConnectCommandPanel({
               </span>
             ) : effectiveProxyAuth === "provider-key" ? (
               client.id === "claude-desktop" ? (
-                <span>
-                  The installer opens Claude subscription sign-in and configures
-                  Desktop. Your token stays on your computer.
-                </span>
+                claudeDesktopSubscriptionHidden ? (
+                  <span>
+                    {personalSubscriptionTurnedOffMessage(
+                      providerCatalog.overrides,
+                      "anthropic",
+                    )}
+                  </span>
+                ) : (
+                  <span>
+                    {`The installer opens ${providerCatalog.personalSubscriptionLabel("anthropic", "Claude")} subscription sign-in and configures Desktop. Your token stays on your computer.`}
+                  </span>
+                )
               ) : passthroughAttributes ? (
                 <span>
                   Only the base URL changes: requests keep using your own API
@@ -1146,8 +1169,12 @@ export function ConnectCommandPanel({
       </div>
     ) : null;
 
-  const noVirtualKeyMessage =
-    client.id === "cursor"
+  const noVirtualKeyMessage = claudeDesktopSubscriptionHidden
+    ? personalSubscriptionTurnedOffMessage(
+        providerCatalog.overrides,
+        "anthropic",
+      )
+    : client.id === "cursor"
       ? CURSOR_NO_KEYS_MESSAGE
       : allPrimaryProviders
         ? `No usable primary model providers are available, so ${client.label} connects without model routing. Mark a compatible provider key as primary to route its models.`
@@ -1328,7 +1355,7 @@ export function ConnectCommandPanel({
                     using{" "}
                     <span className="font-medium text-foreground">
                       {client.id === "claude-desktop"
-                        ? "your Claude subscription"
+                        ? `your ${providerCatalog.personalSubscriptionLabel("anthropic", "Claude")} subscription`
                         : "your provider key"}
                     </span>
                   </span>
@@ -1621,6 +1648,10 @@ export function ConnectCommandPanel({
                 <InlineNoticeText>
                   {`Routing ${client.label}'s models needs permission to create virtual keys, so it connects without model routing.`}
                 </InlineNoticeText>
+              </InlineNotice>
+            ) : claudeDesktopSubscriptionHidden && hasProxy && includeProxy ? (
+              <InlineNotice variant="info">
+                <InlineNoticeText>{noVirtualKeyMessage}</InlineNoticeText>
               </InlineNotice>
             ) : virtualKeyUnbacked && allPrimaryProviders ? (
               <InlineNotice variant="info">

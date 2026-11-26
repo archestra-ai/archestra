@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import { ProviderAuthRequiredCard } from "./provider-auth-required-card";
 
 const createMutateAsync = vi.fn();
@@ -22,6 +23,9 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/organization.query");
+
+let modelProviderOverrides: Record<string, unknown> | null = null;
 
 // Complete the sign-in on click so the save path is exercised directly.
 vi.mock("@/components/subscription-sign-in", () => ({
@@ -56,6 +60,33 @@ describe("ProviderAuthRequiredCard", () => {
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+    modelProviderOverrides = null;
+    vi.mocked(useOrganization).mockImplementation(
+      () =>
+        ({
+          data: { modelProviderOverrides },
+        }) as unknown as ReturnType<typeof useOrganization>,
+    );
+  });
+
+  it("says a turned-off subscription is off instead of offering a sign-in", () => {
+    modelProviderOverrides = {
+      openai: { plans: { personal: { hidden: true, displayName: "Our GPT" } } },
+    };
+
+    render(
+      <ProviderAuthRequiredCard provider="openai" providerLabel="ChatGPT" />,
+    );
+
+    expect(screen.getByText("Connect Our GPT")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Our GPT is turned off for this organization. Ask an administrator to turn it on under Settings → LLM → Model providers.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Sign in" }),
+    ).not.toBeInTheDocument();
   });
 
   it("reconnects the user's existing personal subscription key in place", async () => {

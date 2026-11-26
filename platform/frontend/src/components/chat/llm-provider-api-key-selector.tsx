@@ -136,7 +136,7 @@ export function LlmProviderApiKeySelector({
       ),
     [fetchedAvailableKeys, session?.user.id],
   );
-  // A subscription whose provider the admins turned off is not connectable:
+  // A personal subscription the admins turned off is not connectable:
   // the sign-in dialog refuses a hidden provider, so offering it here would
   // only lead to a dead end. An already-connected credential keeps its entry
   // below — existing keys go on working when a provider is switched off.
@@ -145,9 +145,22 @@ export function LlmProviderApiKeySelector({
     () =>
       SUBSCRIPTION_CONNECT_OPTIONS.filter(
         (option) =>
-          !providerCatalog.isHidden(option.provider) &&
+          providerCatalog.canAddPersonalSubscription(option.provider) &&
           !availableKeys.some((key) => subscriptionMatchesKey(option, key)),
-      ),
+      ).map((option) => {
+        // A subscription the admins renamed is offered under that name.
+        const name = providerCatalog.personalSubscriptionLabel(
+          option.provider,
+          option.name,
+        );
+        return name === option.name
+          ? option
+          : {
+              ...option,
+              name,
+              defaultValues: { ...option.defaultValues, name },
+            };
+      }),
     [availableKeys, providerCatalog],
   );
   const displayedKeys = useMemo(
@@ -439,10 +452,12 @@ export function LlmProviderApiKeySelector({
         open={open}
         onOpenChange={handleOpenChange}
         onSelectKey={handleSelectKey}
-        // With every provider switched off there is no key left to add, and
-        // the create dialog would open on an empty picker.
+        // With every provider's API keys switched off there is no key left
+        // to add, and the create dialog would open on an empty picker.
         onAddApiKey={
-          providerCatalog.visibleIds.length > 0 ? onAddApiKey : undefined
+          providerCatalog.visibleIds.some(providerCatalog.canAddApiKey)
+            ? onAddApiKey
+            : undefined
         }
         currentProvider={currentProvider}
         searchPlaceholder="Search credentials..."

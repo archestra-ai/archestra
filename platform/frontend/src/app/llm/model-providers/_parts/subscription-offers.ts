@@ -63,16 +63,23 @@ export function subscriptionKindOfCredential(
 /**
  * Every subscription in the shared registry, in card display order, resolved
  * against the keys the viewer already has. Derived rather than hand-listed so a
- * new registry entry reaches this page without editing it.
+ * new registry entry reaches this page without editing it. `label` gives a
+ * subscription the name the organization chose for it.
  */
 export function buildSubscriptionOffers(
   credentials: LlmProviderApiKeyResponse[],
+  options: { label?: (provider: SubscriptionProvider) => string } = {},
 ): SubscriptionOffer[] {
   const orderedKinds = [...SUBSCRIPTION_CREDENTIAL_KINDS].sort(
     (a, b) => cardOrderIndex(a) - cardOrderIndex(b),
   );
   return orderedKinds.map((kind) => {
-    const { provider, displayName, marker } = SUBSCRIPTION_CREDENTIALS[kind];
+    const {
+      provider,
+      displayName: builtInName,
+      marker,
+    } = SUBSCRIPTION_CREDENTIALS[kind];
+    const displayName = options.label?.(provider) ?? builtInName;
     return {
       kind,
       name: displayName,

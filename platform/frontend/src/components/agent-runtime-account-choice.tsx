@@ -3,6 +3,8 @@
 import {
   COMPANY_ACCOUNT_WORDS,
   type CompanyAccountWords,
+  personalSubscriptionTurnedOffMessage,
+  SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
 import { AlertTriangle, CircleCheck, Lock } from "lucide-react";
 import Link from "next/link";
@@ -28,6 +30,7 @@ import {
   type CompanyAccount,
   useAgentRuntimeAccount,
 } from "@/lib/agent-runtime-account.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { cn } from "@/lib/utils/tailwind";
 
 type Option = AccountWay;
@@ -239,6 +242,7 @@ function AccountChoiceForm({
   onPendingChange: (change: PendingAccountChange | null) => void;
 }) {
   const id = useId();
+  const providerCatalog = useModelProviderCatalog();
   const defaultOption = agentDefault(account);
   // This section mounts once per stored choice: the form starts on it, and
   // a saved choice becomes the new baseline, so the form is not dirty.
@@ -364,6 +368,16 @@ function AccountChoiceForm({
         !subscription.connected &&
         (subscription.kind === "claude" ? (
           <ClaudeCodeAccount agentId={agentId} variant="compact" />
+        ) : !providerCatalog.canAddPersonalSubscription(
+            SUBSCRIPTION_CREDENTIALS[subscription.kind].provider,
+          ) ? (
+          // Turned off by an admin: a sign-in would be refused.
+          <p className="text-sm text-muted-foreground">
+            {personalSubscriptionTurnedOffMessage(
+              providerCatalog.overrides,
+              SUBSCRIPTION_CREDENTIALS[subscription.kind].provider,
+            )}
+          </p>
         ) : (
           <Button type="button" size="xs" variant="outline" asChild>
             <Link

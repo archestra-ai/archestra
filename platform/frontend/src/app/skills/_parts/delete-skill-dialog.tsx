@@ -81,7 +81,10 @@ export function SkillDeleteDescription({
   const isSkillsList = usePathname() === "/skills";
   return (
     <>
-      <span className="block">
+      {/* The header puts 8px under the title. This adds 8px, so the text
+          starts 16px below it: further from the title than its two rows are
+          from each other (12px), which keeps the rows reading as one text. */}
+      <span className="mt-2 block">
         <span>Agents will no longer be able to use </span>
         <ItemNameLinks
           items={skills.map((skill) => ({
@@ -92,9 +95,7 @@ export function SkillDeleteDescription({
         />
         <span>.</span>
       </span>
-      {/* Closer to the row above than that row is to the title (8px): the
-          two rows are one text, and the title heads both. */}
-      <span className="mt-1.5 block">
+      <span className="mt-3 block">
         {canOpenDeletedView ? (
           <>
             <span>You can restore deleted skills from the </span>

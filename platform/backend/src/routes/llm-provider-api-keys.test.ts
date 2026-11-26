@@ -12,6 +12,7 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import SecretModel from "@/models/secret";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { ApiError } from "@/types";
@@ -2629,6 +2630,58 @@ describe("LLM Provider API Keys — API keys and personal subscriptions the orga
     });
     expect(update.statusCode).toBe(400);
     expect(update.json().error.message).toContain("ChatGPT is turned off");
+  });
+
+  test("reports plan='personal' for Anthropic OAuth keys and plan='apiKey' for Anthropic API keys across list, available, and get-by-id", async () => {
+    const oauthCreated = await createKey("anthropic", "sk-ant-oat01-listed");
+    expect(oauthCreated.statusCode, oauthCreated.body).toBe(200);
+    const oauthId = oauthCreated.json().id;
+
+    const apiKeyCreated = await createKey("anthropic", "sk-ant-api03-listed");
+    expect(apiKeyCreated.statusCode, apiKeyCreated.body).toBe(200);
+    const apiKeyId = apiKeyCreated.json().id;
+
+    for (const url of [
+      "/api/llm-provider-api-keys",
+      "/api/llm-provider-api-keys/available",
+    ]) {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode, response.body).toBe(200);
+      const keys = response.json() as Array<{ id: string; plan?: string }>;
+      expect(keys.find((k) => k.id === oauthId)?.plan).toBe("personal");
+      expect(keys.find((k) => k.id === apiKeyId)?.plan).toBe("apiKey");
+    }
+
+    const singleOauth = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${oauthId}`,
+    });
+    expect(singleOauth.statusCode, singleOauth.body).toBe(200);
+    expect(singleOauth.json().plan).toBe("personal");
+
+    const singleApiKey = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${apiKeyId}`,
+    });
+    expect(singleApiKey.statusCode, singleApiKey.body).toBe(200);
+    expect(singleApiKey.json().plan).toBe("apiKey");
+  });
+
+  test("findPlan falls back to the stored plan when reading an Anthropic secret fails", async () => {
+    const created = await createKey("anthropic", "sk-ant-oat01-vault-fallback");
+    expect(created.statusCode, created.body).toBe(200);
+    const key = created.json();
+
+    vi.spyOn(SecretModel, "findById").mockRejectedValueOnce(
+      new Error("secret store unavailable"),
+    );
+
+    const plan = await LlmProviderApiKeyModel.findPlan({
+      id: key.id,
+      provider: "anthropic",
+      secretId: key.secretId,
+    });
+    expect(plan).toBe("apiKey");
   });
 });
 

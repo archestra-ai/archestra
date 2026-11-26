@@ -251,10 +251,13 @@ vi.mock("@/components/ui/data-table", () => ({
     // whose contents are asserted, and dropping it would let a blank
     // ownership cell pass unnoticed.
     const access = columns.find((column) => column.accessorKey === "scope");
+    const provider = columns.find(
+      (column) => column.accessorKey === "provider",
+    );
     return (
       <div data-loading={isLoading}>
         {data.map((row) => (
-          <div key={row.id}>
+          <div key={row.id} data-testid={`provider-key-row-${row.id}`}>
             <span>{row.name}</span>
             {select?.cell?.({
               row: {
@@ -265,6 +268,7 @@ vi.mock("@/components/ui/data-table", () => ({
               },
               table: {},
             } as never)}
+            {provider?.cell?.({ row: { original: row } })}
             {access?.cell?.({ row: { original: row } })}
             {actions?.cell?.({ row: { original: row } })}
           </div>
@@ -1369,6 +1373,48 @@ describe("ApiKeysPage", () => {
     render(<ApiKeysPage />);
 
     expect(personalCards().queryByText("Claude Code")).toBeNull();
+  });
+
+  it("badges a listed Anthropic OAuth key as turned off when only Claude Code is off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          anthropic: { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "anthropic-oauth-key",
+          name: "My Claude OAuth Key",
+          provider: "anthropic",
+          plan: "personal",
+          subscriptionKind: null,
+          scope: "personal",
+        },
+        {
+          id: "anthropic-api-key",
+          name: "Company Anthropic Key",
+          provider: "anthropic",
+          plan: "apiKey",
+          subscriptionKind: null,
+          scope: "org",
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    const oauthRow = screen.getByTestId("provider-key-row-anthropic-oauth-key");
+    const apiRow = screen.getByTestId("provider-key-row-anthropic-api-key");
+    expect(within(oauthRow).getByText("Turned off")).toBeInTheDocument();
+    expect(within(apiRow).queryByText("Turned off")).not.toBeInTheDocument();
   });
 
   it("keeps a connected Claude Code subscription disconnectable without provider-key read permission while hiding provider API keys", () => {

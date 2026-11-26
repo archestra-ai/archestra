@@ -485,6 +485,44 @@ describe("personal subscriptions beside API keys", () => {
     ).toBe(true);
   });
 
+  it("honors a server-resolved plan for Anthropic keys (sk-ant-oat vs API keys)", () => {
+    const claudeCodeOff = {
+      anthropic: { plans: { personal: { hidden: true } } },
+    };
+    const apiKeysOff = {
+      anthropic: { plans: { apiKey: { hidden: true } } },
+    };
+
+    expect(
+      isProviderKeyHidden(claudeCodeOff, {
+        provider: "anthropic",
+        plan: "personal",
+        subscriptionKind: null,
+      }),
+    ).toBe(true);
+    expect(
+      isProviderKeyHidden(claudeCodeOff, {
+        provider: "anthropic",
+        plan: "apiKey",
+        subscriptionKind: null,
+      }),
+    ).toBe(false);
+    expect(
+      isProviderKeyHidden(apiKeysOff, {
+        provider: "anthropic",
+        plan: "personal",
+        subscriptionKind: null,
+      }),
+    ).toBe(false);
+    expect(
+      isProviderKeyHidden(apiKeysOff, {
+        provider: "anthropic",
+        plan: "apiKey",
+        subscriptionKind: null,
+      }),
+    ).toBe(true);
+  });
+
   it("treats GitHub Copilot and Microsoft 365 Copilot as personal subscriptions only", () => {
     expect(isProviderApiKeyHidden(null, "github-copilot")).toBe(true);
     expect(isProviderApiKeyHidden(null, "microsoft-365-copilot")).toBe(true);

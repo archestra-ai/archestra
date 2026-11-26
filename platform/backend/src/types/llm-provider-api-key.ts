@@ -1,5 +1,6 @@
 import {
   CreatedByNullableSchema,
+  ProviderPlanSchema,
   SubscriptionCredentialKindSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -134,6 +135,12 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
      * the recorded credential kind; no secret is read or returned.
      */
     isGithubAppKey: z.boolean().optional(),
+    /**
+     * Which plan the stored credential belongs to (`apiKey`, `personal`, or
+     * `enterprise`), resolved server-side so the UI classifies Anthropic
+     * `sk-ant-oat…` OAuth tokens under Claude Code just like the backend.
+     */
+    plan: ProviderPlanSchema.optional(),
     /**
      * The login of the GitHub organization a GitHub App key is installed on,
      * and billed to.

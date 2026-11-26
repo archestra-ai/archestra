@@ -293,6 +293,7 @@ class LlmProviderApiKeyModel {
     | (LlmProviderApiKey & {
         subscriptionKind: SubscriptionCredentialKind | null;
         isGithubAppKey: boolean;
+        plan: ProviderPlan;
         githubOrganization: string | null;
         githubOrganizationName: string | null;
       })
@@ -326,14 +327,29 @@ class LlmProviderApiKeyModel {
       },
     ]);
     const { credentialKind: _credentialKind, ...apiKey } = row.apiKey;
+    const subscriptionKind = subscriptionKindOf(
+      apiKey.provider,
+      kinds.get(apiKey.id),
+    );
+    const isGithubAppKey = kinds.get(apiKey.id) === "github_app";
+    const plan = await resolveKeyPlan(
+      {
+        id: apiKey.id,
+        provider: apiKey.provider,
+        secretId: apiKey.secretId,
+        secret: row.secret,
+        secretIsVault: row.secretIsVault,
+        isGithubAppKey,
+        subscriptionKind,
+      },
+      { readVaultSecret: true },
+    );
 
     return {
       ...apiKey,
-      subscriptionKind: subscriptionKindOf(
-        apiKey.provider,
-        kinds.get(apiKey.id),
-      ),
-      isGithubAppKey: kinds.get(apiKey.id) === "github_app",
+      subscriptionKind,
+      isGithubAppKey,
+      plan,
       ...githubOrganizationFields(
         await githubOrganizationOf(
           {
@@ -517,30 +533,51 @@ class LlmProviderApiKeyModel {
 
     return CreatedByModel.attach(
       await Promise.all(
-        accessibleKeys.map(async (key) => ({
-          ...toApiKeyWithScopeInfo(
-            {
-              ...key,
-              // `scope` from the owner column and grants, not the retired one.
-              scope: displayScopes.get(key.id) ?? key.scope,
-              credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
-            },
+        accessibleKeys.map(async (key) => {
+          const resolvedKind =
+            credentialKinds.get(key.id) ?? key.credentialKind;
+          const subscriptionKind =
             options?.includeSubscriptionInfo === true
               ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
-              : null,
-          ),
-          ...githubOrganizationFields(
-            await githubOrganizationOf(
+              : null;
+          const plan = await resolveKeyPlan(
+            {
+              id: key.id,
+              provider: key.provider,
+              secretId: key.secretId,
+              secret: key.secret,
+              secretIsVault: key.secretIsVault,
+              isGithubAppKey: resolvedKind === "github_app",
+              subscriptionKind: subscriptionKindOf(
+                key.provider,
+                credentialKinds.get(key.id),
+              ),
+            },
+            { readVaultSecret: options?.includeSubscriptionInfo === true },
+          );
+          return {
+            ...toApiKeyWithScopeInfo(
               {
                 ...key,
-                credentialKind:
-                  credentialKinds.get(key.id) ?? key.credentialKind,
+                // `scope` from the owner column and grants, not the retired one.
+                scope: displayScopes.get(key.id) ?? key.scope,
+                credentialKind: resolvedKind,
               },
-              { withName: options?.includeSubscriptionInfo === true },
+              subscriptionKind,
+              plan,
             ),
-          ),
-          labels: labelsByKey.get(key.id) ?? [],
-        })),
+            ...githubOrganizationFields(
+              await githubOrganizationOf(
+                {
+                  ...key,
+                  credentialKind: resolvedKind,
+                },
+                { withName: options?.includeSubscriptionInfo === true },
+              ),
+            ),
+            labels: labelsByKey.get(key.id) ?? [],
+          };
+        }),
       ),
       (key) => key.createdBy,
     );
@@ -613,30 +650,51 @@ class LlmProviderApiKeyModel {
 
     return CreatedByModel.attach(
       await Promise.all(
-        keys.map(async (key) => ({
-          ...toApiKeyWithScopeInfo(
-            {
-              ...key,
-              credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
-            },
+        keys.map(async (key) => {
+          const resolvedKind =
+            credentialKinds.get(key.id) ?? key.credentialKind;
+          const subscriptionKind =
             options?.includeSubscriptionInfo === true
               ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
-              : null,
-          ),
-          ...githubOrganizationFields(
-            await githubOrganizationOf(
+              : null;
+          const plan = await resolveKeyPlan(
+            {
+              id: key.id,
+              provider: key.provider,
+              secretId: key.secretId,
+              secret: key.secret,
+              secretIsVault: key.secretIsVault,
+              isGithubAppKey: resolvedKind === "github_app",
+              subscriptionKind: subscriptionKindOf(
+                key.provider,
+                credentialKinds.get(key.id),
+              ),
+            },
+            { readVaultSecret: options?.includeSubscriptionInfo === true },
+          );
+          return {
+            ...toApiKeyWithScopeInfo(
               {
                 ...key,
-                credentialKind:
-                  credentialKinds.get(key.id) ?? key.credentialKind,
+                credentialKind: resolvedKind,
               },
-              // Only the key lists people read ask GitHub for the name; the
-              // proxy and key resolution use this list too.
-              { withName: options?.includeSubscriptionInfo === true },
+              subscriptionKind,
+              plan,
             ),
-          ),
-          labels: labelsByKey.get(key.id) ?? [],
-        })),
+            ...githubOrganizationFields(
+              await githubOrganizationOf(
+                {
+                  ...key,
+                  credentialKind: resolvedKind,
+                },
+                // Only the key lists people read ask GitHub for the name; the
+                // proxy and key resolution use this list too.
+                { withName: options?.includeSubscriptionInfo === true },
+              ),
+            ),
+            labels: labelsByKey.get(key.id) ?? [],
+          };
+        }),
       ),
       (key) => key.createdBy,
     );
@@ -1962,6 +2020,44 @@ class LlmProviderApiKeyModel {
   }
 }
 
+async function resolveKeyPlan(
+  key: {
+    id: string;
+    provider: SupportedProvider;
+    secretId: string | null;
+    secret: SecretValue | null;
+    secretIsVault: boolean | null;
+    isGithubAppKey: boolean;
+    subscriptionKind: SubscriptionCredentialKind | null;
+  },
+  options: { readVaultSecret: boolean },
+): Promise<ProviderPlan> {
+  const plan = providerKeyPlan({
+    provider: key.provider,
+    isGithubAppKey: key.isGithubAppKey,
+    subscriptionKind: key.subscriptionKind,
+  });
+  if (key.provider === "anthropic" && plan === "apiKey") {
+    try {
+      const value =
+        key.secretIsVault && key.secretId
+          ? options.readVaultSecret
+            ? await getSecretValueForLlmProviderApiKey(key.secretId)
+            : null
+          : readApiKeyValue(key.secret);
+      if (isAnthropicOAuthToken(value)) {
+        return "personal";
+      }
+    } catch (err) {
+      logger.warn(
+        { apiKeyId: key.id, err },
+        "resolveKeyPlan: failed to read Anthropic secret; falling back to stored plan",
+      );
+    }
+  }
+  return plan;
+}
+
 function toApiKeyWithScopeInfo<
   T extends {
     provider: string;
@@ -1974,10 +2070,12 @@ function toApiKeyWithScopeInfo<
 >(
   key: T,
   subscriptionKind: SubscriptionCredentialKind | null,
+  plan: ProviderPlan,
 ): Omit<T, "secret" | "secretIsVault" | "credentialKind"> & {
   secretStorageType: SecretStorageType;
   subscriptionKind: SubscriptionCredentialKind | null;
   isGithubAppKey: boolean;
+  plan: ProviderPlan;
 } {
   const {
     secret: _secret,
@@ -1992,6 +2090,7 @@ function toApiKeyWithScopeInfo<
     secretStorageType: computeSecretStorageType(key.secretId, secretIsVault),
     subscriptionKind,
     isGithubAppKey: key.credentialKind === "github_app",
+    plan,
   };
 }
 

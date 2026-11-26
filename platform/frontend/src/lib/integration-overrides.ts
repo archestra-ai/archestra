@@ -18,6 +18,7 @@ import {
   type MessagingChannelId,
   type ModelProviderOverride,
   type ModelProviderOverrides,
+  type ProviderPlan,
   personalSubscriptionLabel,
   type SubscriptionCredentialKind,
   type SupportedProvider,
@@ -55,11 +56,12 @@ export type NamedIntegrationCatalog<Id extends string> =
     isCopilotPlanHidden: (plan: CopilotPlan) => boolean;
     /**
      * A key whose provider, or plan, the admin turned off: its API keys, its
-     * personal subscription (`subscriptionKind`), or a GitHub Copilot plan.
-     * Never offer it.
+     * personal subscription (`subscriptionKind` or server-resolved `plan`), or
+     * a GitHub Copilot plan. Never offer it.
      */
     isKeyHidden: (key: {
       provider: SupportedProvider;
+      plan?: ProviderPlan | null;
       isGithubAppKey?: boolean | null;
       subscriptionKind?: SubscriptionCredentialKind | null;
     }) => boolean;
@@ -142,6 +144,7 @@ export function useModelProviderCatalog(
         isCopilotPlanHidden(overrides, plan),
       isKeyHidden: (key: {
         provider: SupportedProvider;
+        plan?: ProviderPlan | null;
         isGithubAppKey?: boolean | null;
         subscriptionKind?: SubscriptionCredentialKind | null;
       }) => isProviderKeyHidden(overrides, key),

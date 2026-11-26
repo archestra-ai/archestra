@@ -46365,6 +46365,7 @@ export type GetNewChatBootstrapResponses = {
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
+            plan?: 'apiKey' | 'personal' | 'enterprise';
             githubOrganization?: string | null;
             githubOrganizationName?: string | null;
             labels?: Array<{
@@ -46407,6 +46408,7 @@ export type GetNewChatBootstrapResponses = {
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
+            plan?: 'apiKey' | 'personal' | 'enterprise';
             githubOrganization?: string | null;
             githubOrganizationName?: string | null;
             labels?: Array<{
@@ -46983,6 +46985,7 @@ export type GetConversationBootstrapResponses = {
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
+                plan?: 'apiKey' | 'personal' | 'enterprise';
                 githubOrganization?: string | null;
                 githubOrganizationName?: string | null;
                 labels?: Array<{
@@ -47025,6 +47028,7 @@ export type GetConversationBootstrapResponses = {
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
+                plan?: 'apiKey' | 'personal' | 'enterprise';
                 githubOrganization?: string | null;
                 githubOrganizationName?: string | null;
                 labels?: Array<{
@@ -110743,6 +110747,7 @@ export type GetLlmProviderApiKeysResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -110916,6 +110921,7 @@ export type CreateLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -111044,6 +111050,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -111259,6 +111266,7 @@ export type GetLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -111407,6 +111415,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{
@@ -111536,6 +111545,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        plan?: 'apiKey' | 'personal' | 'enterprise';
         githubOrganization?: string | null;
         githubOrganizationName?: string | null;
         labels?: Array<{

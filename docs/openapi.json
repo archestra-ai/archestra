@@ -173654,6 +173654,14 @@
                           "isGithubAppKey": {
                             "type": "boolean"
                           },
+                          "plan": {
+                            "type": "string",
+                            "enum": [
+                              "apiKey",
+                              "personal",
+                              "enterprise"
+                            ]
+                          },
                           "githubOrganization": {
                             "nullable": true,
                             "type": "string"
@@ -173888,6 +173896,14 @@
                           },
                           "isGithubAppKey": {
                             "type": "boolean"
+                          },
+                          "plan": {
+                            "type": "string",
+                            "enum": [
+                              "apiKey",
+                              "personal",
+                              "enterprise"
+                            ]
                           },
                           "githubOrganization": {
                             "nullable": true,
@@ -177132,6 +177148,14 @@
                               "isGithubAppKey": {
                                 "type": "boolean"
                               },
+                              "plan": {
+                                "type": "string",
+                                "enum": [
+                                  "apiKey",
+                                  "personal",
+                                  "enterprise"
+                                ]
+                              },
                               "githubOrganization": {
                                 "nullable": true,
                                 "type": "string"
@@ -177366,6 +177390,14 @@
                               },
                               "isGithubAppKey": {
                                 "type": "boolean"
+                              },
+                              "plan": {
+                                "type": "string",
+                                "enum": [
+                                  "apiKey",
+                                  "personal",
+                                  "enterprise"
+                                ]
                               },
                               "githubOrganization": {
                                 "nullable": true,
@@ -434523,6 +434555,14 @@
                       "isGithubAppKey": {
                         "type": "boolean"
                       },
+                      "plan": {
+                        "type": "string",
+                        "enum": [
+                          "apiKey",
+                          "personal",
+                          "enterprise"
+                        ]
+                      },
                       "githubOrganization": {
                         "nullable": true,
                         "type": "string"
@@ -435289,6 +435329,14 @@
                     "isGithubAppKey": {
                       "type": "boolean"
                     },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
+                    },
                     "githubOrganization": {
                       "nullable": true,
                       "type": "string"
@@ -435824,6 +435872,14 @@
                       "isGithubAppKey": {
                         "type": "boolean"
                       },
+                      "plan": {
+                        "type": "string",
+                        "enum": [
+                          "apiKey",
+                          "personal",
+                          "enterprise"
+                        ]
+                      },
                       "githubOrganization": {
                         "nullable": true,
                         "type": "string"
@@ -436323,6 +436379,14 @@
                     },
                     "isGithubAppKey": {
                       "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
                     },
                     "githubOrganization": {
                       "nullable": true,
@@ -436902,6 +436966,14 @@
                     },
                     "isGithubAppKey": {
                       "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
                     },
                     "githubOrganization": {
                       "nullable": true,
@@ -437696,6 +437768,14 @@
                     },
                     "isGithubAppKey": {
                       "type": "boolean"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "apiKey",
+                        "personal",
+                        "enterprise"
+                      ]
                     },
                     "githubOrganization": {
                       "nullable": true,

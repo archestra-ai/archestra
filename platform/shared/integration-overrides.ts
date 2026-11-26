@@ -399,6 +399,7 @@ export function isProviderKeyHidden(
   overrides: ModelProviderOverrides | null,
   key: {
     provider: SupportedProvider;
+    plan?: ProviderPlan | null;
     isGithubAppKey?: boolean | null;
     subscriptionKind?: SubscriptionCredentialKind | null;
   },
@@ -408,13 +409,17 @@ export function isProviderKeyHidden(
 
 /**
  * The plan a provider key belongs to, for the providers that offer more than
- * one. Every other key gets `apiKey`, which reads the provider switch.
+ * one. Every other key gets `apiKey`, which reads the provider switch. When
+ * the server already resolved `plan` (for instance an Anthropic `sk-ant-oat…`
+ * OAuth token), trust it directly.
  */
 export function providerKeyPlan(key: {
   provider: SupportedProvider;
+  plan?: ProviderPlan | null;
   isGithubAppKey?: boolean | null;
   subscriptionKind?: SubscriptionCredentialKind | null;
 }): ProviderPlan {
+  if (key.plan) return key.plan;
   if (key.provider === "github-copilot") {
     return key.isGithubAppKey ? "enterprise" : "personal";
   }

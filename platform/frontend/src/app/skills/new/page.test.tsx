@@ -387,9 +387,9 @@ describe("NewSkillPage as the first skill's page", () => {
     expect(
       screen.getByRole("heading", { name: "Teach your agent" }),
     ).toBeVisible();
-    expect(
-      screen.getByText(/A skill is a set of reusable instructions/),
-    ).toBeVisible();
+    expect(screen.getByText(/A skill teaches your agent/)).toHaveTextContent(
+      "A skill teaches your agent how to do a specific task. It can be a simple SKILL.md file or bundled with scripts and example files. Add ready skills from marketplaces or write your own. Then share them with a single command.",
+    );
     expect(screen.queryByRole("link", { name: "Skills" })).toBeNull();
     // The step itself is unchanged under the introduction.
     expect(screen.getByText("Blank template")).toBeVisible();

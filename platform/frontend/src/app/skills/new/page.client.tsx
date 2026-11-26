@@ -252,10 +252,10 @@ function NewSkillWizard() {
                     Teach your agent
                   </h2>
                   <p className="leading-relaxed text-pretty text-muted-foreground">
-                    A skill is a set of reusable instructions, with optional
-                    scripts and reference files, that your agent loads when a
-                    task calls for it. Add ready skills from Git repositories or
-                    write your own. Then use them in chat as slash commands.
+                    A skill teaches your agent how to do a specific task. It can
+                    be a simple SKILL.md file or bundled with scripts and
+                    example files. Add ready skills from marketplaces or write
+                    your own. Then share them with a single command.
                   </p>
                 </div>
               )}

@@ -158,7 +158,13 @@ class GithubCloudReader implements PluginRepoReader {
         return this.resolvePublicCommit({ ...params, repository, ref });
       }
       throw new Error(
-        `Could not resolve ref "${ref}" in ${repository.slug}: ${errorMessage(error)}`,
+        githubStatus(error) === 404
+          ? `${
+              ref === "HEAD"
+                ? `Repository ${repository.slug} was not found`
+                : `"${ref}" was not found in ${repository.slug}`
+            }${this.token ? ", or the credential can't see it." : "."}`
+          : `Could not resolve ref "${ref}" in ${repository.slug}: ${githubFailureReason(error)}`,
       );
     }
   }
@@ -209,7 +215,9 @@ class GithubCloudReader implements PluginRepoReader {
         this.anonymousRateLimited = true;
         return this.probeRawFiles(params);
       }
-      throw new Error(`Could not read repository tree: ${errorMessage(error)}`);
+      throw new Error(
+        `Could not read repository tree: ${githubFailureReason(error)}`,
+      );
     }
   }
 
@@ -474,4 +482,34 @@ async function abortable<Value>(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function githubStatus(error: unknown): number | null {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : null;
+}
+
+/**
+ * Why a GitHub API call failed, in words for the person who typed the
+ * repository. The API's own message is written for a developer reading a
+ * response: it ends in a documentation link, and its rate-limit text names
+ * the address the request came from.
+ */
+function githubFailureReason(error: unknown): string {
+  if (isGithubRateLimitError(error)) {
+    return "GitHub's request limit is used up. Try again later.";
+  }
+  switch (githubStatus(error)) {
+    case 401:
+      return "the credential was rejected";
+    case 403:
+      return "the credential can't read it";
+    case 404:
+      return "not found, or the credential can't see it";
+    default:
+      return errorMessage(error).replace(
+        /\s*-\s*https:\/\/docs\.github\.com\S*/g,
+        "",
+      );
+  }
 }

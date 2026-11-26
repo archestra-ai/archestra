@@ -1,7 +1,8 @@
 "use client";
 
-import { Info } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import { IdentityFields } from "@/components/identity-fields";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
@@ -52,6 +53,7 @@ export function PluginContentFields({
   onFilesChange,
   readOnly = false,
   locked = false,
+  nameTaken = false,
 }: {
   displayName: string;
   onDisplayNameChange: (value: string) => void;
@@ -73,6 +75,8 @@ export function PluginContentFields({
    * reads as locked rather than as fields that ignore typing.
    */
   locked?: boolean;
+  /** Another visible plugin for the same client carries this display name. */
+  nameTaken?: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -97,11 +101,24 @@ export function PluginContentFields({
             readOnly={readOnly}
             disabled={locked}
             onChange={(event) => onDisplayNameChange(event.target.value)}
-            placeholder="Session attribution"
+            placeholder="e.g. Session attribution"
             maxLength={120}
             required
+            aria-describedby={
+              nameTaken ? "plugin-display-name-taken" : undefined
+            }
           />
         </IdentityFields>
+        {nameTaken && (
+          <InlineNotice id="plugin-display-name-taken" size="xs">
+            <AlertTriangle aria-hidden />
+            <span className="font-medium">Name already in use</span>
+            <InlineNoticeText>
+              Another plugin for this client has this name. People will not be
+              able to tell the two apart in the list.
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
         <div className="space-y-2">
           <Label htmlFor="plugin-description">Description</Label>
           <Textarea

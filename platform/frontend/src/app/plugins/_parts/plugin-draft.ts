@@ -109,15 +109,56 @@ export function isPluginDraftDirty(draft: PluginDraft, seed: PluginDraft) {
   return JSON.stringify(draft) !== JSON.stringify(seed);
 }
 
-/** A plugin can be saved once it is named and installs something. */
-export function isPluginDraftComplete(params: {
+/**
+ * What still stops the draft from being saved, as a sentence for the person
+ * filling it in; null once it can be saved.
+ *
+ * A file that exists but is empty installs nothing, so a manual plugin needs
+ * content in at least one of its files. A Git plugin's files are the
+ * repository's, and are not this form's to judge.
+ */
+export function pluginDraftGap(params: {
   draft: PluginDraft;
   isGithubPlugin: boolean;
-}): boolean {
+}): string | null {
   const { draft, isGithubPlugin } = params;
-  if (draft.displayName.trim().length === 0 || draft.files.length === 0) {
-    return false;
+  if (draft.displayName.trim().length === 0) return "Enter a display name.";
+  if (draft.files.length === 0) return "Add at least one file.";
+  if (isGithubPlugin) {
+    // A public repository needs no credential.
+    return draft.githubRepoUrl.trim().length > 0
+      ? null
+      : "Enter the repository URL.";
   }
-  // A public repository needs no credential.
-  return !isGithubPlugin || draft.githubRepoUrl.trim().length > 0;
+  if (!draft.files.some((file) => file.content.trim().length > 0)) {
+    return "Add content to at least one file.";
+  }
+  return null;
+}
+
+/**
+ * Whether another plugin the viewer can see already carries this name for the
+ * same client. Two such rows cannot be told apart in the list, so the form
+ * says so; it does not refuse the name, because a plugin the viewer cannot
+ * see may hold it too and the server cannot say that without revealing it.
+ */
+export function hasPluginNameTwin(params: {
+  displayName: string;
+  clientType: string;
+  /** The plugin being edited, left out of the comparison. */
+  pluginId?: string;
+  plugins: ReadonlyArray<{
+    id: string;
+    displayName: string;
+    clientType: string;
+  }>;
+}): boolean {
+  const name = params.displayName.trim().toLowerCase();
+  if (!name) return false;
+  return params.plugins.some(
+    (plugin) =>
+      plugin.id !== params.pluginId &&
+      plugin.clientType === params.clientType &&
+      plugin.displayName.trim().toLowerCase() === name,
+  );
 }

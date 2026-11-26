@@ -531,6 +531,21 @@ async function toError(
   } catch {
     // Not JSON.
   }
+  // A used-up request quota arrives as 429, or as 403 with the quota header
+  // at zero. It is not a credential problem, and the host's own text for it
+  // names the address the request came from, so that text is left out.
+  if (
+    response.status === 429 ||
+    (response.status === 403 &&
+      (response.headers.get("x-ratelimit-remaining") === "0" ||
+        response.headers.get("ratelimit-remaining") === "0" ||
+        /rate limit/i.test(detail)))
+  ) {
+    return new GitHostError(
+      response.status,
+      `${what}: the host's request limit is used up. Try again later.`,
+    );
+  }
   const reason =
     response.status === 401
       ? "the credential was rejected"

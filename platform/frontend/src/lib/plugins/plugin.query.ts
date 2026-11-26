@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  isUuid,
+} from "@archestra/shared";
 import {
   type QueryClient,
   useMutation,
@@ -80,6 +84,9 @@ export function usePlugin(id: string | null) {
     queryKey: ["plugins", id],
     enabled: !!id,
     queryFn: async () => {
+      // A malformed id names no plugin. Asking the API would only come back
+      // as a validation error, which reads as a failed load, not "not found".
+      if (!isUuid(id as string)) return null;
       const { data, error } = await getPlugin({
         path: { id: id as string },
       });
@@ -351,12 +358,11 @@ export function useBulkDeletePlugins() {
     },
     onSuccess: ({ succeeded, failed }) => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      if (failed.length === 0)
-        toast.success(`Deleted ${succeeded.length} plugins`);
-      else
-        toast.warning(
-          `Deleted ${succeeded.length} plugins; ${failed.length} failed`,
-        );
+      const deleted = `Deleted ${succeeded.length} ${
+        succeeded.length === 1 ? "plugin" : "plugins"
+      }`;
+      if (failed.length === 0) toast.success(deleted);
+      else toast.warning(`${deleted}; ${failed.length} failed`);
       if (succeeded.length > 0) {
         return invalidatePluginCapabilities(queryClient);
       }

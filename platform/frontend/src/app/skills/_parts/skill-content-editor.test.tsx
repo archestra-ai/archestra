@@ -16,10 +16,11 @@ function Harness({
   onFiles,
 }: {
   files: ResourceFile[];
-  manifest?: string;
+  /** Null lists only the files, as a plugin's payload does. */
+  manifest?: string | null;
   onFiles?: (files: ResourceFile[]) => void;
 }) {
-  const [manifest, setManifest] = useState(initialManifest);
+  const [manifest, setManifest] = useState<string | null>(initialManifest);
   const [files, setFiles] = useState(initial);
   return (
     <SkillContentEditor
@@ -104,6 +105,66 @@ describe("SkillContentEditor", () => {
       within(explorer()).getByRole("button", { name: "api.md" }),
     ).toHaveAttribute("aria-current", "page");
     expect(editor()).toHaveValue("");
+  });
+
+  it("refuses a name the server would not store, and keeps it open to correct", async () => {
+    const user = userEvent.setup();
+    const onFiles = vi.fn();
+    render(
+      <Harness
+        files={[{ path: "notes.md", content: "", encoding: "utf8" }]}
+        onFiles={onFiles}
+      />,
+    );
+    const name = () => screen.getByRole("textbox", { name: "File name" });
+
+    await user.click(screen.getByRole("button", { name: "New file" }));
+    await user.type(name(), "../up.txt{Enter}");
+    expect(
+      screen.getByText("A path cannot contain . or .. as a folder name."),
+    ).toBeVisible();
+
+    // A second manifest, in any letter case.
+    await user.clear(name());
+    await user.type(name(), "skill.md{Enter}");
+    expect(screen.getByText("SKILL.md is already in the list.")).toBeVisible();
+
+    // A name that is taken says so; it used to do nothing at all.
+    await user.clear(name());
+    await user.type(name(), "Notes.md{Enter}");
+    expect(
+      screen.getByText("A file with this name already exists."),
+    ).toBeVisible();
+    expect(onFiles).not.toHaveBeenCalled();
+
+    // Corrected in place: the message goes with the next keystroke.
+    await user.clear(name());
+    await user.type(name(), "more-notes.md{Enter}");
+    expect(screen.queryByText(/already exists/)).not.toBeInTheDocument();
+    expect(onFiles).toHaveBeenLastCalledWith([
+      { path: "notes.md", content: "", encoding: "utf8" },
+      { path: "more-notes.md", content: "", encoding: "utf8" },
+    ]);
+  });
+
+  it("opens another file when the open one goes to the trash", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        manifest={null}
+        files={[
+          { path: "a.md", content: "first", encoding: "utf8" },
+          { path: "b.md", content: "second", encoding: "utf8" },
+        ]}
+      />,
+    );
+    expect(editor()).toHaveValue("first");
+
+    await user.click(
+      screen.getByRole("button", { name: "Move a.md to trash" }),
+    );
+
+    expect(editor()).toHaveValue("second");
   });
 
   it("moves a file to the trash and restores it", async () => {

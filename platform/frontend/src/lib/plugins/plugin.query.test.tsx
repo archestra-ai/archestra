@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sdk = vi.hoisted(() => ({
   createPlugin: vi.fn(),
   deletePlugin: vi.fn(),
+  getPlugin: vi.fn(),
   importGithubPlugin: vi.fn(),
   importGithubPluginMarketplace: vi.fn(),
 }));
@@ -29,6 +30,7 @@ import {
   useDeletePlugin,
   useImportGithubPlugin,
   useImportGithubPluginMarketplace,
+  usePlugin,
 } from "./plugin.query";
 
 function createTestClient() {
@@ -69,6 +71,25 @@ describe("Plugin bulk mutations", () => {
 
     expect(outcome.succeeded).toEqual([{ id: "p1", name: "One" }]);
     expect(outcome.failed).toHaveLength(1);
+  });
+
+  it("counts one deleted plugin as one plugin", async () => {
+    sdk.deletePlugin.mockResolvedValue({
+      data: { success: true },
+      error: undefined,
+    });
+    const { result } = renderHook(() => useBulkDeletePlugins(), { wrapper });
+
+    await act(() => result.current.mutateAsync([{ id: "p1", name: "One" }]));
+    expect(toast.success).toHaveBeenLastCalledWith("Deleted 1 plugin");
+
+    await act(() =>
+      result.current.mutateAsync([
+        { id: "p1", name: "One" },
+        { id: "p2", name: "Two" },
+      ]),
+    );
+    expect(toast.success).toHaveBeenLastCalledWith("Deleted 2 plugins");
   });
 
   it("names the failed plugins and their reasons in the import toast", async () => {
@@ -185,5 +206,19 @@ describe("Plugin bulk mutations", () => {
     expect(
       client.getQueryState(authQueryKeys.scopedCapabilities())?.isInvalidated,
     ).toBe(true);
+  });
+});
+
+describe("usePlugin", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("treats a malformed id as a plugin that does not exist, without asking the API", async () => {
+    const { result } = renderHook(() => usePlugin("not-a-uuid"), { wrapper });
+
+    // Null is what the page reads as "not found"; a request would have come
+    // back as a validation error and read as a failed load.
+    await waitFor(() => expect(result.current.data).toBeNull());
+    expect(result.current.isError).toBe(false);
+    expect(sdk.getPlugin).not.toHaveBeenCalled();
   });
 });

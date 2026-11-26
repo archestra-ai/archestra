@@ -72,6 +72,15 @@ export function defineResourceCreationFooterTests(
             await page
               .getByRole("textbox", { name: /^Server URL/ })
               .fill("https://example.com/mcp");
+          if (resource === "plugins") {
+            // A plugin whose files are all blank installs nothing, so Create
+            // waits for content. Inserted, not typed: the editor closes a
+            // typed brace itself.
+            const editor = page.locator(".monaco-editor").first();
+            await editor.scrollIntoViewIfNeeded();
+            await editor.click();
+            await page.keyboard.insertText("{}");
+          }
           await expect(create).toBeEnabled();
           const createStyle = await footerStyle(create);
           expect(createStyle.position).toBe(

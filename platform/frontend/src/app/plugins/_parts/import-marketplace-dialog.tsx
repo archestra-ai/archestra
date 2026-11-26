@@ -121,7 +121,13 @@ export function ImportMarketplaceDialog({
   const [previewEntry, setPreviewEntry] = useState<MarketplaceEntry | null>(
     null,
   );
-  const [discoverError, setDiscoverError] = useState<string | null>(null);
+  // A scan ends without plugins in two different ways. `failed`: the
+  // repository could not be read. `nothing-found`: it was read, and holds
+  // nothing to import, so its access is not the thing to change.
+  const [discoverError, setDiscoverError] = useState<{
+    kind: "failed" | "nothing-found";
+    message: string;
+  } | null>(null);
   const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
     [],
   );
@@ -224,8 +230,11 @@ export function ImportMarketplaceDialog({
         ),
       );
     } else {
-      const message = errorMessage ?? data?.reason ?? null;
-      if (message) setDiscoverError(message);
+      if (errorMessage) {
+        setDiscoverError({ kind: "failed", message: errorMessage });
+      } else if (data?.reason) {
+        setDiscoverError({ kind: "nothing-found", message: data.reason });
+      }
     }
   };
 
@@ -758,16 +767,28 @@ export function ImportMarketplaceDialog({
         <div className="space-y-5">
           <GitSourceStepBody source={source} lastLabel="Plugins" />
           {discoverError && source.step === "repo" ? (
-            <InlineNotice variant="error">
-              <AlertTriangle />
-              <span className="font-medium">Couldn’t read that repository</span>
-              <InlineNoticeText>
-                <span>{discoverError}</span>
-                {source.access?.kind === "public" ? (
-                  <span> Private? Change the access above.</span>
-                ) : null}
-              </InlineNoticeText>
-            </InlineNotice>
+            discoverError.kind === "nothing-found" ? (
+              <InlineNotice>
+                <AlertTriangle />
+                <span className="font-medium">
+                  No plugins found in that repository
+                </span>
+                <InlineNoticeText>{discoverError.message}.</InlineNoticeText>
+              </InlineNotice>
+            ) : (
+              <InlineNotice variant="error">
+                <AlertTriangle />
+                <span className="font-medium">
+                  Couldn’t read that repository
+                </span>
+                <InlineNoticeText>
+                  <span>{discoverError.message}</span>
+                  {source.access?.kind === "public" ? (
+                    <span> Private? Change the access above.</span>
+                  ) : null}
+                </InlineNoticeText>
+              </InlineNotice>
+            )
           ) : null}
         </div>
       )}

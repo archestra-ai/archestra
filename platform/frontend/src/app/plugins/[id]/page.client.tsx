@@ -48,6 +48,7 @@ import {
   type PluginDetail,
   useDeletePlugin,
   usePlugin,
+  usePlugins,
   useUpdatePlugin,
 } from "@/lib/plugins/plugin.query";
 import {
@@ -55,10 +56,11 @@ import {
   pluginAction,
 } from "../_parts/plugin-actions-model";
 import {
-  isPluginDraftComplete,
+  hasPluginNameTwin,
   isPluginDraftDirty,
   type PluginDraft,
   pluginDraftFromPlugin,
+  pluginDraftGap,
 } from "../_parts/plugin-draft";
 import { PluginForm } from "../_parts/plugin-form";
 import { PluginGitSourceCard } from "../_parts/plugin-git-source";
@@ -82,7 +84,13 @@ import { PluginSourceGlyph } from "../_parts/plugin-source-icon";
  * mirrors the skill page.
  */
 export default function PluginDetailPage({ id }: { id: string }) {
-  const { data: plugin, isPending, isLoadingError, refetch } = usePlugin(id);
+  const {
+    data: plugin,
+    isPending,
+    isLoadingError,
+    error,
+    refetch,
+  } = usePlugin(id);
 
   // Hold the last plugin this mount saw. Deleting it in another tab (or any
   // background refetch that answers 404) turns `data` into null, and dropping
@@ -105,9 +113,15 @@ export default function PluginDetailPage({ id }: { id: string }) {
 
   if (isLoadingError) {
     return (
-      <PageLayout title="Plugin" description="View plugin configuration.">
+      <PageLayout
+        title="Plugin"
+        description=""
+        backLink={<PluginBackLink href="/plugins" label="Plugins" />}
+        maxWidth="wizard"
+      >
         <QueryLoadError
           title="Couldn't load this plugin"
+          error={error}
           onRetry={() => refetch()}
         />
       </PageLayout>
@@ -196,7 +210,16 @@ function PluginDetailView({
     setDraft((prev) => ({ ...prev, ...patch }));
   const discardChanges = () => setDraft(base);
 
-  const isComplete = isPluginDraftComplete({ draft, isGithubPlugin });
+  const draftGap = pluginDraftGap({ draft, isGithubPlugin });
+  const { data: plugins } = usePlugins();
+  const nameTaken =
+    !isGithubPlugin &&
+    hasPluginNameTwin({
+      displayName: draft.displayName,
+      clientType: plugin.clientType,
+      pluginId: plugin.id,
+      plugins: plugins ?? [],
+    });
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -212,10 +235,12 @@ function PluginDetailView({
           : {
               displayName: submitted.displayName.trim(),
               description: submitted.description,
-              enabled: submitted.enabled,
               supportedPlatforms: submitted.supportedPlatforms,
               files: submitted.files,
             }),
+        // Whether the plugin can be installed is this page's to decide, for
+        // a Git plugin as much as for a manual one.
+        enabled: submitted.enabled,
         labels: submitted.labels,
         icon: submitted.icon,
       })
@@ -334,80 +359,96 @@ function PluginDetailView({
               {installAction.label}
             </PermissionButton>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon-sm">
-                <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">More actions</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {isGithubPlugin && (
+          {isGithubPlugin ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon-sm">
+                  <MoreHorizontal className="h-4 w-4" />
+                  <span className="sr-only">More actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {isGithubPlugin && (
+                  <DropdownMenuItem
+                    aria-disabled={isReadOnly || undefined}
+                    aria-describedby={updateReason ? updateReasonId : undefined}
+                    className={
+                      isReadOnly ? "cursor-not-allowed opacity-50" : undefined
+                    }
+                    onSelect={(event) => {
+                      if (isReadOnly) event.preventDefault();
+                    }}
+                    onClick={(event) => {
+                      if (isReadOnly) {
+                        event.preventDefault();
+                        return;
+                      }
+                      setUpdatesOpen(true);
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    {updatesAction.label}
+                    {updateReason && (
+                      <span
+                        id={updateReasonId}
+                        aria-hidden="true"
+                        className="sr-only"
+                      >
+                        {updateReason}
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                )}
+                {isGithubPlugin && <DropdownMenuSeparator />}
                 <DropdownMenuItem
-                  aria-disabled={isReadOnly || undefined}
-                  aria-describedby={updateReason ? updateReasonId : undefined}
+                  variant="destructive"
+                  aria-disabled={canDelete !== true || undefined}
+                  aria-describedby={deleteReason ? deleteReasonId : undefined}
                   className={
-                    isReadOnly ? "cursor-not-allowed opacity-50" : undefined
+                    canDelete === true
+                      ? undefined
+                      : "cursor-not-allowed opacity-50"
                   }
                   onSelect={(event) => {
-                    if (isReadOnly) event.preventDefault();
+                    if (canDelete !== true) event.preventDefault();
                   }}
                   onClick={(event) => {
-                    if (isReadOnly) {
+                    if (canDelete !== true) {
                       event.preventDefault();
                       return;
                     }
-                    setUpdatesOpen(true);
+                    setDeleteRequested(true);
                   }}
                 >
-                  <RefreshCw className="h-4 w-4" />
-                  {updatesAction.label}
-                  {updateReason && (
+                  <Trash2 className="h-4 w-4" />
+                  {deleteAction.label}
+                  {deleteReason && (
                     <span
-                      id={updateReasonId}
+                      id={deleteReasonId}
                       aria-hidden="true"
                       className="sr-only"
                     >
-                      {updateReason}
+                      {deleteReason}
                     </span>
                   )}
                 </DropdownMenuItem>
-              )}
-              {isGithubPlugin && <DropdownMenuSeparator />}
-              <DropdownMenuItem
-                variant="destructive"
-                aria-disabled={canDelete !== true || undefined}
-                aria-describedby={deleteReason ? deleteReasonId : undefined}
-                className={
-                  canDelete === true
-                    ? undefined
-                    : "cursor-not-allowed opacity-50"
-                }
-                onSelect={(event) => {
-                  if (canDelete !== true) event.preventDefault();
-                }}
-                onClick={(event) => {
-                  if (canDelete !== true) {
-                    event.preventDefault();
-                    return;
-                  }
-                  setDeleteRequested(true);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-                {deleteAction.label}
-                {deleteReason && (
-                  <span
-                    id={deleteReasonId}
-                    aria-hidden="true"
-                    className="sr-only"
-                  >
-                    {deleteReason}
-                  </span>
-                )}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            // A manual plugin has one whole-plugin action, so it is a button:
+            // a menu holding a single item only adds a click.
+            <PermissionButton
+              permissions={deleteAction.permissions}
+              permissionScope={deleteAction.permissionScope}
+              variant="outline"
+              size="icon-sm"
+              tooltip={deleteAction.label}
+              aria-label={deleteAction.label}
+              onClick={() => setDeleteRequested(true)}
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </PermissionButton>
+          )}
         </div>
       }
     >
@@ -450,6 +491,7 @@ function PluginDetailView({
           pluginId={plugin.id}
           isGithubPlugin={isGithubPlugin}
           activeSection={activeSection}
+          nameTaken={nameTaken}
         />
 
         {activeSection === "general" && !isReadOnly && (
@@ -469,7 +511,10 @@ function PluginDetailView({
               <PermissionButton
                 permissions={{ plugin: ["update"] }}
                 permissionScope={plugin.id}
-                disabled={!isDirty || !isComplete || isGone || isSaving}
+                disabled={!isDirty || draftGap !== null || isGone || isSaving}
+                tooltip={
+                  isDirty && !isSaving ? (draftGap ?? undefined) : undefined
+                }
                 onClick={handleSave}
               >
                 {isSaving ? (

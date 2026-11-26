@@ -482,6 +482,37 @@ describe("discoverGithubMarketplace", () => {
     });
   });
 
+  test("says a missing repository was not found, without GitHub's own wording", async () => {
+    // No repository is stubbed, so GitHub answers 404 as it does for a
+    // mistyped or private one. Its message ends in a documentation link.
+    const fetchMock = stubGithub([]);
+    const githubStub = fetchMock.getMockImplementation() as (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => Promise<Response>;
+    fetchMock.mockImplementation(async (input, init) => {
+      const response = await githubStub(input, init);
+      if (response.status !== 404) return response;
+      return Response.json(
+        {
+          message: "Not Found",
+          documentation_url:
+            "https://docs.github.com/rest/commits/commits#get-a-commit",
+        },
+        { status: 404 },
+      );
+    });
+
+    const failure = await discoverGithubMarketplace({
+      repoUrl: "nobody/missing",
+    }).catch((error: Error) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(
+      "Repository nobody/missing was not found.",
+    );
+  });
+
   test("falls back to public Git when the anonymous REST quota is exhausted", async () => {
     const fetchMock = stubGithub([
       {

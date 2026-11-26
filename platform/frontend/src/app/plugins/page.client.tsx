@@ -74,6 +74,7 @@ import {
 } from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type PluginListItem,
   useBulkDeletePlugins,
@@ -129,6 +130,9 @@ function PluginsList() {
   // Label filtering is server-side, so the value rides the list query rather
   // than narrowing the already-fetched array below.
   const labelsFilter = searchParams.get("labels") || undefined;
+  // The page lives in the URL like the filters do, so a reload or a shared
+  // link opens the same rows, and the search box's own `page=1` takes effect.
+  const { pageIndex, pageSize, setPagination } = useDataTableQueryParams();
 
   const {
     data: plugins,
@@ -149,10 +153,17 @@ function PluginsList() {
       const params = new URLSearchParams(searchParams.toString());
       if (value === "all" || value === "") params.delete(name);
       else params.set(name, value);
+      // A narrower list starts from its first page.
+      params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [pathname, router, searchParams],
   );
+
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "displayName", desc: false },
+  ]);
+  const nameDescending = sorting[0]?.desc ?? false;
 
   // The plugin list is small enough to filter and paginate client-side — the
   // API returns every visible plugin in one read.
@@ -186,24 +197,29 @@ function PluginsList() {
           }
           return true;
         })
-        .sort((left, right) =>
-          left.displayName.localeCompare(right.displayName),
+        // One order for the table and the cards: the Plugin header sets it.
+        .sort(
+          (left, right) =>
+            left.displayName.localeCompare(right.displayName) *
+            (nameDescending ? -1 : 1),
         ),
-    [plugins, search, client, platform, source, sourceRepo],
+    [plugins, search, client, platform, source, sourceRepo, nameDescending],
   );
 
   // Only imported plugins have a repository, so the filter stays hidden until
   // at least one plugin is imported.
+  // A repository named in the URL is listed too, even when no plugin comes
+  // from it: the filter is narrowing the list, so its control has to show it.
   const sourceRepos = useMemo(
     () =>
       Array.from(
         new Set(
-          (plugins ?? [])
-            .map(pluginRepository)
-            .filter((repo): repo is string => !!repo),
+          [...(plugins ?? []).map(pluginRepository), sourceRepo].filter(
+            (repo): repo is string => !!repo,
+          ),
         ),
       ).sort(),
-    [plugins],
+    [plugins, sourceRepo],
   );
 
   const hasActiveFilters = Boolean(
@@ -226,6 +242,7 @@ function PluginsList() {
       "source",
       "state",
       "sourceRepo",
+      "page",
       "scope",
       "teamIds",
       "authorIds",
@@ -238,9 +255,6 @@ function PluginsList() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [pathname, router, searchParams]);
 
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "details", desc: true },
-  ]);
   const [deletingPlugin, setDeletingPlugin] = useState<PluginListItem | null>(
     null,
   );
@@ -308,8 +322,7 @@ function PluginsList() {
         permissionScope: editAction.permissionScope,
         href: pluginActionHref(editAction),
       },
-    ];
-    const dropdownActions: TableRowAction[] = [
+      // Inline, not behind a menu: a menu with one item is an extra click.
       {
         icon: <Trash2 className="h-4 w-4" />,
         label: deleteAction.label,
@@ -319,21 +332,13 @@ function PluginsList() {
         onClick: () => setDeletingPlugin(plugin),
       },
     ];
-    return (
-      <TableRowActions
-        actions={actions}
-        dropdownActions={dropdownActions}
-        itemName={plugin.displayName}
-      />
-    );
+    return <TableRowActions actions={actions} itemName={plugin.displayName} />;
   };
 
   const columns: ColumnDef<PluginListItem>[] = [
     {
       id: "displayName",
       accessorKey: "displayName",
-      sortingFn: (left, right) =>
-        left.original.displayName.localeCompare(right.original.displayName),
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -374,10 +379,7 @@ function PluginsList() {
     },
     {
       id: "details",
-      accessorFn: (plugin) => plugin.updatedAt,
-      sortingFn: (left, right) =>
-        new Date(left.original.updatedAt).getTime() -
-        new Date(right.original.updatedAt).getTime(),
+      enableSorting: false,
       size: 380,
       header: "Details",
       cell: ({ row }) => {
@@ -422,7 +424,8 @@ function PluginsList() {
 
     {
       id: "actions",
-      size: 110,
+      enableSorting: false,
+      size: 130,
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => (
         <div className="flex justify-end">
@@ -766,6 +769,13 @@ function PluginsList() {
                     hideSelectedCount
                     sorting={sorting}
                     onSortingChange={setSorting}
+                    manualSorting
+                    pagination={{
+                      pageIndex,
+                      pageSize,
+                      total: filteredPlugins.length,
+                    }}
+                    onPaginationChange={setPagination}
                     // The list holds only plugins the caller can read.
                     onRowClick={(row) => router.push(pluginDetailHref(row.id))}
                     rowSelection={bulkSelection.rowSelection}
@@ -865,12 +875,13 @@ function PluginsEmptyState() {
         </Button>
       }
       secondaryAction={
-        // The wizard's first step lists the popular marketplaces.
+        // The wizard's first step lists the popular marketplaces; the link
+        // lands on that list, not on the step's top like "Add new plugin".
         <Link
-          href="/plugins/new"
+          href="/plugins/new#popular-marketplaces"
           className="text-sm text-primary hover:underline"
         >
-          Browse popular plugins
+          Browse popular marketplaces
         </Link>
       }
     />

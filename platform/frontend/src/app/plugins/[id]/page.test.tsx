@@ -36,6 +36,7 @@ import {
   useApplyGithubPluginUpdate,
   useDeletePlugin,
   usePlugin,
+  usePlugins,
   usePreviewGithubPluginUpdate,
   useTriggerPluginGithubSync,
   useUpdatePlugin,
@@ -148,6 +149,9 @@ beforeEach(() => {
     isPending: false,
     data: undefined,
   };
+  vi.mocked(usePlugins).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof usePlugins>);
   vi.mocked(useDeletePlugin).mockReturnValue(
     mutationStub as unknown as ReturnType<typeof useDeletePlugin>,
   );
@@ -225,6 +229,47 @@ describe("PluginDetailPage", () => {
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: "Session sentry" }),
     );
+  });
+
+  it("turns installing off from the page, for a manual plugin and a Git one", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage(BASE_PLUGIN);
+
+    const available = screen.getByRole("switch", {
+      name: "Available to install",
+    });
+    expect(available).toBeChecked();
+    await user.click(available);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+
+    // A Git plugin's files are the repository's; whether it can be installed
+    // is still this page's to decide, and a disabled one can be turned on.
+    unmount();
+    renderPage({
+      ...BASE_PLUGIN,
+      sourceKind: "github",
+      sourceRepo: "acme/plugins",
+      enabled: false,
+    } as PluginDetail);
+    const off = screen.getByRole("switch", { name: "Available to install" });
+    expect(off).not.toBeChecked();
+    await user.click(off);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it("deletes a manual plugin from a button, since a menu would hold nothing else", () => {
+    renderPage(BASE_PLUGIN);
+
+    expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "More actions" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows permissions from the page-header URL", () => {

@@ -105,3 +105,46 @@ describe("GitHub installation repository listing", () => {
     });
   });
 });
+
+describe("host failures", () => {
+  const commitUrl = "https://api.github.com/repos/example/widgets/commits/HEAD";
+
+  test("a used-up request quota is not blamed on the credential and hides the host's text", async () => {
+    server.use(
+      http.get(commitUrl, () =>
+        HttpResponse.json(
+          {
+            message:
+              "API rate limit exceeded for 203.0.113.7. (But here's the good news: Authenticated requests get a higher rate limit.)",
+          },
+          { status: 403, headers: { "x-ratelimit-remaining": "0" } },
+        ),
+      ),
+    );
+
+    const failure = await client
+      .resolveCommit("example/widgets", null)
+      .catch((error: Error) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    const message = (failure as Error).message;
+    expect(message).toContain("request limit is used up");
+    expect(message).not.toContain("credential");
+    expect(message).not.toContain("203.0.113.7");
+  });
+
+  test("a refused read still names the credential", async () => {
+    server.use(
+      http.get(commitUrl, () =>
+        HttpResponse.json(
+          { message: "Resource not accessible by integration" },
+          { status: 403 },
+        ),
+      ),
+    );
+
+    await expect(client.resolveCommit("example/widgets", null)).rejects.toThrow(
+      "the credential can't read it",
+    );
+  });
+});

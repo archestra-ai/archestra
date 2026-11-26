@@ -162,8 +162,8 @@ describe("PluginsPage", () => {
     ).toHaveAttribute("href", "/plugins/new?source=blank");
     // The wizard's first step is where the popular marketplaces are listed.
     expect(
-      screen.getByRole("link", { name: "Browse popular plugins" }),
-    ).toHaveAttribute("href", "/plugins/new");
+      screen.getByRole("link", { name: "Browse popular marketplaces" }),
+    ).toHaveAttribute("href", "/plugins/new#popular-marketplaces");
     // The header keeps its line and its Add button, so the first plugin
     // doesn't shift the page.
     expect(
@@ -318,5 +318,122 @@ describe("PluginsPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(push).toHaveBeenCalledWith("/plugins?", { scroll: false });
+  });
+  describe("with more plugins than one page holds", () => {
+    const names = Array.from(
+      { length: 25 },
+      (_, index) => `Plugin ${String(index + 1).padStart(2, "0")}`,
+    );
+    beforeEach(() => {
+      access.plugins = names.map((displayName, index) => ({
+        ...PLUGIN,
+        id: `plugin-${index + 1}`,
+        displayName,
+        pluginSlug: `plugin-${index + 1}`,
+        sourceKind: "manual",
+        sourceRepo: null,
+        sourceMarketplaceRepo: null,
+        // Newest first is the reverse of the names, so an order taken from
+        // the update time would show.
+        updatedAt: new Date(Date.UTC(2026, 7, 1 + index)).toISOString(),
+      }));
+    });
+    const shownNames = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.querySelector("span.font-medium")?.textContent);
+
+    it("opens the page named in the URL, so a reload or a shared link shows the same rows", () => {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams("page=3") as ReturnType<typeof useSearchParams>,
+      );
+
+      render(<PluginsPage />);
+
+      expect(shownNames()).toEqual(names.slice(20));
+    });
+
+    it("writes the page to the URL when the pager moves", async () => {
+      const push = vi.fn();
+      vi.mocked(useRouter).mockReturnValue({
+        push,
+      } as unknown as ReturnType<typeof useRouter>);
+      render(<PluginsPage />);
+
+      // The pager is drawn once per breakpoint; either copy moves the page.
+      await userEvent.click(
+        screen.getAllByRole("button", { name: "Go to next page" })[0],
+      );
+
+      expect(push).toHaveBeenCalledWith("/plugins?page=2&pageSize=10", {
+        scroll: false,
+      });
+    });
+
+    it("starts a narrowed list from its first page", async () => {
+      const push = vi.fn();
+      vi.mocked(useRouter).mockReturnValue({
+        push,
+      } as unknown as ReturnType<typeof useRouter>);
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams("page=3") as ReturnType<typeof useSearchParams>,
+      );
+      // jsdom has no pointer capture or scrolling, which the select asks for.
+      Element.prototype.hasPointerCapture = vi.fn(() => false);
+      Element.prototype.releasePointerCapture = vi.fn();
+      Element.prototype.scrollIntoView = vi.fn();
+      const user = userEvent.setup();
+      render(<PluginsPage />);
+
+      await user.click(
+        screen.getByRole("combobox", { name: "Filter by client" }),
+      );
+      await user.click(screen.getByRole("option", { name: "Codex" }));
+
+      expect(push).toHaveBeenCalledWith("/plugins?client=codex", {
+        scroll: false,
+      });
+    });
+
+    it("lists by name in the table, the order the cards use too", () => {
+      render(<PluginsPage />);
+
+      expect(shownNames()).toEqual(names.slice(0, 10));
+    });
+  });
+
+  it("puts every row action on the row, with no one-item menu", () => {
+    access.grants.push({
+      resource: "plugin",
+      action: "delete",
+      scope: PLUGIN.id,
+    });
+    render(<PluginsPage />);
+
+    expect(
+      screen.getByRole("button", { name: "Delete Policy Runtime" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /More actions/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a repository filter that came from the URL, even when no plugin is from it", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("sourceRepo=nobody/nothing") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<PluginsPage />);
+
+    // Applied, so it sits on the bar and names the repository it filters by.
+    expect(
+      screen.getByRole("combobox", { name: "Filter by repository" }),
+    ).toHaveTextContent("nobody/nothing");
+    expect(
+      screen.getByText("No plugins match the current filters."),
+    ).toBeVisible();
   });
 });

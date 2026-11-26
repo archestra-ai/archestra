@@ -226,6 +226,47 @@ describe("NewPluginPage", () => {
     ).toBeVisible();
   });
 
+  it("tells a repository with nothing to import apart from one it could not read", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const scan = async () => {
+      await user.click(screen.getByRole("button", { name: "Find plugins" }));
+    };
+    await user.click(screen.getByRole("button", { name: /Git repository/ }));
+    await user.click(screen.getByRole("button", { name: /^GitHub/ }));
+    expect(
+      await screen.findByRole("radio", { name: /Public repository/ }),
+    ).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.type(
+      screen.getByPlaceholderText("github.com/owner/repo"),
+      "acme/plugins",
+    );
+
+    // Read fine, holds no plugins: its access is not the thing to change.
+    discoverMock.mockResolvedValue({
+      data: { entries: [], reason: "No plugin folder was found" },
+      errorMessage: null,
+    });
+    await scan();
+    expect(
+      await screen.findByText("No plugins found in that repository"),
+    ).toBeVisible();
+    expect(screen.getByText("No plugin folder was found.")).toBeVisible();
+    expect(screen.queryByText(/Private\?/)).not.toBeInTheDocument();
+
+    // Could not be read: a private repository is the likely reason.
+    discoverMock.mockResolvedValue({
+      data: null,
+      errorMessage: "Repository acme/plugins was not found.",
+    });
+    await scan();
+    expect(
+      await screen.findByText("Couldn’t read that repository"),
+    ).toBeVisible();
+    expect(screen.getByText(/Private\?/)).toBeVisible();
+  });
+
   it("reads a public GitHub repository without sending a credential", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -537,8 +578,12 @@ describe("NewPluginPage", () => {
     } as unknown as ReturnType<typeof useCreatePlugin>);
     const user = userEvent.setup();
     const view = renderPage();
-    await user.click(screen.getByRole("button", { name: /Blank template/ }));
+    await openBlankTemplate(user, view);
     await user.type(screen.getByLabelText("Display name"), "Shared plugin");
+    await user.type(
+      screen.getByRole("textbox", { name: "File contents" }),
+      "{{}",
+    );
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("source=blank&tab=permissions") as ReturnType<
         typeof useSearchParams
@@ -575,7 +620,7 @@ describe("NewPluginPage", () => {
     const user = userEvent.setup();
     const view = renderPage();
 
-    await user.click(screen.getByRole("button", { name: /Blank template/ }));
+    await openBlankTemplate(user, view);
 
     const displayName = screen.getByLabelText("Display name");
     expect(displayName).toBeVisible();
@@ -614,14 +659,107 @@ describe("NewPluginPage", () => {
     );
     view.rerenderPage();
 
-    const create = screen.getByRole("button", { name: /Create plugin/ });
+    // Refused with its reason readable, not natively disabled: a disabled
+    // button could not say why.
+    const create = () => screen.getByRole("button", { name: /Create plugin/ });
     // An unnamed plugin is not creatable, whatever else is filled in.
-    expect(create).toBeDisabled();
+    expect(create()).toHaveAttribute("aria-disabled", "true");
+    expect(create()).toHaveAccessibleDescription("Enter a display name.");
 
     await user.type(screen.getByLabelText("Display name"), "Session guard");
-    expect(create).toBeEnabled();
+    // Nor is a named one whose only file is still blank: it would install
+    // an empty folder.
+    expect(create()).toHaveAttribute("aria-disabled", "true");
+    expect(create()).toHaveAccessibleDescription(
+      "Add content to at least one file.",
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: "File contents" }),
+      "{{}",
+    );
+    expect(create()).toBeEnabled();
+    expect(create()).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("goes back to Source by URL, so a later visit opens General, not the last tab", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank&tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+
+    // The bare path drops `tab` with `source`; the tab used to stay behind
+    // in the URL and reopen with the next visit to the form.
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith("/plugins/new");
+  });
+
+  it("says when another plugin for the same client already has the name", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [
+        { id: "p1", displayName: "Session Guard", clientType: "claude-code" },
+      ],
+    } as unknown as ReturnType<typeof usePlugins>);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("Display name"), "session guard");
+
+    expect(screen.getByText("Name already in use")).toBeVisible();
+  });
+
+  it("asks before a link elsewhere drops a started draft", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <a href="/skills">Skills</a>
+        <NewPluginPage />
+      </QueryClientProvider>,
+    );
+
+    // An untouched form has nothing to lose.
+    await user.click(screen.getByRole("link", { name: "Skills" }));
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Display name"), "Draft");
+    await user.click(screen.getByRole("link", { name: "Skills" }));
+    expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
+    expect(vi.mocked(useRouter)().push).not.toHaveBeenCalledWith("/skills");
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith("/skills");
   });
 });
+
+/**
+ * The wizard's step lives in the URL: choosing the blank template navigates,
+ * and the page shows the form once the URL says so.
+ */
+async function openBlankTemplate(
+  user: ReturnType<typeof userEvent.setup>,
+  view: { rerenderPage: () => void },
+) {
+  await user.click(screen.getByRole("button", { name: /Blank template/ }));
+  expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith(
+    "/plugins/new?source=blank",
+  );
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+  );
+  view.rerenderPage();
+}
 
 function boundedMarketplaceFixture() {
   return {

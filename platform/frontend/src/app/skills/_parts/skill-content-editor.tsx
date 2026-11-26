@@ -15,7 +15,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useId, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import type { WorkspaceDownload } from "@/components/file-workspace/download-zip";
 import {
@@ -34,6 +34,7 @@ import {
   IconBadge,
 } from "@/components/file-workspace/file-workspace";
 import { WorkspaceEditor } from "@/components/file-workspace/workspace-editor";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import {
   Tooltip,
@@ -45,6 +46,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { formatBytes } from "@/lib/utils/format-bytes";
 import { cn } from "@/lib/utils/tailwind";
+import { contentFilePathProblem } from "./content-file-path";
 import type { ResourceFile } from "./skill-draft";
 
 /** Editing viewport with room left for wizard navigation and actions. */
@@ -128,9 +130,9 @@ export function SkillContentEditor({
     ],
     [manifest, files],
   );
-  const openItem =
-    items.find((item) => item.key === openKey) ??
-    (manifest !== null ? items[0] : undefined);
+  // Falls back to the first file when the open one is gone (moved to the
+  // trash), so the pane shows a file for as long as there is one.
+  const openItem = items.find((item) => item.key === openKey) ?? items[0];
   const openFile = openItem?.kind === "file" ? openItem.file : null;
   const manifestOpen = openItem?.kind === "manifest";
 
@@ -163,9 +165,19 @@ export function SkillContentEditor({
     if (files.some((file) => file.path === item.file.path)) return;
     onFilesChange((current) => [...current, item.file]);
   };
+  const newFileProblem = (folder: string | null, name: string) =>
+    contentFilePathProblem({
+      path: folder ? `${folder}/${name}` : name,
+      existingPaths: files.map((file) => file.path),
+      manifestPath: manifest !== null ? MANIFEST_PATH : undefined,
+    });
+  const newFolderProblem = (name: string) =>
+    name.includes("/")
+      ? "Name one folder here. Add folders inside it afterwards."
+      : // A folder is its first file's parent, so it answers to the same rules.
+        newFileProblem(name, "file");
   const commitNewFile = (folder: string | null, name: string) => {
     const path = folder ? `${folder}/${name}` : name;
-    if (files.some((file) => file.path === path)) return;
     onFilesChange((current) => [
       ...current,
       { path, content: "", encoding: "utf8" },
@@ -174,7 +186,6 @@ export function SkillContentEditor({
     setAddingFileIn(undefined);
   };
   const commitNewFolder = (name: string) => {
-    if (name.includes("/")) return;
     if (!pendingFolders.includes(name)) {
       setPendingFolders((current) => [...current, name]);
     }
@@ -228,6 +239,7 @@ export function SkillContentEditor({
             <NewNameRow
               kind="folder"
               depth={depth}
+              problem={newFolderProblem}
               onCommit={commitNewFolder}
               onCancel={() => setAddingFolder(false)}
             />
@@ -236,6 +248,7 @@ export function SkillContentEditor({
             <NewNameRow
               kind="file"
               depth={depth}
+              problem={(name) => newFileProblem(folder, name)}
               onCommit={(name) => commitNewFile(folder, name)}
               onCancel={() => setAddingFileIn(undefined)}
             />
@@ -426,7 +439,7 @@ export function SkillContentEditor({
     >
       {!openItem ? (
         <p className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          {items.length === 0 ? "No files yet." : "Choose a file to read."}
+          {items.length === 0 ? "No files yet." : "Choose a file to open."}
         </p>
       ) : openFile?.encoding === "base64" ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 bg-muted/30 text-center text-sm text-muted-foreground">
@@ -562,47 +575,75 @@ function RowAction({
 function NewNameRow({
   kind,
   depth,
+  problem,
   onCommit,
   onCancel,
 }: {
   kind: "file" | "folder";
   depth: number;
+  /** Why the typed name cannot be used, or null when it can. */
+  problem: (name: string) => string | null;
   onCommit: (name: string) => void;
   onCancel: () => void;
 }) {
   const [value, setValue] = useState("");
+  // Set on a refused Enter and cleared by the next keystroke: the row stays
+  // open with what was typed, so the name can be corrected, not retyped.
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const refusalId = useId();
   const Icon = kind === "file" ? FileText : Folder;
   const commit = () => {
-    const name = value.trim().replace(/\/+$/, "");
-    if (name) onCommit(name);
+    const name = value.trim();
+    if (!name) return;
+    const reason = problem(name);
+    if (reason) setRefusal(reason);
+    else onCommit(name);
   };
   return (
-    <div
-      className={cn(FILE_ROW_CLASS, "gap-1.5 hover:bg-transparent")}
-      style={{ paddingLeft: fileRowIndent(depth) }}
-    >
-      <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-      <Input
-        autoFocus
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            commit();
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            onCancel();
-          }
-        }}
-        onBlur={() => {
-          if (!value.trim()) onCancel();
-        }}
-        placeholder={kind === "file" ? "filename.md" : "folder name"}
-        aria-label={kind === "file" ? "File name" : "Folder name"}
-        className="h-5 min-w-0 flex-1 rounded-sm px-1 font-mono text-[12px] md:text-[12px]"
-      />
-    </div>
+    <>
+      <div
+        className={cn(FILE_ROW_CLASS, "gap-1.5 hover:bg-transparent")}
+        style={{ paddingLeft: fileRowIndent(depth) }}
+      >
+        <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <Input
+          autoFocus
+          value={value}
+          aria-invalid={refusal ? true : undefined}
+          aria-describedby={refusal ? refusalId : undefined}
+          onChange={(event) => {
+            setValue(event.target.value);
+            setRefusal(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit();
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              onCancel();
+            }
+          }}
+          onBlur={() => {
+            if (!value.trim()) onCancel();
+          }}
+          placeholder={kind === "file" ? "filename.md" : "folder name"}
+          aria-label={kind === "file" ? "File name" : "Folder name"}
+          className="h-5 min-w-0 flex-1 rounded-sm px-1 font-mono text-[12px] md:text-[12px]"
+        />
+      </div>
+      {refusal && (
+        <InlineNotice
+          id={refusalId}
+          variant="error"
+          size="xs"
+          plain
+          className="px-2 py-1"
+        >
+          <InlineNoticeText>{refusal}</InlineNoticeText>
+        </InlineNotice>
+      )}
+    </>
   );
 }
 

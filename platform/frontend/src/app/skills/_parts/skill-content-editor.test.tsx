@@ -130,16 +130,18 @@ describe("SkillContentEditor", () => {
     await user.click(
       screen.getByRole("button", { name: "New file or folder" }),
     );
-    // The folder is picked in the tree, so a name holds no path.
-    await user.type(name(), "../up.txt{Enter}");
-    expect(
-      screen.getByText("Pick the folder above. A name cannot contain /."),
-    ).toBeVisible();
+    // The folder is picked in the tree, so the field takes a name, never a
+    // path, in either separator.
+    const onlyAName =
+      "Enter a name only, without / or \\. Pick the folder above.";
+    for (const path of ["../up.txt", "docs/guide.md", "docs\\guide.md"]) {
+      await user.clear(name());
+      await user.type(name(), `${path}{Enter}`);
+      expect(screen.getByText(onlyAName)).toBeVisible();
+    }
     await user.clear(name());
     await user.type(name(), "..{Enter}");
-    expect(
-      screen.getByText("A path cannot contain . or .. as a folder name."),
-    ).toBeVisible();
+    expect(screen.getByText("A name cannot be . or ..")).toBeVisible();
 
     // A second manifest, in any letter case.
     await user.clear(name());

@@ -66,10 +66,14 @@ export function NewFileDialog({
     [folders, added],
   );
   const pathOf = (leaf: string) => (location ? `${location}/${leaf}` : leaf);
+  // Both fields take one name, never a path: the tree is where the place is
+  // chosen, so a separator or a "go up" segment has no meaning in them.
   const nameProblem = (itemKind: "file" | "folder", leaf: string) =>
-    leaf.includes("/")
-      ? "Pick the folder above. A name cannot contain /."
-      : problem(itemKind, pathOf(leaf));
+    /[/\\]/.test(leaf)
+      ? "Enter a name only, without / or \\. Pick the folder above."
+      : leaf === "." || leaf === ".."
+        ? "A name cannot be . or .."
+        : problem(itemKind, pathOf(leaf));
 
   const submit = () => {
     const leaf = name.trim();

@@ -50,7 +50,7 @@ jobs:
     name: Scan ${{ matrix.branch }} ${{ matrix.image }}
     needs: [targets]
     if: ${{ !inputs.test-alert }}
-    runs-on: ubuntu-24.04-16core
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core-spot' || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.
     timeout-minutes: 60
     permissions:
       contents: read # Checkout the line's head.

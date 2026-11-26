@@ -82,6 +82,7 @@ overrides:
   '@xmldom/xmldom': 0.9.12
   mammoth>@xmldom/xmldom: 0.8.15
   samlify>@xmldom/xmldom: 0.8.15
+  xml-crypto>@xmldom/xmldom: 0.8.15
   path-to-regexp: '>=8.4.0'
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
@@ -21989,7 +21990,7 @@ snapshots:
   xml-crypto@6.1.2:
     dependencies:
       '@xmldom/is-dom-node': 1.0.1
-      '@xmldom/xmldom': 0.9.12
+      '@xmldom/xmldom': 0.8.15
       xpath: 0.0.33
 
   xml-escape@1.1.0: {}

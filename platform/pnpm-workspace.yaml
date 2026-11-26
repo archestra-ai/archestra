@@ -157,6 +157,10 @@ overrides:
   '@xmldom/xmldom': 0.9.12
   mammoth>@xmldom/xmldom: 0.8.15
   samlify>@xmldom/xmldom: 0.8.15
+  # samlify verifies signatures through xml-crypto, which calls
+  # parseFromString without a mimeType; 0.9 throws on that, failing every
+  # SAML login with "Invalid SAML response".
+  xml-crypto>@xmldom/xmldom: 0.8.15
   path-to-regexp: '>=8.4.0'
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'

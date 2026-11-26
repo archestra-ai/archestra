@@ -634,7 +634,9 @@ describe("NewPluginPage", () => {
         { name: "hooks.json" },
       ),
     ).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "New file or folder" }),
+    ).toBeVisible();
     expect(screen.queryByLabelText("Relative path")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("switch", { name: /Enabled/ }),

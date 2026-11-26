@@ -83,14 +83,23 @@ describe("SkillContentEditor", () => {
     );
   });
 
-  it("names a new folder's first file and opens it", async () => {
+  it("names a new file in a new folder and opens it", async () => {
     const user = userEvent.setup();
     const onFiles = vi.fn();
     render(<Harness files={[]} onFiles={onFiles} />);
 
-    await user.click(screen.getByRole("button", { name: "New folder" }));
+    // One button for both: a folder is made on the way to its first file.
+    await user.click(
+      screen.getByRole("button", { name: "New file or folder" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "New folder" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "New folder at top level" }),
+    );
     await user.type(
-      screen.getByRole("textbox", { name: "Folder name" }),
+      screen.getByRole("textbox", { name: "New folder name" }),
       "references{Enter}",
     );
     await user.type(
@@ -118,7 +127,9 @@ describe("SkillContentEditor", () => {
     );
     const name = () => screen.getByRole("textbox", { name: "File name" });
 
-    await user.click(screen.getByRole("button", { name: "New file" }));
+    await user.click(
+      screen.getByRole("button", { name: "New file or folder" }),
+    );
     // The folder is picked in the tree, so a name holds no path.
     await user.type(name(), "../up.txt{Enter}");
     expect(
@@ -221,8 +232,10 @@ describe("SkillContentEditor", () => {
     };
     render(<Harness files={[existing]} onFiles={onFiles} />);
 
-    await user.click(screen.getByRole("button", { name: "New file" }));
-    const dialog = screen.getByRole("dialog", { name: "New file" });
+    await user.click(
+      screen.getByRole("button", { name: "New file or folder" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "New file or folder" });
     // It opens on the top level, with every folder there to pick.
     expect(
       within(dialog).getByRole("radio", { name: "Top level" }),
@@ -253,8 +266,10 @@ describe("SkillContentEditor", () => {
     const onFiles = vi.fn();
     render(<Harness files={[]} onFiles={onFiles} />);
 
-    await user.click(screen.getByRole("button", { name: "New file" }));
-    const dialog = screen.getByRole("dialog", { name: "New file" });
+    await user.click(
+      screen.getByRole("button", { name: "New file or folder" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "New file or folder" });
     const addFolder = async (button: string, name: string) => {
       await user.click(within(dialog).getByRole("button", { name: button }));
       // Enter adds the folder; it does not create the file.
@@ -278,39 +293,6 @@ describe("SkillContentEditor", () => {
 
     expect(onFiles).toHaveBeenLastCalledWith([
       { path: "references/eu/terms.md", content: "", encoding: "utf8" },
-    ]);
-  });
-
-  it("puts a new folder inside the folder picked in the tree", async () => {
-    const user = userEvent.setup();
-    const onFiles = vi.fn();
-    render(
-      <Harness
-        files={[{ path: "docs/intro.md", content: "", encoding: "utf8" }]}
-        onFiles={onFiles}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "New folder" }));
-    const folderDialog = screen.getByRole("dialog", { name: "New folder" });
-    await user.click(within(folderDialog).getByRole("radio", { name: "docs" }));
-    await user.type(
-      within(folderDialog).getByRole("textbox", { name: "Folder name" }),
-      "Docs{Enter}",
-    );
-    // `docs/Docs` is free; `docs` itself, in any letter case, is not.
-    const fileDialog = screen.getByRole("dialog", { name: "New file" });
-    expect(
-      within(fileDialog).getByRole("radio", { name: "Docs" }),
-    ).toBeChecked();
-    await user.type(
-      within(fileDialog).getByRole("textbox", { name: "File name" }),
-      "a.md{Enter}",
-    );
-
-    expect(onFiles).toHaveBeenLastCalledWith([
-      { path: "docs/intro.md", content: "", encoding: "utf8" },
-      { path: "docs/Docs/a.md", content: "", encoding: "utf8" },
     ]);
   });
 

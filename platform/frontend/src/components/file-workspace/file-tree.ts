@@ -17,11 +17,10 @@ export type FileTreeNode<F> =
 /**
  * The files as folders: folders first, then files, each alphabetical. A folder
  * whose only child is a folder merges with it ("batteries/archestra"), as an
- * IDE's compact folders do. `folders` adds folders that hold no file yet.
+ * IDE's compact folders do.
  */
 export function buildFileTree<F extends { path: string; name: string }>(
   files: F[],
-  folders: string[] = [],
 ): FileTreeNode<F>[] {
   const top: FileTreeNode<F>[] = [];
   const dirAt = (segments: string[]) => {
@@ -41,7 +40,6 @@ export function buildFileTree<F extends { path: string; name: string }>(
     }
     return level;
   };
-  for (const folder of folders) dirAt(folder.split("/").filter(Boolean));
   for (const file of files) {
     dirAt(file.path.split("/").slice(0, -1)).push({
       type: "file",

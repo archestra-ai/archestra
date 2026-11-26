@@ -8,7 +8,6 @@ import {
   FilePlus,
   FileTerminal,
   FileText,
-  FolderPlus,
   LockKeyhole,
   RotateCcw,
   Trash2,
@@ -42,10 +41,7 @@ import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { formatBytes } from "@/lib/utils/format-bytes";
 import { cn } from "@/lib/utils/tailwind";
 import { contentFilePathProblem } from "./content-file-path";
-import {
-  type NewContentItem,
-  NewContentItemDialog,
-} from "./new-content-item-dialog";
+import { NewFileDialog } from "./new-file-dialog";
 import type { ResourceFile } from "./skill-draft";
 
 /** Editing viewport with room left for wizard navigation and actions. */
@@ -59,7 +55,7 @@ export const SKILL_WIZARD_EDITOR_CLASS =
  * null manifest lists only the files, for a plugin's payload.
  *
  * Controlled — content lives in the caller's draft; only view state (the open
- * file, a name being typed, empty folders, the session trash bin) is kept here.
+ * file, the session trash bin) is kept here.
  */
 export function SkillContentEditor({
   manifest,
@@ -99,11 +95,8 @@ export function SkillContentEditor({
   const [openKey, setOpenKey] = useState<string | null>(() =>
     manifest !== null ? MANIFEST_KEY : files[0] ? fileKey(files[0].path) : null,
   );
-  // The file or folder being named in the dialog; null while none is.
-  const [creating, setCreating] = useState<NewContentItem | null>(null);
-  // Empty folders that exist only in this session: they persist once a file
-  // is put in one.
-  const [pendingFolders, setPendingFolders] = useState<string[]>([]);
+  // Whether the New file dialog is open.
+  const [creating, setCreating] = useState(false);
   // Files moved to the trash, restorable for as long as this editor is open.
   const [trash, setTrash] = useState<TrashedFile[]>([]);
 
@@ -155,9 +148,6 @@ export function SkillContentEditor({
         ),
       ),
     );
-    setPendingFolders((current) =>
-      current.filter((path) => path !== folder && !path.startsWith(prefix)),
-    );
   };
   const restore = (id: string) => {
     const item = trash.find((entry) => entry.id === id);
@@ -166,10 +156,10 @@ export function SkillContentEditor({
     if (files.some((file) => file.path === item.file.path)) return;
     onFilesChange((current) => [...current, item.file]);
   };
-  // Every folder the files are in, with the ones that hold no file yet: what
-  // the dialog offers as the place for a new file or folder.
+  // Every folder the files are in: what the dialog offers as the place for
+  // a new file.
   const folderPaths = useMemo(() => {
-    const paths = new Set(pendingFolders);
+    const paths = new Set<string>();
     for (const file of files) {
       const parts = file.path.split("/").slice(0, -1);
       parts.forEach((_, index) => {
@@ -177,41 +167,22 @@ export function SkillContentEditor({
       });
     }
     return [...paths];
-  }, [files, pendingFolders]);
-  const newItemProblem = (kind: NewContentItem["kind"], path: string) => {
-    if (kind === "file") {
-      return contentFilePathProblem({
-        path,
-        existingPaths: files.map((file) => file.path),
-        manifestPath: manifest !== null ? MANIFEST_PATH : undefined,
-      });
-    }
-    if (
-      folderPaths.some((folder) => folder.toLowerCase() === path.toLowerCase())
-    ) {
-      return "A folder with this name already exists.";
-    }
-    // A folder is its first file's parent, so it answers to the same rules.
-    return contentFilePathProblem({
-      path: `${path}/file`,
+  }, [files]);
+  const newPathProblem = (kind: "file" | "folder", path: string) =>
+    contentFilePathProblem({
+      // A folder is its first file's parent, so it answers to the same rules.
+      path: kind === "file" ? path : `${path}/file`,
       existingPaths: files.map((file) => file.path),
+      manifestPath:
+        kind === "file" && manifest !== null ? MANIFEST_PATH : undefined,
     });
-  };
-  const commitNewItem = (kind: NewContentItem["kind"], path: string) => {
-    if (kind === "folder") {
-      setPendingFolders((current) =>
-        current.includes(path) ? current : [...current, path],
-      );
-      // A folder exists once it holds a file: name its first one next.
-      setCreating({ kind: "file", folder: path });
-      return;
-    }
+  const createFile = (path: string) => {
     onFilesChange((current) => [
       ...current,
       { path, content: "", encoding: "utf8" },
     ]);
     setOpenKey(fileKey(path));
-    setCreating(null);
+    setCreating(false);
   };
   const setEditorValue = (value: string) => {
     if (manifestOpen) onManifestChange(value);
@@ -229,7 +200,6 @@ export function SkillContentEditor({
       title: "Files",
       count: items.length,
       files: items,
-      folders: pendingFolders,
       empty: <p>No files yet.</p>,
     },
     ...(!readOnly && trash.length > 0
@@ -349,12 +319,12 @@ export function SkillContentEditor({
 
   return (
     <>
-      <NewContentItemDialog
-        item={creating}
+      <NewFileDialog
+        open={creating}
         folders={folderPaths}
-        problem={newItemProblem}
-        onCreate={commitNewItem}
-        onClose={() => setCreating(null)}
+        problem={newPathProblem}
+        onCreate={createFile}
+        onClose={() => setCreating(false)}
       />
       <FileWorkspace
         className={cn("min-h-0 flex-1", className)}
@@ -371,32 +341,20 @@ export function SkillContentEditor({
         explorer={explorer}
         // A handful of files: the list is always shown, with no toggle.
         explorerToggle={false}
-        // Labelled buttons on the editor's own bar. As two 12px icons in the
-        // file list's header they were hard to find.
+        // A labelled button on the editor's own bar. As a 12px icon in the
+        // file list's header it was hard to find.
         leading={
           readOnly ? undefined : (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                className="h-6"
-                onClick={() => setCreating({ kind: "file", folder: null })}
-              >
-                <FilePlus aria-hidden />
-                <span>New file</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                className="h-6"
-                onClick={() => setCreating({ kind: "folder", folder: null })}
-              >
-                <FolderPlus aria-hidden />
-                <span>New folder</span>
-              </Button>
-            </>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="h-6"
+              onClick={() => setCreating(true)}
+            >
+              <FilePlus aria-hidden />
+              <span>New file or folder</span>
+            </Button>
           )
         }
         activeKey={openItem?.key ?? null}

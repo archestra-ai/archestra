@@ -26,8 +26,6 @@ export interface FileExplorerSection<F extends WorkspaceFile> {
   /** Controls beside the header's title, such as "New file". */
   actions?: ReactNode;
   files: F[];
-  /** Folders that hold no file yet. */
-  folders?: string[];
   /** Lists the files by full path, with no folders. */
   flat?: boolean;
   /** Shown in place of the files while there are none. */
@@ -99,7 +97,7 @@ export function FileExplorer<F extends WorkspaceFile>({
                 file,
               }),
             )
-          : buildFileTree(section.files, section.folders),
+          : buildFileTree(section.files),
       ),
     [sections],
   );

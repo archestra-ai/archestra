@@ -15,33 +15,30 @@ import { Label } from "@/components/ui/label";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
-/** What the dialog is naming, and the folder it opens on (null: the top). */
-export interface NewContentItem {
-  kind: "file" | "folder";
-  folder: string | null;
-}
-
 /**
- * Names a new file or folder for the plugin and skill file editor.
+ * Names a new file for the plugin and skill file editor.
  *
  * The place comes first and is picked, not typed: the folders are a tree to
  * click through, and a folder that is missing is added there, on the way to
- * the file that needs it. Only the name is typed. It is checked when it is
- * submitted; a refused name stays in the field with the reason, to correct.
+ * the file that needs it; there is no other way to make a folder, since one
+ * exists only through the files in it. Only the name is typed. It is checked
+ * when it is submitted; a refused name stays in the field with the reason, to
+ * correct.
  */
-export function NewContentItemDialog({
-  item,
+export function NewFileDialog({
+  open,
   folders,
   problem,
   onCreate,
   onClose,
 }: {
-  item: NewContentItem | null;
-  /** Every folder the files are in, as paths, the empty ones included. */
+  open: boolean;
+  /** Every folder the files are in, as paths. */
   folders: readonly string[];
-  /** Why the full path cannot be used for the kind, or null when it can. */
-  problem: (kind: NewContentItem["kind"], path: string) => string | null;
-  onCreate: (kind: NewContentItem["kind"], path: string) => void;
+  /** Why a file or a folder cannot have this full path; null when it can. */
+  problem: (kind: "file" | "folder", path: string) => string | null;
+  /** Creates the file at this full path. */
+  onCreate: (path: string) => void;
   onClose: () => void;
 }) {
   const nameId = useId();
@@ -54,26 +51,22 @@ export function NewContentItemDialog({
   const [added, setAdded] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
-  // A fresh dialog for each thing being named: a folder's dialog is followed
-  // by the dialog for its first file.
-  const itemKey = item ? `${item.kind}:${item.folder ?? ""}` : null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when another item is being named
+  // A fresh dialog each time it opens.
   useEffect(() => {
-    setLocation(item?.folder ?? null);
+    if (!open) return;
+    setLocation(null);
     setName("");
     setRefusal(null);
     setAdded([]);
     setCollapsed(new Set());
-  }, [itemKey]);
+  }, [open]);
 
   const tree = useMemo(
     () => folderTree([...folders, ...added]),
     [folders, added],
   );
-  const kind = item?.kind ?? "file";
-  const isFile = kind === "file";
   const pathOf = (leaf: string) => (location ? `${location}/${leaf}` : leaf);
-  const nameProblem = (itemKind: NewContentItem["kind"], leaf: string) =>
+  const nameProblem = (itemKind: "file" | "folder", leaf: string) =>
     leaf.includes("/")
       ? "Pick the folder above. A name cannot contain /."
       : problem(itemKind, pathOf(leaf));
@@ -81,23 +74,18 @@ export function NewContentItemDialog({
   const submit = () => {
     const leaf = name.trim();
     if (!leaf) return;
-    const reason = nameProblem(kind, leaf);
+    const reason = nameProblem("file", leaf);
     if (reason) setRefusal(reason);
-    else onCreate(kind, pathOf(leaf));
+    else onCreate(pathOf(leaf));
   };
 
   return (
     <FormDialog
-      open={item !== null}
-      onOpenChange={(open) => {
-        if (!open) onClose();
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
       }}
-      title={isFile ? "New file" : "New folder"}
-      description={
-        isFile
-          ? undefined
-          : "A folder is kept once it holds a file, so its first file is named next."
-      }
+      title="New file or folder"
       size="small"
     >
       <DialogForm
@@ -111,9 +99,7 @@ export function NewContentItemDialog({
       >
         <DialogBody className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label id={`${nameId}-location`}>
-              {isFile ? "Folder" : "Inside"}
-            </Label>
+            <Label id={`${nameId}-location`}>Folder</Label>
             <div
               role="radiogroup"
               aria-labelledby={`${nameId}-location`}
@@ -141,22 +127,18 @@ export function NewContentItemDialog({
                 }
               />
             </div>
-            {isFile && (
-              <AddFolderHere
-                location={location}
-                problem={(leaf) => nameProblem("folder", leaf)}
-                onAdd={(leaf) => {
-                  const path = pathOf(leaf);
-                  setAdded((current) => [...current, path]);
-                  setLocation(path);
-                }}
-              />
-            )}
+            <AddFolderHere
+              location={location}
+              problem={(leaf) => nameProblem("folder", leaf)}
+              onAdd={(leaf) => {
+                const path = pathOf(leaf);
+                setAdded((current) => [...current, path]);
+                setLocation(path);
+              }}
+            />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor={nameId}>
-              {isFile ? "File name" : "Folder name"}
-            </Label>
+            <Label htmlFor={nameId}>File name</Label>
             <Input
               id={nameId}
               autoFocus
@@ -165,7 +147,7 @@ export function NewContentItemDialog({
                 setName(event.target.value);
                 setRefusal(null);
               }}
-              placeholder={isFile ? "filename.md" : "folder-name"}
+              placeholder="filename.md"
               className="font-mono"
               spellCheck={false}
               autoComplete="off"
@@ -184,7 +166,7 @@ export function NewContentItemDialog({
             Cancel
           </Button>
           <Button type="submit" disabled={name.trim() === ""}>
-            {isFile ? "Create file" : "Create folder"}
+            Create file
           </Button>
         </DialogStickyFooter>
       </DialogForm>

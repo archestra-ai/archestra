@@ -780,6 +780,52 @@ describe("NewPluginPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("explains plugins, with no list to go back to, while there are none", () => {
+    // The default here: the plugin list is empty.
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Extend your agent" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/A plugin can bundle reusable instructions/),
+    ).toHaveTextContent(
+      "A plugin can bundle reusable instructions in form of skills, executable scripts, and hooks in any combination to extend functionality of your agent. Add ready plugins from marketplaces or create your own. Then install with a single command.",
+    );
+    expect(
+      screen.queryByRole("link", { name: "Plugins" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("drops the explanation and links back to the list once a plugin exists", () => {
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [
+        { id: "p1", displayName: "Session Guard", clientType: "claude-code" },
+      ],
+    } as unknown as ReturnType<typeof usePlugins>);
+    renderPage();
+
+    expect(screen.queryByText("Extend your agent")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Plugins" })).toHaveAttribute(
+      "href",
+      "/plugins",
+    );
+  });
+
+  it("holds the source step until it knows whether plugins exist, so nothing jumps", () => {
+    vi.mocked(usePlugins).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isFetching: true,
+    } as unknown as ReturnType<typeof usePlugins>);
+    renderPage();
+
+    expect(
+      screen.queryByRole("button", { name: /Blank template/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Extend your agent")).not.toBeInTheDocument();
+  });
+
   it("asks before a link elsewhere drops a started draft", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,

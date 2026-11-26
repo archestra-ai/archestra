@@ -107,7 +107,17 @@ function NewPluginWizard() {
     setDraft((prev) => ({ ...prev, ...patch }));
 
   const createPlugin = useCreatePlugin();
-  const { data: plugins } = usePlugins();
+  const {
+    data: plugins,
+    isPending: isPluginsPending,
+    isFetching: isPluginsFetching,
+  } = usePlugins();
+  // With no plugin to list, this page is where Plugins opens. It then says
+  // what a plugin is, and has no list to go back to.
+  const isFirstPlugin = plugins?.length === 0;
+  // Held until that is known, so the source cards do not jump down when the
+  // explanation arrives above them.
+  const isFirstPluginUnknown = isPluginsPending && isPluginsFetching;
   const { data: session } = useSession();
   const nameTaken = pluginNameTwin({
     displayName: draft.displayName,
@@ -200,7 +210,11 @@ function NewPluginWizard() {
       <PageLayout
         title="Add a new plugin"
         description={STEP_DESCRIPTIONS[step]}
-        backLink={<PluginBackLink href="/plugins" label="Plugins" />}
+        backLink={
+          isFirstPlugin && step === "source" ? undefined : (
+            <PluginBackLink href="/plugins" label="Plugins" />
+          )
+        }
         tabs={
           step === "configure"
             ? [
@@ -244,8 +258,22 @@ function NewPluginWizard() {
         contentOverflowX="clip"
       >
         <div className="space-y-6">
-          {step === "source" && (
+          {step === "source" && !isFirstPluginUnknown && (
             <div className="space-y-8">
+              {isFirstPlugin && (
+                <div className="max-w-2xl space-y-2">
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    Extend your agent
+                  </h2>
+                  <p className="leading-relaxed text-pretty text-muted-foreground">
+                    A plugin can bundle reusable instructions in form of skills,
+                    executable scripts, and hooks in any combination to extend
+                    functionality of your agent. Add ready plugins from
+                    marketplaces or create your own. Then install with a single
+                    command.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <CatalogSourceCard
                   icon={<GitBranch className="size-5" />}

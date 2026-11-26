@@ -14,7 +14,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { OsLogos } from "@/app/connection/os-logos";
 import { BulkResourceAccessDialog } from "@/components/bulk-resource-access-dialog";
@@ -400,6 +406,29 @@ function PluginsList() {
     ...columns,
   ];
 
+  const listIsEmpty =
+    !isFetching && (plugins?.length ?? 0) === 0 && !hasActiveFilters;
+  // The list opens on "Mine · Shared with me", so an empty list is not yet
+  // "no plugins": the question is asked again without that filter. Only when
+  // the viewer can see no plugin at all is there nothing to list.
+  const everyPlugin = usePlugins(listIsEmpty);
+  const isCheckingForAnyPlugin =
+    listIsEmpty && everyPlugin.isPending && everyPlugin.isFetching;
+  const hasNoPlugins = listIsEmpty && everyPlugin.data?.length === 0;
+  const createPermission = useHasPermissions({ plugin: ["create"] });
+  // Undefined while the permissions are still loading: nobody is sent on, and
+  // nobody is told they cannot add a plugin, before that is known.
+  const canCreate = createPermission.isPending
+    ? undefined
+    : createPermission.data;
+  // With no plugins there is no list to show, so the page to add the first
+  // one opens in its place; it explains plugins while there are none. Replaced,
+  // not pushed, so Back does not land here and bounce forward again.
+  const opensAddPage = hasNoPlugins && canCreate === true;
+  useEffect(() => {
+    if (opensAddPage) router.replace("/plugins/new");
+  }, [opensAddPage, router]);
+
   if (isLoadingError) {
     return (
       <PageLayout title="Plugins" description={PLUGINS_DESCRIPTION}>
@@ -423,8 +452,6 @@ function PluginsList() {
    * pending indefinitely, cannot hold this true.
    */
   const isInitialPluginsLoad = isPending && isFetching;
-  const showEmptyState =
-    !isFetching && (plugins?.length ?? 0) === 0 && !hasActiveFilters;
 
   return (
     <>
@@ -435,16 +462,23 @@ function PluginsList() {
         // first plugin doesn't shift it.
         actionButton={
           <div className="flex items-center gap-2">
-            {/* On an empty page the one way forward is the button under the
-                text, so it is not repeated up here. */}
-            {!showEmptyState && <AddPluginButton />}
+            {!hasNoPlugins && <AddPluginButton />}
             <ResourceListActions resource="plugin" />
           </div>
         }
       >
         <TableCardView storageKey="archestra-plugins-view" defaultMode="table">
-          {isInitialPluginsLoad ? null : showEmptyState ? (
-            <PluginsEmptyState />
+          {isInitialPluginsLoad ||
+          isCheckingForAnyPlugin ||
+          // On its way to the page that adds the first plugin, or still
+          // learning whether the viewer may add one.
+          (hasNoPlugins && canCreate !== false) ? null : hasNoPlugins ? (
+            // Someone who cannot add a plugin is told who can.
+            <EmptyState
+              icon={Puzzle}
+              title="No plugins yet"
+              description="Your admins haven't shared a plugin yet."
+            />
           ) : (
             <>
               <CollectionFilters>
@@ -787,7 +821,7 @@ function PluginsList() {
   );
 }
 
-/** The page's way to a new plugin: in the header, or under the first-use text. */
+/** The header's way to a new plugin. */
 function AddPluginButton() {
   return (
     <PermissionButton permissions={{ plugin: ["create"] }} size="sm" asChild>
@@ -796,24 +830,6 @@ function AddPluginButton() {
         Add new plugin
       </Link>
     </PermissionButton>
-  );
-}
-
-function PluginsEmptyState() {
-  const { data: canCreate, isPending } = useHasPermissions({
-    plugin: ["create"],
-  });
-  return (
-    <EmptyState
-      variant="firstUse"
-      icon={Puzzle}
-      align="start"
-      title="Extend your agent"
-      description="A plugin can bundle reusable instructions in form of skills, executable scripts, and hooks in any combination to extend functionality of your agent. Add ready plugins from marketplaces or create your own. Then install with a single command."
-      canAct={isPending ? undefined : canCreate}
-      readerMessage="Your admins haven't shared a plugin yet."
-      action={<AddPluginButton />}
-    />
   );
 }
 

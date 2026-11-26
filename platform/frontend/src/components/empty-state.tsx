@@ -42,9 +42,6 @@ import { cn } from "@/lib/utils/tailwind";
  * `readerMessage`, so a reader without permission sees who sets the feature
  * up rather than a disabled button. `undefined` (permissions still loading)
  * shows neither, so nothing flickers.
- * @param align - `firstUse` only. `"start"` sets the panel on the page's left
- * line, directly under the page header, so it reads on from the page title
- * instead of floating in the middle of the page.
  */
 export function EmptyState({
   icon: Icon = Inbox,
@@ -57,7 +54,6 @@ export function EmptyState({
   secondaryAction,
   canAct,
   readerMessage,
-  align = "center",
 }: {
   icon?: LucideIcon;
   title: ReactNode;
@@ -69,16 +65,12 @@ export function EmptyState({
   secondaryAction?: ReactNode;
   canAct?: boolean;
   readerMessage?: ReactNode;
-  align?: "center" | "start";
 }) {
   if (variant === "firstUse") {
     return (
       <div
         className={cn(
-          "flex max-w-xl flex-col",
-          align === "start"
-            ? "items-start py-2 text-left"
-            : "mx-auto items-center px-2 py-10 text-center sm:py-16",
+          "mx-auto flex max-w-xl flex-col items-center px-2 py-10 text-center sm:py-16",
           className,
         )}
       >
@@ -99,12 +91,7 @@ export function EmptyState({
           </p>
         ) : null}
         {canAct === true ? (
-          <div
-            className={cn(
-              "mt-8 flex flex-wrap items-center gap-x-6 gap-y-3",
-              align === "start" ? "justify-start" : "justify-center",
-            )}
-          >
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
             {action}
             {secondaryAction}
           </div>

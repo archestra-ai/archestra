@@ -124,6 +124,7 @@ describe("PluginsPage", () => {
     localStorage.removeItem("archestra-plugins-view");
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
+      replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(usePathname).mockReturnValue("/plugins");
     vi.mocked(useSearchParams).mockReturnValue(
@@ -146,63 +147,73 @@ describe("PluginsPage", () => {
     ).toHaveAttribute("href", "/plugins/new");
   });
 
-  it("explains plugins to a creator on an empty page, with one way forward under the text", () => {
+  it("opens the page that adds the first plugin when there are none to list", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
     access.plugins = [];
     access.role = { plugin: ["create"] };
     render(<PluginsPage />);
 
+    // Replaced, so Back does not return to a page that sends forward again.
+    expect(replace).toHaveBeenCalledWith("/plugins/new");
+    // Nothing of a list, and no landing panel, on the way there.
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText("Extend your agent")).not.toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Extensions for local agents like Claude Code or Codex.",
-      ),
-    ).toBeVisible();
-    expect(screen.getByText("Extend your agent")).toBeVisible();
-    expect(
-      screen.getByText(
-        "A plugin can bundle reusable instructions in form of skills, executable scripts, and hooks in any combination to extend functionality of your agent. Add ready plugins from marketplaces or create your own. Then install with a single command.",
-      ),
-    ).toBeVisible();
-    // One button, under the text and not repeated in the header.
-    const add = screen.getAllByRole("link", { name: /Add new plugin/ });
-    expect(add).toHaveLength(1);
-    expect(add[0]).toHaveAttribute("href", "/plugins/new");
-    expect(add[0].closest("[data-page-actions]")).toBeNull();
-    expect(
-      screen.queryByRole("link", { name: /Create a plugin/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /Browse popular/ }),
+      screen.queryByRole("link", { name: /Add new plugin/ }),
     ).not.toBeInTheDocument();
   });
 
-  it("waits for permissions before showing the first-use button or the reader message", () => {
+  it("stays on the list while plugins exist", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    access.role = { plugin: ["read", "create"] };
+    render(<PluginsPage />);
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByText("Policy Runtime")).toBeVisible();
+  });
+
+  it("waits for permissions before sending anyone on or showing the reader message", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
     access.plugins = [];
     access.role = {};
     access.isPending = true;
     render(<PluginsPage />);
 
-    expect(screen.getByText("Extend your agent")).toBeVisible();
+    expect(replace).not.toHaveBeenCalled();
     expect(
       screen.queryByText("Your admins haven't shared a plugin yet."),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /Add new plugin/ }),
-    ).not.toBeInTheDocument();
   });
 
-  it("tells a reader without plugin:create who shares plugins instead of offering a disabled button", () => {
+  it("tells a reader without plugin:create who shares plugins, and sends them nowhere", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
     access.plugins = [];
     access.role = { plugin: ["read"] };
     render(<PluginsPage />);
 
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByText("No plugins yet")).toBeVisible();
     expect(
       screen.getByText("Your admins haven't shared a plugin yet."),
     ).toBeVisible();
     expect(
       screen.queryByRole("link", { name: /Add new plugin/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Add new plugin/ }),
     ).not.toBeInTheDocument();
   });
 

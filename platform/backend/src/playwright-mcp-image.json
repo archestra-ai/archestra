@@ -1,8 +1,8 @@
 {
-  "mcpVersion": "0.0.85",
-  "image": "mcr.microsoft.com/playwright/mcp@sha256:8ca417ff2a3660b770d7dd4a293bd179d0f3c29d0d5fb5bc43d3be617b1566a2",
+  "mcpVersion": "0.0.86",
+  "image": "mcr.microsoft.com/playwright/mcp@sha256:2dfc17e08e8db54678ec965ce9ffb4100be0aa68135774d761bac9035ceb6668",
   "nodeVersion": "26.13.1",
-  "playwrightVersion": "1.66.0-alpha-2026-11-09",
+  "playwrightVersion": "1.66.0-alpha-2026-11-18",
   "architectures": [
     "amd64",
     "arm64"

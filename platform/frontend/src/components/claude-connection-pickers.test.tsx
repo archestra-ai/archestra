@@ -511,4 +511,69 @@ describe("CompanyConnectionPickers", () => {
       screen.getByRole("button", { name: "Model Choose an API key first" }),
     ).toBeDisabled();
   });
+
+  it("shows an overflow tooltip only when truncated, including on disabled pickers", async () => {
+    const user = userEvent.setup();
+    const longKeyName =
+      "Very Long Production Anthropic Organization Provider API Key Name";
+    const enabled = renderPickers({
+      apiKeyId: "key-long",
+      apiKeyName: longKeyName,
+    });
+    const enabledValue = screen.getByText(longKeyName);
+    Object.defineProperty(enabledValue, "clientWidth", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(enabledValue, "scrollWidth", {
+      configurable: true,
+      value: 200,
+    });
+    const enabledButton = screen.getByRole("button", {
+      name: `Key ${longKeyName}`,
+    });
+    await user.hover(enabledButton);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await user.unhover(enabledButton);
+
+    Object.defineProperty(enabledValue, "scrollWidth", {
+      configurable: true,
+      value: 420,
+    });
+    await user.hover(enabledButton);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(longKeyName);
+    await user.unhover(enabledButton);
+    enabled.unmount();
+
+    renderPickers({
+      apiKeyId: "key-long",
+      apiKeyName: longKeyName,
+      disabled: true,
+    });
+    const disabledValue = screen.getByText(longKeyName);
+    Object.defineProperty(disabledValue, "clientWidth", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(disabledValue, "scrollWidth", {
+      configurable: true,
+      value: 420,
+    });
+    const disabledButton = screen.getByRole("button", {
+      name: `Key ${longKeyName}`,
+    });
+    expect(disabledButton).toBeDisabled();
+    const triggerWrapper = disabledButton.parentElement;
+    if (!triggerWrapper) {
+      throw new Error("Expected disabled picker button wrapper");
+    }
+    expect(triggerWrapper).toHaveAttribute("tabindex", "0");
+    await user.hover(triggerWrapper);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(longKeyName);
+    await user.unhover(triggerWrapper);
+    triggerWrapper.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(longKeyName);
+    await user.click(triggerWrapper);
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  });
 });

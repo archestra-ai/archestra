@@ -591,40 +591,52 @@ function PickerField({
           onOpenChange={handleTooltipOpenChange}
         >
           <TooltipTrigger asChild>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                // Named by its label and its value, so the value is read out too.
-                aria-labelledby={`${labelId} ${labelId}-value`}
-                variant="outline"
-                size="sm"
-                disabled={disabled}
-                className={cn(
-                  widthClass,
-                  "min-w-0 justify-start gap-2 font-normal",
-                  // Room for the clear control, which sits over the field's end.
-                  onClear && "pr-8",
-                )}
-              >
-                <span aria-hidden className="flex shrink-0 items-center">
-                  {icon}
-                </span>
-                <span
-                  ref={valueRef}
-                  id={`${labelId}-value`}
+            {/* A non-disabled wrapper takes hover and focus when the button is
+                disabled, so truncated values can still show their tooltip. */}
+            <span
+              tabIndex={disabled ? 0 : undefined}
+              className={cn(
+                "flex min-w-0",
+                widthClass,
+                disabled &&
+                  "rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+            >
+              <PopoverTrigger asChild disabled={disabled}>
+                <Button
+                  type="button"
+                  // Named by its label and its value, so the value is read out too.
+                  aria-labelledby={`${labelId} ${labelId}-value`}
+                  variant="outline"
+                  size="sm"
+                  disabled={disabled}
                   className={cn(
-                    "min-w-0 flex-1 truncate text-left",
-                    !value && "text-muted-foreground",
+                    widthClass,
+                    "min-w-0 justify-start gap-2 font-normal",
+                    // Room for the clear control, which sits over the field's end.
+                    onClear && "pr-8",
                   )}
                 >
-                  {displayText}
-                </span>
-                {/* The clear control takes the chevron's place while it shows. */}
-                {!onClear && (
-                  <ChevronsUpDownIcon className="shrink-0 opacity-50" />
-                )}
-              </Button>
-            </PopoverTrigger>
+                  <span aria-hidden className="flex shrink-0 items-center">
+                    {icon}
+                  </span>
+                  <span
+                    ref={valueRef}
+                    id={`${labelId}-value`}
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-left",
+                      !value && "text-muted-foreground",
+                    )}
+                  >
+                    {displayText}
+                  </span>
+                  {/* The clear control takes the chevron's place while it shows. */}
+                  {!onClear && (
+                    <ChevronsUpDownIcon className="shrink-0 opacity-50" />
+                  )}
+                </Button>
+              </PopoverTrigger>
+            </span>
           </TooltipTrigger>
           <TooltipContent>{displayText}</TooltipContent>
         </Tooltip>

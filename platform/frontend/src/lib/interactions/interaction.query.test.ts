@@ -150,7 +150,7 @@ describe("useExportSessionInteractions", () => {
 
   it("includes the errors the chat showed, which no request row carries", async () => {
     getInteractionsMock.mockResolvedValueOnce(
-      makePage({ ids: ["row-1"], total: 1, hasNext: false }),
+      makePage({ rows: [{ id: "row-1" }], total: 1, hasNext: false }),
     );
     const chatError = {
       id: "chat-error-1",

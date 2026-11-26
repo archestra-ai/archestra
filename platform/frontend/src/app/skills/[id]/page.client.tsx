@@ -84,7 +84,10 @@ import {
 import { SkillSourceGlyph } from "../_parts/skill-source-glyph";
 import { SkillUsagePanel } from "../_parts/skill-usage-panel";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
-import { useSkillNameProblem } from "../_parts/use-skill-name-problem";
+import {
+  skillDescriptionProblem,
+  useSkillNameProblem,
+} from "../_parts/use-skill-name-problem";
 
 const SECTION_DESCRIPTIONS: Record<SkillDetailSection, string> = {
   // Settings is the page's default and shows the skill's own description
@@ -269,8 +272,12 @@ function SkillDetailView({
     ownerId: skill.authorId,
     skillId: skill.id,
   });
+  const descriptionProblem = skillDescriptionProblem({
+    description: parsed.description,
+    originalDescription: skill.description,
+  });
   const saveGap =
-    skillDraftGap(parsed) ?? nameProblem?.replaceAll("`", "") ?? null;
+    skillDraftGap(parsed) ?? nameProblem?.message ?? descriptionProblem ?? null;
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -519,6 +526,7 @@ function SkillDetailView({
             // who may use it is still this organization's to decide.
             contentReadOnly={isSynced}
             nameProblem={nameProblem}
+            descriptionProblem={descriptionProblem}
           />
 
           {!isReadOnly && (

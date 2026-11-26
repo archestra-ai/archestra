@@ -68,13 +68,15 @@ export async function seedImportedSkill(params: {
   /** Who the skill is shared with; defaults to its author alone. */
   access?: TestAccess;
   authorId?: string | null;
+  /** Defaults to one derived from the name. */
+  description?: string;
 }) {
   const skill = await SkillModel.createWithFiles({
     skill: {
       organizationId: params.organizationId,
       authorId: params.authorId ?? null,
       name: params.name,
-      description: `${params.name} description`,
+      description: params.description ?? `${params.name} description`,
       content: `# ${params.name}`,
       metadata: {},
       sourceType: "github",

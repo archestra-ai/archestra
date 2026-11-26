@@ -75,6 +75,7 @@ import {
 } from "@/skills/parser";
 import { skillCatalog } from "@/skills/skill-catalog";
 import {
+  findNewSkillDescriptionProblem,
   findNewSkillNameProblem,
   isSkillNameConflict,
   refineUniqueFilePaths,
@@ -832,6 +833,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         name: parsed.name,
       });
+      assertNewSkillDescriptionUsable(parsed.description);
 
       const resourceId = crypto.randomUUID();
       if (body.initialGrants?.length) {
@@ -1042,6 +1044,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: parsed.name,
           excludeSkillId: existing.id,
         });
+      }
+      // The same for the description: only a new one is asked.
+      if (parsed.description !== existing.description) {
+        assertNewSkillDescriptionUsable(parsed.description);
       }
 
       // Changing a skill's environment assignments is gated like assigning
@@ -2526,6 +2532,12 @@ async function assertNewSkillNameUsable(
   params: Parameters<typeof findNewSkillNameProblem>[0],
 ): Promise<void> {
   const problem = await findNewSkillNameProblem(params);
+  if (problem) throw new ApiError(problem.status, problem.message);
+}
+
+/** Refuse a description a skill is being given for the first time. */
+function assertNewSkillDescriptionUsable(description: string): void {
+  const problem = findNewSkillDescriptionProblem(description);
   if (problem) throw new ApiError(problem.status, problem.message);
 }
 

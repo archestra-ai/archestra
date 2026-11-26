@@ -1,4 +1,7 @@
-import { describeUnusableSkillName } from "@archestra/shared";
+import {
+  describeUnusableSkillDescription,
+  describeUnusableSkillName,
+} from "@archestra/shared";
 import { z } from "zod";
 import SkillModel from "@/models/skill";
 import {
@@ -211,9 +214,9 @@ export function isSkillNameConflict(error: unknown): boolean {
 }
 
 /**
- * Why a skill cannot be given `name`, or null when it can: the name cannot be
- * one folder name, or it differs only by letter case from another skill of the
- * same owner.
+ * Why a skill cannot be given `name`, or null when it can: the name breaks the
+ * Agent Skills naming rules, or another skill of the same owner has it (in
+ * any letter case, for names stored before the rules were asked).
  *
  * Asked only when a name is NEW to the skill (a create, or an update that
  * changes it), on the REST routes and the MCP skill tools alike. It is never
@@ -247,6 +250,22 @@ export async function findNewSkillNameProblem(params: {
         ? `A skill named "${taken}" already exists`
         : `A skill named "${taken}" already exists. Skill names that differ only by letter case count as the same name.`,
   };
+}
+
+/**
+ * Why a skill cannot be given `description`, or null when it can: the Agent
+ * Skills specification limits its length.
+ *
+ * Asked only when a description is NEW to the skill (a create, or an update
+ * that changes it), on the REST routes and the MCP skill tools alike, for the
+ * reason `findNewSkillNameProblem` gives: a skill stored with a description
+ * this would refuse keeps saving every other field.
+ */
+export function findNewSkillDescriptionProblem(
+  description: string,
+): { status: 400; message: string } | null {
+  const unusable = describeUnusableSkillDescription(description);
+  return unusable ? { status: 400, message: unusable } : null;
 }
 
 // =============================================================================

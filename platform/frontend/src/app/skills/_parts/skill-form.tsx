@@ -1,14 +1,22 @@
 "use client";
 
+import {
+  INVALID_SKILL_DESCRIPTION_LEAD,
+  INVALID_SKILL_NAME_LEAD,
+  SKILL_DESCRIPTION_RULE,
+  SKILL_DESCRIPTION_SPEC_URL,
+  SKILL_NAME_RULE,
+  SKILL_NAME_SPEC_URL,
+} from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
-import { type Ref, useMemo } from "react";
+import { type Ref, useMemo, useState } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { IdentityFields } from "@/components/identity-fields";
 import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { InlineNotice } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +30,7 @@ import {
   SkillContentEditor,
 } from "./skill-content-editor";
 import type { SkillDraft } from "./skill-draft";
-import { isSkillNameUnpublishable } from "./use-skill-name-problem";
+import type { SkillNameProblem } from "./use-skill-name-problem";
 
 /**
  * Everything a skill is, on one page: what it is called and does, the
@@ -43,6 +51,7 @@ export function SkillForm({
   readOnly = false,
   contentReadOnly = false,
   nameProblem = null,
+  descriptionProblem = null,
 }: {
   draft: SkillDraft;
   creating?: boolean;
@@ -59,7 +68,9 @@ export function SkillForm({
    */
   contentReadOnly?: boolean;
   /** Why the typed name cannot be saved; shown under the field. */
-  nameProblem?: string | null;
+  nameProblem?: SkillNameProblem | null;
+  /** Why the typed description cannot be saved; shown under the field. */
+  descriptionProblem?: string | null;
 }) {
   // Read back out of the manifest rather than kept beside it, so an edit made
   // in the editor shows up in the fields and vice versa.
@@ -67,14 +78,15 @@ export function SkillForm({
     () => parseManifestFields(draft.manifest),
     [draft.manifest],
   );
-  // Under the name, where the reader is typing it. An error is the one thing
-  // to fix first, so the warning waits for a name that can be saved.
-  const nameWarning = !nameProblem && isSkillNameUnpublishable(parsed.name);
-  const nameNoticeId = nameProblem
-    ? "skill-name-problem"
-    : nameWarning
-      ? "skill-name-warning"
-      : undefined;
+  // Both fields are required. A field left empty says so once the reader has
+  // been in it and moved on, not while the form is still untouched.
+  const namesEditable = !readOnly && !contentReadOnly;
+  const [visited, setVisited] = useState({ name: false, description: false });
+  const nameMissing = namesEditable && visited.name && !parsed.hasName;
+  const descriptionMissing =
+    namesEditable && visited.description && !parsed.hasDescription;
+  const nameInvalid = nameProblem !== null || nameMissing;
+  const descriptionInvalid = descriptionProblem !== null || descriptionMissing;
 
   return (
     <SettingsSectionGroup>
@@ -92,7 +104,11 @@ export function SkillForm({
             onIconChange={(icon) => onChange({ icon })}
             fallbackType="skill"
             disabled={readOnly}
-            label={<Label htmlFor="skill-name">Skill name</Label>}
+            label={
+              <FieldLabel htmlFor="skill-name" required={namesEditable}>
+                Skill name
+              </FieldLabel>
+            }
           >
             <Input
               id="skill-name"
@@ -112,34 +128,28 @@ export function SkillForm({
               // reads as locked rather than as a field that ignores typing.
               disabled={contentReadOnly}
               required
-              aria-invalid={nameProblem ? true : undefined}
-              aria-describedby={nameNoticeId}
+              onBlur={() => setVisited((fields) => ({ ...fields, name: true }))}
+              aria-invalid={nameInvalid ? true : undefined}
+              aria-describedby={nameInvalid ? "skill-name-problem" : undefined}
             />
-            {nameProblem && (
-              <InlineNotice id="skill-name-problem" variant="error" size="xs">
-                <AlertTriangle aria-hidden />
-                <span className="font-medium">
-                  <TextWithCode text={nameProblem} />
-                </span>
-              </InlineNotice>
-            )}
-            {nameWarning && (
-              // A warning, not a refusal: the skill can be saved as it is.
-              <InlineNotice id="skill-name-warning" size="xs">
-                <AlertTriangle aria-hidden />
-                <span className="font-medium">
-                  This name can&apos;t be published over MCP
-                </span>
-                <InlineNoticeText>
-                  You can keep it: the skill works everywhere else. To publish
-                  over MCP, use only lowercase letters, digits and single
-                  hyphens, up to 64 characters.
-                </InlineNoticeText>
-              </InlineNotice>
+            {nameInvalid && (
+              <FieldProblem id="skill-name-problem">
+                {nameProblem?.kind === "invalid" ? (
+                  <RuleRefusal
+                    lead={INVALID_SKILL_NAME_LEAD}
+                    rule={SKILL_NAME_RULE}
+                    href={SKILL_NAME_SPEC_URL}
+                  />
+                ) : (
+                  <span>{nameProblem?.message ?? "Enter a skill name."}</span>
+                )}
+              </FieldProblem>
             )}
           </IdentityFields>
           <div className="space-y-2">
-            <Label htmlFor="skill-description">Description</Label>
+            <FieldLabel htmlFor="skill-description" required={namesEditable}>
+              Description
+            </FieldLabel>
             <Textarea
               id="skill-description"
               value={parsed.description ?? ""}
@@ -159,7 +169,27 @@ export function SkillForm({
               // reads as locked rather than as a field that ignores typing.
               disabled={contentReadOnly}
               required
+              onBlur={() =>
+                setVisited((fields) => ({ ...fields, description: true }))
+              }
+              aria-invalid={descriptionInvalid ? true : undefined}
+              aria-describedby={
+                descriptionInvalid ? "skill-description-problem" : undefined
+              }
             />
+            {descriptionInvalid && (
+              <FieldProblem id="skill-description-problem">
+                {descriptionProblem ? (
+                  <RuleRefusal
+                    lead={INVALID_SKILL_DESCRIPTION_LEAD}
+                    rule={SKILL_DESCRIPTION_RULE}
+                    href={SKILL_DESCRIPTION_SPEC_URL}
+                  />
+                ) : (
+                  <span>Enter a description.</span>
+                )}
+              </FieldProblem>
+            )}
           </div>
         </div>
         <SkillContentEditor
@@ -192,36 +222,74 @@ export function SkillForm({
 }
 
 /**
- * A sentence whose `backticked` parts are characters to type, set as code:
- * "can't contain a slash `/`" shows the slash itself, not the backticks.
+ * A field's label, with the mark the app's forms give a required field. The
+ * mark sits beside the label, not inside it, so the label's text stays the
+ * field's name.
  */
-function TextWithCode({ text }: { text: string }) {
-  // Every other piece between backticks is code. The offset is the key: the
-  // pieces of one sentence never move.
-  let offset = 0;
-  const parts = text.split("`").map((piece, position) => {
-    const part = { key: offset, text: piece, isCode: position % 2 === 1 };
-    offset += piece.length + 1;
-    return part;
-  });
+function FieldLabel({
+  htmlFor,
+  required,
+  children,
+}: {
+  htmlFor: string;
+  required: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <Label htmlFor={htmlFor}>{children}</Label>
+      {required && (
+        <span className="text-destructive" aria-hidden="true">
+          *
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Why a field's value cannot be saved, under the field. */
+function FieldProblem({
+  id,
+  children,
+}: {
+  id: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <InlineNotice id={id} variant="error" size="xs">
+      <AlertTriangle aria-hidden />
+      <span className="font-medium">{children}</span>
+    </InlineNotice>
+  );
+}
+
+/**
+ * A value refused by a rule of the Agent Skills specification: what is wrong,
+ * then the rule itself as a link to where the specification states it. The
+ * words are the ones the API sends (`describeUnusableSkillName`,
+ * `describeUnusableSkillDescription`).
+ */
+function RuleRefusal({
+  lead,
+  rule,
+  href,
+}: {
+  lead: string;
+  rule: string;
+  href: string;
+}) {
   return (
     <>
-      {parts.map((part) =>
-        part.isCode ? (
-          // The border takes the notice's own text colour: the variant owns
-          // the palette.
-          <code
-            key={part.key}
-            className="rounded border border-current/30 px-1 font-mono"
-          >
-            {part.text}
-          </code>
-        ) : (
-          // An element, not bare text: page translation re-parents bare text
-          // nodes, and React then fails to replace them.
-          <span key={part.key}>{part.text}</span>
-        ),
-      )}
+      <span>{lead}</span>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-4"
+      >
+        {rule}
+      </a>
+      <span>.</span>
     </>
   );
 }

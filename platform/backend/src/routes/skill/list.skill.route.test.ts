@@ -76,14 +76,14 @@ describe("GET /api/skills", () => {
       ctx.organizationId,
       ADMIN_ROLE_NAME,
     );
+    // Stored directly: an underscore is a name only an import can bring.
     for (const name of ["trashed-skill", "trashed_skill"]) {
-      const created = (
-        await ctx.app.inject({
-          method: "POST",
-          url: "/api/skills",
-          payload: { content: manifestNamed(name) },
-        })
-      ).json();
+      const created = await seedImportedSkill({
+        organizationId: ctx.organizationId,
+        authorId: ctx.user.id,
+        name,
+        sourceRef: `example/skills@main:skills/${name}`,
+      });
       await ctx.app.inject({
         method: "DELETE",
         url: `/api/skills/${created.id}`,

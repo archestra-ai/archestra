@@ -224,20 +224,23 @@ describe("POST /api/skills", () => {
   });
 
   test("rejects a name that differs from one of the author's skills only by letter case", async () => {
-    await ctx.app.inject({
-      method: "POST",
-      url: "/api/skills",
-      payload: { content: manifestNamed("probe-skill-one") },
+    // A new name is lowercase by rule, so the other spelling can only be a
+    // stored one: saved before the rule was asked, or imported from Git.
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      name: "Probe-Skill-One",
+      sourceRef: "example/skills@main:skills/probe",
     });
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("Probe-Skill-One") },
+      payload: { content: manifestNamed("probe-skill-one") },
     });
 
     expect(response.statusCode).toBe(409);
     // Names the skill that is in the way, as it is actually spelled.
-    expect(response.json().error.message).toContain('"probe-skill-one"');
+    expect(response.json().error.message).toContain('"Probe-Skill-One"');
     expect(response.json().error.message).toContain("letter case");
   });
 
@@ -260,12 +263,19 @@ describe("POST /api/skills", () => {
     expect(response.statusCode).toBe(200);
   });
 
+  // One rule and one sentence for every new name: the Agent Skills naming
+  // rules. A name they refuse is not stored and then left out of a gateway.
   test.each([
-    ["a slash", "name: docs/release", "slash"],
-    ["a line break", 'name: "two\\nlines"', "single line"],
-    ["a parent-directory step", 'name: "up..over"', "dot"],
-    ["more than a folder name holds", `name: ${"x".repeat(256)}`, "255 bytes"],
-  ])("rejects a new name with %s", async (_label, nameLine, reason) => {
+    ["a slash", "name: docs/release"],
+    ["a line break", 'name: "two\\nlines"'],
+    ["a parent-directory step", 'name: "up..over"'],
+    ["more than 64 characters", `name: ${"x".repeat(65)}`],
+    ["a space and capitals", 'name: "Release Notes"'],
+    ["an emoji", 'name: "notes ✍️"'],
+    ["an underscore", "name: pdf_tools"],
+    ["a leading hyphen", 'name: "-pdf"'],
+    ["two hyphens in a row", "name: pdf--tools"],
+  ])("rejects a new name with %s", async (_label, nameLine) => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
@@ -277,27 +287,33 @@ describe("POST /api/skills", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain(reason);
+    expect(response.json().error.message).toBe(
+      "This name can't be used. Skill name can only contain lowercase letters, digits and single hyphens, up to 64 characters.",
+    );
   });
 
-  test("keeps accepting names the Agent Skills rules would not publish", async () => {
-    // Spaces, capitals and emoji only withhold a skill from MCP publication.
-    const response = await ctx.app.inject({
-      method: "POST",
-      url: "/api/skills",
-      payload: {
-        content: [
-          "---",
-          'name: "Release Notes ✍️"',
-          "description: A skill.",
-          "---",
-          "",
-        ].join("\n"),
-      },
-    });
+  test("rejects a description longer than the Agent Skills specification takes", async () => {
+    const create = (description: string) =>
+      ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: [
+            "---",
+            "name: long-description",
+            `description: ${description}`,
+            "---",
+            "",
+          ].join("\n"),
+        },
+      });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json().name).toBe("Release Notes ✍️");
+    const refused = await create("d".repeat(1025));
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.message).toBe(
+      "This description is too long. Skill description can be up to 1024 characters.",
+    );
+    expect((await create("d".repeat(1024))).statusCode).toBe(200);
   });
 
   test("a manifest YAML cannot read is refused with one plain line", async () => {

@@ -185,6 +185,30 @@ describe("SkillDetailPage", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
+  it("keeps a stored name the naming rules would refuse saveable, and asks the rules only of a new one", async () => {
+    // Saved before the rules were asked, or imported from a repository.
+    mockSkill({ name: "PDF Tools" });
+    renderPage();
+    const user = userEvent.setup();
+
+    // The stored name is not this edit's to fix.
+    expect(document.getElementById("skill-name-problem")).toBeNull();
+    await user.type(screen.getByLabelText("Description"), " And forms.");
+    expect(screen.getByRole("button", { name: "Save" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
+
+    // A new name is.
+    await user.type(screen.getByLabelText("Skill name"), " 2");
+    expect(document.getElementById("skill-name-problem")).toHaveTextContent(
+      "This name can't be used. Skill name can only contain lowercase letters, digits and single hyphens, up to 64 characters.",
+    );
+    expect(screen.getByRole("button", { name: "Save" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
   it("writes the name and description fields back into the manifest", async () => {
     renderPage();
     const user = userEvent.setup();

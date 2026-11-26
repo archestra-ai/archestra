@@ -46,37 +46,61 @@ export function isSpecCompliantSkillCompatibility(
  * Why a NEW skill name cannot be used, as a sentence for the person typing
  * it, or null when it can.
  *
- * This is the storage rule, far looser than `isSpecCompliantSkillName`: spaces,
- * capitals and emoji are fine, and a name that breaks the Agent Skills rules
- * is only withheld from publication. What is refused is a name that cannot be
- * one folder name, because a skill's files are mounted at `/skills/<name>`
- * (`skillRootPath`) and a name with a slash, a `..` or a line break never
- * mounts.
+ * A new name has to follow the Agent Skills naming rules
+ * (`isSpecCompliantSkillName`). One rule for every way a person names a
+ * skill, so no skill is created that works in one place and is left out of
+ * another: a gateway publishes only names that follow the rules. Such a name
+ * is also always one folder name, which the mount at `/skills/<name>`
+ * (`skillRootPath`) needs.
  *
  * Asked only when a name is first given or changed. A stored skill that breaks
- * it (older rows, Git imports) keeps loading and saving under its name.
+ * it (older rows, Git imports, built-ins) keeps loading and saving under its
+ * name.
  */
 export function describeUnusableSkillName(name: string): string | null {
   if (name.trim() === "") return "Give the skill a name.";
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are exactly what is being refused
-  if (/[\u0000-\u001f\u007f]/.test(name)) {
-    return "A skill name must be a single line of text.";
-  }
-  // Backticks mark the character itself; the form sets it as code.
-  if (name.includes("/")) {
-    return "A skill name can't contain a slash `/`. Use hyphen `-` instead.";
-  }
-  if (name.includes("\\")) {
-    return "A skill name can't contain a backslash `\\`. Use hyphen `-` instead.";
-  }
-  if (name === "." || name.includes("..")) {
-    return "A skill name cannot be a dot or contain two dots in a row.";
-  }
-  if (new TextEncoder().encode(name).length > MAX_SKILL_NAME_BYTES) {
-    return `A skill name can be at most ${MAX_SKILL_NAME_BYTES} bytes long. Shorten it.`;
+  if (!isSpecCompliantSkillName(name)) {
+    return `${INVALID_SKILL_NAME_LEAD}${SKILL_NAME_RULE}.`;
   }
   return null;
 }
 
-/** The longest folder name the common filesystems hold. */
-const MAX_SKILL_NAME_BYTES = 255;
+/**
+ * The refusal in two parts, so a form can make the rule a link to
+ * `SKILL_NAME_SPEC_URL` while the API sends the same words as plain text.
+ */
+export const INVALID_SKILL_NAME_LEAD =
+  "This name can't be used. Skill name can only contain ";
+export const SKILL_NAME_RULE =
+  "lowercase letters, digits and single hyphens, up to 64 characters";
+
+/** Where the Agent Skills specification states the naming rules. */
+export const SKILL_NAME_SPEC_URL =
+  "https://agentskills.io/specification#name-field";
+
+/**
+ * Why a NEW skill description cannot be used, as a sentence for the person
+ * typing it, or null when it can: the Agent Skills specification takes 1 to
+ * `MAX_SKILL_DESCRIPTION_LENGTH` characters.
+ *
+ * Asked only when a description is first given or changed, like the name
+ * rule above: a stored skill with a longer one keeps saving its other fields.
+ */
+export function describeUnusableSkillDescription(
+  description: string,
+): string | null {
+  if (description.trim() === "") return "Give the skill a description.";
+  if (!isSpecCompliantSkillDescription(description)) {
+    return `${INVALID_SKILL_DESCRIPTION_LEAD}${SKILL_DESCRIPTION_RULE}.`;
+  }
+  return null;
+}
+
+/** The refusal in two parts, like the name's, so a form can link the rule. */
+export const INVALID_SKILL_DESCRIPTION_LEAD =
+  "This description is too long. Skill description can be ";
+export const SKILL_DESCRIPTION_RULE = `up to ${MAX_SKILL_DESCRIPTION_LENGTH} characters`;
+
+/** Where the Agent Skills specification states the description's limits. */
+export const SKILL_DESCRIPTION_SPEC_URL =
+  "https://agentskills.io/specification#description-field";

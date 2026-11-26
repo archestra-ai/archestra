@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeUnusableSkillDescription,
   describeUnusableSkillName,
   isSpecCompliantSkillCompatibility,
   isSpecCompliantSkillDescription,
@@ -58,13 +59,33 @@ describe("isSpecCompliantSkillCompatibility", () => {
   });
 });
 
+describe("describeUnusableSkillDescription", () => {
+  it("accepts a description within the specification's limit", () => {
+    expect(describeUnusableSkillDescription("Work with PDFs.")).toBeNull();
+    expect(describeUnusableSkillDescription("d".repeat(1024))).toBeNull();
+    // Counted in characters, not UTF-16 units.
+    expect(describeUnusableSkillDescription("🙂".repeat(1024))).toBeNull();
+  });
+
+  it("asks for a description when there is none", () => {
+    expect(describeUnusableSkillDescription("  ")).toBe(
+      "Give the skill a description.",
+    );
+  });
+
+  it("refuses a description over the limit, and states the limit", () => {
+    expect(describeUnusableSkillDescription("d".repeat(1025))).toBe(
+      "This description is too long. Skill description can be up to 1024 characters.",
+    );
+  });
+});
+
 describe("describeUnusableSkillName", () => {
   it.each([
     "pdf-processing",
-    "My Skill",
-    "PDF_Tools v2.1",
-    "résumé ✍️",
-    "x".repeat(255),
+    "a",
+    "v2",
+    "x".repeat(64),
   ])("accepts %s", (name) => {
     expect(describeUnusableSkillName(name)).toBeNull();
   });
@@ -72,15 +93,30 @@ describe("describeUnusableSkillName", () => {
   it.each([
     ["", "Give the skill a name."],
     ["   ", "Give the skill a name."],
-    ["a/b", "can't contain a slash `/`. Use hyphen `-` instead."],
-    ["a\\b", "can't contain a backslash `\\`. Use hyphen `-` instead."],
-    ["two\nlines", "single line"],
-    [".", "dot"],
-    ["up..and-over", "dot"],
-    ["x".repeat(256), "255 bytes"],
-    // 128 two-byte letters are 128 characters but 256 bytes.
-    ["é".repeat(128), "255 bytes"],
-  ])("refuses %j", (name, reason) => {
-    expect(describeUnusableSkillName(name)).toContain(reason);
+  ])("asks for a name when given %j", (name, message) => {
+    expect(describeUnusableSkillName(name)).toBe(message);
+  });
+
+  // Anything the Agent Skills naming rules refuse gets the one sentence that
+  // states the rules, whatever the name got wrong.
+  it.each([
+    "My Skill",
+    "PDF-Tools",
+    "pdf_tools",
+    "résumé",
+    "notes ✍️",
+    "a/b",
+    "a\\b",
+    "two\nlines",
+    ".",
+    "up..and-over",
+    "-pdf",
+    "pdf-",
+    "pdf--tools",
+    "x".repeat(65),
+  ])("refuses %j", (name) => {
+    expect(describeUnusableSkillName(name)).toBe(
+      "This name can't be used. Skill name can only contain lowercase letters, digits and single hyphens, up to 64 characters.",
+    );
   });
 });

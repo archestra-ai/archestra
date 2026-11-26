@@ -1,3 +1,4 @@
+import { describeUnusableSkillName } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -329,33 +330,40 @@ describe("NewSkillPage unsaved draft", () => {
   });
 });
 
-describe("NewSkillPage name check", () => {
-  const typeName = async (name: string) => {
+describe("NewSkillPage name and description checks", () => {
+  const openBlank = async () => {
     const user = userEvent.setup();
     await user.click(screen.getByText("Blank template"));
+    return user;
+  };
+  const typeName = async (name: string) => {
+    const user = await openBlank();
     await user.type(screen.getByLabelText("Skill name"), name);
     await user.type(screen.getByLabelText("Description"), "A skill.");
+    return user;
   };
+  const createButton = () =>
+    screen.getByRole("button", { name: "Create skill" });
+  const problem = (field: "name" | "description") =>
+    document.getElementById(`skill-${field}-problem`);
 
-  it("says before the save that the author already has the name in another letter case", async () => {
+  it("says before the save that the author already has the name", async () => {
     mockOrganization(true);
     mockOwnSkills([
       { id: "skill-1", name: "probe-skill-one", authorId: "user-1" },
     ]);
     renderPage();
-    await typeName("Probe-Skill-One");
+    await typeName("probe-skill-one");
 
     // One sentence, the same as on the plugin form.
-    expect(screen.getByLabelText("Skill name")).toHaveAccessibleDescription(
+    expect(problem("name")).toHaveTextContent(
       "Name is already in use. Try another one.",
     );
     expect(screen.getByLabelText("Skill name")).toHaveAttribute(
       "aria-invalid",
       "true",
     );
-    expect(
-      screen.getByRole("button", { name: "Create skill" }),
-    ).toHaveAttribute("aria-disabled", "true");
+    expect(createButton()).toHaveAttribute("aria-disabled", "true");
   });
 
   it("leaves another author's skill of that name alone", async () => {
@@ -364,50 +372,118 @@ describe("NewSkillPage name check", () => {
       { id: "skill-1", name: "probe-skill-one", authorId: "someone-else" },
     ]);
     renderPage();
-    await typeName("Probe-Skill-One");
+    await typeName("probe-skill-one");
 
-    expect(
-      screen.queryByText(/Name is already in use/),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Create skill" }),
-    ).not.toHaveAttribute("aria-disabled");
+    expect(problem("name")).toBeNull();
+    expect(createButton()).not.toHaveAttribute("aria-disabled");
   });
 
-  it("refuses a name that cannot be a folder name, and still takes one the Agent Skills rules would not publish", async () => {
+  it.each([
+    "Release Notes",
+    "docs/release",
+    "pdf_tools",
+    "PDF-Tools",
+  ])("refuses the name %j, which breaks the Agent Skills naming rules, and links the rules", async (name) => {
     mockOrganization(true);
     renderPage();
-    await typeName("docs/release");
+    await typeName(name);
 
-    // One sentence with no heading; the characters are shown as code, not
-    // between backticks.
-    const name = screen.getByLabelText("Skill name");
-    expect(name).toHaveAttribute("aria-describedby", "skill-name-problem");
-    expect(document.getElementById("skill-name-problem")).toHaveTextContent(
-      "A skill name can't contain a slash /. Use hyphen - instead.",
+    // The words the API sends for the same name.
+    expect(problem("name")).toHaveTextContent(
+      describeUnusableSkillName(name) as string,
     );
-    expect(name).toHaveAttribute("aria-invalid", "true");
-    expect(
-      screen.getByRole("button", { name: "Create skill" }),
-    ).toHaveAttribute("aria-disabled", "true");
-
-    const user = userEvent.setup();
-    await user.clear(name);
-    await user.type(name, "Release Notes");
-    // Allowed: a warning under the name, in place of the error, and the
-    // skill can be created.
-    expect(name).not.toHaveAttribute("aria-invalid");
-    expect(name).toHaveAccessibleDescription(
-      /This name can't be published over MCP.*You can keep it/,
+    expect(problem("name")).toHaveTextContent(
+      "This name can't be used. Skill name can only contain lowercase letters, digits and single hyphens, up to 64 characters.",
     );
     expect(
-      screen.getByRole("button", { name: "Create skill" }),
-    ).not.toHaveAttribute("aria-disabled");
+      screen.getByRole("link", {
+        name: "lowercase letters, digits and single hyphens, up to 64 characters",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://agentskills.io/specification#name-field",
+    );
+    expect(screen.getByLabelText("Skill name")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    // Refused, not warned about: there is no skill to create under it.
+    expect(createButton()).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByText(/published over MCP/)).not.toBeInTheDocument();
+  });
 
-    // A name the Agent Skills rules take needs no notice at all.
-    await user.clear(name);
-    await user.type(name, "release-notes");
-    expect(name).not.toHaveAccessibleDescription();
+  it("takes a name the naming rules allow, with no notice", async () => {
+    mockOrganization(true);
+    renderPage();
+    await typeName("release-notes");
+
+    expect(problem("name")).toBeNull();
+    expect(createButton()).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("marks both fields as required", async () => {
+    mockOrganization(true);
+    renderPage();
+    await openBlank();
+
+    for (const label of ["Skill name", "Description"]) {
+      const field = screen.getByLabelText(label);
+      expect(field).toBeRequired();
+      // The mark sits beside the label, which keeps its plain text.
+      expect(
+        screen.getByText(label, { selector: "label" }).parentElement,
+      ).toHaveTextContent(`${label}*`);
+    }
+  });
+
+  it("says a field is missing once it has been left empty, not before", async () => {
+    mockOrganization(true);
+    renderPage();
+    const user = await openBlank();
+
+    expect(problem("name")).toBeNull();
+    expect(problem("description")).toBeNull();
+
+    await user.click(screen.getByLabelText("Skill name"));
+    await user.click(screen.getByLabelText("Description"));
+    expect(problem("name")).toHaveTextContent("Enter a skill name.");
+    expect(problem("description")).toBeNull();
+    await user.tab();
+    expect(problem("description")).toHaveTextContent("Enter a description.");
+    expect(screen.getByLabelText("Description")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+
+    await user.type(screen.getByLabelText("Description"), "Says hello.");
+    expect(problem("description")).toBeNull();
+    expect(screen.getByLabelText("Description")).not.toHaveAttribute(
+      "aria-invalid",
+    );
+  });
+
+  it("refuses a description longer than the Agent Skills specification takes, and links the limit", async () => {
+    mockOrganization(true);
+    renderPage();
+    const user = await openBlank();
+    await user.type(screen.getByLabelText("Skill name"), "release-notes");
+    // Pasted: 1025 keystrokes would take the test seconds.
+    await user.click(screen.getByLabelText("Description"));
+    await user.paste("d".repeat(1025));
+
+    expect(problem("description")).toHaveTextContent(
+      "This description is too long. Skill description can be up to 1024 characters.",
+    );
+    expect(
+      screen.getByRole("link", { name: "up to 1024 characters" }),
+    ).toHaveAttribute(
+      "href",
+      "https://agentskills.io/specification#description-field",
+    );
+    expect(createButton()).toHaveAttribute("aria-disabled", "true");
+    expect(createButton()).toHaveAccessibleDescription(
+      "This description is too long. Skill description can be up to 1024 characters.",
+    );
   });
 });
 

@@ -62,6 +62,7 @@ import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import {
+  findNewSkillDescriptionProblem,
   findNewSkillNameProblem,
   isSkillNameConflict,
   refineUniqueFilePaths,
@@ -563,6 +564,12 @@ const registry = defineArchestraTools([
       if (nameProblem) {
         return errorResult(nameProblem.message);
       }
+      const descriptionProblem = findNewSkillDescriptionProblem(
+        parsed.description,
+      );
+      if (descriptionProblem) {
+        return errorResult(descriptionProblem.message);
+      }
       const skill = await SkillModel.createWithFiles({
         initialPermissionGrants: args.initialGrants,
         skill: {
@@ -646,6 +653,14 @@ const registry = defineArchestraTools([
         });
         if (nameProblem) {
           return errorResult(nameProblem.message);
+        }
+      }
+      if (parsed.description !== skill.description) {
+        const descriptionProblem = findNewSkillDescriptionProblem(
+          parsed.description,
+        );
+        if (descriptionProblem) {
+          return errorResult(descriptionProblem.message);
         }
       }
 

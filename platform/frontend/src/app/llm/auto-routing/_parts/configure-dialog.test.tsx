@@ -57,6 +57,7 @@ const state: AutoRoutingState = {
       apiKeys: [],
     },
   ],
+  defaultDecisionModel: "jev-1.13.0",
 };
 
 const tier = (modelId: string) => ({
@@ -78,7 +79,10 @@ const autoRouter: AutoRouter = {
     smart: tier(MODELS.smart),
   },
   decisionModel: { apiKeyId: null, model: "jev-1.13.0" },
-  usesPastSessions: true,
+  learnFromPastSessions: true,
+  readsPastSessions: true,
+  expectedTrafficFactor: 1,
+  traffic: { volumeSource: "live", pastBaseline: null },
   virtualApiKeyIds: [],
   usage: { agentCount: 0, organizationDefault: false },
   generation: 1,
@@ -89,6 +93,7 @@ const autoRouter: AutoRouter = {
       scorerVersionId: "00000000-0000-4000-8000-000000000009",
       sessions: 0,
       required: 100,
+      pastSessions: 0,
     },
     lastFitError: null,
     scorer: "ready",
@@ -209,6 +214,8 @@ describe("ConfigureAutoRoutingDialog", () => {
             smart: { providerApiKeyId: KEY.id, modelId: dbId(MODELS.smart) },
           },
           decisionModel: { apiKeyId: null, model: "jev-1.13.0" },
+          learnFromPastSessions: true,
+          expectedTrafficFactor: 1,
         },
       ]),
     );

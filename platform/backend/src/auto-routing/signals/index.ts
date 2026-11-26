@@ -20,6 +20,15 @@ export function preRunSource(scorerModel: string = DEFAULT_SCORER_MODEL) {
 }
 
 const SOURCE_ID = preRunSource().id;
+const DEFAULT_SPEC_HASH = specHash(preRunSource().spec);
+
+/**
+ * Whether sessions read with `scorerModel` get the default decision model's
+ * scorer version, the one the organization's past sessions are scored by.
+ */
+export function scoresAsDefault(scorerModel: string): boolean {
+  return specHash(preRunSource(scorerModel).spec) === DEFAULT_SPEC_HASH;
+}
 
 /**
  * The source version of the running spec asked with `scorerModel`. Upserted

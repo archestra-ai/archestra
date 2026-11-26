@@ -100,7 +100,11 @@ describe("the session scorer and a Jev key's grants", () => {
         },
       });
     };
-    await inject({ method: "POST", url: "/api/auto-routing/backfill/scan" });
+    await inject({
+      method: "POST",
+      url: "/api/auto-routing/backfill/scan",
+      payload: { latestBackfillId: null },
+    });
     await runBackfill();
 
     expect(await scorer()).toBe("no_jev_key");

@@ -43,6 +43,12 @@ const routingBackfillsTable = pgTable(
     scorerVersionId: uuid("scorer_version_id").references(
       () => routingScorerVersionsTable.id,
     ),
+    /**
+     * The Jev key that pays for scoring, fixed when scoring starts; a run
+     * whose key is gone fails rather than spend another. Null on runs started
+     * before it was recorded.
+     */
+    scorerApiKeyId: uuid("scorer_api_key_id"),
     maxSessions: integer("max_sessions"),
     maxCostUsd: numeric("max_cost_usd", { precision: 10, scale: 4 }),
     reservedCostUsd: numeric("reserved_cost_usd", { precision: 12, scale: 6 })
@@ -74,8 +80,10 @@ const routingBackfillsTable = pgTable(
     leaseEpoch: bigint("lease_epoch", { mode: "number" }).notNull().default(0),
     consecutiveFailures: integer("consecutive_failures").notNull().default(0),
     error: text("error"),
-    /** The settings generation its completion raised, so readers can wait for that fit. */
+    /** @deprecated Superseded by `fitGenerations`, which migration 0664 copied it into. Retained, no longer read or written. */
     fitGeneration: bigint("fit_generation", { mode: "number" }),
+    /** The generation completion raised each router reading past sessions to, by router id; its fit after this run plans it. */
+    fitGenerations: jsonb("fit_generations").$type<Record<string, number>>(),
     startedBy: text("started_by").references(() => usersTable.id, {
       onDelete: "set null",
     }),

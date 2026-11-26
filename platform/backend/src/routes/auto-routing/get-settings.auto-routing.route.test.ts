@@ -56,7 +56,10 @@ describe("GET /api/auto-routing/routers and /state", () => {
         budgetPreset: null,
         tiers: { fast: null, normal: null, smart: null },
         decisionModel: { apiKeyId: null, model: DEFAULT_SCORER_MODEL },
-        usesPastSessions: true,
+        learnFromPastSessions: true,
+        readsPastSessions: true,
+        expectedTrafficFactor: 1,
+        traffic: { volumeSource: "live", pastBaseline: null },
         virtualApiKeyIds: [],
         usage: { agentCount: 0, organizationDefault: false },
         generation: 1,
@@ -67,6 +70,7 @@ describe("GET /api/auto-routing/routers and /state", () => {
             scorerVersionId: (await activeSourceVersion()).id,
             sessions: 0,
             required: 200,
+            pastSessions: 0,
           },
           lastFitError: null,
           scorer: "no_jev_key",
@@ -186,7 +190,10 @@ describe("GET /api/auto-routing/routers and /state", () => {
           },
         },
         decisionModel: { apiKeyId: null, model: DEFAULT_SCORER_MODEL },
-        usesPastSessions: true,
+        learnFromPastSessions: true,
+        readsPastSessions: true,
+        expectedTrafficFactor: 1,
+        traffic: { volumeSource: "live", pastBaseline: null },
         virtualApiKeyIds: [],
         usage: { agentCount: 2, organizationDefault: false },
         generation: 2,
@@ -197,6 +204,7 @@ describe("GET /api/auto-routing/routers and /state", () => {
             scorerVersionId: running.id,
             sessions: 2,
             required: 200,
+            pastSessions: 0,
           },
           lastFitError: "solver diverged",
           scorer: "no_jev_key",
@@ -222,7 +230,10 @@ describe("GET /api/auto-routing/routers and /state", () => {
     const [a, b] = response.json();
     expect([a.id, b.id]).toEqual([first, second.id]);
     expect([a.name, b.name]).toEqual(["auto", "auto:support"]);
-    expect([a.usesPastSessions, b.usesPastSessions]).toEqual([true, false]);
+    expect([a.learnFromPastSessions, b.learnFromPastSessions]).toEqual([
+      true,
+      false,
+    ]);
     expect(a.usage.agentCount).toBe(1);
     expect(b.usage.agentCount).toBe(0);
     expect(a.tiers.normal).not.toBeNull();

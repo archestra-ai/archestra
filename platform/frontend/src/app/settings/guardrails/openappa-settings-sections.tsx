@@ -178,15 +178,15 @@ export function OpenAppaEnforcedMarksSetting() {
   return (
     <SettingsBlock
       id="enforced-marks"
-      title="Enforced marks"
-      description="Approvals the platform adds, in Observe or automatic approval, never satisfy these marks."
+      title="Approvals that need a person"
+      description="In Observe and with automatic approval, these still wait for a person. Use the names from attention in your policy."
       control={
         deployment.data ? (
           <div className="flex w-full flex-col gap-2 sm:w-80">
             <div className="flex gap-2">
               <Input
                 aria-label="New enforced mark"
-                placeholder="Mark"
+                placeholder="human-approval"
                 value={draft}
                 disabled={disabled}
                 onChange={(event) => setDraft(event.target.value)}

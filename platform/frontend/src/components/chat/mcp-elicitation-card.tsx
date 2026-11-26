@@ -501,7 +501,7 @@ export function McpElicitationCard({
     }));
   };
 
-  const renderReview = (question: CardQuestion) => {
+  const renderReview = (question: CardQuestion, embedded = false) => {
     const picked =
       question.values[getReviewDecisionField(question.request.requestedSchema)];
     return (
@@ -513,6 +513,7 @@ export function McpElicitationCard({
         reviewedCoverage={question.request.reviewedCoverage}
         reviewedText={question.request.reviewedText}
         disabled={isSubmitting || !question.isPending}
+        embedded={embedded}
         secondaryText={
           isSubmitting ? (
             <span>Saving answer...</span>
@@ -739,7 +740,7 @@ export function McpElicitationCard({
               className="flex min-w-0 flex-col gap-4 p-4"
             >
               {question.request.kind === "openappa_review" ? (
-                renderReview(question)
+                renderReview(question, true)
               ) : (
                 <>
                   <ElicitationMessage request={question.request} />

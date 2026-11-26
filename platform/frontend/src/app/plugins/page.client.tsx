@@ -74,7 +74,6 @@ import {
 } from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
-import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type PluginListItem,
   useBulkDeletePlugins,
@@ -130,9 +129,6 @@ function PluginsList() {
   // Label filtering is server-side, so the value rides the list query rather
   // than narrowing the already-fetched array below.
   const labelsFilter = searchParams.get("labels") || undefined;
-  // The page lives in the URL like the filters do, so a reload or a shared
-  // link opens the same rows, and the search box's own `page=1` takes effect.
-  const { pageIndex, pageSize, setPagination } = useDataTableQueryParams();
 
   const {
     data: plugins,
@@ -153,7 +149,7 @@ function PluginsList() {
       const params = new URLSearchParams(searchParams.toString());
       if (value === "all" || value === "") params.delete(name);
       else params.set(name, value);
-      // A narrower list starts from its first page.
+      // A narrowed list starts from its first page.
       params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
@@ -743,6 +739,7 @@ function PluginsList() {
                   <DataTable
                     columns={tableColumns}
                     data={filteredPlugins}
+                    urlPagination
                     getRowId={(row) => row.id}
                     emptyIcon={Braces}
                     emptyMessage="No plugins yet."
@@ -753,12 +750,6 @@ function PluginsList() {
                     sorting={sorting}
                     onSortingChange={setSorting}
                     manualSorting
-                    pagination={{
-                      pageIndex,
-                      pageSize,
-                      total: filteredPlugins.length,
-                    }}
-                    onPaginationChange={setPagination}
                     // The list holds only plugins the caller can read.
                     onRowClick={(row) => router.push(pluginDetailHref(row.id))}
                     rowSelection={bulkSelection.rowSelection}

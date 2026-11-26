@@ -259,7 +259,7 @@ class RoutingHistoryModel {
       select s.api_shape, s.client, count(*)::int as sessions,
         coalesce(sum(s.total_tokens), 0) as tokens
       from routing_history_sessions s
-      where ${population({ ...backfill, includeBackfillId: backfill.id })}
+      where ${population({ ...backfill, scans: { includeBackfillId: backfill.id } })}
       group by s.api_shape, s.client
       order by sessions desc, s.api_shape, s.client`);
     return {
@@ -497,7 +497,7 @@ class RoutingHistoryModel {
 
   /**
    * The past sessions a fit learns from, in one statement so counts and rows
-   * agree: the frame is the population of the latest finished scan (`frame`)
+   * agree: the frame is the population of the scan publication `frame`
    * started from `windowStart`; the sample, the rank prefix of the frame the
    * scorer version attempted without a gap. Each scored session of the
    * sample stands for `population / scored` sessions. `withSample: false`
@@ -506,7 +506,7 @@ class RoutingHistoryModel {
   static async findFitSnapshot(params: {
     organizationId: string;
     scorerVersionId: string;
-    frame: { windowStart: Date; cutoff: Date };
+    frame: { id: string; windowStart: Date; cutoff: Date };
     windowStart: Date;
     longContextThreshold: number | null;
     withSample: boolean;
@@ -554,7 +554,7 @@ class RoutingHistoryModel {
           organizationId: params.organizationId,
           windowStart,
           cutoff: params.frame.cutoff,
-          includeBackfillId: null,
+          scans: { frameId: params.frame.id },
         })}
       ),
       gap as (
@@ -635,9 +635,10 @@ class RoutingHistoryModel {
   /**
    * Deletes, `batchSize` rows per statement, history no fit can read any
    * more: sessions started before `windowStart` (with their usage and
-   * scores), scores by a scorer version that is neither `keepScorerVersionId`
-   * nor that of the organization's router reading past sessions, and finished backfills whose sessions are gone.
-   * Nothing a running or waiting backfill covers is touched.
+   * scores), scores by a scorer version other than `keepScorerVersionId` (the
+   * default one, which alone reads past sessions), and finished backfills
+   * whose sessions are gone. Nothing a running or waiting backfill covers is
+   * touched.
    */
   static async purgeExpired(params: {
     windowStart: Date;
@@ -659,26 +660,14 @@ class RoutingHistoryModel {
               and not ${active(sql`s.organization_id`, sql`s.started_at >= b.window_start`)}
             limit ${limit})`,
       ),
-      // Build the compact reference set once per batch instead of allowing
-      // an agent-table scan for every candidate score.
       scores: await deleteInBatches(
         batchSize,
         (limit) => sql`
-          with referenced_scorers as materialized (
-            select distinct organization_id, scorer_version_id
-            from auto_routers
-            where uses_past_sessions and scorer_version_id is not null
-          )
           delete from routing_history_scores where (history_session_id, scorer_version_id) in (
             select sc.history_session_id, sc.scorer_version_id
             from routing_history_scores sc
             join routing_history_sessions s on s.id = sc.history_session_id
             where sc.scorer_version_id <> ${params.keepScorerVersionId}
-              and not exists (
-                select 1 from referenced_scorers a
-                where a.organization_id = s.organization_id
-                  and a.scorer_version_id = sc.scorer_version_id
-              )
               and not ${active(sql`s.organization_id`, sql`b.scorer_version_id = sc.scorer_version_id`)}
             limit ${limit})`,
       ),
@@ -707,10 +696,12 @@ export type PastWindow = {
 
 type ScoreKey = { historySessionId: string; scorerVersionId: string };
 
+/** The sample of the scan publication `frameId`, or of a scoring run that copied its finish. */
 type SampleParams = {
   organizationId: string;
   windowStart: Date;
   cutoff: Date;
+  frameId: string;
   maxSessions: number;
   scorerVersionId: string;
 };
@@ -771,18 +762,24 @@ function sessionInteractions(session: RoutingHistorySession): SQL {
 
 /**
  * Scanned sessions of the organization started from `windowStart` (and
- * before `cutoff`) that live routing has no decision for. A scan still in
- * progress counts only when it is `includeBackfillId`.
+ * before `cutoff`) that live routing has no decision for, found by `scans`:
+ * those finished by the time backfill `frameId`'s scan did, as a frame,
+ * since a later scan adds sessions inside an earlier window, which would
+ * change that frame under fits reading it (compared in SQL, at the
+ * timestamps' full precision); or every finished scan's and those of
+ * `includeBackfillId`, a scan still in progress.
  */
 function population(params: {
   organizationId: string;
   windowStart: Date;
   cutoff: Date | null;
-  includeBackfillId: string | null;
+  scans: { frameId: string } | { includeBackfillId: string };
 }): SQL {
-  const scanned = params.includeBackfillId
-    ? sql`(b.scanned_at is not null or b.id = ${params.includeBackfillId})`
-    : sql`b.scanned_at is not null`;
+  const { scans } = params;
+  const scanned =
+    "frameId" in scans
+      ? sql`b.scanned_at <= (select f.scanned_at from routing_backfills f where f.id = ${scans.frameId})`
+      : sql`(b.scanned_at is not null or b.id = ${scans.includeBackfillId})`;
   return sql`s.organization_id = ${params.organizationId}
     and s.started_at >= ${params.windowStart.toISOString()}::timestamptz
     ${params.cutoff ? sql`and s.started_at < ${params.cutoff.toISOString()}::timestamptz` : sql``}
@@ -795,7 +792,7 @@ function population(params: {
 
 function sample(params: SampleParams): SQL {
   return sql`select s.* from routing_history_sessions s
-    where ${population({ ...params, includeBackfillId: null })}
+    where ${population({ ...params, scans: { frameId: params.frameId } })}
     order by s.sample_rank, s.id
     limit ${params.maxSessions}`;
 }

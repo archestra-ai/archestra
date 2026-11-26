@@ -16,6 +16,7 @@ import type {
   RouterDocument,
   RoutingPlanStatus,
   RoutingPlanTrigger,
+  RoutingVolumeSource,
 } from "@/types/auto-routing";
 import autoRoutersTable from "./auto-router";
 import organizationsTable from "./organization";
@@ -60,6 +61,12 @@ const routingPlansTable = pgTable(
     diagnostics: jsonb("diagnostics").$type<RouterDocument>(),
     status: text("status").$type<RoutingPlanStatus>().notNull(),
     error: text("error"),
+    /** The scan whose past sessions the fit read; null when it read none. */
+    historyFrameId: uuid("history_frame_id"),
+    /** The traffic factor the fit scaled its volume by; null on fits recorded before it. */
+    volumeFactor: numeric("volume_factor"),
+    /** Whose volume the fit planned for; null on fits recorded before it. */
+    volumeSource: text("volume_source").$type<RoutingVolumeSource>(),
   },
   (table) => [
     uniqueIndex("routing_plans_one_active_per_router_uidx")

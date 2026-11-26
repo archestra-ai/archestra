@@ -12,7 +12,6 @@ import {
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
   TOOL_COPY_FILE_SHORT_NAME,
-  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TURN_NOTICE_PART_TYPE,
@@ -28,12 +27,8 @@ import type { PanelApp } from "./apps-context";
 import type { FileAttachment } from "./editable-user-message";
 import type { HookRunChipData } from "./hook-run-chip";
 import type { McpToolOutput } from "./mcp-app-container";
+import { getBlockedAttempt } from "./openappa-blocked-attempt";
 import { runToolArguments } from "./openappa-policy-change.utils";
-import {
-  identifyRemedyChains,
-  type RemedyChain,
-  remedyChainPartIndices,
-} from "./openappa-remedy-chains";
 
 export type OptimisticToolCall = {
   toolCallId: string;
@@ -57,8 +52,6 @@ export type CompactToolGroupEntry =
       part: DynamicToolUIPart | ToolUIPart;
       toolResultPart: DynamicToolUIPart | ToolUIPart | null;
       errorText: string | undefined;
-      /** Set when this entry stands for a whole guarded call (see `RemedyChain`). */
-      remedyChain?: RemedyChain;
     }
   | {
       /**
@@ -72,8 +65,6 @@ export type CompactToolGroupEntry =
       part: DynamicToolUIPart | ToolUIPart;
       toolResultPart: DynamicToolUIPart | ToolUIPart | null;
       errorText: string | undefined;
-      /** Set when the app call is the released attempt of a guarded call. */
-      remedyChain?: RemedyChain;
     }
   | {
       /** An inline `data-hook-run` debug entry rendered as a circle in the row. */
@@ -526,19 +517,8 @@ export function resolveAppEntryRender(params: {
 }
 
 /** A human title for tool cards whose raw name means nothing to the reader. */
-export function getToolCardTitle(
-  toolName: string,
-  shortName?: ArchestraToolShortName | null,
-): string | undefined {
-  if (toolName === SELF_FORK_TOOL_NAME) return "Subagent";
-  switch (shortName) {
-    case TOOL_GET_REMEDY_PLANS_SHORT_NAME:
-      return "Checked what's allowed";
-    case TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME:
-      return "Guardrails step";
-    default:
-      return undefined;
-  }
+export function getToolCardTitle(toolName: string): string | undefined {
+  return toolName === SELF_FORK_TOOL_NAME ? "Subagent" : undefined;
 }
 
 /** Unwrap a run_tool dispatch to the target tool name (no-op for other tools). */
@@ -744,31 +724,13 @@ export function identifyCompactToolGroups(
     mcpAppToolCallIds?: Set<string>;
     role?: UIMessage["role"];
   },
-): {
-  groupMap: Map<number, CompactToolGroup>;
-  consumedIndices: Set<number>;
-  /** Guarded calls that render as one full tool card at their anchor index. */
-  remedyChainCards: Map<number, RemedyChain>;
-} {
+): { groupMap: Map<number, CompactToolGroup>; consumedIndices: Set<number> } {
   const groupMap = new Map<number, CompactToolGroup>();
   const consumedIndices = new Set<number>();
-  const remedyChainCards = new Map<number, RemedyChain>();
 
-  if (!parts) return { groupMap, consumedIndices, remedyChainCards };
+  if (!parts) return { groupMap, consumedIndices };
 
   const role: UIMessage["role"] = options?.role ?? "assistant";
-
-  // A guarded call's notices, remedies, and retries render as one entry at its
-  // first notice; every other member renders nothing on its own.
-  const remedyChainByAnchor = new Map<number, RemedyChain>();
-  for (const chain of identifyRemedyChains(parts, {
-    getToolShortName: options?.getToolShortName,
-  })) {
-    remedyChainByAnchor.set(chain.anchorIndex, chain);
-    for (const index of remedyChainPartIndices(chain)) {
-      if (index !== chain.anchorIndex) consumedIndices.add(index);
-    }
-  }
 
   // Collect toolCallIds from data-tool-ui-start parts (MCP Apps known before output arrives)
   const mcpAppCallIds = new Set(options?.mcpAppToolCallIds);
@@ -892,37 +854,20 @@ export function identifyCompactToolGroups(
       continue;
     }
 
-    // A denial notice whose input has not named its target yet renders
-    // nothing, so the row never flashes a separate notice circle before the
-    // notice joins its chain.
+    // A denial notice shows under the name of the call it blocked. While its
+    // input streams in and has not named that call yet, it renders nothing,
+    // so the row never flashes a circle under the notice's own name.
     if (
       rawPart.state === "input-streaming" &&
-      options?.getToolShortName?.(toolName) ===
-        TOOL_GET_REMEDY_PLANS_SHORT_NAME &&
-      !remedyChainByAnchor.has(i)
+      options?.getToolShortName &&
+      options.getToolShortName(toolName) === TOOL_GET_REMEDY_PLANS_SHORT_NAME &&
+      !getBlockedAttempt({
+        part: rawPart,
+        toolName,
+        getToolShortName: options.getToolShortName,
+      })
     ) {
       consumedIndices.add(i);
-      continue;
-    }
-
-    const remedyChain = remedyChainByAnchor.get(i);
-    if (remedyChain) {
-      const entry = remedyChainEntry({
-        chain: remedyChain,
-        mcpAppCallIds,
-        options,
-      });
-      if (entry) {
-        if (!currentGroup) {
-          currentGroup = { startIndex: i, entries: [] };
-        }
-        currentGroup.entries.push(entry);
-        consumedIndices.add(i);
-        consumeEarlyStarts(remedyChain.finalAttempt?.part.toolCallId);
-      } else {
-        remedyChainCards.set(i, remedyChain);
-        flushGroup();
-      }
       continue;
     }
 
@@ -991,7 +936,7 @@ export function identifyCompactToolGroups(
   }
 
   flushGroup();
-  return { groupMap, consumedIndices, remedyChainCards };
+  return { groupMap, consumedIndices };
 }
 
 /**
@@ -1194,76 +1139,6 @@ function parseToolAppRender(
   const mcpServerId = ui?.mcpServerId ?? null;
   const fullToolName = getToolName(part) ?? early?.toolName ?? "";
   return { outputUri, mcpServerId, fullToolName };
-}
-
-/**
- * The compact entry for a guarded call, or null when any member is a
- * non-compact widget (such as `todo_write` or `ask_user`). A released attempt
- * that renders an MCP App keeps its app pill when healthy, or degrades to a
- * regular circle with its expanded card on error, approval, denial, or auth.
- */
-function remedyChainEntry(params: {
-  chain: RemedyChain;
-  mcpAppCallIds: Set<string>;
-  options:
-    | {
-        nonCompactToolNames?: Set<string>;
-        getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
-      }
-    | undefined;
-}): CompactToolGroupEntry | null {
-  const { chain, mcpAppCallIds, options } = params;
-  const { finalAttempt } = chain;
-  const members = finalAttempt ? [...chain.steps, finalAttempt] : chain.steps;
-  const eligible = members.every(
-    (member) =>
-      !options?.nonCompactToolNames?.has(member.toolName) &&
-      isCompactEligible({
-        part: member.part,
-        toolResultPart: member.toolResultPart,
-        toolName: member.toolName,
-        getToolShortName: options?.getToolShortName,
-      }),
-  );
-  if (!eligible) return null;
-
-  const finalIsHealthyApp =
-    finalAttempt !== null &&
-    isAppRenderPart({
-      part: finalAttempt.part,
-      toolResultPart: finalAttempt.toolResultPart,
-      mcpAppCallIds,
-      getToolShortName: options?.getToolShortName,
-    }) &&
-    !getToolErrorText({
-      part: finalAttempt.part,
-      toolResultPart: finalAttempt.toolResultPart,
-    }) &&
-    (finalAttempt.toolResultPart ?? finalAttempt.part).state !==
-      "approval-requested" &&
-    (finalAttempt.toolResultPart ?? finalAttempt.part).state !==
-      "output-denied" &&
-    !hasToolAuthOrNoDevicePrompt({
-      part: finalAttempt.part,
-      toolResultPart: finalAttempt.toolResultPart,
-    });
-
-  const [anchor] = chain.steps;
-  const shown = finalIsHealthyApp && finalAttempt ? finalAttempt : anchor;
-  return {
-    kind: finalIsHealthyApp ? "app" : "tool",
-    partIndex: chain.anchorIndex,
-    toolName: shown.toolName,
-    part: shown.part,
-    toolResultPart: shown.toolResultPart,
-    errorText: finalAttempt
-      ? getToolErrorText({
-          part: finalAttempt.part,
-          toolResultPart: finalAttempt.toolResultPart,
-        })
-      : undefined,
-    remedyChain: chain,
-  };
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

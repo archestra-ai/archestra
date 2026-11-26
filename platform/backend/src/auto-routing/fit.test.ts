@@ -69,6 +69,7 @@ function input(
     output: 0,
   });
   const sample: FitHistory["sample"] = rows.map((row) => ({
+    past: false,
     createdAt: new Date(0),
     features: {
       signals: {
@@ -90,7 +91,7 @@ function input(
     firstCreatedAt: null,
     lastCreatedAt: null,
   };
-  return planInput({ sample, volume }, tiers, 1);
+  return planInput({ sample, volume, volumeFactor: 1 }, tiers, 1);
 }
 
 function usd(cache_write: number, cache_write_1h: number): RouterTokenPrices {

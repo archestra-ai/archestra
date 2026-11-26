@@ -1,7 +1,13 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -90,7 +96,20 @@ vi.mock("@/components/ai-elements/tool", () => ({
   ToolContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  ToolHeader: ({ type }: { type: string }) => <div>{type}</div>,
+  ToolHeader: ({
+    type,
+    state,
+    statusLabel,
+  }: {
+    type: string;
+    state?: string;
+    statusLabel?: string;
+  }) => (
+    <>
+      <div>{type}</div>
+      <div data-testid="tool-state">{statusLabel ?? state}</div>
+    </>
+  ),
   ToolInput: ({ input }: { input: unknown }) => (
     <pre>{JSON.stringify(input)}</pre>
   ),
@@ -1300,6 +1319,73 @@ describe("ChatMessages", () => {
     ).not.toBeInTheDocument();
   });
 
+  it.each([
+    {
+      name: "delivered its ruling",
+      notice: { state: "output-available", output: "[appa] Blocked." },
+      status: "Blocked",
+    },
+    {
+      name: "was cut off when its turn ended",
+      notice: { state: "input-available" },
+      status: "output-cancelled",
+    },
+  ])("shows a subagent's blocked call in the state of a notice that $name", ({
+    notice,
+    status,
+  }) => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-workspace__helper",
+            toolCallId: "call-delegation",
+            state: "output-available",
+            input: { task: "tidy up" },
+            output: "done",
+          },
+          {
+            type: "data-subagent-tool-call",
+            data: {
+              parentToolCallId: "call-delegation",
+              toolCallId: "call-notice",
+              toolName: "sparky__get_remedy_plans",
+              input: {
+                tool: "workspace__delete_file",
+                arguments: { path: "/notes.md" },
+                ruling: "[appa] Blocked.",
+                notice: { v: 1, call_id: "call-notice" },
+              },
+              ...notice,
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "helper" }));
+
+    // The subagent's notice is shown as the call it blocked. The turn has
+    // ended, so a notice without a result did not finish: it never reads as
+    // still running.
+    const blocked = screen.getByText("tool-workspace__delete_file");
+    expect(
+      within(blocked.parentElement as HTMLElement).getByTestId("tool-state"),
+    ).toHaveTextContent(status);
+    expect(
+      screen.queryByText("tool-sparky__get_remedy_plans"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders a persisted ask_user result in its grouped transcript slot", () => {
     const messages = [
       {
@@ -1588,7 +1674,9 @@ describe("ChatMessages", () => {
 
     // Completed: a compact circle whose expanded card lists the input.
     // The approval-requested circle is already auto-expanded under its circle.
-    fireEvent.click(screen.getByRole("button", { name: "Guardrails step" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "execute remedy plan" }),
+    );
 
     const shownInputs = screen
       .getAllByText(/Share the report with the team/)
@@ -1601,15 +1689,19 @@ describe("ChatMessages", () => {
         plan: "Share the report with the team",
       });
     }
+    // Neither shows what the proxy stamped on the call.
+    for (const stamped of ["eyJhbGciOiJIUzI1NiJ9", "c2lnbmF0dXJlLWJ5dGVz"]) {
+      expect(document.body).not.toHaveTextContent(stamped);
+    }
   });
 
-  it("renders a guarded call as one circle whose card shows the negotiation in order", () => {
-    const blocked = remedyChainParts({
+  it("renders a guarded call's blocked attempt, remedy and retry as their own circles, in order", () => {
+    const blocked = guardedCallParts({
       prefix: "a",
       tool: "workspace__show_board",
       args: { board: "roadmap" },
     });
-    const other = remedyChainParts({
+    const other = guardedCallParts({
       prefix: "b",
       tool: "sparky__list_skills",
       args: {},
@@ -1649,123 +1741,25 @@ describe("ChatMessages", () => {
       screen
         .getAllByRole("button", { expanded: false })
         .map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["show board", "list skills", "clock"]);
+    ).toEqual([
+      "show board (blocked)",
+      "list skills (blocked)",
+      "clock",
+      "execute remedy plan",
+      "execute remedy plan",
+      "list skills",
+      "show board",
+    ]);
 
     fireEvent.click(screen.getByRole("button", { name: "show board" }));
 
+    // The released call's card holds its own request and result only.
     const card = screen.getByText("tool-workspace__show_board").parentElement;
-    expect(card).not.toBeNull();
     const text = card?.textContent ?? "";
-    const order = [
-      '{"board":"roadmap"}',
-      "Guardrails",
-      "tool-sparky__get_remedy_plans",
-      "tool-sparky__execute_remedy_plan",
-      '"a: board shown"',
-    ].map((needle) => text.indexOf(needle));
-    expect(order.every((index) => index >= 0)).toBe(true);
-    expect(order).toEqual([...order].sort((x, y) => x - y));
-    // The other guarded call's negotiation stays in its own card.
-    expect(text).not.toContain("b: skills listed");
-  });
-
-  it("keeps a guarded call running until its turn ends, only in the active turn", () => {
-    const earlier = remedyChainParts({
-      prefix: "a",
-      tool: "workspace__show_board",
-      args: {},
-    });
-    const current = remedyChainParts({
-      prefix: "b",
-      tool: "workspace__close_task",
-      args: { id: 7 },
-    });
-    // Both calls were blocked and remedied, and neither was retried yet.
-    const messages = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [earlier.notice, earlier.remedy],
-      },
-      { id: "user-2", role: "user", parts: [{ type: "text", text: "Go on" }] },
-      {
-        id: "assistant-2",
-        role: "assistant",
-        parts: [current.notice, current.remedy],
-      },
-    ] as unknown as UIMessage[];
-
-    const { rerender } = render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="streaming"
-      />,
-    );
-
-    // The finished turn shows its final state; the active one stays running.
-    expect(
-      screen.getByRole("button", { name: "show board (blocked)" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "close task (running)" }),
-    ).toBeInTheDocument();
-
-    rerender(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-      />,
-    );
-
-    expect(
-      screen.getByRole("button", { name: "close task (blocked)" }),
-    ).toBeInTheDocument();
-  });
-
-  it("keeps a guarded call's approval prompt visible in one full card", () => {
-    const onToolApprovalResponse = vi.fn();
-    const chain = remedyChainParts({
-      prefix: "a",
-      tool: "workspace__export_records",
-      args: { destination: "external" },
-    });
-    const messages = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          chain.notice,
-          chain.remedy,
-          {
-            ...chain.retry,
-            state: "approval-requested",
-            output: undefined,
-            approval: { id: "approval-1" },
-          },
-        ],
-      },
-    ] as unknown as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-        onToolApprovalResponse={onToolApprovalResponse}
-      />,
-    );
-
-    expect(screen.getAllByText("tool-workspace__export_records")).toHaveLength(
-      1,
-    );
-    expect(screen.getByText("Guardrails")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    expect(onToolApprovalResponse).toHaveBeenCalledWith({
-      id: "approval-1",
-      approved: true,
-    });
+    expect(text).toContain('{"board":"roadmap"}');
+    expect(text).toContain('"a: board shown"');
+    expect(text).not.toContain("Guardrails");
+    expect(text).not.toContain("tool-sparky__get_remedy_plans");
   });
 
   it("renders approval controls for a direct tool call that requires approval", () => {
@@ -2997,7 +2991,7 @@ describe("owned-app inline rendering", () => {
 });
 
 /** One guarded call as Chat receives it: notice, remedy, released retry. */
-function remedyChainParts(params: {
+function guardedCallParts(params: {
   prefix: string;
   tool: string;
   args: Record<string, unknown>;

@@ -33,6 +33,43 @@ describe("DataTable page index clamping", () => {
     expect(screen.getByText("row-0")).toBeInTheDocument();
   });
 
+  it("returns to the first page when what narrows the rows changes", async () => {
+    // The rows still fill four pages after the search, so nothing clamps:
+    // without the key the table would stay on page 4 of the new results.
+    const { rerender } = render(
+      <DataTable columns={columns} data={makeRows(40)} resetPageKey="" />,
+    );
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Go to last page" })[0],
+    );
+    expect(screen.getAllByText("Page 4 of 4").length).toBeGreaterThan(0);
+
+    rerender(
+      <DataTable columns={columns} data={makeRows(40)} resetPageKey="row" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Page 1 of 4").length).toBeGreaterThan(0);
+    });
+    expect(screen.getByText("row-0")).toBeInTheDocument();
+  });
+
+  it("stays on its page when the rows are re-read under the same search", async () => {
+    const { rerender } = render(
+      <DataTable columns={columns} data={makeRows(40)} resetPageKey="row" />,
+    );
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Go to next page" })[0],
+    );
+
+    // A refetch hands the table a new array with the same rows.
+    rerender(
+      <DataTable columns={columns} data={makeRows(40)} resetPageKey="row" />,
+    );
+
+    expect(screen.getAllByText("Page 2 of 4").length).toBeGreaterThan(0);
+  });
+
   it("notifies the parent when a controlled page index exceeds the shrunken page count", async () => {
     const onPaginationChange = vi.fn();
     const { rerender } = render(

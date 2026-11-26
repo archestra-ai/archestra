@@ -13,6 +13,8 @@ export interface SignalSourceContext {
   organizationId: string;
   /** The router's decision-model key; the organization's primary key when unset or no longer usable. */
   apiKeyId?: string | null;
+  /** Only `apiKeyId` may answer: without it the read fails as `no_credentials` instead of using another key. */
+  exactApiKey?: boolean;
   /** Overrides the live-routing scorer timeout, for callers no request waits on. */
   timeoutMs?: number;
   /** Enables the process-local circuit breaker for live request-path scoring. */

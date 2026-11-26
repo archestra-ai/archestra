@@ -110,18 +110,36 @@ def check_upgrade(source_ref, target_ref):
     return not errors
 
 
+def stable_line_refs():
+    """Fetched origin/release/X.Y refs, keyed by their (X, Y) line."""
+    refs = git("for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/release/").decode().splitlines()
+    lines = {}
+    for ref in refs:
+        match = re.fullmatch(r"origin/release/(\d+)\.(\d+)", ref)
+        if match:
+            lines[(int(match[1]), int(match[2]))] = ref
+    if not lines:
+        raise ValueError("No stable release refs found; fetch origin release/* before checking upgrades")
+    return lines
+
+
 def release_paths(base_branch):
-    if re.fullmatch(r"release/\d+\.\d+", base_branch):
+    stable = re.fullmatch(r"release/(\d+)\.(\d+)", base_branch)
+    if stable:
         # A backport must support both upgrades within stable and a subsequent
-        # move to main. Land any required forward repair on main first.
-        return [(f"origin/{base_branch}", "WORKTREE"), ("WORKTREE", "origin/main")]
+        # move to main. Land any required forward repair on main first. Every
+        # older line must also upgrade to this one: a new line's X.Y.0 is the
+        # first release its previous line's installations move to.
+        line = (int(stable[1]), int(stable[2]))
+        older = [ref for version, ref in sorted(stable_line_refs().items()) if version < line]
+        return [
+            *[(ref, "WORKTREE") for ref in older],
+            (f"origin/{base_branch}", "WORKTREE"),
+            ("WORKTREE", "origin/main"),
+        ]
     if base_branch != "main":
         raise ValueError(f"Unsupported release base branch: {base_branch}")
-    refs = git("for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/release/").decode().splitlines()
-    stable_refs = [ref for ref in refs if re.fullmatch(r"origin/release/\d+\.\d+", ref)]
-    if not stable_refs:
-        raise ValueError("No stable release refs found; fetch origin release/* before checking upgrades")
-    return [("origin/main", "WORKTREE"), *[(ref, "WORKTREE") for ref in stable_refs]]
+    return [("origin/main", "WORKTREE"), *[(ref, "WORKTREE") for ref in stable_line_refs().values()]]
 
 
 def main():

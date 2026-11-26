@@ -1,5 +1,6 @@
 """Every supported release line gets Dependabot updates for what it ships, and
-moving to a new line moves all of them (set-release-line.py)."""
+moving to a new line moves all of them (set-release-line.py). A line cut from
+main gets its own entries before its X.Y.0 makes it the supported line."""
 import importlib.util
 import json
 from pathlib import Path
@@ -20,8 +21,9 @@ class DependabotReleaseLineTest(unittest.TestCase):
         entries = parse((ROOT / ".github/dependabot.yml").read_text())
         shipped = {(entry["ecosystem"], directory) for entry in entries if entry["target"] is None
                    for directory in entry["directories"] if entry["ecosystem"] != "github-actions"} - MAIN_ONLY
-        self.assertEqual({entry["target"] for entry in entries if entry["target"]}, set(lines))
-        for line in lines:
+        targets = {entry["target"] for entry in entries if entry["target"]}
+        assert_release_targets(self, targets, lines)
+        for line in sorted(targets):
             line_entries = [entry for entry in entries if entry["target"] == line]
             covered = {(entry["ecosystem"], directory) for entry in line_entries for directory in entry["directories"]}
             with self.subTest(line=line):
@@ -52,6 +54,48 @@ class DependabotReleaseLineTest(unittest.TestCase):
             self.assertEqual(len(moved), len(before))
             with self.assertRaises(SystemExit):
                 module.main(["set-release-line.py", "release/1.5; rm -rf /"])
+
+    def test_a_cut_line_gets_its_own_entries_and_then_replaces_the_old_ones(self):
+        module = load(ROOT / ".github/scripts/set-release-line.py")
+        text = (ROOT / ".github/dependabot.yml").read_text()
+        [line] = json.loads((ROOT / ".github/backport-targets.json").read_text())["branches"]
+        added = module.add_line(text, line, "release/9.8")
+        before, after = parse(text), parse(added)
+        old = [entry for entry in before if entry["target"] == line]
+        self.assertEqual([entry for entry in after if entry["target"] == line], old)
+        self.assertEqual(
+            [entry["body"] for entry in after if entry["target"] == "release/9.8"],
+            [entry["body"].replace(f"target-branch: {line}", "target-branch: release/9.8") for entry in old],
+        )
+        with self.assertRaises(ValueError):
+            module.add_line(added, line, "release/9.8")
+        # Moving keeps the copies and drops the old line's entries: the same file
+        # as moving without them.
+        self.assertEqual(module.move(added, "release/9.8"), module.move(text, "release/9.8"))
+        # Moving to a third line would leave duplicate entries.
+        with self.assertRaises(ValueError):
+            module.move(added, "release/9.9")
+
+
+def assert_release_targets(test, targets, lines):
+    """Dependabot's release targets are the supported lines and, from a stable
+    cut until its X.Y.0 moves the line, at most one newer line."""
+    test.assertLessEqual(set(lines), set(targets))
+    extra = set(targets) - set(lines)
+    test.assertLessEqual(len(extra), 1, f"more than one line awaiting its X.Y.0: {sorted(extra)}")
+    for branch in extra:
+        test.assertTrue(all(version(branch) > version(line) for line in lines), f"{branch} is not newer than {lines}")
+
+
+def version(branch):
+    return tuple(int(part) for part in branch.removeprefix("release/").split("."))
+
+
+def load(path):
+    spec = importlib.util.spec_from_file_location(path.stem.replace("-", "_"), path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def parse(text):

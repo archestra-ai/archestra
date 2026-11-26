@@ -1,5 +1,5 @@
 {
-  "id": "6dcfae58-6843-4438-9b5b-205bd164b42f",
+  "id": "b0b12169-769b-45c3-818c-35529fbbef15",
   "prevId": "fda1715f-10b8-4d3a-bb74-beab04398931",
   "version": "7",
   "dialect": "postgresql",
@@ -7652,6 +7652,20 @@
           "notNull": true,
           "default": false
         },
+        "learn_from_past_sessions": {
+          "name": "learn_from_past_sessions",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "expected_traffic_factor": {
+          "name": "expected_traffic_factor",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7750,7 +7764,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "auto_routers_expected_traffic_factor_check": {
+          "name": "auto_routers_expected_traffic_factor_check",
+          "value": "\"auto_routers\".\"expected_traffic_factor\" > 0 AND \"auto_routers\".\"expected_traffic_factor\" <= 100"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.auto_routing_tiers": {
@@ -12326,24 +12345,6 @@
           "type": "text",
           "primaryKey": true,
           "notNull": true
-        },
-        "mode": {
-          "name": "mode",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "person_approval": {
-          "name": "person_approval",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "enforced_marks": {
-          "name": "enforced_marks",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": false
         },
         "enabled": {
           "name": "enabled",
@@ -26563,6 +26564,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "scorer_api_key_id": {
+          "name": "scorer_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "max_sessions": {
           "name": "max_sessions",
           "type": "integer",
@@ -26677,6 +26684,12 @@
         "fit_generation": {
           "name": "fit_generation",
           "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fit_generations": {
+          "name": "fit_generations",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -27582,6 +27595,24 @@
         },
         "error": {
           "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "history_frame_id": {
+          "name": "history_frame_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "volume_factor": {
+          "name": "volume_factor",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "volume_source": {
+          "name": "volume_source",
           "type": "text",
           "primaryKey": false,
           "notNull": false

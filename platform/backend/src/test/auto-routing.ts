@@ -97,6 +97,9 @@ export function activeFit(params: {
     scorerVersionId: params.scorerVersionId,
     coreVersion: "0.1.0",
     planFormatVersion: 1,
+    historyFrameId: null,
+    volumeFactor: 1,
+    volumeSource: "live",
     outcome: {
       status: "active",
       plan: { label: params.label ?? "plan" },
@@ -159,6 +162,9 @@ export async function publishFittedPlan(params: {
     scorerVersionId,
     coreVersion: "0.1.0",
     planFormatVersion: 1,
+    historyFrameId: null,
+    volumeFactor: 1,
+    volumeSource: "live",
     outcome: {
       status: "active",
       plan: JSON.parse(planJson),
@@ -172,13 +178,13 @@ export async function publishFittedPlan(params: {
 
 /**
  * The organization's router named `name`, made on first use with no tiers.
- * The first one, `auto`, learns from past sessions like the one that existed
- * before an organization could have several.
+ * The first one, `auto`, learns from past sessions like the one an upgrade
+ * kept learning; others do not unless `learnFromPastSessions` says so.
  */
 export async function ensureAutoRouter(
   organizationId: string,
   name = "auto",
-  options: { usesPastSessions?: boolean } = {},
+  options: { learnFromPastSessions?: boolean } = {},
 ) {
   const existing = await AutoRouterModel.findByName(organizationId, name);
   if (existing) return existing;
@@ -189,7 +195,7 @@ export async function ensureAutoRouter(
       name,
       scorerModel: DEFAULT_SCORER_MODEL,
       generation: 1,
-      usesPastSessions: options.usesPastSessions ?? name === "auto",
+      learnFromPastSessions: options.learnFromPastSessions ?? name === "auto",
     })
     .returning({ id: schema.autoRoutersTable.id });
   const router = await AutoRouterModel.find(row.id);
@@ -201,7 +207,7 @@ export async function ensureAutoRouter(
 export async function configureAutoRouter(
   organizationId: string,
   name = "auto",
-  options: { usesPastSessions?: boolean } = {},
+  options: { learnFromPastSessions?: boolean } = {},
 ) {
   const router = await ensureAutoRouter(organizationId, name, options);
   const trio = await makePricedTrio();

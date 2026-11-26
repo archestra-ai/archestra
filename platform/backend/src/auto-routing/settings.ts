@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Transaction } from "@/database";
 import {
   AgentModel,
@@ -13,6 +14,7 @@ import { ApiError } from "@/types";
 import type {
   AutoRouter,
   AutoRoutingTierSetting,
+  InsertAutoRouter,
   RoutingPlanRecord,
   RoutingPlanTrigger,
   UpdateAutoRouter,
@@ -28,11 +30,15 @@ import type {
 } from "@/types/auto-routing-api";
 import { scanOnFirstEnable } from "./backfill";
 import {
+  dailyVolume,
   type FitSessions,
   fitInputsUnchanged,
   fitNow,
   infeasibleBudget,
+  type PastReads,
+  pastReads,
   readFitWindow,
+  readsPastSessions,
 } from "./fit";
 import { activeSourceVersion, DEFAULT_SCORER_MODEL } from "./signals";
 import { scorerState } from "./signals/jev-session";
@@ -74,12 +80,13 @@ export async function getAutoRoutingState(
           .map((key) => ({ id: key.id, name: key.name })),
       },
     ],
+    defaultDecisionModel: DEFAULT_SCORER_MODEL,
   };
 }
 
 /**
  * Turns every router of the organization on or off. Turning it on scans the
- * organization's past sessions once for the router that learns from them; the
+ * organization's past sessions once when a router learns from them; the
  * dispatcher fits each configured router within a minute.
  */
 export async function setAutoRoutingEnabled(
@@ -89,8 +96,7 @@ export async function setAutoRoutingEnabled(
   await OrganizationModel.patch(organizationId, {
     autoRoutingEnabled: enabled,
   });
-  if (enabled && (await AutoRouterModel.findPastSessionsRouter(organizationId)))
-    await scanOnFirstEnable(organizationId);
+  if (enabled) await scanOnFirstEnable(organizationId);
   return getAutoRoutingState(organizationId);
 }
 
@@ -109,7 +115,11 @@ export async function getAutoRouter(
   return describeOne(await loadAutoRouter(organizationId, routerId));
 }
 
-/** Creates a complete router, which starts cold: it learns from its own sessions only. */
+/**
+ * Creates a complete router. It learns from its own sessions and, unless
+ * told not to, from the organization's past ones, so its budget must be met
+ * on them as an update's must; without past sessions it starts cold.
+ */
 export async function createAutoRouter(
   organizationId: string,
   body: CreateAutoRouterBody,
@@ -121,18 +131,25 @@ export async function createAutoRouter(
   if (await AutoRouterModel.findByName(organizationId, body.name)) {
     throw new ApiError(409, `An auto router named "${body.name}" exists.`);
   }
+  const values = {
+    name: body.name,
+    budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
+    budgetPreset: body.budgetPreset ?? null,
+    scorerApiKeyId: body.decisionModel?.apiKeyId ?? null,
+    scorerModel: body.decisionModel?.model ?? DEFAULT_SCORER_MODEL,
+    learnFromPastSessions: body.learnFromPastSessions ?? true,
+    expectedTrafficFactor: body.expectedTrafficFactor ?? 1,
+    tiers: body.tiers,
+  };
+  await assertFeasibleBudget(draftRouter(organizationId, values));
   const created = await AutoRouterModel.create(
     organizationId,
-    {
-      name: body.name,
-      budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
-      budgetPreset: body.budgetPreset ?? null,
-      scorerApiKeyId: body.decisionModel?.apiKeyId ?? null,
-      scorerModel: body.decisionModel?.model ?? DEFAULT_SCORER_MODEL,
-      tiers: body.tiers,
-    },
+    values,
     assertValidRouter,
   );
+  if (created.enabled && readsPastSessions(created)) {
+    await scanOnFirstEnable(organizationId);
+  }
   return fitAndDescribe(created.id, "initial");
 }
 
@@ -161,6 +178,8 @@ export async function updateAutoRouter(
           : undefined,
     scorerApiKeyId: body.decisionModel?.apiKeyId,
     scorerModel: body.decisionModel?.model,
+    learnFromPastSessions: body.learnFromPastSessions,
+    expectedTrafficFactor: body.expectedTrafficFactor,
     tiers: body.tiers,
   };
   // The feasibility fit runs outside the routing-plan lock; the write then
@@ -193,6 +212,9 @@ export async function updateAutoRouter(
       throw error;
     });
     if (!updated) await loadAutoRouter(organizationId, routerId);
+  }
+  if (updated.enabled && readsPastSessions(updated)) {
+    await scanOnFirstEnable(organizationId);
   }
   return fitAndDescribe(routerId, "settings");
 }
@@ -415,6 +437,40 @@ async function assertValidDecisionModel(
   }
 }
 
+type DraftValues = InsertAutoRouter &
+  Pick<
+    AutoRouter,
+    | "budgetPreset"
+    | "scorerApiKeyId"
+    | "learnFromPastSessions"
+    | "expectedTrafficFactor"
+  > & { tiers: NonNullable<UpdateAutoRouter["tiers"]> };
+
+/** The router `values` would create, for a fit that publishes nothing: it has no sessions of its own yet. */
+function draftRouter(organizationId: string, values: DraftValues): AutoRouter {
+  return {
+    id: randomUUID(),
+    organizationId,
+    name: values.name,
+    enabled: true,
+    budgetUsdPerDay: values.budgetUsdPerDay ?? null,
+    budgetPreset: values.budgetPreset,
+    scorerApiKeyId: values.scorerApiKeyId,
+    scorerModel: values.scorerModel,
+    scorerVersionId: null,
+    generation: 0,
+    plannedGeneration: 0,
+    learnFromPastSessions: values.learnFromPastSessions,
+    expectedTrafficFactor: values.expectedTrafficFactor,
+    fastModelId: values.tiers.fast.modelId,
+    normalModelId: values.tiers.normal.modelId,
+    smartModelId: values.tiers.smart.modelId,
+    fastApiKeyId: values.tiers.fast.providerApiKeyId,
+    normalApiKeyId: values.tiers.normal.providerApiKeyId,
+    smartApiKeyId: values.tiers.smart.providerApiKeyId,
+  };
+}
+
 /** Runs a fit on `next` that publishes nothing, so a budget the trio cannot meet is never stored. */
 async function assertFeasibleBudget(next: AutoRouter): Promise<void> {
   const cheapest = await infeasibleBudget(next);
@@ -433,6 +489,9 @@ type DescribeContext = {
   defaultAutoRouterId: string | null;
   virtualApiKeyIds: Map<string, string[]>;
   primaryScorerKey: { id: string; name: string } | null;
+  /** One watermark and one past-window read for every router described together. */
+  inputWatermark: Date;
+  pastReads: PastReads;
 };
 
 async function describeContext(
@@ -454,6 +513,8 @@ async function describeContext(
     defaultAutoRouterId: organization?.defaultAutoRouterId ?? null,
     virtualApiKeyIds,
     primaryScorerKey: primary && { id: primary.id, name: primary.name },
+    inputWatermark: new Date(),
+    pastReads: pastReads(),
   };
 }
 
@@ -510,7 +571,8 @@ async function describe(
       : await readFitWindow({
           router,
           scorerVersionId: scorerVersion.id,
-          inputWatermark: new Date(),
+          inputWatermark: context.inputWatermark,
+          pastReads: context.pastReads,
         });
   return {
     id: router.id,
@@ -524,7 +586,14 @@ async function describe(
       apiKeyId: router.scorerApiKeyId,
       model: router.scorerModel,
     },
-    usesPastSessions: router.usesPastSessions,
+    learnFromPastSessions: router.learnFromPastSessions,
+    readsPastSessions: readsPastSessions(router),
+    expectedTrafficFactor: router.expectedTrafficFactor,
+    traffic: {
+      volumeSource: progress.volumeSource,
+      pastBaseline:
+        progress.frameId === null ? null : dailyVolume(progress.pastVolume),
+    },
     virtualApiKeyIds: context.virtualApiKeyIds.get(router.id) ?? [],
     usage: {
       agentCount: context.agentCounts.get(router.id) ?? 0,
@@ -540,6 +609,7 @@ async function describe(
         scorerVersionId: scorerVersion.id,
         sessions: progress.sessions,
         required: progress.minSessions,
+        pastSessions: progress.pastSessions,
       },
       lastFitError: latest?.status === "failed" ? latest.error : null,
       scorer,

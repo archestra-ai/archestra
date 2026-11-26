@@ -757,6 +757,7 @@ export const handlers: HttpHandler[] = [
     enabled: false,
     eligibleApiKeyIds: [],
     decisionProviders: [],
+    defaultDecisionModel: "jev-1.13.0",
   }),
   ...getJson("/api/organization/agent-runtime-tiers", agentRuntimeTiersSeed),
   // The agent settings page checks which runtime agents run on the default.

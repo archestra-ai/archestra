@@ -44,8 +44,6 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
 
 import { CompactToolGroup } from "./compact-tool-call";
 import { McpTaskProvider } from "./mcp-task-context";
-import { RemedyChainCard } from "./openappa-remedy-chain-card";
-import { identifyRemedyChains } from "./openappa-remedy-chains";
 import {
   collectPreviewedChanges,
   PreviewedChangesProvider,
@@ -786,130 +784,7 @@ describe("CompactToolGroup", () => {
     );
   });
 
-  it.each([
-    { turnActive: true, name: "read file (running)", dot: "bg-blue-500" },
-    { turnActive: false, name: "read file (blocked)", dot: "bg-orange-500" },
-  ])("shows a negotiating guarded call as running while its turn is active ($turnActive)", ({
-    turnActive,
-    name,
-    dot,
-  }) => {
-    mockGetToolShortName.mockImplementation((toolName: string) =>
-      toolName.startsWith("archestra__")
-        ? toolName.replace("archestra__", "")
-        : null,
-    );
-    const ruling =
-      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0d0d0d0d0d0d0d0d")';
-    const notice = {
-      type: "tool-archestra__get_remedy_plans",
-      state: "output-available",
-      toolCallId: "call-notice",
-      input: {
-        tool: "fs__read_file",
-        arguments: {},
-        ruling,
-        notice: { v: 1, call_id: "call-notice" },
-      },
-      output: ruling,
-    };
-    const [chain] = identifyRemedyChains([notice], {
-      getToolShortName: mockGetToolShortName,
-    });
-
-    render(
-      <CompactToolGroup
-        turnActive={turnActive}
-        tools={[
-          {
-            kind: "tool",
-            key: "chain-1",
-            toolName: "archestra__get_remedy_plans",
-            part: notice as never,
-            toolResultPart: null,
-            errorText: undefined,
-            remedyChain: chain,
-          },
-        ]}
-      />,
-    );
-
-    const circle = screen.getByRole("button", { name });
-    const statusDot = circle.querySelector("span.absolute");
-    expect(statusDot?.className).toContain(dot);
-    expect(statusDot?.className.includes("animate-pulse")).toBe(turnActive);
-  });
-
-  it.each([
-    { released: false, dialogs: 0 },
-    { released: true, dialogs: 1 },
-  ])("opens a guarded credential setup's dialog only once it is released (released: $released)", ({
-    released,
-    dialogs,
-  }) => {
-    mockGetToolShortName.mockImplementation((name: string) =>
-      name.startsWith("archestra__") ? name.replace("archestra__", "") : null,
-    );
-    const target = "archestra__request_runtime_credential_setup";
-    const ruling =
-      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0c0c0c0c0c0c0c0c")';
-    const notice = {
-      type: "tool-archestra__get_remedy_plans",
-      state: "output-available",
-      toolCallId: "call-notice",
-      input: {
-        tool: target,
-        arguments: { kind: "github_app" },
-        ruling,
-        notice: { v: 1, call_id: "call-notice" },
-      },
-      output: ruling,
-    };
-    const parts: unknown[] = [
-      notice,
-      {
-        type: "tool-archestra__execute_remedy_plan",
-        state: "output-available",
-        toolCallId: "call-remedy",
-        input: { offer_id: "0c0c0c0c0c0c0c0c" },
-        output: "[appa] Authorized.",
-      },
-    ];
-    if (released) {
-      parts.push({
-        type: `tool-${target}`,
-        state: "output-available",
-        toolCallId: "call-retry",
-        input: { kind: "github_app" },
-        output: { action: "open_credential_dialog", kind: "github_app" },
-      });
-    }
-    const [chain] = identifyRemedyChains(parts, {
-      getToolShortName: mockGetToolShortName,
-    });
-
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <CompactToolGroup
-          tools={[
-            {
-              kind: "tool",
-              key: "chain-1",
-              toolName: "archestra__get_remedy_plans",
-              part: notice as never,
-              toolResultPart: null,
-              errorText: undefined,
-              remedyChain: chain,
-            },
-          ]}
-        />
-      </QueryClientProvider>,
-    );
-
-    expect(screen.queryAllByRole("dialog", { name: "" })).toHaveLength(dialogs);
-  });
-
-  it("shows a denial notice's arguments as the object they hold", async () => {
+  it("shows a denial notice as one call: the one the model tried, blocked, with its ruling", async () => {
     const noticeToolName = "archestra__get_remedy_plans";
     mockGetToolShortName.mockImplementation((name: string) =>
       name === noticeToolName ? TOOL_GET_REMEDY_PLANS_SHORT_NAME : null,
@@ -937,7 +812,16 @@ describe("CompactToolGroup", () => {
                   ruling: "[appa] Blocked: this call cannot run yet.",
                   notice: { v: 1, call_id: "call-notice" },
                 },
-                output: "[appa] Blocked: this call cannot run yet.",
+                // As stored: the ruling, with the identity the notice ran as.
+                output: {
+                  _meta: {
+                    archestraExecutedAs: {
+                      kind: "platform",
+                      callerUserId: "user-1",
+                    },
+                  },
+                  content: "[appa] Blocked: this call cannot run yet.",
+                },
               } as never,
               toolResultPart: null,
               errorText: undefined,
@@ -946,29 +830,103 @@ describe("CompactToolGroup", () => {
         />
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole("button"));
+    expect(
+      screen
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["load skill (blocked)"]);
 
+    fireEvent.click(
+      screen.getByRole("button", { name: "load skill (blocked)" }),
+    );
+
+    // The card is the attempted call: its name, a Blocked state, and the
+    // arguments the model sent.
+    expect(screen.getByText("archestra__load_skill")).toBeVisible();
     expect(container).toHaveTextContent('"name": "appa-guide"');
+    // The identity sits on the card's own header.
+    expect(
+      screen.getByText("archestra__load_skill").closest("button"),
+    ).toHaveTextContent("Called as");
+
+    // Below them is the notice call's result as the model got it, in the
+    // standard result block under the Guardrails mark. The notice call is
+    // not a second call on screen.
+    // "Blocked" is the card's state and the label of the result's field.
+    const [state, ruling] = screen.getAllByText("Blocked");
+    expect(state.closest("button")).toHaveTextContent("archestra__load_skill");
+    expect(ruling).toBeVisible();
+    expect(
+      ruling.parentElement?.querySelector("svg.lucide-open-appa"),
+    ).not.toBeNull();
+    expect(container).not.toHaveTextContent("get_remedy_plans");
+    expect(container).not.toHaveTextContent("Completed");
+    // The result is prose, so its block wraps to the card.
+    expect(wrapsToTheCard(ruling)).toBe(true);
+
+    // The ruling shows once. The notice's arguments repeat the attempt and
+    // the ruling, so they are not listed again.
+    expect(
+      container.textContent?.split("[appa] Blocked: this call cannot run yet.")
+        .length,
+    ).toBe(2);
+    expect(container).not.toHaveTextContent("call_id");
+    expect(container).not.toHaveTextContent('"ruling"');
+  });
+
+  it("shows a get_remedy_plans call that carries no notice as an ordinary call", () => {
+    const toolName = "archestra__get_remedy_plans";
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name === toolName ? TOOL_GET_REMEDY_PLANS_SHORT_NAME : null,
+    );
+    vi.mocked(useSession).mockReturnValue({ data: undefined } as never);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "direct-1",
+              toolName,
+              part: {
+                type: `tool-${toolName}`,
+                state: "output-available",
+                toolCallId: "call-direct",
+                input: {},
+                output: "No call is blocked.",
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "get remedy plans" }),
+    ).toBeVisible();
   });
 
   it.each([
     {
       ruling: "deny",
       text: "[appa] Denied: the human reviewer refused this call to archestra__todo_write.",
-      circle: "Guardrails step (denied by you)",
+      circle: "execute remedy plan (denied by you)",
       header: "Denied by you",
     },
     {
       ruling: "approve",
       text: "[appa] Authorized. Call the archestra__todo_write tool again with exactly these arguments: {}",
-      circle: "Guardrails step (approved by you)",
+      circle: "execute remedy plan (approved by you)",
       header: "Approved by you",
     },
     {
       // The reviewer approved, but a policy publish retired the offer first.
       ruling: "superseded",
       text: "[appa] this offer no longer stands; re-propose the call",
-      circle: "Guardrails step (policy changed, the agent will ask again)",
+      circle: "execute remedy plan (policy changed, the agent will ask again)",
       header: "Policy changed, the agent will ask again",
     },
   ])("says the viewer's own ruling on a reviewed remedy ($ruling)", ({
@@ -1014,150 +972,238 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByText("Completed")).not.toBeInTheDocument();
   });
 
-  it.each([
-    { humanRuling: undefined, label: "Blocked" },
-    { humanRuling: "deny", label: "Denied by you" },
-  ])("names a guarded call by its target until it is released ($label)", ({
-    humanRuling,
-    label,
-  }) => {
-    mockGetToolShortName.mockImplementation((name: string) =>
-      name.startsWith("archestra__") ? name.replace("archestra__", "") : null,
-    );
-    const ruling =
-      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0b0b0b0b0b0b0b0b", plan: "Accept")';
-    const notice = {
-      type: "tool-archestra__get_remedy_plans",
-      state: "output-available",
-      toolCallId: "call-notice",
-      input: {
-        tool: "fs__read_file",
-        arguments: { path: "/notes.md" },
-        ruling,
-        notice: { v: 1, call_id: "call-notice" },
-      },
-      output: ruling,
-    };
-    const [chain] = identifyRemedyChains(
-      [
-        notice,
-        {
-          type: "tool-archestra__execute_remedy_plan",
-          state: "output-available",
-          toolCallId: "call-remedy",
-          input: { offer_id: "0b0b0b0b0b0b0b0b", plan: "Accept" },
-          output: {
-            content: [{ type: "text", text: "[appa] Not authorized." }],
-            ...(humanRuling
-              ? { _meta: { archestraHumanRuling: humanRuling } }
-              : {}),
-          },
-        },
-      ],
-      { getToolShortName: mockGetToolShortName },
-    );
-
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <CompactToolGroup
-          tools={[
-            {
-              kind: "tool",
-              key: "chain-1",
-              toolName: "archestra__get_remedy_plans",
-              part: notice as never,
-              toolResultPart: null,
-              errorText: undefined,
-              remedyChain: chain,
-            },
-          ]}
-        />
-      </QueryClientProvider>,
-    );
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: `read file (${label.toLowerCase()})`,
-      }),
-    );
-
-    expect(screen.getByText("fs__read_file")).toBeInTheDocument();
-    expect(screen.getAllByText(label).length).toBeGreaterThan(0);
-    expect(screen.getByText("Guardrails")).toBeInTheDocument();
-    expect(
-      screen
-        .getAllByText(/^(Checked what's allowed|Guardrails step)$/)
-        .map((node) => node.textContent),
-    ).toEqual(["Checked what's allowed", "Guardrails step"]);
-  });
-
-  describe("a remedy step reaching the person", () => {
+  describe("a guarded call", () => {
     const ruling =
       '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0a0a0a0a0a0a0a0a", plan: "Share it")';
-    const card = (remedy: Record<string, unknown>) => {
+    const notice = {
+      kind: "tool" as const,
+      key: "notice-1",
+      toolName: "archestra__get_remedy_plans",
+      part: {
+        type: "tool-archestra__get_remedy_plans",
+        state: "output-available",
+        toolCallId: "call-notice",
+        input: {
+          tool: "fs__read_file",
+          arguments: { path: "/notes.md" },
+          ruling,
+          notice: { v: 1, call_id: "call-notice" },
+        },
+        output: ruling,
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    };
+    const remedy = (part: Record<string, unknown>) => ({
+      kind: "tool" as const,
+      key: "remedy-1",
+      toolName: "archestra__execute_remedy_plan",
+      part: {
+        type: "tool-archestra__execute_remedy_plan",
+        toolCallId: "call-remedy",
+        input: { offer_id: "0a0a0a0a0a0a0a0a", plan: "Share it" },
+        ...part,
+      } as never,
+      toolResultPart: null,
+      errorText:
+        typeof part.errorText === "string" ? part.errorText : undefined,
+    });
+    const retry = {
+      kind: "tool" as const,
+      key: "retry-1",
+      toolName: "fs__read_file",
+      part: {
+        type: "tool-fs__read_file",
+        state: "output-available",
+        toolCallId: "call-retry",
+        input: { path: "/notes.md" },
+        output: "notes",
+      } as never,
+      toolResultPart: null,
+      errorText: undefined,
+    };
+    const row = (tools: Parameters<typeof CompactToolGroup>[0]["tools"]) => {
       mockGetToolShortName.mockImplementation((name: string) =>
         name.startsWith("archestra__") ? name.replace("archestra__", "") : null,
       );
-      const [chain] = identifyRemedyChains(
-        [
-          {
-            type: "tool-archestra__get_remedy_plans",
-            state: "output-available",
-            toolCallId: "call-notice",
-            input: {
-              tool: "fs__read_file",
-              arguments: { path: "/notes.md" },
-              ruling,
-              notice: { v: 1, call_id: "call-notice" },
-            },
-            output: ruling,
-          },
-          {
-            type: "tool-archestra__execute_remedy_plan",
-            toolCallId: "call-remedy",
-            input: { offer_id: "0a0a0a0a0a0a0a0a", plan: "Share it" },
-            ...remedy,
-          },
-        ] as never,
-        { getToolShortName: mockGetToolShortName },
-      );
+      vi.mocked(useSession).mockReturnValue({ data: undefined } as never);
       return (
         <QueryClientProvider client={new QueryClient()}>
-          <RemedyChainCard
-            chain={chain}
-            collapsible
-            onToolApprovalResponse={vi.fn()}
-          />
+          <CompactToolGroup tools={tools} onToolApprovalResponse={vi.fn()} />
         </QueryClientProvider>
       );
     };
 
+    it.each([
+      {
+        name: "still running",
+        part: { state: "input-available", output: undefined },
+        turnActive: true,
+        circle: "read file (running)",
+        status: "Running",
+      },
+      {
+        name: "failed",
+        part: {
+          state: "output-error",
+          output: undefined,
+          errorText: "The notice could not be delivered",
+        },
+        errorText: "The notice could not be delivered",
+        turnActive: false,
+        circle: "read file (error)",
+        status: "Error",
+      },
+      {
+        name: "cut off when its turn ended",
+        part: { state: "input-available", output: undefined },
+        turnActive: false,
+        circle: "read file (cancelled)",
+        status: "Cancelled",
+      },
+    ])("names a notice that is $name after the call it blocked, without calling it blocked", ({
+      part,
+      errorText,
+      turnActive,
+      circle,
+      status,
+    }) => {
+      mockGetToolShortName.mockImplementation((name: string) =>
+        name.startsWith("archestra__") ? name.replace("archestra__", "") : null,
+      );
+      vi.mocked(useSession).mockReturnValue({ data: undefined } as never);
+      const { container } = render(
+        <QueryClientProvider client={new QueryClient()}>
+          <CompactToolGroup
+            turnActive={turnActive}
+            tools={[
+              {
+                ...notice,
+                part: { ...(notice.part as object), ...part } as never,
+                errorText,
+              },
+            ]}
+          />
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: circle }));
+      // The card is the attempted call, in the notice's own state.
+      const header = screen.getByText("fs__read_file").closest("button");
+      expect(header).toHaveTextContent(status);
+      expect(container).not.toHaveTextContent("Blocked");
+      expect(container).not.toHaveTextContent("get_remedy_plans");
+    });
+
+    it("shows the blocked attempt, the remedy and the released call as three circles", () => {
+      const { container } = render(
+        row([
+          notice,
+          remedy({ state: "output-available", output: "[appa] Authorized." }),
+          retry,
+        ]),
+      );
+
+      expect(
+        screen
+          .getAllByRole("button")
+          .map((button) => button.getAttribute("aria-label")),
+      ).toEqual(["read file (blocked)", "execute remedy plan", "read file"]);
+
+      // The Guardrails runtime's own call carries its mark. Both calls to
+      // the tool keep the tool's icon, the blocked one included.
+      const marked = (name: string) =>
+        screen
+          .getByRole("button", { name })
+          .querySelector("svg.lucide-open-appa") !== null;
+      expect(marked("read file (blocked)")).toBe(false);
+      expect(marked("execute remedy plan")).toBe(true);
+      expect(marked("read file")).toBe(false);
+
+      // The released call's card is its own request and result. Another
+      // tool's result keeps its lines as the tool wrote them.
+      fireEvent.click(screen.getByRole("button", { name: "read file" }));
+      expect(container).toHaveTextContent('"path": "/notes.md"');
+      expect(wrapsToTheCard(screen.getByText("Result"))).toBe(false);
+      expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
+    });
+
     it("opens the plan when a step already on screen starts waiting for approval", () => {
       const { rerender, container } = render(
-        card({ state: "input-available" }),
+        row([notice, remedy({ state: "input-available" })]),
       );
       expect(container).not.toHaveTextContent("Share it");
 
       rerender(
-        card({
-          state: "approval-requested",
-          approval: { id: "approval-1" },
-        }),
+        row([
+          notice,
+          remedy({
+            state: "approval-requested",
+            approval: { id: "approval-1" },
+          }),
+        ]),
       );
 
       expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
       expect(container).toHaveTextContent("Share it");
     });
 
-    it("shows why a step failed without expanding it, minus the runtime's marker", () => {
+    it("shows why a remedy failed, as the tool returned it", () => {
       render(
-        card({
-          state: "output-error",
-          errorText: "[appa] Not authorized.",
-        }),
+        row([
+          notice,
+          remedy({
+            state: "output-error",
+            errorText: "[appa] Not authorized.",
+          }),
+        ]),
       );
-      fireEvent.click(screen.getByText("fs__read_file"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "execute remedy plan (error)" }),
+      );
 
-      expect(screen.getByText("Not authorized.")).toBeVisible();
+      expect(screen.getByText("[appa] Not authorized.")).toBeVisible();
+    });
+
+    it("shows a settled remedy's request and result as the call sent and got them", () => {
+      const { container } = render(
+        row([
+          remedy({
+            state: "output-available",
+            output: {
+              content: [
+                {
+                  type: "text",
+                  text: "[appa] Authorized. Call the fs__read_file tool again with exactly these arguments: {}",
+                },
+              ],
+            },
+          }),
+        ]),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "execute remedy plan" }),
+      );
+
+      // The request is the call's own payload, like any tool's.
+      expect(container).toHaveTextContent('"offer_id": "0a0a0a0a0a0a0a0a"');
+      expect(container).toHaveTextContent('"plan": "Share it"');
+      // The result is shown as the tool returned it, like any tool's.
+      const request = screen.getByText("Request");
+      const result = screen.getByText("Result");
+      expect(
+        request.compareDocumentPosition(result) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(container).toHaveTextContent(
+        "[appa] Authorized. Call the fs__read_file tool again with exactly these arguments: {}",
+      );
+      // The runtime answers in prose, so the block wraps to the card.
+      expect(wrapsToTheCard(result)).toBe(true);
+      // The circle carries the Guardrails mark; the card does not repeat it.
+      expect(
+        request.closest("[data-state]")?.querySelector("svg.lucide-open-appa"),
+      ).toBeNull();
     });
   });
 
@@ -1799,40 +1845,16 @@ describe("CompactToolGroup", () => {
     fireEvent.click(queued);
     expect(screen.getByText("Queued")).toBeVisible();
   });
-
-  it("gives a blocked call the ruling that stopped it as its result", () => {
-    mockGetToolShortName.mockImplementation((toolName: string) =>
-      toolName.startsWith("archestra__")
-        ? toolName.replace("archestra__", "")
-        : null,
-    );
-    const ruling =
-      '[appa] Blocked: fs__read_file cannot run yet.\n  - archestra__execute_remedy_plan(offer_id: "0d0d0d0d0d0d0d0d")';
-    const notice = {
-      type: "tool-archestra__get_remedy_plans",
-      state: "output-available",
-      toolCallId: "call-notice",
-      input: {
-        tool: "fs__read_file",
-        arguments: { path: "/etc/hosts" },
-        ruling,
-        notice: { v: 1, call_id: "call-notice" },
-      },
-      output: ruling,
-    };
-    const [chain] = identifyRemedyChains([notice], {
-      getToolShortName: mockGetToolShortName,
-    });
-
-    const { rerender } = render(<RemedyChainCard chain={chain} turnActive />);
-    // Still being negotiated: the call may yet run, so it has no result.
-    expect(screen.queryByText("Result")).not.toBeInTheDocument();
-
-    rerender(<RemedyChainCard chain={chain} />);
-    const result = screen.getByText("Result");
-    expect(result).toBeVisible();
-    expect(result.parentElement?.parentElement?.textContent ?? "").toContain(
-      "Blocked: fs__read_file cannot run yet.",
-    );
-  });
 });
+
+/**
+ * Whether the code block of the section a label heads wraps its lines. The
+ * block wraps on its `pre` before the highlighter loads and on the `code`
+ * inside it afterwards.
+ */
+function wrapsToTheCard(sectionLabel: HTMLElement): boolean {
+  const section = sectionLabel.parentElement?.parentElement;
+  return [section?.querySelector("pre"), section?.querySelector("pre code")]
+    .filter((el): el is HTMLElement => el instanceof HTMLElement)
+    .some((el) => el.style.whiteSpace === "pre-wrap");
+}

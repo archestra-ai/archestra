@@ -131120,12 +131120,16 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "defaultDecisionModel": {
+                      "type": "string"
                     }
                   },
                   "required": [
                     "enabled",
                     "eligibleApiKeyIds",
-                    "decisionProviders"
+                    "decisionProviders",
+                    "defaultDecisionModel"
                   ],
                   "additionalProperties": false
                 }
@@ -131499,12 +131503,16 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "defaultDecisionModel": {
+                      "type": "string"
                     }
                   },
                   "required": [
                     "enabled",
                     "eligibleApiKeyIds",
-                    "decisionProviders"
+                    "decisionProviders",
+                    "defaultDecisionModel"
                   ],
                   "additionalProperties": false
                 }
@@ -132040,8 +132048,52 @@
                         ],
                         "additionalProperties": false
                       },
-                      "usesPastSessions": {
+                      "learnFromPastSessions": {
                         "type": "boolean"
+                      },
+                      "readsPastSessions": {
+                        "type": "boolean"
+                      },
+                      "expectedTrafficFactor": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true
+                      },
+                      "traffic": {
+                        "type": "object",
+                        "properties": {
+                          "volumeSource": {
+                            "type": "string",
+                            "enum": [
+                              "live",
+                              "history"
+                            ]
+                          },
+                          "pastBaseline": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "sessionsPerDay": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "tokensPerDay": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "sessionsPerDay",
+                              "tokensPerDay"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "volumeSource",
+                          "pastBaseline"
+                        ],
+                        "additionalProperties": false
                       },
                       "virtualApiKeyIds": {
                         "type": "array",
@@ -132120,12 +132172,18 @@
                                 "minimum": 0,
                                 "exclusiveMinimum": true,
                                 "maximum": 9007199254740991
+                              },
+                              "pastSessions": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
                               }
                             },
                             "required": [
                               "scorerVersionId",
                               "sessions",
-                              "required"
+                              "required",
+                              "pastSessions"
                             ],
                             "additionalProperties": false
                           },
@@ -132178,7 +132236,10 @@
                       "budgetPreset",
                       "tiers",
                       "decisionModel",
-                      "usesPastSessions",
+                      "learnFromPastSessions",
+                      "readsPastSessions",
+                      "expectedTrafficFactor",
+                      "traffic",
                       "virtualApiKeyIds",
                       "usage",
                       "generation",
@@ -132436,7 +132497,7 @@
         "tags": [
           "Auto Routing"
         ],
-        "description": "Create an auto router with its tiers, budget and decision model. It learns from its own sessions only\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:update`](/docs/reference/permissions#llmProxy:update): Modify LLM Proxy configuration",
+        "description": "Create an auto router with its tiers, budget and decision model. Unless `learnFromPastSessions` is false, it also learns from the organization's past sessions\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:update`](/docs/reference/permissions#llmProxy:update): Modify LLM Proxy configuration",
         "requestBody": {
           "required": true,
           "content": {
@@ -132552,6 +132613,15 @@
                       "model"
                     ],
                     "additionalProperties": false
+                  },
+                  "learnFromPastSessions": {
+                    "type": "boolean"
+                  },
+                  "expectedTrafficFactor": {
+                    "type": "number",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 100
                   }
                 },
                 "required": [
@@ -132842,8 +132912,52 @@
                       ],
                       "additionalProperties": false
                     },
-                    "usesPastSessions": {
+                    "learnFromPastSessions": {
                       "type": "boolean"
+                    },
+                    "readsPastSessions": {
+                      "type": "boolean"
+                    },
+                    "expectedTrafficFactor": {
+                      "type": "number",
+                      "minimum": 0,
+                      "exclusiveMinimum": true
+                    },
+                    "traffic": {
+                      "type": "object",
+                      "properties": {
+                        "volumeSource": {
+                          "type": "string",
+                          "enum": [
+                            "live",
+                            "history"
+                          ]
+                        },
+                        "pastBaseline": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "sessionsPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "tokensPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sessionsPerDay",
+                            "tokensPerDay"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "volumeSource",
+                        "pastBaseline"
+                      ],
+                      "additionalProperties": false
                     },
                     "virtualApiKeyIds": {
                       "type": "array",
@@ -132922,12 +133036,18 @@
                               "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
+                            },
+                            "pastSessions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
                             "scorerVersionId",
                             "sessions",
-                            "required"
+                            "required",
+                            "pastSessions"
                           ],
                           "additionalProperties": false
                         },
@@ -133075,7 +133195,10 @@
                     "budgetPreset",
                     "tiers",
                     "decisionModel",
-                    "usesPastSessions",
+                    "learnFromPastSessions",
+                    "readsPastSessions",
+                    "expectedTrafficFactor",
+                    "traffic",
                     "virtualApiKeyIds",
                     "usage",
                     "generation",
@@ -133913,8 +134036,52 @@
                       ],
                       "additionalProperties": false
                     },
-                    "usesPastSessions": {
+                    "learnFromPastSessions": {
                       "type": "boolean"
+                    },
+                    "readsPastSessions": {
+                      "type": "boolean"
+                    },
+                    "expectedTrafficFactor": {
+                      "type": "number",
+                      "minimum": 0,
+                      "exclusiveMinimum": true
+                    },
+                    "traffic": {
+                      "type": "object",
+                      "properties": {
+                        "volumeSource": {
+                          "type": "string",
+                          "enum": [
+                            "live",
+                            "history"
+                          ]
+                        },
+                        "pastBaseline": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "sessionsPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "tokensPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sessionsPerDay",
+                            "tokensPerDay"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "volumeSource",
+                        "pastBaseline"
+                      ],
+                      "additionalProperties": false
                     },
                     "virtualApiKeyIds": {
                       "type": "array",
@@ -133993,12 +134160,18 @@
                               "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
+                            },
+                            "pastSessions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
                             "scorerVersionId",
                             "sessions",
-                            "required"
+                            "required",
+                            "pastSessions"
                           ],
                           "additionalProperties": false
                         },
@@ -134051,7 +134224,10 @@
                     "budgetPreset",
                     "tiers",
                     "decisionModel",
-                    "usesPastSessions",
+                    "learnFromPastSessions",
+                    "readsPastSessions",
+                    "expectedTrafficFactor",
+                    "traffic",
                     "virtualApiKeyIds",
                     "usage",
                     "generation",
@@ -134435,6 +134611,15 @@
                       "model"
                     ],
                     "additionalProperties": false
+                  },
+                  "learnFromPastSessions": {
+                    "type": "boolean"
+                  },
+                  "expectedTrafficFactor": {
+                    "type": "number",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 100
                   }
                 },
                 "additionalProperties": false
@@ -134733,8 +134918,52 @@
                       ],
                       "additionalProperties": false
                     },
-                    "usesPastSessions": {
+                    "learnFromPastSessions": {
                       "type": "boolean"
+                    },
+                    "readsPastSessions": {
+                      "type": "boolean"
+                    },
+                    "expectedTrafficFactor": {
+                      "type": "number",
+                      "minimum": 0,
+                      "exclusiveMinimum": true
+                    },
+                    "traffic": {
+                      "type": "object",
+                      "properties": {
+                        "volumeSource": {
+                          "type": "string",
+                          "enum": [
+                            "live",
+                            "history"
+                          ]
+                        },
+                        "pastBaseline": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "sessionsPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "tokensPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sessionsPerDay",
+                            "tokensPerDay"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "volumeSource",
+                        "pastBaseline"
+                      ],
+                      "additionalProperties": false
                     },
                     "virtualApiKeyIds": {
                       "type": "array",
@@ -134813,12 +135042,18 @@
                               "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
+                            },
+                            "pastSessions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
                             "scorerVersionId",
                             "sessions",
-                            "required"
+                            "required",
+                            "pastSessions"
                           ],
                           "additionalProperties": false
                         },
@@ -134966,7 +135201,10 @@
                     "budgetPreset",
                     "tiers",
                     "decisionModel",
-                    "usesPastSessions",
+                    "learnFromPastSessions",
+                    "readsPastSessions",
+                    "expectedTrafficFactor",
+                    "traffic",
                     "virtualApiKeyIds",
                     "usage",
                     "generation",
@@ -136955,8 +137193,52 @@
                       ],
                       "additionalProperties": false
                     },
-                    "usesPastSessions": {
+                    "learnFromPastSessions": {
                       "type": "boolean"
+                    },
+                    "readsPastSessions": {
+                      "type": "boolean"
+                    },
+                    "expectedTrafficFactor": {
+                      "type": "number",
+                      "minimum": 0,
+                      "exclusiveMinimum": true
+                    },
+                    "traffic": {
+                      "type": "object",
+                      "properties": {
+                        "volumeSource": {
+                          "type": "string",
+                          "enum": [
+                            "live",
+                            "history"
+                          ]
+                        },
+                        "pastBaseline": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "sessionsPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "tokensPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sessionsPerDay",
+                            "tokensPerDay"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "volumeSource",
+                        "pastBaseline"
+                      ],
+                      "additionalProperties": false
                     },
                     "virtualApiKeyIds": {
                       "type": "array",
@@ -137035,12 +137317,18 @@
                               "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
+                            },
+                            "pastSessions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
                             "scorerVersionId",
                             "sessions",
-                            "required"
+                            "required",
+                            "pastSessions"
                           ],
                           "additionalProperties": false
                         },
@@ -137188,7 +137476,10 @@
                     "budgetPreset",
                     "tiers",
                     "decisionModel",
-                    "usesPastSessions",
+                    "learnFromPastSessions",
+                    "readsPastSessions",
+                    "expectedTrafficFactor",
+                    "traffic",
                     "virtualApiKeyIds",
                     "usage",
                     "generation",
@@ -137908,7 +138199,8 @@
                         "type": "number",
                         "minimum": 0,
                         "exclusiveMinimum": true,
-                        "maximum": 100
+                        "maximum": 100,
+                        "description": "Scales the fitted usage window's unscaled volume; the router's expected traffic factor is not applied on top"
                       }
                     },
                     "required": [
@@ -137932,12 +138224,60 @@
                         "type": "number",
                         "minimum": 0,
                         "exclusiveMinimum": true,
-                        "maximum": 100
+                        "maximum": 100,
+                        "description": "Scales the fitted usage window's unscaled volume; the router's expected traffic factor is not applied on top"
                       }
                     },
                     "required": [
                       "budgetPreset",
                       "volumeMultiplier"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "budgetUsdPerDay": {
+                        "type": "number",
+                        "minimum": 0.01,
+                        "maximum": 9999999999.99
+                      },
+                      "expectedTrafficFactor": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true,
+                        "maximum": 100,
+                        "description": "An expected traffic factor to simulate in place of the router's, applied as a fit applies it: only while past sessions size the plan"
+                      }
+                    },
+                    "required": [
+                      "budgetUsdPerDay",
+                      "expectedTrafficFactor"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "budgetPreset": {
+                        "type": "string",
+                        "enum": [
+                          "cost_efficient",
+                          "balanced",
+                          "intelligence"
+                        ]
+                      },
+                      "expectedTrafficFactor": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true,
+                        "maximum": 100,
+                        "description": "An expected traffic factor to simulate in place of the router's, applied as a fit applies it: only while past sessions size the plan"
+                      }
+                    },
+                    "required": [
+                      "budgetPreset",
+                      "expectedTrafficFactor"
                     ],
                     "additionalProperties": false
                   }
@@ -138070,12 +138410,18 @@
                           "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
+                        },
+                        "pastSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
                         "status",
                         "sessions",
-                        "required"
+                        "required",
+                        "pastSessions"
                       ],
                       "additionalProperties": false
                     }
@@ -138640,6 +138986,21 @@
                         "status"
                       ],
                       "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "basis_unavailable"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
                     }
                   ]
                 }
@@ -138931,7 +139292,19 @@
         "tags": [
           "Auto Routing"
         ],
-        "description": "Get the newest historical backfill and what scoring past sessions would take, for the organization's first auto router\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:read`](/docs/reference/permissions#llmProxy:read): View the LLM Proxy and its connection details",
+        "description": "Get the newest historical backfill of the organization's past sessions, which every auto router reading them shares, and what scoring them would take; with routerId, also whether that router's fit after the newest scoring run is still to come\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:read`](/docs/reference/permissions#llmProxy:read): View the LLM Proxy and its connection details",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "routerId",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -139136,6 +139509,12 @@
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
+                        "usableSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
                         "estimatedCostUsd": {
                           "type": "number"
                         },
@@ -139153,11 +139532,35 @@
                         "cutoff",
                         "sessions",
                         "remaining",
+                        "usableSessions",
                         "estimatedCostUsd",
                         "suggestedMaxCostUsd",
                         "rescore"
                       ],
                       "additionalProperties": false
+                    },
+                    "pastSessionsNeeded": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "payer": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "no_jev_key"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
                     },
                     "history": {
                       "type": "array",
@@ -139243,6 +139646,8 @@
                   "required": [
                     "backfill",
                     "scoreOffer",
+                    "pastSessionsNeeded",
+                    "payer",
                     "history"
                   ],
                   "additionalProperties": false
@@ -139489,570 +139894,6 @@
             "llmProxy:read"
           ]
         }
-      },
-      "delete": {
-        "operationId": "cancelAutoRoutingBackfill",
-        "tags": [
-          "Auto Routing"
-        ],
-        "description": "Cancel the running historical backfill\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:update`](/docs/reference/permissions#llmProxy:update): Modify LLM Proxy configuration",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "backfill": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "running",
-                            "scanned",
-                            "done",
-                            "failed",
-                            "cancelled",
-                            "superseded"
-                          ]
-                        },
-                        "phase": {
-                          "type": "string",
-                          "enum": [
-                            "scan",
-                            "score"
-                          ]
-                        },
-                        "windowStart": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "cutoff": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "eligibleSessions": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "eligibleTokens": {
-                          "type": "number",
-                          "minimum": 0
-                        },
-                        "breakdown": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "apiShape": {
-                                "type": "string",
-                                "enum": [
-                                  "chat_completions",
-                                  "responses",
-                                  "messages"
-                                ]
-                              },
-                              "client": {
-                                "type": "string"
-                              },
-                              "sessions": {
-                                "type": "integer",
-                                "minimum": 0,
-                                "maximum": 9007199254740991
-                              }
-                            },
-                            "required": [
-                              "apiShape",
-                              "client",
-                              "sessions"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "scorerCurrent": {
-                          "nullable": true,
-                          "type": "boolean"
-                        },
-                        "maxSessions": {
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
-                        },
-                        "maxCostUsd": {
-                          "nullable": true,
-                          "type": "number"
-                        },
-                        "spentCostUsd": {
-                          "type": "number"
-                        },
-                        "progress": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "sample": {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
-                            },
-                            "scored": {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
-                            },
-                            "noText": {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
-                            },
-                            "failed": {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
-                            }
-                          },
-                          "required": [
-                            "sample",
-                            "scored",
-                            "noText",
-                            "failed"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "error": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "completedAt": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "awaitingFit": {
-                          "type": "boolean"
-                        },
-                        "fitBlockedReason": {
-                          "nullable": true,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "status",
-                        "phase",
-                        "windowStart",
-                        "cutoff",
-                        "eligibleSessions",
-                        "eligibleTokens",
-                        "breakdown",
-                        "scorerCurrent",
-                        "maxSessions",
-                        "maxCostUsd",
-                        "spentCostUsd",
-                        "progress",
-                        "error",
-                        "completedAt",
-                        "awaitingFit",
-                        "fitBlockedReason"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "scoreOffer": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "backfillId": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "scorerVersionId": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "windowStart": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "cutoff": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
-                        "sessions": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "exclusiveMinimum": true,
-                          "maximum": 9007199254740991
-                        },
-                        "remaining": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "exclusiveMinimum": true,
-                          "maximum": 9007199254740991
-                        },
-                        "estimatedCostUsd": {
-                          "type": "number"
-                        },
-                        "suggestedMaxCostUsd": {
-                          "type": "number"
-                        },
-                        "rescore": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "backfillId",
-                        "scorerVersionId",
-                        "windowStart",
-                        "cutoff",
-                        "sessions",
-                        "remaining",
-                        "estimatedCostUsd",
-                        "suggestedMaxCostUsd",
-                        "rescore"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "history": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "running",
-                              "scanned",
-                              "done",
-                              "failed",
-                              "cancelled",
-                              "superseded"
-                            ]
-                          },
-                          "phase": {
-                            "type": "string",
-                            "enum": [
-                              "scan",
-                              "score"
-                            ]
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "completedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "startedByName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "foundSessions": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "scoredSessions": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "spentCostUsd": {
-                            "type": "number"
-                          },
-                          "maxCostUsd": {
-                            "nullable": true,
-                            "type": "number"
-                          },
-                          "error": {
-                            "nullable": true,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "status",
-                          "phase",
-                          "createdAt",
-                          "completedAt",
-                          "startedByName",
-                          "foundSessions",
-                          "scoredSessions",
-                          "spentCostUsd",
-                          "maxCostUsd",
-                          "error"
-                        ],
-                        "additionalProperties": false
-                      }
-                    }
-                  },
-                  "required": [
-                    "backfill",
-                    "scoreOffer",
-                    "history"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmProxy:update"
-          ]
-        }
       }
     },
     "/api/auto-routing/backfill/scan": {
@@ -140062,6 +139903,28 @@
           "Auto Routing"
         ],
         "description": "Count the past sessions auto routing could learn from; reads the database only\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:update`](/docs/reference/permissions#llmProxy:update): Modify LLM Proxy configuration",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "latestBackfillId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "latestBackfillId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Default Response",
@@ -140266,6 +140129,12 @@
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
+                        "usableSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
                         "estimatedCostUsd": {
                           "type": "number"
                         },
@@ -140283,11 +140152,35 @@
                         "cutoff",
                         "sessions",
                         "remaining",
+                        "usableSessions",
                         "estimatedCostUsd",
                         "suggestedMaxCostUsd",
                         "rescore"
                       ],
                       "additionalProperties": false
+                    },
+                    "pastSessionsNeeded": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "payer": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "no_jev_key"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
                     },
                     "history": {
                       "type": "array",
@@ -140373,6 +140266,8 @@
                   "required": [
                     "backfill",
                     "scoreOffer",
+                    "pastSessionsNeeded",
+                    "payer",
                     "history"
                   ],
                   "additionalProperties": false
@@ -140873,6 +140768,12 @@
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
+                        "usableSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
                         "estimatedCostUsd": {
                           "type": "number"
                         },
@@ -140890,11 +140791,35 @@
                         "cutoff",
                         "sessions",
                         "remaining",
+                        "usableSessions",
                         "estimatedCostUsd",
                         "suggestedMaxCostUsd",
                         "rescore"
                       ],
                       "additionalProperties": false
+                    },
+                    "pastSessionsNeeded": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "payer": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "no_jev_key"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
                     },
                     "history": {
                       "type": "array",
@@ -140980,6 +140905,630 @@
                   "required": [
                     "backfill",
                     "scoreOffer",
+                    "pastSessionsNeeded",
+                    "payer",
+                    "history"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmProxy:update"
+          ]
+        }
+      }
+    },
+    "/api/auto-routing/backfill/{id}": {
+      "delete": {
+        "operationId": "cancelAutoRoutingBackfill",
+        "tags": [
+          "Auto Routing"
+        ],
+        "description": "Cancel the historical backfill with this id while it is running or waits to be scored in the given phase\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:update`](/docs/reference/permissions#llmProxy:update): Modify LLM Proxy configuration",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "scan",
+                "score"
+              ]
+            },
+            "in": "query",
+            "name": "phase",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "backfill": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "running",
+                            "scanned",
+                            "done",
+                            "failed",
+                            "cancelled",
+                            "superseded"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "scan",
+                            "score"
+                          ]
+                        },
+                        "windowStart": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "cutoff": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "eligibleSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "eligibleTokens": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "breakdown": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "apiShape": {
+                                "type": "string",
+                                "enum": [
+                                  "chat_completions",
+                                  "responses",
+                                  "messages"
+                                ]
+                              },
+                              "client": {
+                                "type": "string"
+                              },
+                              "sessions": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "apiShape",
+                              "client",
+                              "sessions"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "scorerCurrent": {
+                          "nullable": true,
+                          "type": "boolean"
+                        },
+                        "maxSessions": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "maxCostUsd": {
+                          "nullable": true,
+                          "type": "number"
+                        },
+                        "spentCostUsd": {
+                          "type": "number"
+                        },
+                        "progress": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "sample": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "scored": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "noText": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "failed": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "sample",
+                            "scored",
+                            "noText",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "error": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "completedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "awaitingFit": {
+                          "type": "boolean"
+                        },
+                        "fitBlockedReason": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "phase",
+                        "windowStart",
+                        "cutoff",
+                        "eligibleSessions",
+                        "eligibleTokens",
+                        "breakdown",
+                        "scorerCurrent",
+                        "maxSessions",
+                        "maxCostUsd",
+                        "spentCostUsd",
+                        "progress",
+                        "error",
+                        "completedAt",
+                        "awaitingFit",
+                        "fitBlockedReason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "scoreOffer": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "backfillId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "scorerVersionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "windowStart": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "cutoff": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "sessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "remaining": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "usableSessions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "estimatedCostUsd": {
+                          "type": "number"
+                        },
+                        "suggestedMaxCostUsd": {
+                          "type": "number"
+                        },
+                        "rescore": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "backfillId",
+                        "scorerVersionId",
+                        "windowStart",
+                        "cutoff",
+                        "sessions",
+                        "remaining",
+                        "usableSessions",
+                        "estimatedCostUsd",
+                        "suggestedMaxCostUsd",
+                        "rescore"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "pastSessionsNeeded": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "payer": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "no_jev_key"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "scanned",
+                              "done",
+                              "failed",
+                              "cancelled",
+                              "superseded"
+                            ]
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "scan",
+                              "score"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "startedByName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "foundSessions": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "scoredSessions": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "spentCostUsd": {
+                            "type": "number"
+                          },
+                          "maxCostUsd": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "error": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "phase",
+                          "createdAt",
+                          "completedAt",
+                          "startedByName",
+                          "foundSessions",
+                          "scoredSessions",
+                          "spentCostUsd",
+                          "maxCostUsd",
+                          "error"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "backfill",
+                    "scoreOffer",
+                    "pastSessionsNeeded",
+                    "payer",
                     "history"
                   ],
                   "additionalProperties": false

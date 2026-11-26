@@ -31,6 +31,13 @@ export const RoutingPlanStatusSchema = z.enum([
 ]);
 export type RoutingPlanStatus = z.infer<typeof RoutingPlanStatusSchema>;
 
+/**
+ * Whose traffic a fit sizes the plan for: the router's own once it spans a
+ * week, else the organization's past sessions.
+ */
+export const RoutingVolumeSourceSchema = z.enum(["live", "history"]);
+export type RoutingVolumeSource = z.infer<typeof RoutingVolumeSourceSchema>;
+
 /** router-core `SessionFeatures`: the core's input, derived from `RoutingDecisionFeatures`. */
 export const RoutingSessionFeaturesSchema = z.object({
   tier_needed: z.tuple([z.number(), z.number(), z.number()]),
@@ -123,6 +130,7 @@ export const SelectRoutingPlanSchema = createSelectSchema(
     plan: RouterDocumentSchema.nullable(),
     summary: RouterDocumentSchema.nullable(),
     diagnostics: RouterDocumentSchema.nullable(),
+    volumeSource: RoutingVolumeSourceSchema.nullable(),
   },
 );
 export type RoutingPlan = z.infer<typeof SelectRoutingPlanSchema>;
@@ -182,8 +190,10 @@ export const AutoRouterSchema = AutoRoutingTrioSchema.extend({
   generation: z.number().int(),
   /** Generation of the last fit outcome; behind `generation` means a fit is due. */
   plannedGeneration: z.number().int(),
-  /** The router also learns from the organization's scored past sessions. */
-  usesPastSessions: z.boolean(),
+  /** The router also learns from the organization's scored past sessions while its decision model scores them. */
+  learnFromPastSessions: z.boolean(),
+  /** Scales the past sessions' volume while a fit plans for it. */
+  expectedTrafficFactor: z.number().positive(),
 });
 export type AutoRouter = z.infer<typeof AutoRouterSchema>;
 
@@ -199,6 +209,8 @@ export const UpdateAutoRouterSchema = AutoRouterSchema.pick({
   budgetPreset: true,
   scorerApiKeyId: true,
   scorerModel: true,
+  learnFromPastSessions: true,
+  expectedTrafficFactor: true,
 })
   .extend({ tiers: AutoRouterTiersSchema })
   .partial();
@@ -237,6 +249,10 @@ export type RoutingFit = {
   scorerVersionId: string;
   coreVersion: string;
   planFormatVersion: number;
+  /** The scan whose past sessions the fit read; null when it read none. */
+  historyFrameId: string | null;
+  volumeFactor: number;
+  volumeSource: RoutingVolumeSource;
   outcome: RoutingFitOutcome;
 };
 
@@ -332,6 +348,7 @@ export const SelectRoutingBackfillSchema = createSelectSchema(
     status: RoutingBackfillStatusSchema,
     phase: RoutingBackfillPhaseSchema,
     breakdown: RoutingBackfillBreakdownSchema,
+    fitGenerations: z.record(z.string(), z.number()).nullable(),
   },
 );
 export type RoutingBackfill = z.infer<typeof SelectRoutingBackfillSchema>;

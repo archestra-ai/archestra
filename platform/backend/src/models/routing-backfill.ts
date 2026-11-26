@@ -1,9 +1,21 @@
-import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import db, { schema, type Transaction } from "@/database";
 import {
   type RoutingBackfill,
   type RoutingBackfillBreakdown,
+  type RoutingBackfillPhase,
   SelectRoutingBackfillSchema,
 } from "@/types/auto-routing";
 
@@ -11,6 +23,17 @@ const t = schema.routingBackfillsTable;
 
 /** A worker's claim on a running backfill; every write it makes is fenced by the epoch. */
 export type BackfillLease = { id: string; epoch: number };
+
+/**
+ * A scan publication: the finished scan whose population fits read. A
+ * re-score copies a scan's bounds but publishes nothing, and was created
+ * after that scan finished, so only a scan was created before its
+ * `scannedAt`.
+ */
+export type ScanFrame = Pick<
+  RoutingBackfill,
+  "id" | "windowStart" | "cutoff"
+> & { scannedAt: Date };
 
 type ReserveOutcome =
   | { kind: "reserved"; amount: number }
@@ -53,6 +76,7 @@ class RoutingBackfillModel {
       scanId: string;
       organizationId: string;
       scorerVersionId: string;
+      scorerApiKeyId: string | null;
       maxSessions: number;
       maxCostUsd: number;
       startedBy: string | null;
@@ -72,11 +96,13 @@ class RoutingBackfillModel {
         phase: "score",
         cutoff: scan.cutoff,
         windowStart: scan.windowStart,
-        scannedAt: scan.scannedAt,
+        // Copied in SQL: a Date would truncate it to milliseconds.
+        scannedAt: sql`(select scanned_at from routing_backfills where id = ${scan.id})`,
         populationSessions: scan.populationSessions,
         populationTokens: scan.populationTokens,
         breakdown: scan.breakdown,
         scorerVersionId: params.scorerVersionId,
+        scorerApiKeyId: params.scorerApiKeyId,
         maxSessions: params.maxSessions,
         maxCostUsd: params.maxCostUsd.toFixed(4),
         startedBy: params.startedBy,
@@ -94,6 +120,7 @@ class RoutingBackfillModel {
     id: string;
     organizationId: string;
     scorerVersionId: string;
+    scorerApiKeyId: string;
     maxSessions: number;
     maxCostUsd: number;
     startedBy: string | null;
@@ -104,6 +131,7 @@ class RoutingBackfillModel {
         status: "running",
         phase: "score",
         scorerVersionId: params.scorerVersionId,
+        scorerApiKeyId: params.scorerApiKeyId,
         maxSessions: params.maxSessions,
         maxCostUsd: params.maxCostUsd.toFixed(4),
         startedBy: params.startedBy,
@@ -133,25 +161,26 @@ class RoutingBackfillModel {
     return row ? SelectRoutingBackfillSchema.parse(row) : null;
   }
 
-  /** Whether a finished backfill bumped the organization to `generation`. */
-  static async bumpedGeneration(
-    organizationId: string,
-    generation: number,
-  ): Promise<boolean> {
-    const [row] = await db
-      .select({ id: t.id })
+  /** The organization's newest backfill other than `backfill`. */
+  static async findLatestBefore(
+    backfill: RoutingBackfill,
+    tx: Transaction,
+  ): Promise<RoutingBackfill | null> {
+    const [row] = await tx
+      .select()
       .from(t)
       .where(
         and(
-          eq(t.organizationId, organizationId),
-          eq(t.fitGeneration, generation),
+          eq(t.organizationId, backfill.organizationId),
+          ne(t.id, backfill.id),
         ),
       )
+      .orderBy(desc(t.createdAt), desc(t.id))
       .limit(1);
-    return row !== undefined;
+    return row ? SelectRoutingBackfillSchema.parse(row) : null;
   }
 
-  /** The newest backfill whose scan finished, the sessions a re-score reuses. */
+  /** The newest scan publication, the sessions a re-score reuses. */
   static async findLatestScanned(
     organizationId: string,
     tx?: Transaction,
@@ -159,15 +188,73 @@ class RoutingBackfillModel {
     const [row] = await (tx ?? db)
       .select()
       .from(t)
-      .where(
-        and(
-          eq(t.organizationId, organizationId),
-          sql`${t.scannedAt} is not null`,
-        ),
-      )
+      .where(and(eq(t.organizationId, organizationId), isScanPublication))
       .orderBy(desc(t.scannedAt), desc(t.id))
       .limit(1);
     return row ? SelectRoutingBackfillSchema.parse(row) : null;
+  }
+
+  /** The newest `limit` scan publications whose window ends after `since`, newest first. */
+  static async findScanFrames(params: {
+    organizationId: string;
+    since: Date;
+    limit: number;
+  }): Promise<ScanFrame[]> {
+    const rows = await db
+      .select(frameColumns)
+      .from(t)
+      .where(
+        and(
+          eq(t.organizationId, params.organizationId),
+          isScanPublication,
+          gt(t.cutoff, params.since),
+        ),
+      )
+      .orderBy(desc(t.scannedAt), desc(t.id))
+      .limit(params.limit);
+    return rows.flatMap(toScanFrame);
+  }
+
+  /**
+   * The generation the newest scoring run that asked a fit of `routerId`
+   * raised it to, whichever backfill the organization shows; null when none
+   * did.
+   */
+  static async findRequestedFitGeneration(
+    organizationId: string,
+    routerId: string,
+  ): Promise<number | null> {
+    const requested = sql<string>`${t.fitGenerations} ->> ${routerId}`;
+    const [row] = await db
+      .select({ generation: requested })
+      .from(t)
+      .where(
+        and(
+          eq(t.organizationId, organizationId),
+          sql`${requested} is not null`,
+        ),
+      )
+      .orderBy(desc(t.completedAt), desc(t.id))
+      .limit(1);
+    return row ? Number(row.generation) : null;
+  }
+
+  /** The organization's scan publication `id`, if it still exists. */
+  static async findScanFrame(
+    organizationId: string,
+    id: string,
+  ): Promise<ScanFrame | null> {
+    const rows = await db
+      .select(frameColumns)
+      .from(t)
+      .where(
+        and(
+          eq(t.organizationId, organizationId),
+          eq(t.id, id),
+          isScanPublication,
+        ),
+      );
+    return rows.flatMap(toScanFrame)[0] ?? null;
   }
 
   /** Retires a scan still waiting to be scored, so a newer scan can take its place. */
@@ -393,11 +480,13 @@ class RoutingBackfillModel {
 
   static async finish(
     lease: BackfillLease,
-    outcome: {
-      status: "done" | "superseded" | "failed";
-      error?: string;
-      fitGeneration?: number | null;
-    },
+    outcome:
+      | {
+          status: "done";
+          error?: string;
+          fitGenerations: Record<string, number>;
+        }
+      | { status: "superseded" | "failed"; error?: string },
     tx?: Transaction,
   ): Promise<boolean> {
     return setOwned(
@@ -405,7 +494,9 @@ class RoutingBackfillModel {
       {
         status: outcome.status,
         error: outcome.error ?? null,
-        fitGeneration: outcome.fitGeneration ?? null,
+        ...(outcome.status === "done" && {
+          fitGenerations: outcome.fitGenerations,
+        }),
         completedAt: sql`now()`,
         leaseOwner: null,
         leaseExpiresAt: null,
@@ -439,8 +530,16 @@ class RoutingBackfillModel {
     return row?.status === "failed";
   }
 
-  /** Cancels the organization's active backfill; null when it has none. */
-  static async cancel(organizationId: string): Promise<RoutingBackfill | null> {
+  /**
+   * Cancels the organization's backfill `id` while it is active in `phase`;
+   * null when it is not. The phase keeps a stop meant for a scan from
+   * cancelling the scoring that took over its row.
+   */
+  static async cancel(
+    organizationId: string,
+    id: string,
+    phase: RoutingBackfillPhase,
+  ): Promise<RoutingBackfill | null> {
     const [row] = await db
       .update(t)
       .set({
@@ -452,6 +551,8 @@ class RoutingBackfillModel {
       .where(
         and(
           eq(t.organizationId, organizationId),
+          eq(t.id, id),
+          eq(t.phase, phase),
           inArray(t.status, ["running", "scanned"]),
         ),
       )
@@ -487,6 +588,27 @@ class RoutingBackfillModel {
 }
 
 export default RoutingBackfillModel;
+
+const isScanPublication = sql`${t.scannedAt} is not null and ${t.createdAt} < ${t.scannedAt}`;
+
+const frameColumns = {
+  id: t.id,
+  windowStart: t.windowStart,
+  cutoff: t.cutoff,
+  scannedAt: t.scannedAt,
+};
+
+function toScanFrame({
+  scannedAt,
+  ...row
+}: {
+  id: string;
+  windowStart: Date;
+  cutoff: Date;
+  scannedAt: Date | null;
+}): ScanFrame[] {
+  return scannedAt ? [{ ...row, scannedAt }] : [];
+}
 
 function ownedBy(lease: BackfillLease) {
   return and(

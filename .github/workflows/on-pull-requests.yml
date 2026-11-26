@@ -569,7 +569,7 @@ jobs:
     # In the queue it follows the backend inputs (which include the Rust
     # crates and migrations), running whenever the classification failed.
     if: ${{ !cancelled() && ((github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.backend != 'false')) || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))) }}
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-8core' || 'archestra-gce-8core-spot') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
     timeout-minutes: 20

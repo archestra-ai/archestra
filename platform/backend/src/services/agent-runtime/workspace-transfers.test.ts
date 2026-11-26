@@ -234,6 +234,40 @@ describe("relayed upload tickets", () => {
     expect(pod.finalized).toEqual([]);
   });
 
+  test("a body that failed before it was read ends the upload with that failure", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const pod = fakePod();
+    const minted = await workspaceTransferTickets.mintRelayedUpload({
+      ...seeded,
+      path: "inbox/relayed.txt",
+      size: 4,
+      ttlMs: RELAYED_UPLOAD_TICKET_TTL_MS,
+    });
+    const body = new Readable({ read() {} });
+    body.on("error", () => {});
+    body.destroy(new Error("caller went away"));
+    await new Promise((resolve) => setImmediate(resolve));
+    await expect(
+      workspaceTransferTickets.receive({
+        ticket: await workspaceTransferTickets.resolveRelayed(minted.ticketId),
+        body,
+        sha256: () => "unused",
+      }),
+    ).rejects.toThrow("caller went away");
+    expect(pod.finalized).toEqual([]);
+    expect(pod.staged.size).toBe(0);
+  });
+
   test("a relayed ticket cannot be redeemed with a token, and a token ticket cannot be redeemed as relayed", async ({
     makeAgent,
     makeMember,

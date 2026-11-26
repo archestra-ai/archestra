@@ -1176,7 +1176,9 @@ function limitBytes(
   // `pipe` does not carry a failure: a body that breaks off (a caller gone
   // mid-upload, bytes that fail a check on the way) must end the helper's
   // input with that failure, not leave it waiting for more.
-  body.once("error", (error) => stream.destroy(error));
+  // A body can also have failed already, while the upload was authorized.
+  if (body.errored) stream.destroy(body.errored);
+  else body.once("error", (error) => stream.destroy(error));
   // The helper's exec may attach to the stream only after the failure: it
   // reads `stream.errored` then. Until it does, the failure is not unhandled.
   stream.on("error", () => {});

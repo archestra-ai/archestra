@@ -286,8 +286,9 @@ class LlmProviderApiKeyModel {
    * chat/agent preflight needs to know that the pinned credential is somebody's
    * personal subscription — and which one — to gate sending behind "connect
    * your own account" for every subscription kind, not just ChatGPT. Only
-   * credential-level subscription providers' secrets are ever resolved, and
-   * only the derived kind is returned — never the value.
+   * credential-level subscription providers' and Anthropic keys' secrets are
+   * inspected (to classify `sk-ant-oat…` OAuth tokens under Claude Code), and
+   * only the derived kind and plan are returned — never the value.
    */
   static async findByIdWithSubscriptionInfo(id: string): Promise<
     | (LlmProviderApiKey & {
@@ -327,11 +328,9 @@ class LlmProviderApiKeyModel {
       },
     ]);
     const { credentialKind: _credentialKind, ...apiKey } = row.apiKey;
-    const subscriptionKind = subscriptionKindOf(
-      apiKey.provider,
-      kinds.get(apiKey.id),
-    );
-    const isGithubAppKey = kinds.get(apiKey.id) === "github_app";
+    const resolvedKind = kinds.get(apiKey.id) ?? null;
+    const subscriptionKind = subscriptionKindOf(apiKey.provider, resolvedKind);
+    const isGithubAppKey = resolvedKind === "github_app";
     const plan = await resolveKeyPlan(
       {
         id: apiKey.id,
@@ -339,10 +338,9 @@ class LlmProviderApiKeyModel {
         secretId: apiKey.secretId,
         secret: row.secret,
         secretIsVault: row.secretIsVault,
-        isGithubAppKey,
-        subscriptionKind,
+        credentialKind: resolvedKind,
       },
-      { readVaultSecret: true },
+      { inspectAnthropicSecret: true },
     );
 
     return {
@@ -547,13 +545,11 @@ class LlmProviderApiKeyModel {
               secretId: key.secretId,
               secret: key.secret,
               secretIsVault: key.secretIsVault,
-              isGithubAppKey: resolvedKind === "github_app",
-              subscriptionKind: subscriptionKindOf(
-                key.provider,
-                credentialKinds.get(key.id),
-              ),
+              credentialKind: resolvedKind,
             },
-            { readVaultSecret: options?.includeSubscriptionInfo === true },
+            {
+              inspectAnthropicSecret: options?.includeSubscriptionInfo === true,
+            },
           );
           return {
             ...toApiKeyWithScopeInfo(
@@ -664,13 +660,11 @@ class LlmProviderApiKeyModel {
               secretId: key.secretId,
               secret: key.secret,
               secretIsVault: key.secretIsVault,
-              isGithubAppKey: resolvedKind === "github_app",
-              subscriptionKind: subscriptionKindOf(
-                key.provider,
-                credentialKinds.get(key.id),
-              ),
+              credentialKind: resolvedKind,
             },
-            { readVaultSecret: options?.includeSubscriptionInfo === true },
+            {
+              inspectAnthropicSecret: options?.includeSubscriptionInfo === true,
+            },
           );
           return {
             ...toApiKeyWithScopeInfo(
@@ -1494,14 +1488,7 @@ class LlmProviderApiKeyModel {
     secretId?: string | null;
   }): Promise<ProviderPlan> {
     const kind = await LlmProviderApiKeyModel.findCredentialKind(apiKey.id);
-    const plan = providerKeyPlan({
-      provider: apiKey.provider,
-      isGithubAppKey: kind === "github_app",
-      subscriptionKind:
-        kind === null
-          ? subscriptionKindForProvider(apiKey.provider)
-          : subscriptionKindOf(apiKey.provider, kind),
-    });
+    const plan = planFromCredentialKind(apiKey.provider, kind);
     if (apiKey.provider === "anthropic" && plan === "apiKey") {
       const secretId =
         apiKey.secretId !== undefined
@@ -2020,6 +2007,20 @@ class LlmProviderApiKeyModel {
   }
 }
 
+function planFromCredentialKind(
+  provider: SupportedProvider,
+  kind: LlmProviderCredentialKind | null | undefined,
+): ProviderPlan {
+  return providerKeyPlan({
+    provider,
+    isGithubAppKey: kind === "github_app",
+    subscriptionKind:
+      kind == null
+        ? subscriptionKindForProvider(provider)
+        : subscriptionKindOf(provider, kind),
+  });
+}
+
 async function resolveKeyPlan(
   key: {
     id: string;
@@ -2027,23 +2028,20 @@ async function resolveKeyPlan(
     secretId: string | null;
     secret: SecretValue | null;
     secretIsVault: boolean | null;
-    isGithubAppKey: boolean;
-    subscriptionKind: SubscriptionCredentialKind | null;
+    credentialKind: LlmProviderCredentialKind | null | undefined;
   },
-  options: { readVaultSecret: boolean },
+  options: { inspectAnthropicSecret: boolean },
 ): Promise<ProviderPlan> {
-  const plan = providerKeyPlan({
-    provider: key.provider,
-    isGithubAppKey: key.isGithubAppKey,
-    subscriptionKind: key.subscriptionKind,
-  });
-  if (key.provider === "anthropic" && plan === "apiKey") {
+  const plan = planFromCredentialKind(key.provider, key.credentialKind);
+  if (
+    options.inspectAnthropicSecret &&
+    key.provider === "anthropic" &&
+    plan === "apiKey"
+  ) {
     try {
       const value =
         key.secretIsVault && key.secretId
-          ? options.readVaultSecret
-            ? await getSecretValueForLlmProviderApiKey(key.secretId)
-            : null
+          ? await getSecretValueForLlmProviderApiKey(key.secretId)
           : readApiKeyValue(key.secret);
       if (isAnthropicOAuthToken(value)) {
         return "personal";

@@ -13,7 +13,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import type { WorkspaceDownload } from "@/components/file-workspace/download-zip";
 import {
@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { contentFilePathProblem } from "./content-file-path";
 import { NewFileDialog } from "./new-file-dialog";
 import type { ResourceFile } from "./skill-draft";
+import { useLineProblemMarks } from "./use-line-problem-marks";
 
 /** Editing viewport with room left for wizard navigation and actions. */
 export const SKILL_WIZARD_EDITOR_CLASS =
@@ -67,6 +68,7 @@ export function SkillContentEditor({
   downloadName,
   showDownload = true,
   nameNotice = true,
+  manifestProblem = null,
   className,
 }: {
   manifest: string | null;
@@ -96,6 +98,11 @@ export function SkillContentEditor({
    * over MCP. Off where a name field above the editor says it instead.
    */
   nameNotice?: boolean;
+  /**
+   * The line of SKILL.md a save was just refused for. The manifest is opened
+   * and the line marked; null once the manifest has been edited since.
+   */
+  manifestProblem?: { line: number; message: string } | null;
   className?: string;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(() =>
@@ -135,6 +142,14 @@ export function SkillContentEditor({
   const openItem = items.find((item) => item.key === openKey) ?? items[0];
   const openFile = openItem?.kind === "file" ? openItem.file : null;
   const manifestOpen = openItem?.kind === "manifest";
+  // A refused save brings its line to the reader: the manifest is opened if
+  // another file was, each time a problem is reported.
+  useEffect(() => {
+    if (manifestProblem) setOpenKey(MANIFEST_KEY);
+  }, [manifestProblem]);
+  const markProblemLine = useLineProblemMarks(
+    manifestOpen ? manifestProblem : null,
+  );
 
   const removeFiles = (paths: Set<string>) => {
     const removed = files.filter((file) => paths.has(file.path));
@@ -424,6 +439,7 @@ export function SkillContentEditor({
             language={editorLanguage(openItem.path)}
             value={openFile ? openFile.content : (manifest ?? "")}
             onChange={(value) => setEditorValue(value ?? "")}
+            onMount={markProblemLine}
             loading={
               <div className="flex h-full w-full items-center justify-center bg-muted/50">
                 <p className="text-sm text-muted-foreground">
@@ -438,6 +454,9 @@ export function SkillContentEditor({
               folding: true,
               tabSize: 2,
               renderLineHighlight: "line",
+              // Below the line: a marked line is usually in the frontmatter
+              // at the top, where a hover above it is cut off by the bar.
+              hover: { above: false },
             }}
           />
         )}

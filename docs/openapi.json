@@ -574405,6 +574405,21 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "properties": {
+                            "line": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991,
+                              "description": "The line of SKILL.md to fix, counted from 1. Sent with `internal_code` `skill_manifest_invalid`."
+                            }
+                          },
+                          "required": [
+                            "line"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -575882,6 +575897,21 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "properties": {
+                            "line": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991,
+                              "description": "The line of SKILL.md to fix, counted from 1. Sent with `internal_code` `skill_manifest_invalid`."
+                            }
+                          },
+                          "required": [
+                            "line"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [

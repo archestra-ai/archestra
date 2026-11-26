@@ -463,6 +463,64 @@ describe("useUpdateSkill", () => {
     });
   });
 
+  it("hands a refusal that names a line of SKILL.md to the editor, and still says why", async () => {
+    const message =
+      "SKILL.md frontmatter is not valid YAML (line 3). Wrap the value in quotes.";
+    sdk.updateSkill.mockResolvedValue({
+      data: undefined,
+      error: {
+        error: {
+          message,
+          type: "api_validation_error",
+          internal_code: "skill_manifest_invalid",
+          details: { line: 3 },
+        },
+      },
+    } as never);
+    const onManifestProblem = vi.fn();
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useUpdateSkill({ onManifestProblem }), {
+      wrapper,
+    });
+
+    result.current.mutate(editArgs);
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+
+    // The line, and the text it is a line of.
+    expect(onManifestProblem).toHaveBeenCalledExactlyOnceWith({
+      line: 3,
+      message,
+      manifest: editArgs.body.content,
+    });
+    expect(toast.error).toHaveBeenCalledWith(message, expect.anything());
+  });
+
+  it("reports no line for a refusal that names none", async () => {
+    sdk.updateSkill.mockResolvedValue({
+      data: undefined,
+      error: {
+        error: {
+          message: 'A skill named "pdf-tools" already exists',
+          type: "api_conflict_error",
+        },
+      },
+    } as never);
+    const onManifestProblem = vi.fn();
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useUpdateSkill({ onManifestProblem }), {
+      wrapper,
+    });
+
+    result.current.mutate(editArgs);
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+
+    expect(onManifestProblem).not.toHaveBeenCalled();
+  });
+
   it("still reports a name collision as itself, though it is a 409 too", async () => {
     sdk.updateSkill.mockResolvedValue({
       data: undefined,

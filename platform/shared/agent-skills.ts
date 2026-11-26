@@ -43,6 +43,20 @@ export function isSpecCompliantSkillCompatibility(
 }
 
 /**
+ * `internal_code` of a save refused because SKILL.md cannot be read as a
+ * skill. Its `details` say where, so an editor can mark the line.
+ */
+export const SKILL_MANIFEST_INVALID_CODE = "skill_manifest_invalid";
+
+export interface SkillManifestInvalidDetails {
+  /**
+   * The line of SKILL.md to fix, counted from 1. Line 1, the opening `---`,
+   * when the problem is something the frontmatter lacks.
+   */
+  line: number;
+}
+
+/**
  * Why a NEW skill name cannot be used, as a sentence for the person typing
  * it, or null when it can.
  *

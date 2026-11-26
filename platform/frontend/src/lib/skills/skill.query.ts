@@ -16,6 +16,10 @@ import { skillNamesQueryKey } from "@/lib/connection-approval-query-keys";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
+  parseSkillManifestProblem,
+  type SkillManifestProblem,
+} from "@/lib/skills/manifest-problem";
+import {
   getApiErrorInternalCode,
   getApiErrorMessage,
   handleApiError,
@@ -438,12 +442,23 @@ export function useSkillVersion(id: string | null, version: number | null) {
 
 // ===== Mutation hooks =====
 
-export function useCreateSkill() {
+/**
+ * What a skill save can be asked to report besides its toast.
+ *
+ * `onManifestProblem` is called when the save is refused for a line of
+ * SKILL.md, so the editor can mark the line. The toast still says why.
+ */
+interface SkillSaveOptions {
+  onManifestProblem?: (problem: SkillManifestProblem) => void;
+}
+
+export function useCreateSkill(options?: SkillSaveOptions) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (body: archestraApiTypes.CreateSkillData["body"]) => {
       const { data, error } = await createSkill({ body });
       if (error) {
+        reportManifestProblem({ error, manifest: body.content, options });
         handleApiError(error);
         return null;
       }
@@ -462,7 +477,7 @@ export function useCreateSkill() {
   });
 }
 
-export function useUpdateSkill() {
+export function useUpdateSkill(options?: SkillSaveOptions) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -488,6 +503,7 @@ export function useUpdateSkill() {
           );
           return null;
         }
+        reportManifestProblem({ error, manifest: body.content, options });
         handleApiError(error);
         return null;
       }
@@ -927,6 +943,16 @@ function reportBulkSkillOutcome(
     `${labels.verb} ${skillCount(succeeded.length)} — ${skillCount(failed.length)} could not be ${labels.failureVerb}d`,
     { description: `${description} — ${failed[0].error}` },
   );
+}
+
+/** Hand a refusal that names a line of SKILL.md to whoever asked for it. */
+function reportManifestProblem(params: {
+  error: unknown;
+  manifest: string;
+  options: SkillSaveOptions | undefined;
+}) {
+  const problem = parseSkillManifestProblem(params.error, params.manifest);
+  if (problem) params.options?.onManifestProblem?.(problem);
 }
 
 /** How many failed skills a bulk toast names before it starts counting. */

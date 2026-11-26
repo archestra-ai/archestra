@@ -42,6 +42,7 @@ import {
 } from "@/lib/design/resource-lexicon";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
+import type { SkillManifestProblem } from "@/lib/skills/manifest-problem";
 import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
 import { repositoryLabel } from "@/lib/skills/skill-source";
 import { useSkillAccess } from "@/lib/skills/use-skill-access";
@@ -176,7 +177,13 @@ function SkillDetailView({
   // Undecided is not refused. Reading the permissions as "no" while they load
   // would flash the read-only notice at the author of the skill.
   const isReadOnly = !isAccessPending && !canEdit;
-  const updateSkill = useUpdateSkill();
+  // A save refused for a line of SKILL.md marks that line in the editor,
+  // until the manifest is edited.
+  const [refusedManifest, setRefusedManifest] =
+    useState<SkillManifestProblem | null>(null);
+  const updateSkill = useUpdateSkill({
+    onManifestProblem: setRefusedManifest,
+  });
 
   const actionModel = getSkillActionModel(skill.id);
   const historyAction = skillAction(actionModel, "history");
@@ -219,6 +226,8 @@ function SkillDetailView({
   // save to a head the author never saw.
   const seed = useMemo(() => skillDraftFromSkill(skill), [skill]);
   const [draft, setDraft] = useState<SkillDraft>(seed);
+  const manifestProblem =
+    refusedManifest?.manifest === draft.manifest ? refusedManifest : null;
   const [base, setBase] = useState<{ draft: SkillDraft; version: number }>({
     draft: seed,
     version: skill.latestVersion,
@@ -527,6 +536,7 @@ function SkillDetailView({
             contentReadOnly={isSynced}
             nameProblem={nameProblem}
             descriptionProblem={descriptionProblem}
+            manifestProblem={manifestProblem}
           />
 
           {!isReadOnly && (

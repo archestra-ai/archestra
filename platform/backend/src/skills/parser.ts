@@ -39,9 +39,17 @@ export interface ParsedSkill {
 
 /** Raised when a `SKILL.md` file cannot be parsed into a valid skill. */
 export class SkillParseError extends Error {
-  constructor(message: string) {
+  /**
+   * The line of the file to fix, counted from 1, for an editor to mark.
+   * Line 1 (the opening `---`) when the problem is something the frontmatter
+   * lacks, which no line of its own holds.
+   */
+  readonly line: number;
+
+  constructor(message: string, line = 1) {
     super(message);
     this.name = "SkillParseError";
+    this.line = line;
   }
 }
 
@@ -72,7 +80,10 @@ export function parseSkillManifest(raw: string): ParsedSkill {
   try {
     frontmatter = parseYaml(match[1]);
   } catch (error) {
-    throw new SkillParseError(describeInvalidFrontmatter(error));
+    throw new SkillParseError(
+      describeInvalidFrontmatter(error),
+      invalidFrontmatterLine(error) ?? FRONTMATTER_FIRST_LINE,
+    );
   }
 
   if (
@@ -82,12 +93,13 @@ export function parseSkillManifest(raw: string): ParsedSkill {
   ) {
     throw new SkillParseError(
       "SKILL.md frontmatter must be a list of `key: value` lines, starting with `name` and `description`.",
+      FRONTMATTER_FIRST_LINE,
     );
   }
 
   const fields = frontmatter as Record<string, unknown>;
-  const name = readRequiredText(fields, "name");
-  const description = readRequiredText(fields, "description");
+  const name = readRequiredText(fields, "name", match[1]);
+  const description = readRequiredText(fields, "description", match[1]);
 
   return {
     name,
@@ -266,26 +278,47 @@ function sameStringMap(
 function readRequiredText(
   fields: Record<string, unknown>,
   key: "name" | "description",
+  /** The frontmatter block as written, to say which line holds the key. */
+  block: string,
 ): string {
   const value = fields[key];
+  const line = frontmatterKeyLine(block, key);
   if (typeof value === "string") {
     if (value.trim()) return value.trim();
     throw new SkillParseError(
       `SKILL.md frontmatter has an empty \`${key}\`. Add text after \`${key}:\`.`,
+      line,
     );
   }
   if (!(key in fields)) {
+    // No line holds a key that is not there.
     throw new SkillParseError(`SKILL.md frontmatter is missing \`${key}\``);
   }
   if (value === null || value === undefined) {
     throw new SkillParseError(
       `SKILL.md frontmatter has an empty \`${key}\`. Add text after \`${key}:\`.`,
+      line,
     );
   }
   throw new SkillParseError(
     `SKILL.md frontmatter \`${key}\` must be text. Wrap the value in quotes, for example \`${key}: "123"\`.`,
+    line,
   );
 }
+
+/**
+ * The file line a top-level frontmatter key is written on, or line 1 when the
+ * block has no such line (a key written in flow style, say).
+ */
+function frontmatterKeyLine(block: string, key: string): number {
+  const index = block
+    .split(/\r?\n/)
+    .findIndex((line) => line.startsWith(`${key}:`));
+  return index === -1 ? 1 : index + FRONTMATTER_FIRST_LINE;
+}
+
+/** The block starts on line 2 of the file, under the opening `---`. */
+const FRONTMATTER_FIRST_LINE = 2;
 
 /**
  * One plain sentence for frontmatter YAML cannot read.
@@ -298,16 +331,19 @@ function readRequiredText(
  * when: ...`), so the remedy names it.
  */
 function describeInvalidFrontmatter(error: unknown): string {
-  const line =
-    error instanceof YAMLException && typeof error.mark?.line === "number"
-      ? // `mark.line` counts from 0 inside the block, which starts on line 2
-        // of the file, under the opening `---`.
-        error.mark.line + 2
-      : null;
+  const line = invalidFrontmatterLine(error);
   return (
     `SKILL.md frontmatter is not valid YAML${line === null ? "" : ` (line ${line})`}. ` +
     'If a value contains a colon or starts with a special character, wrap it in quotes, for example `description: "Use when: the user asks"`.'
   );
+}
+
+/** The file line YAML stopped on, or null when the parser gave none. */
+function invalidFrontmatterLine(error: unknown): number | null {
+  return error instanceof YAMLException && typeof error.mark?.line === "number"
+    ? // `mark.line` counts from 0 inside the block.
+      error.mark.line + FRONTMATTER_FIRST_LINE
+    : null;
 }
 
 function readString(value: unknown): string {

@@ -52,6 +52,7 @@ export function SkillForm({
   contentReadOnly = false,
   nameProblem = null,
   descriptionProblem = null,
+  manifestProblem = null,
 }: {
   draft: SkillDraft;
   creating?: boolean;
@@ -71,6 +72,8 @@ export function SkillForm({
   nameProblem?: SkillNameProblem | null;
   /** Why the typed description cannot be saved; shown under the field. */
   descriptionProblem?: string | null;
+  /** The line of SKILL.md a save was refused for; marked in the editor. */
+  manifestProblem?: { line: number; message: string } | null;
 }) {
   // Read back out of the manifest rather than kept beside it, so an edit made
   // in the editor shows up in the fields and vice versa.
@@ -202,6 +205,7 @@ export function SkillForm({
           showDownload={false}
           // Said under the name field above, next to what it is about.
           nameNotice={false}
+          manifestProblem={manifestProblem}
           className={SKILL_WIZARD_EDITOR_CLASS}
         />
       </SettingsSection>

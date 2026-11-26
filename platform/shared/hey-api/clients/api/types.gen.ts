@@ -147940,6 +147940,12 @@ export type CreateSkillErrors = {
             message: string;
             type: 'api_validation_error';
             internal_code?: string;
+            details?: {
+                /**
+                 * The line of SKILL.md to fix, counted from 1. Sent with `internal_code` `skill_manifest_invalid`.
+                 */
+                line: number;
+            };
         };
     };
     /**
@@ -148387,6 +148393,12 @@ export type UpdateSkillErrors = {
             message: string;
             type: 'api_validation_error';
             internal_code?: string;
+            details?: {
+                /**
+                 * The line of SKILL.md to fix, counted from 1. Sent with `internal_code` `skill_manifest_invalid`.
+                 */
+                line: number;
+            };
         };
     };
     /**

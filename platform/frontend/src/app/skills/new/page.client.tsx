@@ -35,6 +35,7 @@ import { WizardStepper } from "@/components/wizard-stepper";
 import { useSession } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
+import type { SkillManifestProblem } from "@/lib/skills/manifest-problem";
 import {
   type SkillCatalogResult,
   useCreateSkill,
@@ -127,7 +128,15 @@ function NewSkillWizard() {
     [draft.manifest],
   );
   const { data: session } = useSession();
-  const createSkill = useCreateSkill();
+  // A save refused for a line of SKILL.md marks that line in the editor,
+  // until the manifest is edited.
+  const [refusedManifest, setRefusedManifest] =
+    useState<SkillManifestProblem | null>(null);
+  const manifestProblem =
+    refusedManifest?.manifest === draft.manifest ? refusedManifest : null;
+  const createSkill = useCreateSkill({
+    onManifestProblem: setRefusedManifest,
+  });
   const nameProblem = useSkillNameProblem({
     name: parsed.name,
     originalName: null,
@@ -404,6 +413,7 @@ function NewSkillWizard() {
                     labelsRef={labelsRef}
                     nameProblem={nameProblem}
                     descriptionProblem={descriptionProblem}
+                    manifestProblem={manifestProblem}
                   />
                   <WizardFooter>
                     {catalogDisabled ? (

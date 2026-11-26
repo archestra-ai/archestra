@@ -13,6 +13,8 @@ import {
   ResourceSharedWithQuerySchema,
   ResourceVisibilityScopeSchema,
   RouteId,
+  SKILL_MANIFEST_INVALID_CODE,
+  type SkillManifestInvalidDetails,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -294,6 +296,33 @@ const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
         "owes nothing to a prior read of the skill.",
     ),
 }).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
+
+/**
+ * A skill save's responses. Its 400 can say which line of SKILL.md to fix
+ * (`SKILL_MANIFEST_INVALID_CODE`), which the shared 400 has no field for.
+ */
+const skillSaveResponseSchema = {
+  ...constructResponseSchema(SkillDetailSchema),
+  400: z.object({
+    error: z.object({
+      message: z.string(),
+      type: z.literal("api_validation_error"),
+      internal_code: z.string().optional(),
+      details: z
+        .object({
+          line: z
+            .number()
+            .int()
+            .min(1)
+            .describe(
+              "The line of SKILL.md to fix, counted from 1. Sent with " +
+                "`internal_code` `skill_manifest_invalid`.",
+            ),
+        })
+        .optional(),
+    }),
+  }),
+};
 
 const BulkSkillIdsSchema = z
   .array(UuidIdSchema)
@@ -809,7 +838,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a skill from a raw SKILL.md and resource files",
         tags: ["Skills"],
         body: SkillManifestInputSchema,
-        response: constructResponseSchema(SkillDetailSchema),
+        response: skillSaveResponseSchema,
       },
     },
     async ({ body, organizationId, user }, reply) => {
@@ -1014,7 +1043,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Skills"],
         params: z.object({ id: UuidIdSchema }),
         body: SkillManifestUpdateSchema,
-        response: constructResponseSchema(SkillDetailSchema),
+        response: skillSaveResponseSchema,
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
@@ -2521,7 +2550,16 @@ function parseManifestOrThrow(raw: string) {
     return parseSkillManifest(raw);
   } catch (error) {
     if (error instanceof SkillParseError) {
-      throw new ApiError(400, error.message);
+      // The line travels with the refusal, so an editor can mark it.
+      const refusal = new ApiError(
+        400,
+        error.message,
+        SKILL_MANIFEST_INVALID_CODE,
+      );
+      refusal.details = {
+        line: error.line,
+      } satisfies SkillManifestInvalidDetails;
+      throw refusal;
     }
     throw error;
   }

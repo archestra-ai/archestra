@@ -83,6 +83,65 @@ describe("SkillContentEditor", () => {
     );
   });
 
+  it("opens the manifest and marks the line a save was refused for, until the problem is gone", async () => {
+    const user = userEvent.setup();
+    const files: ResourceFile[] = [
+      { path: "run.py", content: "print(1)", encoding: "utf8" },
+    ];
+    const props = {
+      manifest: MANIFEST,
+      files,
+      onManifestChange: vi.fn(),
+      onFilesChange: vi.fn(),
+    };
+    const { rerender } = render(<SkillContentEditor {...props} />);
+    // Another file is open when the save is refused.
+    await user.click(
+      within(explorer()).getByRole("button", { name: "run.py" }),
+    );
+    expect(editor()).toHaveValue("print(1)");
+
+    rerender(
+      <SkillContentEditor
+        {...props}
+        manifestProblem={{ line: 3, message: "Wrap the value in quotes." }}
+      />,
+    );
+
+    // The line is in SKILL.md, so that is the file shown.
+    expect(editor()).toHaveValue(MANIFEST);
+    expect(JSON.parse(editor().dataset.markers ?? "[]")).toEqual([
+      expect.objectContaining({
+        startLineNumber: 3,
+        endLineNumber: 3,
+        startColumn: 1,
+        // To the end of `description: Ship it.`
+        endColumn: 22,
+        message: "Wrap the value in quotes.",
+      }),
+    ]);
+
+    // The page drops the problem once the manifest is edited.
+    rerender(<SkillContentEditor {...props} manifestProblem={null} />);
+    expect(editor().dataset.markers).toBeUndefined();
+  });
+
+  it("marks the last line for a problem past the end of the manifest", () => {
+    render(
+      <SkillContentEditor
+        manifest={"---\nname: x\n---"}
+        files={[]}
+        onManifestChange={vi.fn()}
+        onFilesChange={vi.fn()}
+        manifestProblem={{ line: 9, message: "Too far." }}
+      />,
+    );
+
+    expect(JSON.parse(editor().dataset.markers ?? "[]")).toEqual([
+      expect.objectContaining({ startLineNumber: 3, endLineNumber: 3 }),
+    ]);
+  });
+
   it("names a new file in a new folder and opens it", async () => {
     const user = userEvent.setup();
     const onFiles = vi.fn();

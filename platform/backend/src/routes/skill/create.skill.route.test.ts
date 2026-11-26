@@ -336,6 +336,40 @@ describe("POST /api/skills", () => {
     expect(message).toContain("wrap it in quotes");
     // The whole message is shown in a toast: no parser code frame.
     expect(message).not.toContain("\n");
+    // The line is also sent on its own, for the editor to mark.
+    expect(response.json().error).toMatchObject({
+      internal_code: "skill_manifest_invalid",
+      details: { line: 3 },
+    });
+  });
+
+  test.each([
+    [
+      "a name that is not text",
+      ["---", "description: A skill.", "name: 123", "---", ""],
+      3,
+    ],
+    [
+      "an empty description",
+      ["---", "name: release-notes", "license: MIT", "description:", "---", ""],
+      4,
+    ],
+    // Nothing to point at but the block that lacks it.
+    ["no description at all", ["---", "name: release-notes", "---", ""], 1],
+    ["no frontmatter at all", ["# Release notes", ""], 1],
+    ["frontmatter that is a list", ["---", "- name", "---", ""], 2],
+  ])("a manifest with %s is refused with the line to fix", async (_label, lines, line) => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: lines.join("\n") },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatchObject({
+      internal_code: "skill_manifest_invalid",
+      details: { line },
+    });
   });
 
   test("a name YAML reads as a number is told to be text", async () => {

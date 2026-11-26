@@ -53,11 +53,12 @@ export async function createTeam(params: {
   await dialog.getByRole("button", { name: "Create Team" }).click();
   // After a successful create the dialog stays open and switches to edit mode
   // (so members/sync can be configured right away) — wait for the switch,
-  // then close it.
+  // then close it. Escape rather than Cancel: the "created" toast sits over
+  // the dialog footer on narrow viewports and intercepts the click.
   await expect(
     dialog.getByRole("button", { name: "Save Changes" }),
   ).toBeVisible({ timeout: 10_000 });
-  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await params.page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible({ timeout: 10_000 });
   await getVisibleTeamRow(params.page, params.name);
 }

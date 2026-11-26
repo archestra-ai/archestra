@@ -363,7 +363,7 @@ describe("plugin tool execution", () => {
 
     const renamed = await executeArchestraTool(
       TOOL_UPDATE_PLUGIN_FULL_NAME,
-      { id: plugin.id, displayName: "Renamed hooks", enabled: false },
+      { id: plugin.id, displayName: "Renamed hooks" },
       context,
     );
     expect(renamed.isError).toBeFalsy();
@@ -373,7 +373,6 @@ describe("plugin tool execution", () => {
       organizationId,
     });
     expect(stored?.displayName).toBe("Renamed hooks");
-    expect(stored?.enabled).toBe(false);
   });
 
   test("update_plugin refuses files on a GitHub-sourced plugin", async () => {

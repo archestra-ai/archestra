@@ -138366,7 +138366,6 @@ export type GetPluginsResponses = {
         approvedContentHash: string | null;
         approvedAt: string | null;
         approvedBy: string | null;
-        enabled: boolean;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -138557,7 +138556,6 @@ export type CreatePluginResponses = {
         approvedContentHash: string | null;
         approvedAt: string | null;
         approvedBy: string | null;
-        enabled: boolean;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -138882,7 +138880,6 @@ export type ImportGithubPluginMarketplaceResponses = {
             approvedContentHash: string | null;
             approvedAt: string | null;
             approvedBy: string | null;
-            enabled: boolean;
             createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
@@ -139195,7 +139192,6 @@ export type ImportGithubPluginResponses = {
         approvedContentHash: string | null;
         approvedAt: string | null;
         approvedBy: string | null;
-        enabled: boolean;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -139472,7 +139468,6 @@ export type ApplyGithubPluginUpdateResponses = {
         approvedContentHash: string | null;
         approvedAt: string | null;
         approvedBy: string | null;
-        enabled: boolean;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -139632,7 +139627,6 @@ export type UpdatePluginGithubSyncResponses = {
         approvedContentHash: string | null;
         approvedAt: string | null;
         approvedBy: string | null;
-        enabled: boolean;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -139966,7 +139960,6 @@ export type GetPluginResponses = {
         approvedContentHash: string | null;
         approvedAt: string | null;
         approvedBy: string | null;
-        enabled: boolean;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -140014,7 +140007,6 @@ export type UpdatePluginData = {
          * Emoji or base64 image data URL shown with the name.
          */
         icon?: string | null;
-        enabled?: boolean;
         supportedPlatforms?: Array<'posix' | 'windows'>;
         labels?: Array<{
             key: string;
@@ -140155,7 +140147,6 @@ export type UpdatePluginResponses = {
         approvedContentHash: string | null;
         approvedAt: string | null;
         approvedBy: string | null;
-        enabled: boolean;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -140281,7 +140272,6 @@ export type GetPluginSkillsResponses = {
         pluginSlug: string;
         sourceRepo: string | null;
         sourceMarketplaceRepo: string | null;
-        pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
         clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
@@ -140492,7 +140482,6 @@ export type GetPluginSkillResponses = {
         pluginSlug: string;
         sourceRepo: string | null;
         sourceMarketplaceRepo: string | null;
-        pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
         clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;

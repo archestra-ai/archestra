@@ -1264,10 +1264,6 @@ function SkillsList() {
                                 <span>templated</span>
                               </Badge>
                             ) : null}
-                            {item.source === "plugin" &&
-                            !item.skill.pluginEnabled ? (
-                              <Badge variant="outline">Plugin disabled</Badge>
-                            ) : null}
                           </div>
                         </TableCard>
                       );
@@ -1541,11 +1537,6 @@ function ListedSkillName({
             Body is rendered with Handlebars at activation.
           </TooltipContent>
         </Tooltip>
-      )}
-      {item.source === "plugin" && !item.skill.pluginEnabled && (
-        <Badge variant="outline" className="shrink-0">
-          Disabled
-        </Badge>
       )}
     </div>
   );

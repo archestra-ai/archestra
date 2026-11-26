@@ -5,7 +5,6 @@ import { isDeliverablePlugin } from "./plugin-eligibility";
 test("Grok cannot deliver Claude plugins, while approved native-client delivery is unchanged", () => {
   const approved = {
     clientType: "claude-code" as const,
-    enabled: true,
     approvedContentHash: "synthetic",
     contentHash: "synthetic",
   };

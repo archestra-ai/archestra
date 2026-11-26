@@ -538260,9 +538260,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "enabled": {
-                        "type": "boolean"
-                      },
                       "createdByServiceAccountId": {
                         "nullable": true,
                         "type": "string",
@@ -538424,7 +538421,6 @@
                       "approvedContentHash",
                       "approvedAt",
                       "approvedBy",
-                      "enabled",
                       "createdByServiceAccountId",
                       "createdAt",
                       "updatedAt",
@@ -539175,9 +539171,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "enabled": {
-                      "type": "boolean"
-                    },
                     "createdByServiceAccountId": {
                       "nullable": true,
                       "type": "string",
@@ -539389,7 +539382,6 @@
                     "approvedContentHash",
                     "approvedAt",
                     "approvedBy",
-                    "enabled",
                     "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
@@ -540621,9 +540613,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "enabled": {
-                            "type": "boolean"
-                          },
                           "createdByServiceAccountId": {
                             "nullable": true,
                             "type": "string",
@@ -540835,7 +540824,6 @@
                           "approvedContentHash",
                           "approvedAt",
                           "approvedBy",
-                          "enabled",
                           "createdByServiceAccountId",
                           "createdAt",
                           "updatedAt",
@@ -542000,9 +541988,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "enabled": {
-                      "type": "boolean"
-                    },
                     "createdByServiceAccountId": {
                       "nullable": true,
                       "type": "string",
@@ -542214,7 +542199,6 @@
                     "approvedContentHash",
                     "approvedAt",
                     "approvedBy",
-                    "enabled",
                     "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
@@ -543131,9 +543115,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "enabled": {
-                      "type": "boolean"
-                    },
                     "createdByServiceAccountId": {
                       "nullable": true,
                       "type": "string",
@@ -543345,7 +543326,6 @@
                     "approvedContentHash",
                     "approvedAt",
                     "approvedBy",
-                    "enabled",
                     "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
@@ -543862,9 +543842,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "enabled": {
-                      "type": "boolean"
-                    },
                     "createdByServiceAccountId": {
                       "nullable": true,
                       "type": "string",
@@ -544076,7 +544053,6 @@
                     "approvedContentHash",
                     "approvedAt",
                     "approvedBy",
-                    "enabled",
                     "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
@@ -544838,9 +544814,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "enabled": {
-                      "type": "boolean"
-                    },
                     "createdByServiceAccountId": {
                       "nullable": true,
                       "type": "string",
@@ -545052,7 +545025,6 @@
                     "approvedContentHash",
                     "approvedAt",
                     "approvedBy",
-                    "enabled",
                     "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
@@ -545333,9 +545305,6 @@
                     "description": "Emoji or base64 image data URL shown with the name.",
                     "nullable": true,
                     "type": "string"
-                  },
-                  "enabled": {
-                    "type": "boolean"
                   },
                   "supportedPlatforms": {
                     "minItems": 1,
@@ -545720,9 +545689,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "enabled": {
-                      "type": "boolean"
-                    },
                     "createdByServiceAccountId": {
                       "nullable": true,
                       "type": "string",
@@ -545934,7 +545900,6 @@
                     "approvedContentHash",
                     "approvedAt",
                     "approvedBy",
-                    "enabled",
                     "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
@@ -546509,9 +546474,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "pluginEnabled": {
-                        "type": "boolean"
-                      },
                       "scope": {
                         "type": "string",
                         "enum": [
@@ -546581,7 +546543,6 @@
                       "pluginSlug",
                       "sourceRepo",
                       "sourceMarketplaceRepo",
-                      "pluginEnabled",
                       "scope",
                       "clientType",
                       "supportedPlatforms",
@@ -547252,9 +547213,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "pluginEnabled": {
-                      "type": "boolean"
-                    },
                     "scope": {
                       "type": "string",
                       "enum": [
@@ -547370,7 +547328,6 @@
                     "pluginSlug",
                     "sourceRepo",
                     "sourceMarketplaceRepo",
-                    "pluginEnabled",
                     "scope",
                     "clientType",
                     "supportedPlatforms",

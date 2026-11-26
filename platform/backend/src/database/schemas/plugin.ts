@@ -96,6 +96,11 @@ const pluginsTable = softDeletablePgTable(
     approvedBy: text("approved_by").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * @deprecated Plugins can no longer be switched off one by one. The
+     * column stays because dropping a column is never done in a migration;
+     * nothing reads or writes it, and its default keeps inserts working.
+     */
     enabled: boolean("enabled").notNull().default(true),
     /** Service account creator; separate from human ownership. */
     createdByServiceAccountId: uuid("created_by_service_account_id").references(

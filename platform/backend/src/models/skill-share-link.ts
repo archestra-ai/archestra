@@ -427,7 +427,6 @@ async function loadPluginsForLinks(
       schema.pluginsTable,
       and(
         eq(schema.skillShareLinkPluginsTable.pluginId, schema.pluginsTable.id),
-        eq(schema.pluginsTable.enabled, true),
         eq(
           schema.pluginsTable.approvedContentHash,
           schema.pluginsTable.contentHash,

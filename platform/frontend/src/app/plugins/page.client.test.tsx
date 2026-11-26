@@ -111,7 +111,6 @@ const PLUGIN = vi.hoisted(() => ({
   approvedContentHash: "hash-1",
   approvedAt: null,
   approvedBy: null,
-  enabled: true,
   createdAt: "2026-08-01T12:00:00.000Z",
   updatedAt: "2026-08-23T18:00:00.000Z",
   deletedAt: null,

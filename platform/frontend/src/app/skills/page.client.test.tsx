@@ -111,7 +111,6 @@ const PLUGIN_SKILL = {
   pluginId: "11111111-1111-4111-8111-111111111111",
   pluginName: "STE bundle",
   pluginSlug: "ste-bundle-11111111",
-  pluginEnabled: true,
   scope: "org" as const,
   clientType: "claude-code" as const,
   supportedPlatforms: ["posix" as const],

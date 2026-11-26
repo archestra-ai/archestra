@@ -28,7 +28,6 @@ beforeEach(() => {
       pluginId: "plugin-1",
       pluginName: "STE bundle",
       pluginSlug: "ste-bundle-plugin-1",
-      pluginEnabled: true,
       scope: "org",
       clientType: "claude-code",
       supportedPlatforms: ["posix"],

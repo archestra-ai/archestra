@@ -124,12 +124,6 @@ const UpdatePluginToolSchema = z
       .max(1_000)
       .optional()
       .describe("What the plugin does."),
-    enabled: z
-      .boolean()
-      .optional()
-      .describe(
-        "Disabled plugins are left out of future setup commands; already-installed copies are unaffected.",
-      ),
     supportedPlatforms: z
       .array(PluginPlatformSchema)
       .min(1)
@@ -281,11 +275,10 @@ const registry = defineArchestraTools([
           plugin.sourceKind === "github"
             ? `${plugin.sourceProvider ?? "github"} ${plugin.sourceRepo ?? ""}`.trim()
             : "manual";
-        const state = plugin.enabled ? "enabled" : "disabled";
         return (
           `- "${plugin.displayName}" (id: ${plugin.id}) — ` +
           `${plugin.clientType}, ${plugin.supportedPlatforms.join("/")}, ` +
-          `${plugin.scope}, ${state}, ${plugin.fileCount} file(s), ${source}`
+          `${plugin.scope}, ${plugin.fileCount} file(s), ${source}`
         );
       });
       return successResult(lines.join("\n"));

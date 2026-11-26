@@ -59,7 +59,9 @@ export const SelectPluginSchema = createSelectSchema(schema.pluginsTable, {
   sourceProvider: z.union([GitProviderSchema, z.null()]),
   scope: ResourceVisibilityScopeSchema,
   githubSyncInterval: z.union([PluginGithubSyncIntervalSchema, z.null()]),
-});
+})
+  // A retired column (see the table), kept out of everything the API says.
+  .omit({ enabled: true });
 
 export const SelectPluginFileSchema = createSelectSchema(
   schema.pluginFilesTable,
@@ -116,7 +118,6 @@ export const UpdatePluginSchema = z
       .nullable()
       .optional()
       .describe("Emoji or base64 image data URL shown with the name."),
-    enabled: z.boolean().optional(),
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
     githubSource: z

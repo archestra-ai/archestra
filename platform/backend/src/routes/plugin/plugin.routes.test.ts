@@ -71,9 +71,10 @@ describe("plugin routes", () => {
       displayName: "Session attribution",
       clientType: "claude-code",
       supportedPlatforms: ["posix"],
-      enabled: true,
       approvedContentHash: expect.any(String),
     });
+    // Plugins are not switched off one by one; the API does not say they are.
+    expect(created.json()).not.toHaveProperty("enabled");
     expect(created.json().contentHash).toBe(created.json().approvedContentHash);
     expect(created.json().pluginSlug).toMatch(
       /^session-attribution-[a-f0-9]{8}$/,

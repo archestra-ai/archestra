@@ -160,7 +160,6 @@ class PluginModel {
         and(
           eq(schema.pluginsTable.organizationId, params.organizationId),
           inArray(schema.pluginsTable.id, params.ids),
-          eq(schema.pluginsTable.enabled, true),
           eq(
             schema.pluginsTable.approvedContentHash,
             schema.pluginsTable.contentHash,
@@ -182,7 +181,6 @@ class PluginModel {
         and(
           eq(schema.pluginsTable.organizationId, params.organizationId),
           eq(schema.pluginsTable.clientType, params.clientType),
-          eq(schema.pluginsTable.enabled, true),
           eq(
             schema.pluginsTable.approvedContentHash,
             schema.pluginsTable.contentHash,
@@ -215,7 +213,6 @@ class PluginModel {
           eq(schema.pluginsTable.organizationId, params.organizationId),
           eq(schema.pluginsTable.clientType, params.clientType),
           sql`${params.platform} = any(${schema.pluginsTable.supportedPlatforms})`,
-          eq(schema.pluginsTable.enabled, true),
           eq(
             schema.pluginsTable.approvedContentHash,
             schema.pluginsTable.contentHash,
@@ -249,7 +246,6 @@ class PluginModel {
         and(
           eq(schema.pluginsTable.organizationId, params.organizationId),
           inArray(schema.pluginsTable.id, params.ids),
-          eq(schema.pluginsTable.enabled, true),
           eq(
             schema.pluginsTable.approvedContentHash,
             schema.pluginsTable.contentHash,
@@ -557,7 +553,6 @@ class PluginModel {
           displayName: params.input.displayName,
           description: params.input.description,
           icon: params.input.icon,
-          enabled: params.input.enabled,
           supportedPlatforms: params.input.supportedPlatforms,
           syncGeneration: sql`${schema.pluginsTable.syncGeneration} + 1`,
           ...sourceUpdate,
@@ -688,7 +683,6 @@ class PluginModel {
       .update(schema.pluginsTable)
       .set({
         deletedAt: new Date(),
-        enabled: false,
         githubSyncInterval: null,
         githubAppConfigId: null,
         githubPatId: null,

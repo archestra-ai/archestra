@@ -247,9 +247,6 @@ function PluginDetailView({
               supportedPlatforms: submitted.supportedPlatforms,
               files: submitted.files,
             }),
-        // Whether the plugin can be installed is this page's to decide, for
-        // a Git plugin as much as for a manual one.
-        enabled: submitted.enabled,
         labels: submitted.labels,
         icon: submitted.icon,
       })
@@ -309,11 +306,6 @@ function PluginDetailView({
           <Badge variant="secondary" className="font-normal">
             {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
           </Badge>
-          {!plugin.enabled && (
-            <Badge variant="outline" className="font-normal">
-              Disabled
-            </Badge>
-          )}
         </div>
       }
       documentTitle={plugin.displayName}
@@ -348,18 +340,16 @@ function PluginDetailView({
               <CreatedByCell createdBy={plugin.createdBy} />
             </p>
           )}
-          {plugin.enabled && (
-            <PermissionButton
-              permissions={installAction.permissions}
-              permissionScope={installAction.permissionScope}
-              variant="outline"
-              size="sm"
-              onClick={() => setInstallOpen(true)}
-            >
-              <PackagePlus className="h-4 w-4" />
-              {installAction.label}
-            </PermissionButton>
-          )}
+          <PermissionButton
+            permissions={installAction.permissions}
+            permissionScope={installAction.permissionScope}
+            variant="outline"
+            size="sm"
+            onClick={() => setInstallOpen(true)}
+          >
+            <PackagePlus className="h-4 w-4" />
+            {installAction.label}
+          </PermissionButton>
           {isGithubPlugin ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

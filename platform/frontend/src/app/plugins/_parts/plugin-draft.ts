@@ -19,7 +19,6 @@ export interface PluginDraft {
   icon: string | null;
   description: string;
   clientType: PluginClientType;
-  enabled: boolean;
   supportedPlatforms: PluginPlatform[];
   files: PluginFileDraft[];
   initialGrants: InitialPermissionGrant[];
@@ -56,7 +55,6 @@ export function blankPluginDraft(): PluginDraft {
     icon: null,
     description: "",
     clientType: "claude-code",
-    enabled: true,
     supportedPlatforms: ["posix", "windows"],
     files: [
       {
@@ -81,7 +79,6 @@ export function pluginDraftFromPlugin(plugin: PluginDetail): PluginDraft {
     icon: plugin.icon ?? null,
     description: plugin.description,
     clientType: plugin.clientType,
-    enabled: plugin.enabled,
     supportedPlatforms: plugin.supportedPlatforms,
     files: plugin.files.map(({ path, content, encoding, mode }) => ({
       path,

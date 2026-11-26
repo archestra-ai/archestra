@@ -653,7 +653,6 @@ Required RBAC permission: [`plugin:update`](/docs/reference/permissions#plugin:u
 | `id` | `string` | Yes | The plugin id, as listed by list_plugins. |
 | `displayName` | `string` | No | Human-readable plugin name. |
 | `description` | `string` | No | What the plugin does. |
-| `enabled` | `boolean` | No | Disabled plugins are left out of future setup commands; already-installed copies are unaffected. |
 | `supportedPlatforms` | `string[]` | No | Operating systems the payload supports. |
 | `baseContentHash` | `string` | No | Required when files is provided. Use the current contentHash from get_plugin; the replacement is rejected if newer bytes landed first. |
 | `files` | `object[]` | No | WHEN PROVIDED, REPLACES THE PLUGIN'S ENTIRE file set. Omit it to edit only metadata/visibility. Manual plugins only — GitHub-sourced files are read-only. For a small change to one file, prefer edit_plugin over resending every file. |

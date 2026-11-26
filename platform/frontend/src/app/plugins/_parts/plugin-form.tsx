@@ -11,9 +11,6 @@ import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
-import { FieldDescription } from "@/components/ui/field-description";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { PluginContentFields } from "./plugin-content-fields";
 import type { PluginDraft } from "./plugin-draft";
 
@@ -92,29 +89,6 @@ export function PluginForm({
               nameTaken={nameTaken}
             />
           </SettingsSection>
-
-          {/* Create has nothing to turn off yet: a new plugin starts
-              available, and the switch appears once it is saved. */}
-          {!isCreate && (
-            <SettingsSection>
-              <div className="flex items-center justify-between gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="plugin-enabled">Available to install</Label>
-                  <FieldDescription id="plugin-enabled-description">
-                    When off, nobody can install this plugin. Copies that are
-                    already installed stay on developer machines.
-                  </FieldDescription>
-                </div>
-                <Switch
-                  id="plugin-enabled"
-                  checked={draft.enabled}
-                  onCheckedChange={(enabled) => onChange({ enabled })}
-                  disabled={readOnly}
-                  aria-describedby="plugin-enabled-description"
-                />
-              </div>
-            </SettingsSection>
-          )}
 
           <SettingsSection>
             <fieldset disabled={readOnly}>

@@ -300,10 +300,6 @@ function PluginsList() {
         permissions: installAction.permissions,
         permissionScope: installAction.permissionScope,
         onClick: () => setInstallingPlugin(plugin),
-        disabled: !plugin.enabled,
-        disabledTooltip: !plugin.enabled
-          ? "Disabled plugins cannot be installed"
-          : undefined,
       },
       {
         icon: <Pencil className="h-4 w-4" />,
@@ -351,11 +347,6 @@ function PluginsList() {
                   {plugin.displayName}
                 </span>
                 <LabelTags labels={plugin.labels ?? []} />
-                {!plugin.enabled && (
-                  <Badge variant="outline" className="shrink-0">
-                    Disabled
-                  </Badge>
-                )}
               </div>
               {plugin.description && (
                 <div className="truncate text-xs text-muted-foreground">
@@ -717,9 +708,6 @@ function PluginsList() {
                             platforms={plugin.supportedPlatforms}
                           />
 
-                          {!plugin.enabled ? (
-                            <Badge variant="outline">Disabled</Badge>
-                          ) : null}
                           {/* The repository in words, as the table has it:
                               the mark alone does not say which one. */}
                           <PluginSourceLabel plugin={plugin} />

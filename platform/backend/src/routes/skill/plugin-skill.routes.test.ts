@@ -217,7 +217,6 @@ describe("plugin Skill routes", () => {
         pluginName: "STE bundle",
         sourceRepo: null,
         sourceMarketplaceRepo: null,
-        pluginEnabled: true,
         scope: "org",
         clientType: "claude-code",
         supportedPlatforms: ["posix", "windows"],

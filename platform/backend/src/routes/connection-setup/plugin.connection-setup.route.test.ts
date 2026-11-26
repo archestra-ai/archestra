@@ -285,18 +285,7 @@ describe("POST /api/connection-setups with plugins", () => {
     ).toEqual([]);
   });
 
-  test("rejects disabled and cross-organization plugins", async ({
-    makeOrganization,
-  }) => {
-    const disabled = await seedPlugin("claude-code");
-    await PluginModel.update({
-      id: disabled.id,
-      organizationId,
-      userId: user.id,
-      input: { enabled: false },
-    });
-    expect((await postPluginSetup([disabled.id])).statusCode).toBe(404);
-
+  test("rejects cross-organization plugins", async ({ makeOrganization }) => {
     const otherOrganization = await makeOrganization();
     const foreign = await PluginModel.create({
       organizationId: otherOrganization.id,

@@ -180,6 +180,56 @@ describe("POST /api/connection-setups", () => {
     expect(passthroughSetup.statusCode, passthroughSetup.body).toBe(200);
   });
 
+  test("refuses Claude Desktop subscription passthrough when Claude Code is turned off, while still allowing virtual-key setup", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: {
+        anthropic: { plans: { personal: { hidden: true } } },
+      },
+    });
+
+    const passthrough = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-desktop",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "anthropic",
+        proxyAuth: "provider-key",
+        model: "claude-haiku-4-5-20251001",
+      },
+    });
+    expect(passthrough.statusCode, passthrough.body).toBe(400);
+    expect(passthrough.json().error.message).toContain(
+      "Claude Code is turned off",
+    );
+
+    const secret = await makeSecret({
+      secret: { apiKey: "sk-ant-api03-company-key" },
+    });
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      name: "Company Anthropic Key",
+    });
+
+    const virtualKey = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-desktop",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "anthropic",
+        proxyAuth: "virtual-key",
+        model: "claude-haiku-4-5-20251001",
+      },
+    });
+    expect(virtualKey.statusCode, virtualKey.body).toBe(200);
+  });
+
   test.each([
     { clientId: "codex", provider: "xai" },
     { clientId: "grok-build", provider: "openai" },

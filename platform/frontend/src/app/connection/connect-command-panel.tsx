@@ -4,6 +4,7 @@ import {
   DocsPage,
   OPENCODE_PRIMARY_PROVIDERS,
   PROVIDERS_REQUIRING_BASE_URL,
+  personalSubscriptionTurnedOffMessage,
   providerRequiresPerUserCredential,
   resolveMcpClientServerName,
   type SupportedProvider,
@@ -583,6 +584,11 @@ export function ConnectCommandPanel({
     proxyAuth,
   ]);
 
+  const claudeDesktopSubscriptionHidden =
+    client.id === "claude-desktop" &&
+    proxyAuth === "provider-key" &&
+    providerCatalog.isPersonalSubscriptionHidden("anthropic");
+
   // A virtual key can only be minted against a configured key, so virtual-key
   // mode never offers a provider the command would fail on. Passthrough needs
   // no key (the user brings their own at runtime).
@@ -598,6 +604,7 @@ export function ConnectCommandPanel({
             );
       return supportedProviders.filter((provider) => backing.has(provider));
     }
+    if (claudeDesktopSubscriptionHidden) return [];
     if (proxyAuth === "native-session")
       return supportedProviders.filter((provider) => provider === "xai");
     if (proxyAuth !== "virtual-key") return supportedProviders;
@@ -616,6 +623,7 @@ export function ConnectCommandPanel({
     proxyAuth,
     configuredProviders,
     allPrimaryProviders,
+    claudeDesktopSubscriptionHidden,
     usableOpenCodeKeys,
     adminMappedProviders,
     client.id,
@@ -1595,10 +1603,18 @@ export function ConnectCommandPanel({
               </span>
             ) : effectiveProxyAuth === "provider-key" ? (
               client.id === "claude-desktop" ? (
-                <span>
-                  The installer opens Claude subscription sign-in and configures
-                  Desktop. Your token stays on your computer.
-                </span>
+                claudeDesktopSubscriptionHidden ? (
+                  <span>
+                    {personalSubscriptionTurnedOffMessage(
+                      providerCatalog.overrides,
+                      "anthropic",
+                    )}
+                  </span>
+                ) : (
+                  <span>
+                    {`The installer opens ${providerCatalog.personalSubscriptionLabel("anthropic", "Claude")} subscription sign-in and configures Desktop. Your token stays on your computer.`}
+                  </span>
+                )
               ) : client.id === "grok-build" ? (
                 <span>
                   {`Requests use your own ${provider === "xai" ? "XAI_API_KEY" : provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"}. The key stays on your computer until Grok sends it through the proxy.${grokNativeSessionAllowed ? ` Choose native login instead to use your ${providerCatalog.personalSubscriptionLabel("xai")} subscription.` : ""}`}
@@ -1906,8 +1922,12 @@ export function ConnectCommandPanel({
       </div>
     ) : null;
 
-  const noVirtualKeyMessage =
-    client.id === "cursor"
+  const noVirtualKeyMessage = claudeDesktopSubscriptionHidden
+    ? personalSubscriptionTurnedOffMessage(
+        providerCatalog.overrides,
+        "anthropic",
+      )
+    : client.id === "cursor"
       ? CURSOR_NO_KEYS_MESSAGE
       : allPrimaryProviders
         ? `No usable primary model providers are available, so ${client.label} connects without model routing. Mark a compatible provider key as primary to route its models.`
@@ -2107,7 +2127,7 @@ export function ConnectCommandPanel({
                     using{" "}
                     <span className="font-medium text-foreground">
                       {client.id === "claude-desktop"
-                        ? "your Claude subscription"
+                        ? `your ${providerCatalog.personalSubscriptionLabel("anthropic", "Claude")} subscription`
                         : "your provider key"}
                     </span>
                   </span>
@@ -2436,6 +2456,10 @@ export function ConnectCommandPanel({
                 <InlineNoticeText>
                   {`Routing ${client.label}'s models needs permission to create virtual keys, so it connects without model routing.`}
                 </InlineNoticeText>
+              </InlineNotice>
+            ) : claudeDesktopSubscriptionHidden && hasProxy && includeProxy ? (
+              <InlineNotice variant="info">
+                <InlineNoticeText>{noVirtualKeyMessage}</InlineNoticeText>
               </InlineNotice>
             ) : virtualKeyUnbacked && allPrimaryProviders ? (
               <InlineNotice variant="info">

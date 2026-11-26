@@ -2715,6 +2715,53 @@ describe("ConnectCommandPanel", () => {
       ).toBeVisible();
     });
 
+    it("Claude Desktop omits Claude subscription passthrough when Claude Code is turned off, while keeping admin-mapped virtual keys", async () => {
+      vi.mocked(useOrganization).mockReturnValue({
+        data: {
+          modelProviderOverrides: {
+            anthropic: { plans: { personal: { hidden: true } } },
+          },
+        },
+      } as unknown as ReturnType<typeof useOrganization>);
+      availableKeysMock.mockReturnValue({ data: [] });
+      renderPanel({ client: findClient("claude-desktop") });
+      await waitFor(() => expect(createSetupMock).toHaveBeenCalled());
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.not.objectContaining({ provider: "anthropic" }),
+      );
+      expect(
+        screen.getByText(/Claude Code is turned off for this organization/),
+      ).toBeVisible();
+
+      createSetupMock.mockClear();
+      vi.mocked(useOrganization).mockReturnValue({
+        data: {
+          modelProviderOverrides: {
+            anthropic: { plans: { personal: { hidden: true } } },
+          },
+          connectionClientProviderKeys: {
+            "claude-desktop": [
+              { provider: "anthropic", providerApiKeyId: "anthropic-org-key" },
+            ],
+          },
+        },
+      } as unknown as ReturnType<typeof useOrganization>);
+      availableKeysMock.mockReturnValue({
+        data: [
+          { id: "anthropic-org-key", provider: "anthropic", plan: "apiKey" },
+        ],
+      });
+      renderPanel({ client: findClient("claude-desktop") });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "anthropic",
+            proxyAuth: "virtual-key",
+          }),
+        ),
+      );
+    });
+
     it.each([
       "pi",
       "copilot-cli",

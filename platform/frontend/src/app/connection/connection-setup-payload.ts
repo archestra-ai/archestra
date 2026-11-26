@@ -391,6 +391,10 @@ export function firstConnectionSetupInputs(params: {
     shown && !allPrimaryProviders
       ? supported.filter((p) => shown.has(p))
       : supported;
+  const claudeDesktopSubscriptionHidden =
+    client.id === "claude-desktop" &&
+    proxyAuth === "provider-key" &&
+    isPersonalSubscriptionHidden(overrides, "anthropic");
   let providers: SupportedProvider[];
   if (allPrimaryProviders) {
     const backing =
@@ -402,6 +406,8 @@ export function firstConnectionSetupInputs(params: {
               .map((key) => key.provider),
           );
     providers = supportedProviders.filter((p) => backing.has(p));
+  } else if (claudeDesktopSubscriptionHidden) {
+    providers = [];
   } else if (proxyAuth !== "virtual-key") {
     providers = supportedProviders;
   } else {

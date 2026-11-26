@@ -720,6 +720,16 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             provider: "xai",
           });
         }
+        if (
+          clientId === "claude-desktop" &&
+          proxyAuth === "provider-key" &&
+          provider === "anthropic"
+        ) {
+          await assertPersonalSubscriptionAllowed({
+            organizationId,
+            provider: "anthropic",
+          });
+        }
         llmProxyId = (
           await requireLlmProxyAccess({ organizationId, userId: user.id })
         ).id;

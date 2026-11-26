@@ -259,7 +259,7 @@ function EndpointRequest({
           <OauthTokenRequest
             {...connection.picked.oauth}
             scope={LLM_PROXY_OAUTH_SCOPE}
-            renderCode={(code) => <FloatingCodeExample code={code} />}
+            renderCode={(code) => <FloatingCodeExample code={code} compact />}
           />
         </div>
       )}

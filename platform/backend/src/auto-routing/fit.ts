@@ -544,14 +544,17 @@ async function simulate(
  * recorded outcome, if any, read another; an outcome recorded before fits
  * stored their frame says nothing.
  */
-function scheduledTrigger(params: {
+async function scheduledTrigger(params: {
   settings: AutoRouter;
   scorerVersionId: string;
-  latestScorerVersionId: string | null;
-  lastOutcome: RoutingPlan | null;
   frameId: string | null;
-}): RoutingPlanTrigger {
-  const { settings, latestScorerVersionId, lastOutcome, frameId } = params;
+}): Promise<RoutingPlanTrigger> {
+  const { settings, frameId } = params;
+  const [[latest], lastOutcome] = await Promise.all([
+    RoutingPlanModel.findHistory(settings.id, 1),
+    RoutingPlanModel.findLatestOutcome(settings.id),
+  ]);
+  const latestScorerVersionId = latest?.plan.scorerVersionId ?? null;
   if (
     latestScorerVersionId !== null &&
     latestScorerVersionId !== params.scorerVersionId
@@ -578,10 +581,6 @@ async function readFitInputs(params: {
   const readiness = await fitReadiness(settings);
   if (readiness.kind !== "ready") return null;
   const tiers = fitTiers(readiness.trio);
-  const [[latest], lastOutcome] = await Promise.all([
-    RoutingPlanModel.findHistory(settings.id, 1),
-    RoutingPlanModel.findLatestOutcome(settings.id),
-  ]);
   const inputWatermark = new Date();
   const history =
     tiers.kind === "ok"
@@ -597,13 +596,11 @@ async function readFitInputs(params: {
       : EMPTY_HISTORY;
   const trigger =
     params.requestedTrigger ??
-    scheduledTrigger({
+    (await scheduledTrigger({
       settings,
       scorerVersionId,
-      latestScorerVersionId: latest?.plan.scorerVersionId ?? null,
-      lastOutcome,
       frameId: history.frameId,
-    });
+    }));
   return {
     organizationId: settings.organizationId,
     routerId: settings.id,
@@ -681,7 +678,10 @@ export async function readFitHistory(
   },
   maxSessions?: number,
 ): Promise<FitHistory> {
-  const [live, past] = await Promise.all([
+  // Past sessions count only for a router short of its own minimum: their
+  // sample is read once they do, else the frame's summary is enough.
+  const sampled = params.recorded?.countsPastSessions === true;
+  const [live, read] = await Promise.all([
     RoutingUsageModel.findFitHistory(
       {
         ...params,
@@ -690,14 +690,16 @@ export async function readFitHistory(
       },
       maxSessions,
     ),
-    readPastSessions(params, true),
+    readPastSessions(params, sampled),
   ]);
-  const window = summarizeWindow(
-    live.volume,
-    past,
-    params.router,
-    params.recorded,
-  );
+  const summarize = (past: PastSessions) =>
+    summarizeWindow(live.volume, past, params.router, params.recorded);
+  const counted = summarize(read);
+  const past =
+    sampled || counted.pastSessions === 0 || read.frame === null
+      ? read
+      : await readPastSnapshot(params, read.frame, true);
+  const window = past === read ? counted : summarize(past);
   // The live sample is capped while its volume counts the whole window.
   const liveWeight =
     live.sample.length === 0 ? 1 : live.volume.sessions / live.sample.length;
@@ -726,9 +728,46 @@ type FitScope = Pick<
 >;
 
 type PastSessions = PastWindow & {
-  frameId: string | null;
+  frame: ScanFrame | null;
   sample: HistoryFitRow[];
 };
+
+type PastReadParams = {
+  router: FitScope;
+  scorerVersionId: string;
+  inputWatermark: Date;
+  longContextThreshold: number | null;
+  recorded?: RecordedPastRead;
+  pastReads?: PastReads;
+};
+
+/** `frame`'s past sessions in the window, shared through `pastReads` when the caller passes them. */
+async function readPastSnapshot(
+  params: PastReadParams,
+  frame: ScanFrame,
+  withSample: boolean,
+): Promise<PastSessions> {
+  const windowStart = new Date(params.inputWatermark.getTime() - HISTORY_MS);
+  const key = [
+    params.scorerVersionId,
+    frame.id,
+    windowStart.getTime(),
+    params.longContextThreshold,
+    withSample,
+  ].join("|");
+  const read =
+    params.pastReads?.snapshots.get(key) ??
+    RoutingHistoryModel.findFitSnapshot({
+      organizationId: params.router.organizationId,
+      scorerVersionId: params.scorerVersionId,
+      longContextThreshold: params.longContextThreshold,
+      frame,
+      windowStart,
+      withSample,
+    });
+  params.pastReads?.snapshots.set(key, read);
+  return { frame, ...(await read) };
+}
 
 /**
  * The organization's past sessions, for a router that learns from them and
@@ -739,46 +778,20 @@ type PastSessions = PastWindow & {
  * A recorded read replays its frame regardless of the router's settings.
  */
 async function readPastSessions(
-  params: {
-    router: FitScope;
-    scorerVersionId: string;
-    inputWatermark: Date;
-    longContextThreshold: number | null;
-    recorded?: RecordedPastRead;
-    pastReads?: PastReads;
-  },
+  params: PastReadParams,
   withSample: boolean,
 ): Promise<PastSessions> {
   const none: PastSessions = {
-    frameId: null,
+    frame: null,
     scored: 0,
     population: EMPTY_HISTORY.volume,
     sample: [],
   };
   const { organizationId } = params.router;
-  const reads = params.pastReads ?? pastReads();
+  const reads = params.pastReads;
   const windowStart = new Date(params.inputWatermark.getTime() - HISTORY_MS);
-  const snapshot = async (frame: ScanFrame, sample: boolean) => {
-    const key = [
-      params.scorerVersionId,
-      frame.id,
-      windowStart.getTime(),
-      params.longContextThreshold,
-      sample,
-    ].join("|");
-    const read =
-      reads.snapshots.get(key) ??
-      RoutingHistoryModel.findFitSnapshot({
-        organizationId,
-        scorerVersionId: params.scorerVersionId,
-        longContextThreshold: params.longContextThreshold,
-        frame,
-        windowStart,
-        withSample: sample,
-      });
-    reads.snapshots.set(key, read);
-    return { frameId: frame.id, ...(await read) };
-  };
+  const snapshot = (frame: ScanFrame, sample: boolean) =>
+    readPastSnapshot(params, frame, sample);
   if (params.recorded) {
     const { frameId } = params.recorded;
     const frame =
@@ -794,13 +807,13 @@ async function readPastSessions(
   }
   const framesKey = `${organizationId}|${windowStart.getTime()}`;
   const latestFrames =
-    reads.frames.get(framesKey) ??
+    reads?.frames.get(framesKey) ??
     RoutingBackfillModel.findScanFrames({
       organizationId,
       since: windowStart,
       limit: FIT_FRAME_CANDIDATES,
     });
-  reads.frames.set(framesKey, latestFrames);
+  reads?.frames.set(framesKey, latestFrames);
   const [latest, incumbent] = await Promise.all([
     latestFrames,
     incumbentFrame(params.router),
@@ -871,7 +884,7 @@ function summarizeWindow(
     volumeSource,
     // The one place the factor is chosen: it scales past traffic only.
     volumeFactor: volumeSource === "history" ? factor : 1,
-    frameId: past.frameId,
+    frameId: past.frame?.id ?? null,
     pastVolume: past.population,
   };
 }

@@ -292,13 +292,14 @@ describe("ModelPoolsPage", () => {
     await user.click(
       within(dialog).getByRole("button", { name: "Add member" }),
     );
-    expect(await within(dialog).findByText("My Copilot")).toBeInTheDocument();
+    const providerPicker = await within(dialog).findByRole("button", {
+      name: "Provider key",
+    });
+    expect(providerPicker).toHaveTextContent("My Copilot");
     expect(
       within(dialog).getByText("Personal connections stay private"),
     ).toBeInTheDocument();
-    await user.click(
-      within(dialog).getByRole("button", { name: "Provider key" }),
-    );
+    await user.click(providerPicker);
     expect(screen.queryByText("Other Copilot")).not.toBeInTheDocument();
   });
 

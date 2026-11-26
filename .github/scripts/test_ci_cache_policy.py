@@ -60,10 +60,16 @@ class CachePolicyTests(unittest.TestCase):
                               ("refs/heads/feature/cache", False), ("refs/pull/7/merge", False),
                               ("refs/heads/gh-readonly-queue/main/pr-7-abc", False)):
             with self.subTest(ref=ref):
-                context = {"github": {"ref": ref}, "inputs": {"push_image": True, "auth_provider": "ghcr"}}
+                context = {"github": {"ref": ref},
+                           "inputs": {"push_image": True, "auth_provider": "ghcr", "cache_image_name": ""}}
                 self.assertIs(evaluate(expression, context), expected)
         self.assertIs(evaluate(expression, {"github": {"ref": "refs/heads/main"},
-                                            "inputs": {"push_image": False, "auth_provider": "ghcr"}}), False)
+                                            "inputs": {"push_image": False, "auth_provider": "ghcr",
+                                                       "cache_image_name": ""}}), False)
+        # A build that reads another image's cache leaves that cache to its owner.
+        self.assertIs(evaluate(expression, {"github": {"ref": "refs/heads/main"},
+                                            "inputs": {"push_image": True, "auth_provider": "ghcr",
+                                                       "cache_image_name": "platform"}}), False)
 
     def test_reused_builder_skips_the_registry_cache_import(self):
         action = (ROOT / ".github/actions/build-docker-image/action.yml").read_text()

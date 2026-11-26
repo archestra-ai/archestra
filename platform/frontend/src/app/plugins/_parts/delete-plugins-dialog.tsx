@@ -1,7 +1,7 @@
 "use client";
 
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ItemNameLinks } from "@/components/item-name-links";
+import { ItemNames } from "@/components/item-names";
 import { useDeletePlugins } from "@/lib/plugins/plugin.query";
 import { pluginDetailHref } from "./plugin-page-config";
 
@@ -39,8 +39,9 @@ export function DeletePluginsDialog({
       description={
         <>
           <span>Installed copies of </span>
-          <ItemNameLinks
+          <ItemNames
             items={plugins.map((plugin) => ({
+              id: plugin.id,
               href: pluginDetailHref(plugin.id),
               name: plugin.displayName,
             }))}

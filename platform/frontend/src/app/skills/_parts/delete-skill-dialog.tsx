@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ItemNameLinks } from "@/components/item-name-links";
+import { ItemNames } from "@/components/item-names";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDeleteSkill } from "@/lib/skills/skill.query";
-import { skillDetailHref } from "./skill-page-config";
 import { useSingleFlight } from "./use-single-flight";
 
 export function DeleteSkillDialog({
@@ -75,7 +74,7 @@ export function SkillDeleteDescription({
   /** The skills about to be deleted, named in the text. */
   skills: ReadonlyArray<{ id: string; name: string }>;
   canOpenDeletedView: boolean;
-  /** A link in the text was followed: the dialog it sits in should close. */
+  /** The Deleted link was followed: the dialog it sits in should close. */
   onNavigate?: () => void;
 }) {
   const isSkillsList = usePathname() === "/skills";
@@ -86,13 +85,7 @@ export function SkillDeleteDescription({
           from each other (12px), which keeps the rows reading as one text. */}
       <span className="mt-2 block">
         <span>Agents will no longer be able to use </span>
-        <ItemNameLinks
-          items={skills.map((skill) => ({
-            href: skillDetailHref(skill.id),
-            name: skill.name,
-          }))}
-          onNavigate={onNavigate}
-        />
+        <ItemNames items={skills} />
         <span>{skills.length === 1 ? " skill." : " skills."}</span>
       </span>
       <span className="mt-3 block">

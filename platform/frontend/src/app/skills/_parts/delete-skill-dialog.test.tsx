@@ -60,11 +60,8 @@ describe("DeleteSkillDialog", () => {
     expect(dialog).toHaveTextContent(
       "Agents will no longer be able to use pdf-tools skill.",
     );
-    // Named as a link to the skill's own page, to look before deciding.
-    expect(screen.getByRole("link", { name: "pdf-tools" })).toHaveAttribute(
-      "href",
-      "/skills/skill-1",
-    );
+    // Named in plain text: the only link in the dialog is the way back.
+    expect(screen.queryByRole("link", { name: "pdf-tools" })).toBeNull();
     expect(dialog).toHaveTextContent(
       "You can restore deleted skills from the Deleted filter on this page.",
     );

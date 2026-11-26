@@ -4623,7 +4623,7 @@ export function AgentForm({
         ];
 
   const modelAttention = noAccountWay
-    ? "Choose who pays for its runs"
+    ? undefined
     : usesClaudeSubscription
       ? undefined
       : !requiredSubscriptionSatisfied
@@ -4662,7 +4662,7 @@ export function AgentForm({
       {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
         <Label>
           {isClaudeCodeRuntime || (runtime && agentRuntimeEnabled)
-            ? "Accounts that can run it"
+            ? "Credentials to use"
             : "Model"}
         </Label>
       )}
@@ -4699,7 +4699,8 @@ export function AgentForm({
           )}
           {!isClaudeCodeRuntime &&
             !agentModelPoolId &&
-            (selectedApiKeyIsSubscription ? (
+            (selectedApiKeyIsSubscription &&
+            (!runtimeCards || subscriptionWayOpen) ? (
               <Alert>
                 <InfoIcon className="h-4 w-4" />
                 <AlertDescription>
@@ -4707,18 +4708,17 @@ export function AgentForm({
                   subscription account. No credential is shared.
                 </AlertDescription>
               </Alert>
-            ) : (
+            ) : !selectedApiKeyIsSubscription &&
+              selectedApiKey &&
+              selectedApiKey.scope !== "org" &&
+              (!runtimeCards || companyWayOpen) ? (
               <p className="text-sm text-muted-foreground">
-                {selectedApiKey &&
-                selectedApiKey.scope !== "org" &&
-                (!runtimeCards || companyWayOpen) ? (
-                  <span>
-                    Selected key will be available to everyone who has access to
-                    this agent.
-                  </span>
-                ) : null}
+                <span>
+                  Selected key will be available to everyone who has access to
+                  this agent.
+                </span>
               </p>
-            ))}
+            ) : null)}
           {isClaudeCodeRuntime && !(runtimeCards && runtimeRuleKind) ? (
             // No disabled fieldset around the cards: the boxes of someone
             // who may not change them stay focusable, so their state can be
@@ -4739,41 +4739,27 @@ export function AgentForm({
             <div className="space-y-2">
               {runtime && agentRuntimeEnabled ? (
                 // A runtime's accounts, as the same cards whatever it runs.
-                <>
-                  {/* Three levels decide an account: the runtime's settings
-                      say what agents on it may allow, this form what this
-                      agent allows, and each person picks for their own
-                      runs where both are allowed. */}
-                  {!runtimeRuleKind &&
-                    choosesAmongAccounts &&
-                    canLockAccount && (
-                      <FieldDescription>
-                        Choose which accounts this agent allows, from those its
-                        runtime allows.
-                      </FieldDescription>
-                    )}
-                  <AgentAccountOptions
-                    label="Accounts that can run it"
-                    // Under the runtime's rule there is one kind, and nothing
-                    // to say about a choice between two.
-                    meaning={
-                      runtimeRuleKind
-                        ? undefined
-                        : accountWaysMeaning(
-                            {
-                              subscription: subscriptionWayOpen,
-                              provider: companyWayOpen,
-                            },
-                            companyAccountName(runtime.command?.[0]),
-                          )
-                    }
-                    options={runtimeAccountOptions}
-                    // The plans a rule leaves open are still the agent's to
-                    // tick.
-                    readOnly={!canLockAccount && !runtimeRuleKind}
-                    problem={accountLockProblem}
-                  />
-                </>
+                <AgentAccountOptions
+                  label="Credentials to use"
+                  // Under the runtime's rule there is one kind, and nothing
+                  // to say about a choice between two.
+                  meaning={
+                    runtimeRuleKind
+                      ? undefined
+                      : accountWaysMeaning(
+                          {
+                            subscription: subscriptionWayOpen,
+                            provider: companyWayOpen,
+                          },
+                          companyAccountName(runtime.command?.[0]),
+                        )
+                  }
+                  options={runtimeAccountOptions}
+                  // The plans a rule leaves open are still the agent's to
+                  // tick.
+                  readOnly={!canLockAccount && !runtimeRuleKind}
+                  problem={accountLockProblem}
+                />
               ) : (
                 <fieldset
                   disabled={accountLockedForViewer}

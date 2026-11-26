@@ -417,8 +417,12 @@ function OwnCompanyAccountPickers({
       models={fixedConnectionModels}
       emptyConnection={
         company.connection.id
-          ? `Default ${plan ? "plan" : "connection"}`
-          : `Choose a ${plan ? "plan" : "connection"}`
+          ? plan
+            ? "Default plan"
+            : "Default API key"
+          : plan
+            ? "Choose a plan"
+            : "Choose an API key"
       }
       emptyModel={company.model.id ? "Default model" : "Choose a model"}
     />

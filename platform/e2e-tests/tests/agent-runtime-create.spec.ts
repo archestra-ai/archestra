@@ -49,7 +49,7 @@ test("creates Claude Code from the catalog and explains the account connection a
       page.getByRole("radiogroup", { name: "Runtime", exact: true }),
     ).toHaveCount(0);
     const authenticationRow = page.getByRole("button", {
-      name: /^Accounts that can run it/,
+      name: /^Credentials to use/,
     });
     await expect(authenticationRow).toHaveAttribute("aria-expanded", "true");
     // The runtime's own setting is each person's Claude subscription, so a
@@ -59,46 +59,22 @@ test("creates Claude Code from the catalog and explains the account connection a
       name: /Each person's Claude subscription/,
     });
     const companyKey = page.getByRole("checkbox", {
-      name: /A company API key/,
+      name: /Provider API key/,
     });
     await expect(subscription).toBeChecked();
     await expect(companyKey).not.toBeChecked();
     await expect(authenticationRow.getByRole("img")).toHaveCount(0);
-    // With neither card ticked the row asks for one.
+    // With neither card ticked the form shows the inline validation alert and
+    // keeps the accordion header free of a duplicate warning icon.
     await subscription.uncheck();
     await expect(subscription).not.toBeChecked();
     await expect(companyKey).not.toBeChecked();
-    const attention = authenticationRow.getByRole("img", {
-      name: "Choose who pays for its runs",
-    });
-    await expect(attention).toBeVisible();
-    await attention.hover();
-    await expect(page.getByRole("tooltip")).toHaveText(
-      "Choose who pays for its runs",
-    );
-    const iconBounds = await attention.boundingBox();
-    await expect(async () => {
-      const tooltipBounds = await page
-        .locator('[data-slot="tooltip-content"]')
-        .boundingBox();
-      expect(iconBounds).not.toBeNull();
-      expect(tooltipBounds).not.toBeNull();
-      if (!iconBounds || !tooltipBounds)
-        throw new Error("Missing tooltip or icon bounds");
-      expect(
-        Math.abs(
-          tooltipBounds.x +
-            tooltipBounds.width / 2 -
-            (iconBounds.x + iconBounds.width / 2),
-        ),
-      ).toBeLessThan(4);
-      expect(tooltipBounds.y + tooltipBounds.height).toBeLessThanOrEqual(
-        iconBounds.y,
-      );
-    }).toPass();
+    await expect(authenticationRow.getByRole("img")).toHaveCount(0);
+    await expect(page.getByText("Select at least one option.")).toBeVisible();
     await subscription.check();
     await expect(subscription).toBeChecked();
     await expect(companyKey).not.toBeChecked();
+    await expect(page.getByText("Select at least one option.")).toHaveCount(0);
     await expect(authenticationRow.getByRole("img")).toHaveCount(0);
 
     const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);

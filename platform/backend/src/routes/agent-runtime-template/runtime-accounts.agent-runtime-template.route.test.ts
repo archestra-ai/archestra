@@ -393,7 +393,7 @@ describe("a runtime's account rule", () => {
       expect(await accountOf(agent.id, ctx.member)).toMatchObject({
         choice: { authentication: "subscription" },
         choiceError:
-          "This agent is locked to a company API key, so your own choice is not used.",
+          "This agent is locked to an API key, so your own choice is not used.",
       });
       expect(await stored(agent.id)).toEqual(before);
 

@@ -897,7 +897,7 @@ describe("PUT /api/agents/:id/runtime/account", () => {
       );
       expect(onSubscription.statusCode).toBe(400);
       expect(onSubscription.json().error.message).toBe(
-        "A connection goes only with a company API key. Leave it empty.",
+        "A connection goes only with an API key. Leave it empty.",
       );
     });
 
@@ -1610,14 +1610,14 @@ describe("PUT /api/agents/:id/runtime/account", () => {
     const refused = await put(company, bySubscription.id);
     expect(refused.statusCode).toBe(409);
     expect(refused.json().error.message).toBe(
-      "This agent is locked to each person's own subscription, so you cannot choose a company API key for it.",
+      "This agent is locked to each person's own subscription, so you cannot choose an API key for it.",
     );
     expect((await put(subscription, bySubscription.id)).statusCode).toBe(200);
 
     const refusedByKey = await put(subscription, byKey.id);
     expect(refusedByKey.statusCode).toBe(409);
     expect(refusedByKey.json().error.message).toBe(
-      "This agent is locked to a company API key, so you cannot choose a personal subscription for it.",
+      "This agent is locked to an API key, so you cannot choose a personal subscription for it.",
     );
     expect(await storedChoice(byKey.id)).toBeNull();
     // The agent's company key is what a key lock gives everyone anyway.

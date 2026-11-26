@@ -65,9 +65,9 @@ describe("agentRunBlock", () => {
     expect(
       agentRunBlock(
         blocked({ missing: [credential("CLAUDE_CODE_ACCOUNT", "Claude")] }),
-        { companyAccount: "a company API key" },
+        { companyAccount: "an API key" },
       ),
-    ).toBe("Sign in with Claude or use a company API key to run this agent.");
+    ).toBe("Sign in with Claude or use an API key to run this agent.");
     expect(
       agentRunBlock(
         blocked({

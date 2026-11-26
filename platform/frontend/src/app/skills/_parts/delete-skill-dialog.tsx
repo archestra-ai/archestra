@@ -93,7 +93,7 @@ export function SkillDeleteDescription({
           }))}
           onNavigate={onNavigate}
         />
-        <span>.</span>
+        <span>{skills.length === 1 ? " skill." : " skills."}</span>
       </span>
       <span className="mt-3 block">
         {canOpenDeletedView ? (

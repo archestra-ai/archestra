@@ -9,7 +9,10 @@ vi.mock("@/lib/skills/skill.query", () => ({ useDeleteSkill: vi.fn() }));
 import { usePathname } from "next/navigation";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDeleteSkill } from "@/lib/skills/skill.query";
-import { DeleteSkillDialog } from "./delete-skill-dialog";
+import {
+  DeleteSkillDialog,
+  SkillDeleteDescription,
+} from "./delete-skill-dialog";
 
 const mutateAsync = vi.fn();
 
@@ -55,7 +58,7 @@ describe("DeleteSkillDialog", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent(
-      "Agents will no longer be able to use pdf-tools.",
+      "Agents will no longer be able to use pdf-tools skill.",
     );
     // Named as a link to the skill's own page, to look before deciding.
     expect(screen.getByRole("link", { name: "pdf-tools" })).toHaveAttribute(
@@ -104,6 +107,23 @@ describe("DeleteSkillDialog", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("An admin can restore deleted skills.");
     expect(screen.queryByRole("link", { name: "Deleted" })).toBeNull();
+  });
+
+  it("names several skills as skills, for the bulk delete", () => {
+    mockCanOpenDeletedView(true);
+    const { container } = render(
+      <SkillDeleteDescription
+        skills={[
+          { id: "skill-1", name: "pdf-tools" },
+          { id: "skill-2", name: "csv-tools" },
+        ]}
+        canOpenDeletedView
+      />,
+    );
+
+    expect(container).toHaveTextContent(
+      "Agents will no longer be able to use pdf-tools and csv-tools skills.",
+    );
   });
 
   it("sends one delete for a double click on the confirm button", async () => {

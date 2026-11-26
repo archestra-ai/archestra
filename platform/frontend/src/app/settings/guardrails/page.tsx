@@ -3,13 +3,17 @@ import { SettingsSectionStack } from "@/components/settings/settings-block";
 import {
   OpenAppaAnnotatorModelSetting,
   OpenAppaClientCoverageSetting,
+  OpenAppaEnforcedMarksSetting,
   OpenAppaEnforcementSetting,
+  OpenAppaPersonApprovalSetting,
 } from "./openappa-settings-sections";
 
 export default function OpenAppaSettingsPage() {
   return (
     <SettingsSectionStack className="max-w-4xl">
       <OpenAppaEnforcementSetting />
+      <OpenAppaPersonApprovalSetting />
+      <OpenAppaEnforcedMarksSetting />
       <OpenAppaAnnotatorModelSetting />
       <OpenAppaClientCoverageSetting />
       <AppaGithubSyncPanel />

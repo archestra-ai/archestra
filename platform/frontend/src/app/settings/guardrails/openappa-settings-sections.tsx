@@ -1,6 +1,7 @@
 "use client";
 
 import { DocsPage, getDocsUrl, providerSupportsChat } from "@archestra/shared";
+import { X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useOpenAppaSetupState } from "@/app/openappa/_parts/use-openappa-setup-state";
@@ -8,6 +9,9 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { SettingsBlock } from "@/components/settings/settings-block";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -16,13 +20,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
+  type GuardrailsMode,
+  type PersonApproval,
   useGuardrailsDeployment,
+  useIsGuardrailsModeOrApprovalSaving,
   useUpdateAnnotatorModel,
-  useUpdateGuardrailsDeployment,
+  useUpdateEnforcedMarks,
+  useUpdateGuardrailsMode,
+  useUpdatePersonApproval,
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -31,68 +40,194 @@ import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 
 /**
- * Whether tool calls are checked against the policy at all, named for the
- * state Guardrails run in: Observe checks every call but lets the platform
- * approve for the agent, so it must not read as enforcing.
+ * Whether tool calls are checked against the policy, and whether a call the
+ * policy blocks still runs (Observe) or waits for a remedy (Enforce).
  */
 export function OpenAppaEnforcementSetting() {
   const deployment = useGuardrailsDeployment({ poll: true });
-  const update = useUpdateGuardrailsDeployment();
+  const update = useUpdateGuardrailsMode();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
   const { isFresh } = useOpenAppaSetupState();
+  const saving = useIsGuardrailsModeOrApprovalSaving();
   const enabled = Boolean(deployment.data?.enabled);
   const observing = deployment.data?.mode === "observe";
-  const label = observing ? "Observe the policy" : "Enforce the policy";
   return (
     <SettingsBlock
       id="enforcement"
-      title={label}
+      title="Guardrails mode"
       description={
-        observing ? (
-          <>
+        <>
+          {observing ? (
             <span>
-              Guardrails observe your policy. Every tool call is checked and
-              recorded, but the platform applies remedy plans for the agent, so
-              calls your policy would block still run. Turning this off and on
-              again switches to Enforce.
+              Guardrails check and record tool calls, and the platform answers
+              remedies for the agent.
             </span>
-            <ModesDocsLink />
-          </>
-        ) : enabled ? (
-          "Guardrails are on. Every tool call is checked against your policy before it runs."
-        ) : isFresh ? (
-          // Saving the first policy turns enforcement on; there is nothing to enforce before it.
-          <>
-            <span>There is no policy yet. </span>
-            <Link
-              href="/openappa"
-              className="text-primary underline underline-offset-2 hover:text-primary/80"
-            >
-              Create your policy
-            </Link>
-            <span> to turn this on.</span>
-          </>
-        ) : (
-          "Guardrails are off. Your policy isn't applied, so agents can call any tool."
-        )
+          ) : enabled ? (
+            <span>
+              Guardrails check tool calls against your policy before they run.
+            </span>
+          ) : isFresh ? (
+            // Saving the first policy turns enforcement on; there is nothing to enforce before it.
+            <>
+              <span>There is no policy yet. </span>
+              <Link
+                href="/openappa"
+                className="text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                Create your policy
+              </Link>
+              <span> to turn this on.</span>
+            </>
+          ) : (
+            <span>Guardrails are off. Your policy isn't applied.</span>
+          )}
+          {observing ? <ModesDocsLink /> : null}
+        </>
       }
       control={
         deployment.data ? (
-          <Switch
-            aria-label={label}
-            checked={enabled}
+          <OptionSelect
+            label="Guardrails mode"
+            options={MODE_OPTIONS}
+            value={deployment.data.mode}
             disabled={
               !canManage ||
               !deployment.data.featureEnabled ||
-              isFresh !== false ||
-              update.isPending
+              (deployment.data.mode === "off" && isFresh !== false) ||
+              saving
             }
-            onCheckedChange={(checked) => update.mutate(checked)}
+            onChange={update.mutate}
           />
         ) : (
-          <Skeleton className="h-5 w-9 rounded-full" />
+          <Skeleton className="h-9 w-48" />
+        )
+      }
+    />
+  );
+}
+
+/** Who answers what a person would be asked; only Enforce asks, but it can be set beforehand. */
+export function OpenAppaPersonApprovalSetting() {
+  const deployment = useGuardrailsDeployment({ poll: true });
+  const update = useUpdatePersonApproval();
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  const pinnedBy = deployment.data?.environmentOverrides.find(
+    ({ setting }) => setting === "personApproval",
+  )?.variable;
+  const saving = useIsGuardrailsModeOrApprovalSaving();
+  return (
+    <SettingsBlock
+      id="person-approval"
+      title="Approvals"
+      description={
+        <>
+          <span>Who answers approval requests in Enforce.</span>
+          {pinnedBy ? (
+            <span>
+              {" "}
+              Set by <code className="font-mono text-xs">{pinnedBy}</code>.
+            </span>
+          ) : null}
+        </>
+      }
+      control={
+        deployment.data ? (
+          <OptionSelect
+            label="Approvals"
+            options={APPROVAL_OPTIONS}
+            value={deployment.data.personApproval}
+            disabled={
+              !canManage ||
+              !deployment.data.featureEnabled ||
+              pinnedBy !== undefined ||
+              saving
+            }
+            onChange={update.mutate}
+          />
+        ) : (
+          <Skeleton className="h-9 w-48" />
+        )
+      }
+    />
+  );
+}
+
+/** Marks that Observe and automatic approval never answer for. */
+export function OpenAppaEnforcedMarksSetting() {
+  const deployment = useGuardrailsDeployment({ poll: true });
+  const update = useUpdateEnforcedMarks();
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  const [draft, setDraft] = useState("");
+  const marks = deployment.data?.enforcedMarks ?? [];
+  const mark = draft.trim();
+  const problem = markProblem(mark);
+  const disabled =
+    !canManage || !deployment.data?.featureEnabled || update.isPending;
+  const add = () => {
+    if (problem === null)
+      update.mutate({ add: mark }, { onSuccess: () => setDraft("") });
+  };
+  return (
+    <SettingsBlock
+      id="enforced-marks"
+      title="Approvals that need a person"
+      description="In Observe and with automatic approval, these still wait for a person."
+      control={
+        deployment.data ? (
+          <div className="flex w-full flex-col gap-2 sm:w-80">
+            <div className="flex gap-2">
+              <Input
+                aria-label="New enforced mark"
+                placeholder="human-approval"
+                value={draft}
+                disabled={disabled}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key !== "Enter" ||
+                    event.nativeEvent.isComposing ||
+                    event.keyCode === 229
+                  )
+                    return;
+                  event.preventDefault();
+                  add();
+                }}
+              />
+              <Button
+                variant="outline"
+                disabled={disabled || problem !== null}
+                onClick={add}
+              >
+                Add
+              </Button>
+            </div>
+            {problem && mark ? (
+              <p className="text-destructive text-xs">{problem}</p>
+            ) : null}
+            <div className="flex flex-wrap gap-1">
+              {marks.map((saved) => (
+                <Badge key={saved} variant="secondary">
+                  <span className="font-mono">{saved}</span>
+                  <UnstyledButton
+                    aria-label={`Remove ${saved}`}
+                    disabled={disabled}
+                    className="ml-1 rounded-full"
+                    onClick={() => update.mutate({ remove: saved })}
+                  >
+                    <X className="size-3" />
+                  </UnstyledButton>
+                </Badge>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <Skeleton className="h-9 w-80" />
         )
       }
     />
@@ -298,6 +433,92 @@ export function OpenAppaClientCoverageSetting() {
         )
       }
     />
+  );
+}
+
+type Option = { label: string; description: string };
+
+const MODE_OPTIONS: Record<GuardrailsMode, Option> = {
+  off: { label: "Off", description: "Your policy isn't applied." },
+  observe: {
+    label: "Observe",
+    description:
+      "Calls are checked and recorded; the platform answers remedies.",
+  },
+  enforce: {
+    label: "Enforce",
+    description: "Calls run only as your policy allows.",
+  },
+};
+
+const APPROVAL_OPTIONS: Record<PersonApproval, Option> = {
+  ask: {
+    label: "Ask the person",
+    description: "The person in the session answers.",
+  },
+  auto_unattended: {
+    label: "Automatic in Agent Runtime",
+    description:
+      "The platform answers in sessions opened with an Agent Runtime credential.",
+  },
+  auto_everywhere: {
+    label: "Always automatic",
+    description: "The platform answers in every session.",
+  },
+};
+
+/** Mirrors the backend's EnforcedMarksSchema for one mark. */
+const MAX_MARK_LENGTH = 128;
+
+function markProblem(mark: string): string | null {
+  if (!mark) return "Enter a mark.";
+  if (mark.length > MAX_MARK_LENGTH)
+    return `Use at most ${MAX_MARK_LENGTH} characters.`;
+  if (mark.includes("\u0000")) return "A mark can't contain NUL.";
+  return null;
+}
+
+function isOption<T extends string>(
+  options: Record<T, Option>,
+  value: string,
+): value is T {
+  return Object.hasOwn(options, value);
+}
+
+function OptionSelect<T extends string>({
+  label,
+  options,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  options: Record<T, Option>;
+  value: T;
+  disabled: boolean;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      disabled={disabled}
+      onValueChange={(picked) => {
+        if (isOption(options, picked)) onChange(picked);
+      }}
+    >
+      <SelectTrigger aria-label={label} className="w-full lg:w-48">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper" align="end">
+        {Object.entries<Option>(options).map(
+          ([option, { label: name, description }]) => (
+            <SelectItem key={option} value={option} description={description}>
+              {name}
+            </SelectItem>
+          ),
+        )}
+      </SelectContent>
+    </Select>
   );
 }
 

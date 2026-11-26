@@ -3,17 +3,42 @@
 import { Gauge, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
+import {
+  type GuardrailsMode,
+  useGuardrailsDeployment,
+} from "@/lib/guardrails-deployment.query";
 import { cn } from "@/lib/utils/tailwind";
+
+const MODE_BADGE: Record<
+  GuardrailsMode,
+  { label: string; tone: string; dot: string }
+> = {
+  off: {
+    label: "Not configured",
+    tone: "bg-muted text-muted-foreground",
+    dot: "border-[1.5px] border-muted-foreground/60",
+  },
+  observe: {
+    label: "Observe only",
+    tone: "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+    dot: "bg-amber-500",
+  },
+  enforce: {
+    label: "Enforced",
+    tone: "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+    dot: "bg-emerald-500",
+  },
+};
 
 /** Guardrails and budgets: one line each, with the page that configures it. */
 export function SummaryTiles() {
   // Any member may read the switch, as the Connect page does.
   const { data: guardrails } = useGuardrailsDeployment({ anyMember: true });
-  // The deployment's own switch, as the Guardrails page shows it; not per key.
+  // The deployment's own mode, as the Guardrails page shows it; not per key.
   // Unknown (loading, or the feature is off) shows no state rather than a
   // wrong one.
-  const enforced = guardrails ? guardrails.active === true : undefined;
+  const mode = guardrails && (guardrails.active ? guardrails.mode : "off");
+  const badge = mode && MODE_BADGE[mode];
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Tile
@@ -21,30 +46,23 @@ export function SummaryTiles() {
         icon={<ShieldCheck />}
         title="Guardrails"
         badge={
-          enforced !== undefined && (
+          badge && (
             <span
               className={cn(
                 "inline-flex h-5 items-center gap-1.5 rounded-full px-2 text-[11.5px] font-medium whitespace-nowrap",
-                enforced
-                  ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                  : "bg-muted text-muted-foreground",
+                badge.tone,
               )}
             >
               <span
                 aria-hidden
-                className={cn(
-                  "size-1.5 rounded-full",
-                  enforced
-                    ? "bg-emerald-500"
-                    : "border-[1.5px] border-muted-foreground/60",
-                )}
+                className={cn("size-1.5 rounded-full", badge.dot)}
               />
-              {enforced ? "Enforced" : "Not configured"}
+              {badge.label}
             </span>
           )
         }
         text={
-          enforced === false
+          mode === "off"
             ? "Add a policy to deterministically check every request"
             : "Deterministic data leak prevention"
         }

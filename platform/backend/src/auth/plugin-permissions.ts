@@ -21,6 +21,11 @@ export interface PluginPermissionChecker {
   canRead: boolean;
   /** Reads every plugin — a read grant at `*` scope. */
   canReadAll: boolean;
+  /**
+   * Manages every plugin — an update grant at `*` scope. What the list of
+   * deleted plugins asks for, as the skills trash asks it of skills.
+   */
+  canUpdateAll: boolean;
   /** The caller's plugin grants, for other checks in the same request to reuse. */
   grants: ScopedPermission[];
 }
@@ -66,6 +71,12 @@ export async function getPluginPermissionChecker(params: {
         grant.resource === "plugin" &&
         grant.scope === "*" &&
         grant.action === "read",
+    ),
+    canUpdateAll: grants.some(
+      (grant) =>
+        grant.resource === "plugin" &&
+        grant.scope === "*" &&
+        grant.action === "update",
     ),
   };
 }

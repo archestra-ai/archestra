@@ -14,6 +14,9 @@ const access = vi.hoisted(() => ({
   grants: [] as { resource: string; action: string; scope: string }[],
   plugins: null as unknown[] | null,
   isPending: false,
+  isGlobalAdmin: false,
+  /** The filters the list was last asked with. */
+  listFilters: undefined as { status?: string } | undefined,
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
@@ -44,8 +47,15 @@ vi.mock("@/lib/auth/auth.query", () => ({
     "/plugins": true,
   }),
 }));
+vi.mock("@/lib/organization.query", () => ({
+  useIsGlobalAdmin: () => ({
+    isGlobalAdmin: access.isGlobalAdmin,
+    isLoading: false,
+  }),
+}));
 vi.mock("@/components/resource-scope-filter", () => ({
   ActiveFilterBadges: () => null,
+  ResourceDeletedStatusFilter: () => null,
   ResourceScopeFilter: () => <button type="button">Visibility filter</button>,
   useScopeFilterParams: () => ({
     scope: undefined,
@@ -63,13 +73,29 @@ vi.mock("./_parts/plugin-install-dialog", () => ({
   PluginInstallDialog: () => null,
 }));
 const deleteMutateAsync = vi.hoisted(() => vi.fn());
+const restoreMutate = vi.hoisted(() => vi.fn());
+const restoreMutateAsync = vi.hoisted(() => vi.fn());
+const purgeMutateAsync = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/plugins/plugin.query", () => ({
-  usePlugins: () => ({
-    data: access.plugins ?? [PLUGIN],
+  usePlugins: (_enabled?: boolean, filters?: { status?: string }) => {
+    // The first call on the page is the list itself.
+    if (filters) access.listFilters = filters;
+    return {
+      data: access.plugins ?? [PLUGIN],
+      isPending: false,
+      isFetching: false,
+      isLoadingError: false,
+      refetch: vi.fn(),
+    };
+  },
+  useRestorePlugins: () => ({
+    mutate: restoreMutate,
+    mutateAsync: restoreMutateAsync,
     isPending: false,
-    isFetching: false,
-    isLoadingError: false,
-    refetch: vi.fn(),
+  }),
+  usePermanentlyDeletePlugins: () => ({
+    mutateAsync: purgeMutateAsync,
+    isPending: false,
   }),
   useDeletePlugins: () => ({
     mutateAsync: deleteMutateAsync,
@@ -137,6 +163,9 @@ describe("PluginsPage", () => {
     ];
     access.plugins = null;
     access.isPending = false;
+    access.isGlobalAdmin = false;
+    access.listFilters = undefined;
+    vi.clearAllMocks();
   });
 
   it("offers adding a plugin to a role that may only create plugins", () => {
@@ -560,5 +589,117 @@ describe("PluginsPage", () => {
         name: "Supported platforms: macOS and Linux, Windows",
       }),
     ).toHaveLength(2);
+  });
+  describe("the deleted view", () => {
+    const openDeleted = () =>
+      vi
+        .mocked(useSearchParams)
+        .mockReturnValue(
+          new URLSearchParams("status=deleted") as ReturnType<
+            typeof useSearchParams
+          >,
+        );
+    const manageEveryPlugin = () =>
+      access.grants.push(
+        { resource: "plugin", action: "update", scope: "*" },
+        { resource: "plugin", action: "delete", scope: "*" },
+      );
+    const row = () =>
+      screen.getByText("Policy Runtime").closest("tr") as HTMLElement;
+
+    it("lists the trash for a reader who manages every plugin, with a way back and a way out on each row", async () => {
+      openDeleted();
+      manageEveryPlugin();
+      access.isGlobalAdmin = true;
+      const push = vi.fn();
+      vi.mocked(useRouter).mockReturnValue({
+        push,
+        replace: vi.fn(),
+      } as unknown as ReturnType<typeof useRouter>);
+      const user = userEvent.setup();
+      render(<PluginsPage />);
+
+      expect(access.listFilters).toMatchObject({ status: "deleted" });
+      // A deleted plugin has nothing to install or edit, and no page to open.
+      expect(
+        within(row()).queryByRole("button", { name: /^Install/ }),
+      ).toBeNull();
+      expect(within(row()).queryByRole("link", { name: /^Edit/ })).toBeNull();
+      await user.click(screen.getByText("Policy Runtime"));
+      expect(push).not.toHaveBeenCalled();
+
+      await user.click(
+        within(row()).getByRole("button", { name: "Restore Policy Runtime" }),
+      );
+      expect(restoreMutate).toHaveBeenCalledExactlyOnceWith([
+        { id: PLUGIN.id, name: PLUGIN.displayName },
+      ]);
+
+      // Permanent delete asks first, and names the plugin.
+      purgeMutateAsync.mockResolvedValue({
+        succeeded: [{ id: PLUGIN.id, name: PLUGIN.displayName }],
+        failed: [],
+      });
+      await user.click(
+        within(row()).getByRole("button", {
+          name: "Delete permanently Policy Runtime",
+        }),
+      );
+      const dialog = screen.getByRole("dialog", {
+        name: "Delete plugin permanently",
+      });
+      expect(dialog).toHaveTextContent(
+        "This destroys Policy Runtime along with its files and versions",
+      );
+      expect(purgeMutateAsync).not.toHaveBeenCalled();
+      await user.click(
+        within(dialog).getByRole("button", { name: "Delete permanently" }),
+      );
+      expect(purgeMutateAsync).toHaveBeenCalledExactlyOnceWith([
+        { id: PLUGIN.id, name: PLUGIN.displayName },
+      ]);
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+    });
+
+    it("restores the ticked plugins from the bulk bar, and offers permanent delete only to an admin", async () => {
+      openDeleted();
+      manageEveryPlugin();
+      restoreMutateAsync.mockResolvedValue({
+        succeeded: [{ id: PLUGIN.id, name: PLUGIN.displayName }],
+        failed: [],
+      });
+      const user = userEvent.setup();
+      render(<PluginsPage />);
+
+      await user.click(within(row()).getByRole("checkbox"));
+      // The live list's actions are not what a deleted plugin is ticked for.
+      expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+      // Manages every plugin, but holds no built-in admin role.
+      expect(
+        screen.queryByRole("button", { name: "Delete permanently" }),
+      ).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: "Restore" }));
+      expect(restoreMutateAsync).toHaveBeenCalledExactlyOnceWith([
+        { id: PLUGIN.id, name: PLUGIN.displayName },
+      ]);
+      await waitFor(() =>
+        expect(within(row()).getByRole("checkbox")).not.toBeChecked(),
+      );
+    });
+
+    it("shows the live list to a reader who does not manage every plugin", () => {
+      openDeleted();
+      render(<PluginsPage />);
+
+      // The deleted list is never asked for: it would only come back refused.
+      expect(access.listFilters?.status).toBeUndefined();
+      expect(
+        within(row()).queryByRole("button", { name: /^Restore/ }),
+      ).toBeNull();
+    });
   });
 });

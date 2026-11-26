@@ -2018,6 +2018,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetPlugin]: {},
   [RouteId.UpdatePlugin]: {},
   [RouteId.DeletePlugin]: {},
+  // Authorized per plugin by its grants, like the delete it undoes.
+  [RouteId.RestorePlugin]: {},
+  // Irreversible, so the handler narrows this to a built-in admin role, as
+  // the skills purge does.
+  [RouteId.PermanentlyDeletePlugin]: {},
   [RouteId.PreviewGithubPlugin]: { plugin: ["create"] },
   [RouteId.ImportGithubPlugin]: { plugin: ["create"] },
   [RouteId.PreviewGithubPluginUpdate]: {},

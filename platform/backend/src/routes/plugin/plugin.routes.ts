@@ -13,6 +13,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
+import { isGlobalAdmin } from "@/auth/utils";
 import type { GitAccess } from "@/git-hosts/git-access";
 import {
   PluginLabelModel,
@@ -273,6 +274,13 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           access: ResourceAccessQuerySchema,
           sharedWith: ResourceSharedWithQuerySchema,
           owner: ResourceOwnerQuerySchema,
+          status: z
+            .enum(["active", "deleted"])
+            .optional()
+            .describe(
+              "`deleted` lists deleted plugins instead of the live ones. " +
+                "Only for a caller who can update every plugin.",
+            ),
         }),
         response: constructResponseSchema(z.array(PluginListItemSchema)),
       },
@@ -285,6 +293,11 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!checker.canRead) {
         throw new ApiError(403, "You do not have permission to view plugins");
       }
+      // The trash is an admin surface, as it is for skills: it takes `update`
+      // on every plugin. Restore itself is still authorized per plugin.
+      if (query.status === "deleted" && !checker.canUpdateAll) {
+        throw new ApiError(403, "Forbidden");
+      }
       const accessiblePluginIds = checker.canReadAll
         ? undefined
         : await PluginTeamModel.getUserAccessiblePluginIds({
@@ -295,6 +308,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         accessiblePluginIds,
         labels: parseLabelsParam(query.labels),
+        status: query.status,
         access: await ResourcePermissionSubjectModel.resolveAccessFilter({
           userId: user.id,
           organizationId,
@@ -983,6 +997,102 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!plugin) throw new ApiError(404, "Plugin not found");
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/plugins/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestorePlugin,
+        description:
+          "Restore a deleted plugin. It comes back not syncing: deleting a " +
+          "Git plugin clears its sync schedule and stored credential. 409 " +
+          "when a live plugin has since taken its place, such as the same " +
+          "marketplace entry imported again.",
+        tags: ["Plugins"],
+        params: PluginParamsSchema,
+        response: constructResponseSchema(PluginWithFilesSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, params } = request;
+      // The grant that deleted it brings it back. A plugin's grants survive
+      // its deletion, so this answers for a deleted plugin too.
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "delete",
+      });
+      const deleted = await PluginModel.findDeletedById({
+        id: params.id,
+        organizationId,
+      });
+      if (!deleted) {
+        // Already live: a repeated request (a double click, a retry after a
+        // lost response) gets the plugin back instead of a "not found" for a
+        // restore that worked.
+        const live = await PluginModel.findById({
+          id: params.id,
+          organizationId,
+        });
+        if (!live) throw new ApiError(404, "Plugin not found");
+        // Nothing was restored, so there is nothing to audit.
+        request.auditSkip = true;
+        return reply.send(live);
+      }
+
+      try {
+        await PluginModel.restore({ id: params.id, organizationId });
+      } catch (error) {
+        // Only a live plugin in the deleted one's place can refuse this
+        // write: the unique indexes all leave deleted rows out.
+        if (isUniqueConstraintError(error)) {
+          throw new ApiError(
+            409,
+            `Cannot restore: a plugin from the same source as "${deleted.displayName}" already exists.`,
+          );
+        }
+        throw error;
+      }
+      const restored = await PluginModel.findById({
+        id: params.id,
+        organizationId,
+      });
+      if (!restored) throw new ApiError(404, "Plugin not found");
+      return reply.send(restored);
+    },
+  );
+
+  fastify.delete(
+    "/api/plugins/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeletePlugin,
+        description:
+          "Permanently destroy a deleted plugin (global admins only). " +
+          "Irreversible, with no grace period: its files and versions are " +
+          "destroyed, along with its grants, labels, usage events and share " +
+          "links. Copies already installed on developer machines are not " +
+          "touched. 404 if there is no deleted plugin with that id in the " +
+          "organization, which is also the answer when the plugin is still " +
+          "live or the caller is not a global admin. Restore wins a race.",
+        tags: ["Plugins"],
+        params: PluginParamsSchema,
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ organizationId, user, params }, reply) => {
+      // Before the plugin is read: a caller who is not a global admin gets
+      // the same 404 whatever the id, so the route never confirms a plugin
+      // exists.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
+        throw new ApiError(404, "Plugin not found");
+      }
+      const purged = await PluginModel.purge({ id: params.id, organizationId });
+      if (!purged) throw new ApiError(404, "Plugin not found");
       return reply.send({ success: true });
     },
   );

@@ -36,12 +36,12 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { ItemNames } from "@/components/item-names";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
 import {
   PERMANENT_DELETE_LABEL,
+  PermanentDeleteDialog,
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -1756,8 +1756,6 @@ function PermanentlyDeleteSkillsDialog({
   onDeleted?: () => void;
 }) {
   const permanentlyDeleteSkills = usePermanentlyDeleteSkills();
-  const one = skills.length === 1;
-
   // One request per confirmation: a second click before the button has
   // re-rendered as busy would ask to destroy skills that are already gone.
   const handleDelete = useSingleFlight(async () => {
@@ -1772,28 +1770,17 @@ function PermanentlyDeleteSkillsDialog({
   });
 
   return (
-    <DeleteConfirmDialog
+    <PermanentDeleteDialog
+      noun="skill"
+      items={skills}
+      lost={{
+        one: "every version and resource file, its grants and environment assignments, and any public share link for it",
+        many: "every version and resource file, their grants and environment assignments, and any public share links for them",
+      }}
       open={open}
       onOpenChange={onOpenChange}
-      title={
-        one
-          ? "Delete skill permanently"
-          : `Delete ${skills.length} skills permanently`
-      }
-      description={
-        <>
-          <span>This destroys </span>
-          <ItemNames items={skills} />
-          <span>
-            {one
-              ? " along with every version and resource file, its grants and environment assignments, and any public share link for it. Nothing recovers it."
-              : " along with every version and resource file, their grants and environment assignments, and any public share links for them. Nothing recovers them."}
-          </span>
-        </>
-      }
       isPending={permanentlyDeleteSkills.isPending}
       onConfirm={handleDelete}
-      confirmLabel={PERMANENT_DELETE_LABEL}
     />
   );
 }

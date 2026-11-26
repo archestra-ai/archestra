@@ -21,6 +21,7 @@ import {
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { restore } from "@/database/soft-delete";
 import {
   type ClientType,
   type CreatePlugin,
@@ -75,6 +76,8 @@ class PluginModel {
     labels?: Record<string, string[]>;
     /** The list's "Show" filter; omit when not filtering. */
     access?: ResourceAccessFilter;
+    /** `deleted` lists the trash instead of the live plugins. */
+    status?: "active" | "deleted";
   }): Promise<PluginListItem[]> {
     if (params.accessiblePluginIds?.length === 0) return [];
 
@@ -108,7 +111,9 @@ class PluginModel {
               })
             : undefined,
           // SPDX-SnippetEnd
-          notDeleted(schema.pluginsTable),
+          params.status === "deleted"
+            ? isNotNull(schema.pluginsTable.deletedAt)
+            : notDeleted(schema.pluginsTable),
         ),
       )
       .orderBy(desc(schema.pluginsTable.updatedAt));
@@ -701,6 +706,74 @@ class PluginModel {
       )
       .returning();
     return plugin ?? null;
+  }
+
+  /** A plugin in the organization's trash, or null. */
+  static async findDeletedById(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<Plugin | null> {
+    const [plugin] = await db
+      .select()
+      .from(schema.pluginsTable)
+      .where(
+        and(
+          eq(schema.pluginsTable.id, params.id),
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          isNotNull(schema.pluginsTable.deletedAt),
+        ),
+      )
+      .limit(1);
+    return plugin ?? null;
+  }
+
+  /**
+   * Make a deleted plugin live again. False when it is not in the trash.
+   *
+   * What the delete cleared stays cleared: the plugin comes back not syncing
+   * and without a stored credential, so a Git plugin has to be connected
+   * again by someone who may use that credential.
+   *
+   * Throws the unique violation when a live plugin has since taken the
+   * deleted one's place (the same marketplace entry imported again, say);
+   * the caller turns that into its refusal.
+   */
+  static async restore(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const restored = await restore(
+      db,
+      schema.pluginsTable,
+      and(
+        eq(schema.pluginsTable.id, params.id),
+        eq(schema.pluginsTable.organizationId, params.organizationId),
+      ),
+    );
+    return restored > 0;
+  }
+
+  /**
+   * Destroy a deleted plugin for good: the row, and by cascade its files,
+   * versions, grants, labels, usage events and share links. False when it is
+   * not in the trash, which is also how a restore that won the race reports
+   * itself.
+   */
+  static async purge(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const purged = await db
+      .delete(schema.pluginsTable)
+      .where(
+        and(
+          eq(schema.pluginsTable.id, params.id),
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          isNotNull(schema.pluginsTable.deletedAt),
+        ),
+      )
+      .returning({ id: schema.pluginsTable.id });
+    return purged.length > 0;
   }
 
   static async applyGithubUpdate(params: {

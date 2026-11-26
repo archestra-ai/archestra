@@ -82,6 +82,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "plugin.created": "Plugin created",
   "plugin.updated": "Plugin updated",
   "plugin.deleted": "Plugin deleted",
+  "plugin.restored": "Plugin restored",
+  "plugin.purged": "Plugin permanently deleted",
   "plugin.syncTriggered": "Plugin update check started",
   // Connector
   "clientConnection.updated": "Client connection request reviewed",

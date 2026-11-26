@@ -23,6 +23,8 @@ const {
   applyGithubPluginUpdate,
   createPlugin,
   deletePlugin,
+  permanentlyDeletePlugin,
+  restorePlugin,
   discoverGithubPluginMarketplace,
   getPlugin,
   getPlugins,
@@ -57,7 +59,7 @@ export function usePlugins(
   enabled = true,
   filters?: Pick<
     NonNullable<archestraApiTypes.GetPluginsData["query"]>,
-    "labels" | "access" | "sharedWith" | "owner"
+    "labels" | "access" | "sharedWith" | "owner" | "status"
   >,
 ) {
   // Label and access filtering are resolved server-side (the junction table
@@ -67,12 +69,14 @@ export function usePlugins(
   const access = filters?.access;
   const sharedWith = filters?.sharedWith;
   const owner = filters?.owner;
+  // `deleted` asks for the trash instead of the live plugins.
+  const status = filters?.status;
   return useQuery({
-    queryKey: pluginsQueryKey({ labels, access, sharedWith, owner }),
+    queryKey: pluginsQueryKey({ labels, access, sharedWith, owner, status }),
     enabled,
     queryFn: async () => {
       const { data, error } = await getPlugins({
-        query: { labels, access, sharedWith, owner },
+        query: { labels, access, sharedWith, owner, status },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
@@ -329,12 +333,57 @@ export function useTriggerPluginGithubSync(id: string) {
  * row, the bulk bar and the plugin's page.
  */
 export function useDeletePlugins() {
+  return usePluginsMutation({
+    request: (id) => deletePlugin({ path: { id } }),
+    words: { done: "deleted", doing: "delete" },
+  });
+}
+
+/** Restores one deleted plugin or several, reported like the delete. */
+export function useRestorePlugins() {
+  return usePluginsMutation({
+    request: (id) => restorePlugin({ path: { id } }),
+    words: { done: "restored", doing: "restore" },
+  });
+}
+
+/**
+ * Destroys one deleted plugin or several for good, reported like the delete.
+ * The API answers "not found" to anyone but a global admin.
+ */
+export function usePermanentlyDeletePlugins() {
+  return usePluginsMutation({
+    request: (id) => permanentlyDeletePlugin({ path: { id } }),
+    words: { done: "permanently deleted", doing: "permanently delete" },
+  });
+}
+
+export { isDeliverablePlugin } from "./plugin-eligibility";
+
+// === Internal helpers ===
+
+/**
+ * A new plugin is written with its author's full-access grants on it (read,
+ * use, update, delete, manage-permissions), which the cached capability list
+ * predates. Edit, install, delete, and permissions controls read that list, so
+ * refetch it before the create or import flow navigates to the new plugin.
+ */
+/**
+ * One request per plugin for a batch of them, with one report for the batch:
+ * the shape every plugin action that works on a row and on a selection takes.
+ */
+function usePluginsMutation(params: {
+  request: (id: string) => Promise<{ error?: unknown }>;
+  /** The action as a past participle and as a verb: "deleted", "delete". */
+  words: { done: string; doing: string };
+}) {
   const queryClient = useQueryClient();
+  const { request, words } = params;
   return useMutation({
     mutationFn: async (plugins: Array<{ id: string; name: string }>) => {
       const outcomes = await Promise.all(
         plugins.map(async (plugin) => {
-          const { error } = await deletePlugin({ path: { id: plugin.id } });
+          const { error } = await request(plugin.id);
           return { plugin, error };
         }),
       );
@@ -351,18 +400,19 @@ export function useDeletePlugins() {
       }
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       const total = succeeded.length + failed.length;
+      const Done = words.done.charAt(0).toUpperCase() + words.done.slice(1);
       if (total === 1 && failed.length === 1) {
         // One plugin, one reason: say the reason itself.
         handleApiError(failed[0].error);
       } else if (failed.length === 0) {
         toast.success(
-          total === 1 ? "Plugin deleted" : `Deleted ${total} plugins`,
+          total === 1 ? `Plugin ${words.done}` : `${Done} ${total} plugins`,
         );
       } else if (succeeded.length === 0) {
-        toast.error(`Couldn't delete ${failed.length} plugins`);
+        toast.error(`Couldn't ${words.doing} ${failed.length} plugins`);
       } else {
         toast.warning(
-          `Deleted ${succeeded.length} of ${total} plugins; ${failed.length} could not be deleted`,
+          `${Done} ${succeeded.length} of ${total} plugins; ${failed.length} could not be ${words.done}`,
         );
       }
       if (succeeded.length > 0) {
@@ -372,16 +422,6 @@ export function useDeletePlugins() {
   });
 }
 
-export { isDeliverablePlugin } from "./plugin-eligibility";
-
-// === Internal helpers ===
-
-/**
- * A new plugin is written with its author's full-access grants on it (read,
- * use, update, delete, manage-permissions), which the cached capability list
- * predates. Edit, install, delete, and permissions controls read that list, so
- * refetch it before the create or import flow navigates to the new plugin.
- */
 function invalidatePluginCapabilities(queryClient: QueryClient) {
   return queryClient.invalidateQueries({
     queryKey: authQueryKeys.scopedCapabilities(),

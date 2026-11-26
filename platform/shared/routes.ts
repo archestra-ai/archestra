@@ -1129,6 +1129,8 @@ export const RouteId = {
   GetPlugin: "getPlugin",
   UpdatePlugin: "updatePlugin",
   DeletePlugin: "deletePlugin",
+  RestorePlugin: "restorePlugin",
+  PermanentlyDeletePlugin: "permanentlyDeletePlugin",
   PreviewGithubPlugin: "previewGithubPlugin",
   ImportGithubPlugin: "importGithubPlugin",
   PreviewGithubPluginUpdate: "previewGithubPluginUpdate",

@@ -2,6 +2,7 @@
 
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
+  ArchiveRestore,
   Braces,
   ChevronDown,
   ChevronUp,
@@ -34,6 +35,11 @@ import {
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
+import {
+  PERMANENT_DELETE_LABEL,
+  PermanentDeleteDialog,
+  permanentDeleteRowAction,
+} from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import {
@@ -43,6 +49,7 @@ import {
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
+  ResourceDeletedStatusFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
@@ -73,13 +80,20 @@ import {
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
 import { holdsItemGrant } from "@/lib/auth/auth.utils";
+import { ACTION_LABEL } from "@/lib/design/resource-lexicon";
 import {
   usePluginLabelKeys,
   usePluginLabelValues,
 } from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
-import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
+import {
+  type PluginListItem,
+  usePermanentlyDeletePlugins,
+  usePlugins,
+  useRestorePlugins,
+} from "@/lib/plugins/plugin.query";
 import { repositoryLabel } from "@/lib/skills/skill-source";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { DeletePluginsDialog } from "./_parts/delete-plugins-dialog";
@@ -130,6 +144,14 @@ function PluginsList() {
   // Label filtering is server-side, so the value rides the list query rather
   // than narrowing the already-fetched array below.
   const labelsFilter = searchParams.get("labels") || undefined;
+  // The deleted view lists the trash. It is for a reader who manages every
+  // plugin (`plugin:update` at `*`, the grant the API asks for); for anyone
+  // else `?status=deleted` shows the live list, which is what they can read.
+  const isDeletedRequested = searchParams.get("status") === "deleted";
+  const manageAll = useHasPermissions({ plugin: ["update"] }, "*");
+  const isDeletedView = isDeletedRequested && manageAll.data === true;
+  // Neither list is asked for until it is known which one this reader gets.
+  const isDeletedViewUndecided = isDeletedRequested && manageAll.isPending;
 
   const {
     data: plugins,
@@ -138,11 +160,12 @@ function PluginsList() {
     isLoadingError,
     error: pluginsError,
     refetch,
-  } = usePlugins(true, {
+  } = usePlugins(!isDeletedViewUndecided, {
     labels: labelsFilter,
     access: scopeFilter.access,
     sharedWith: scopeFilter.sharedWith,
     owner: scopeFilter.owner,
+    status: isDeletedView ? "deleted" : undefined,
   });
 
   const setFilter = useCallback(
@@ -227,7 +250,9 @@ function PluginsList() {
       sourceRepo ||
       searchParams.has("state") ||
       scopeFilter.hasActiveScopeFilters ||
-      Boolean(labelsFilter),
+      Boolean(labelsFilter) ||
+      // An empty trash is not "no plugins yet".
+      isDeletedRequested,
   );
 
   const clearFilters = useCallback(() => {
@@ -238,6 +263,7 @@ function PluginsList() {
       "platform",
       "source",
       "state",
+      "status",
       "sourceRepo",
       "page",
       "scope",
@@ -268,6 +294,7 @@ function PluginsList() {
       source,
       sourceRepo,
       labels: labelsFilter,
+      deleted: isDeletedView,
     }),
   });
   const cardSelection = useBulkCardSelection({
@@ -294,7 +321,60 @@ function PluginsList() {
   const [installingPlugin, setInstallingPlugin] =
     useState<PluginListItem | null>(null);
 
+  const admin = useIsGlobalAdmin();
+  const restorePlugins = useRestorePlugins();
+  // One plugin from its row, or the ticked ones from the bulk bar: the same
+  // question either way.
+  const [permanentlyDeleting, setPermanentlyDeleting] = useState<{
+    plugins: readonly PluginListItem[];
+    fromSelection: boolean;
+  } | null>(null);
+  const named = (list: readonly PluginListItem[]) =>
+    list.map((plugin) => ({ id: plugin.id, name: plugin.displayName }));
+  // No confirmation: nothing is lost by a restore.
+  const restoreSelected = async () => {
+    const result = await restorePlugins
+      .mutateAsync(named(bulkSelection.selected))
+      .catch(() => null);
+    if (result && result.succeeded.length > 0) bulkSelection.clearSelection();
+  };
+
   const renderPluginActions = (plugin: PluginListItem) => {
+    if (isDeletedView) {
+      // A deleted plugin can come back or go for good; it has no page to
+      // open and nothing to install.
+      const deleteGrant = {
+        permissions: {},
+        disabled: !holdsItemGrant({
+          grants: pluginGrants,
+          resource: "plugin",
+          action: "delete",
+          id: plugin.id,
+        }),
+        disabledTooltip: "You do not have permission to restore this plugin",
+      };
+      return (
+        <TableRowActions
+          itemName={plugin.displayName}
+          actions={[
+            {
+              icon: <ArchiveRestore className="h-4 w-4" />,
+              label: ACTION_LABEL.restore,
+              ...deleteGrant,
+              onClick: () => restorePlugins.mutate(named([plugin])),
+            },
+            permanentDeleteRowAction({
+              admin,
+              onClick: () =>
+                setPermanentlyDeleting({
+                  plugins: [plugin],
+                  fromSelection: false,
+                }),
+            }),
+          ]}
+        />
+      );
+    }
     const actionModel = getPluginActionModel({ pluginId: plugin.id });
     const installAction = pluginAction(actionModel, "install");
     const editAction = pluginAction(actionModel, "edit");
@@ -576,7 +656,9 @@ function PluginsList() {
                         ]
                       : []),
                   ]}
-                  actions={<TableCardViewToggle />}
+                  // The trash is a table: a deleted plugin has no card to
+                  // open.
+                  actions={isDeletedView ? undefined : <TableCardViewToggle />}
                   search={
                     <SearchInput
                       paramName="search"
@@ -610,6 +692,13 @@ function PluginsList() {
                       ["cursor", "Cursor", clientFilterIcon("cursor")],
                     ]}
                   />
+                  {/* The grant the API asks of `status=deleted`, so the
+                      filter is offered only to a reader the deleted list
+                      will answer. */}
+                  <ResourceDeletedStatusFilter
+                    deletePermission={{ plugin: ["update"] }}
+                    deletePermissionScope="*"
+                  />
                   <EntityLabelFilter
                     useLabelKeys={usePluginLabelKeys}
                     useLabelValues={usePluginLabelValues}
@@ -627,54 +716,98 @@ function PluginsList() {
                 onClear={bulkSelection.clearSelection}
                 selectAllMatching={bulkSelection.selectAllMatching}
               >
-                <PermissionButton
-                  permissions={{}}
-                  variant="outline"
-                  size="sm"
-                  disabled={!canInstallSelected || !!bulkInstall.error}
-                  tooltip={
-                    !canInstallSelected
-                      ? "You do not have permission to install every selected plugin"
-                      : (bulkInstall.error ?? undefined)
-                  }
-                  onClick={() => setBulkInstallOpen(true)}
-                >
-                  <PackagePlus className="h-4 w-4" />
-                  <span>Install</span>
-                </PermissionButton>
-                <PermissionButton
-                  permissions={{}}
-                  variant="outline"
-                  size="sm"
-                  disabled={!canShareSelected}
-                  tooltip={
-                    canShareSelected
-                      ? undefined
-                      : "You do not have permission to manage access to every selected plugin"
-                  }
-                  onClick={() => setBulkVisibilityOpen(true)}
-                >
-                  <Pencil className="h-4 w-4" />
-                  <span>Add access</span>
-                </PermissionButton>
-                <PermissionButton
-                  permissions={{}}
-                  variant="destructive"
-                  size="sm"
-                  disabled={!canDeleteSelected}
-                  tooltip={
-                    canDeleteSelected
-                      ? undefined
-                      : "You do not have permission to delete every selected plugin"
-                  }
-                  onClick={() => setBulkDeleteOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Delete</span>
-                </PermissionButton>
+                {isDeletedView ? (
+                  <>
+                    <PermissionButton
+                      permissions={{}}
+                      size="sm"
+                      disabled={!canDeleteSelected || restorePlugins.isPending}
+                      tooltip={
+                        canDeleteSelected
+                          ? undefined
+                          : "You do not have permission to restore every selected plugin"
+                      }
+                      onClick={restoreSelected}
+                    >
+                      <ArchiveRestore className="h-4 w-4" />
+                      <span>
+                        {restorePlugins.isPending
+                          ? "Restoring..."
+                          : ACTION_LABEL.restore}
+                      </span>
+                    </PermissionButton>
+                    {/* A role, not a permission: offered only to the admins
+                        who can do it. */}
+                    {admin.isGlobalAdmin && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() =>
+                          setPermanentlyDeleting({
+                            plugins: bulkSelection.selected,
+                            fromSelection: true,
+                          })
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>{PERMANENT_DELETE_LABEL}</span>
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <PermissionButton
+                      permissions={{}}
+                      variant="outline"
+                      size="sm"
+                      disabled={!canInstallSelected || !!bulkInstall.error}
+                      tooltip={
+                        !canInstallSelected
+                          ? "You do not have permission to install every selected plugin"
+                          : (bulkInstall.error ?? undefined)
+                      }
+                      onClick={() => setBulkInstallOpen(true)}
+                    >
+                      <PackagePlus className="h-4 w-4" />
+                      <span>Install</span>
+                    </PermissionButton>
+                    <PermissionButton
+                      permissions={{}}
+                      variant="outline"
+                      size="sm"
+                      disabled={!canShareSelected}
+                      tooltip={
+                        canShareSelected
+                          ? undefined
+                          : "You do not have permission to manage access to every selected plugin"
+                      }
+                      onClick={() => setBulkVisibilityOpen(true)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      <span>Add access</span>
+                    </PermissionButton>
+                    <PermissionButton
+                      permissions={{}}
+                      variant="destructive"
+                      size="sm"
+                      disabled={!canDeleteSelected}
+                      tooltip={
+                        canDeleteSelected
+                          ? undefined
+                          : "You do not have permission to delete every selected plugin"
+                      }
+                      onClick={() => setBulkDeleteOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete</span>
+                    </PermissionButton>
+                  </>
+                )}
               </BulkActions>
 
               <TableCardViewContent
+                forceTable={isDeletedView}
                 cards={
                   <TableCardList
                     itemCount={filteredPlugins.length}
@@ -752,14 +885,23 @@ function PluginsList() {
                     emptyIcon={Braces}
                     emptyMessage="No plugins yet."
                     hasActiveFilters={hasActiveFilters}
-                    filteredEmptyMessage="No plugins match the current filters."
+                    filteredEmptyMessage={
+                      isDeletedView
+                        ? "No deleted plugins found."
+                        : "No plugins match the current filters."
+                    }
                     onClearFilters={clearFilters}
                     hideSelectedCount
                     sorting={sorting}
                     onSortingChange={setSorting}
                     manualSorting
-                    // The list holds only plugins the caller can read.
-                    onRowClick={(row) => router.push(pluginDetailHref(row.id))}
+                    // The list holds only plugins the caller can read. A
+                    // deleted plugin has no page to open.
+                    onRowClick={
+                      isDeletedView
+                        ? undefined
+                        : (row) => router.push(pluginDetailHref(row.id))
+                    }
                     rowSelection={bulkSelection.rowSelection}
                     onRowSelectionChange={bulkSelection.setRowSelection}
                     onPageRowIdsChange={bulkSelection.onPageRowIdsChange}
@@ -817,7 +959,66 @@ function PluginsList() {
           onDeleted={bulkSelection.clearSelection}
         />
       )}
+      {permanentlyDeleting && (
+        <PermanentlyDeletePluginsDialog
+          plugins={permanentlyDeleting.plugins}
+          onClose={() => setPermanentlyDeleting(null)}
+          // What was destroyed is no longer there to stay selected.
+          onDeleted={
+            permanentlyDeleting.fromSelection
+              ? bulkSelection.clearSelection
+              : undefined
+          }
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Asks before destroying deleted plugins for good, from a row or from the
+ * bulk bar, through the confirmation every trash shares.
+ */
+function PermanentlyDeletePluginsDialog({
+  plugins,
+  onClose,
+  onDeleted,
+}: {
+  plugins: readonly PluginListItem[];
+  onClose: () => void;
+  /** Fires once at least one plugin has been destroyed. */
+  onDeleted?: () => void;
+}) {
+  const permanentlyDelete = usePermanentlyDeletePlugins();
+  return (
+    <PermanentDeleteDialog
+      noun="plugin"
+      items={plugins.map((plugin) => ({
+        id: plugin.id,
+        name: plugin.displayName,
+      }))}
+      lost={{
+        one: "its files and versions, its grants and labels, and any share link for it. Copies already installed on developer machines stay until they are uninstalled",
+        many: "their files and versions, their grants and labels, and any share links for them. Copies already installed on developer machines stay until they are uninstalled",
+      }}
+      open
+      onOpenChange={(open) => !open && onClose()}
+      isPending={permanentlyDelete.isPending}
+      onConfirm={async () => {
+        const result = await permanentlyDelete
+          .mutateAsync(
+            plugins.map((plugin) => ({
+              id: plugin.id,
+              name: plugin.displayName,
+            })),
+          )
+          .catch(() => null);
+        // Nothing destroyed: the toast says why, and the question stays open.
+        if (!result || result.succeeded.length === 0) return;
+        onDeleted?.();
+        onClose();
+      }}
+    />
   );
 }
 

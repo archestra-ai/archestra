@@ -1086,6 +1086,19 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "plugin",
     fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
   },
+  // Restore and purge are verbs on :id, so each is registered with its own
+  // action. `findByIdForAudit` returns deleted rows and file digests, never
+  // file contents, so the purge's record holds no copy of what was destroyed.
+  "/api/plugins/:id/restore": {
+    resourceType: "plugin",
+    action: "plugin.restored",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  "/api/plugins/:id/permanent": {
+    resourceType: "plugin",
+    action: "plugin.purged",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
   "/api/plugins/github/import": {
     resourceType: "plugin",
     action: "plugin.created",

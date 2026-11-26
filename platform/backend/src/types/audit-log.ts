@@ -80,6 +80,8 @@ export const AuditEventNameSchema = z.enum([
   "plugin.created",
   "plugin.updated",
   "plugin.deleted",
+  "plugin.restored",
+  "plugin.purged",
   "plugin.syncTriggered",
   "clientConnection.updated",
   "clientPrivacy.updated",

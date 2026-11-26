@@ -66,6 +66,7 @@ export function SkillContentEditor({
   readOnlyMarker = true,
   downloadName,
   showDownload = true,
+  nameNotice = true,
   className,
 }: {
   manifest: string | null;
@@ -90,6 +91,11 @@ export function SkillContentEditor({
    * header does, so the button is not read as "download the open file".
    */
   showDownload?: boolean;
+  /**
+   * Whether the editor itself warns about a name that cannot be published
+   * over MCP. Off where a name field above the editor says it instead.
+   */
+  nameNotice?: boolean;
   className?: string;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(() =>
@@ -292,6 +298,7 @@ export function SkillContentEditor({
   );
 
   const nameNotPublishable =
+    nameNotice &&
     manifestOpen &&
     parsed.name !== null &&
     !isSpecCompliantSkillName(parsed.name);

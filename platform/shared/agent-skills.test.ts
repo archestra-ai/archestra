@@ -72,8 +72,8 @@ describe("describeUnusableSkillName", () => {
   it.each([
     ["", "Give the skill a name."],
     ["   ", "Give the skill a name."],
-    ["a/b", "slash"],
-    ["a\\b", "slash"],
+    ["a/b", "can't contain a slash `/`. Use hyphen `-` instead."],
+    ["a\\b", "can't contain a backslash `\\`. Use hyphen `-` instead."],
     ["two\nlines", "single line"],
     [".", "dot"],
     ["up..and-over", "dot"],

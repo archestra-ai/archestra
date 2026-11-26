@@ -63,6 +63,7 @@ import {
   type SkillDraft,
   skillArchiveFiles,
   skillDraftFromSkill,
+  skillDraftGap,
 } from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
 import {
@@ -262,13 +263,14 @@ function SkillDetailView({
     () => parseManifestFields(draft.manifest),
     [draft.manifest],
   );
-  const contentComplete = parsed.hasName && parsed.hasDescription;
   const nameProblem = useSkillNameProblem({
     name: parsed.name,
     originalName: skill.name,
     ownerId: skill.authorId,
     skillId: skill.id,
   });
+  const saveGap =
+    skillDraftGap(parsed) ?? nameProblem?.replaceAll("`", "") ?? null;
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -536,13 +538,9 @@ function SkillDetailView({
                 <PermissionButton
                   permissions={{ skill: ["update"] }}
                   permissionScope={skill.id}
-                  disabled={
-                    !isDirty ||
-                    !contentComplete ||
-                    nameProblem !== null ||
-                    isGone ||
-                    isSaving
-                  }
+                  disabled={!isDirty || saveGap !== null || isGone || isSaving}
+                  // Says what is missing, once there is a change to save.
+                  tooltip={isDirty ? (saveGap ?? undefined) : undefined}
                   onClick={handleSave}
                 >
                   {isSaving ? (

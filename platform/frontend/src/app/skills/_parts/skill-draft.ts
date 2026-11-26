@@ -135,6 +135,19 @@ export function buildSkillSaveBody(
 const sameIds = (a: string[], b: string[]) =>
   a.length === b.length && a.every((id, i) => id === b[i]);
 
+/**
+ * What the draft still lacks before it can be saved, as one short sentence
+ * for the save button to give as its reason. Null when nothing is missing.
+ */
+export function skillDraftGap(manifest: {
+  hasName: boolean;
+  hasDescription: boolean;
+}): string | null {
+  if (!manifest.hasName) return "Enter a skill name.";
+  if (!manifest.hasDescription) return "Enter a description.";
+  return null;
+}
+
 /** Whether the draft differs from the seed it was built from. */
 export function isSkillDraftDirty(draft: SkillDraft, seed: SkillDraft) {
   return (

@@ -22,7 +22,7 @@ import {
   SkillContentEditor,
 } from "./skill-content-editor";
 import type { SkillDraft } from "./skill-draft";
-import type { SkillNameProblem } from "./use-skill-name-problem";
+import { isSkillNameUnpublishable } from "./use-skill-name-problem";
 
 /**
  * Everything a skill is, on one page: what it is called and does, the
@@ -59,7 +59,7 @@ export function SkillForm({
    */
   contentReadOnly?: boolean;
   /** Why the typed name cannot be saved; shown under the field. */
-  nameProblem?: SkillNameProblem | null;
+  nameProblem?: string | null;
 }) {
   // Read back out of the manifest rather than kept beside it, so an edit made
   // in the editor shows up in the fields and vice versa.
@@ -67,6 +67,14 @@ export function SkillForm({
     () => parseManifestFields(draft.manifest),
     [draft.manifest],
   );
+  // Under the name, where the reader is typing it. An error is the one thing
+  // to fix first, so the warning waits for a name that can be saved.
+  const nameWarning = !nameProblem && isSkillNameUnpublishable(parsed.name);
+  const nameNoticeId = nameProblem
+    ? "skill-name-problem"
+    : nameWarning
+      ? "skill-name-warning"
+      : undefined;
 
   return (
     <SettingsSectionGroup>
@@ -98,20 +106,35 @@ export function SkillForm({
                   }),
                 })
               }
-              placeholder="release-checklist"
+              placeholder="e.g. release-checklist"
               readOnly={readOnly}
               // Repository-owned content is disabled, not just read-only, so it
               // reads as locked rather than as a field that ignores typing.
               disabled={contentReadOnly}
               required
               aria-invalid={nameProblem ? true : undefined}
-              aria-describedby={nameProblem ? "skill-name-problem" : undefined}
+              aria-describedby={nameNoticeId}
             />
             {nameProblem && (
               <InlineNotice id="skill-name-problem" variant="error" size="xs">
                 <AlertTriangle aria-hidden />
-                <span className="font-medium">{nameProblem.title}</span>
-                <InlineNoticeText>{nameProblem.detail}</InlineNoticeText>
+                <span className="font-medium">
+                  <TextWithCode text={nameProblem} />
+                </span>
+              </InlineNotice>
+            )}
+            {nameWarning && (
+              // A warning, not a refusal: the skill can be saved as it is.
+              <InlineNotice id="skill-name-warning" size="xs">
+                <AlertTriangle aria-hidden />
+                <span className="font-medium">
+                  This name can&apos;t be published over MCP
+                </span>
+                <InlineNoticeText>
+                  You can keep it: the skill works everywhere else. To publish
+                  over MCP, use only lowercase letters, digits and single
+                  hyphens, up to 64 characters.
+                </InlineNoticeText>
               </InlineNotice>
             )}
           </IdentityFields>
@@ -147,6 +170,8 @@ export function SkillForm({
           readOnly={readOnly || contentReadOnly}
           // The page header offers the skill as a .zip.
           showDownload={false}
+          // Said under the name field above, next to what it is about.
+          nameNotice={false}
           className={SKILL_WIZARD_EDITOR_CLASS}
         />
       </SettingsSection>
@@ -163,5 +188,40 @@ export function SkillForm({
         </fieldset>
       </SettingsSection>
     </SettingsSectionGroup>
+  );
+}
+
+/**
+ * A sentence whose `backticked` parts are characters to type, set as code:
+ * "can't contain a slash `/`" shows the slash itself, not the backticks.
+ */
+function TextWithCode({ text }: { text: string }) {
+  // Every other piece between backticks is code. The offset is the key: the
+  // pieces of one sentence never move.
+  let offset = 0;
+  const parts = text.split("`").map((piece, position) => {
+    const part = { key: offset, text: piece, isCode: position % 2 === 1 };
+    offset += piece.length + 1;
+    return part;
+  });
+  return (
+    <>
+      {parts.map((part) =>
+        part.isCode ? (
+          // The border takes the notice's own text colour: the variant owns
+          // the palette.
+          <code
+            key={part.key}
+            className="rounded border border-current/30 px-1 font-mono"
+          >
+            {part.text}
+          </code>
+        ) : (
+          // An element, not bare text: page translation re-parents bare text
+          // nodes, and React then fails to replace them.
+          <span key={part.key}>{part.text}</span>
+        ),
+      )}
+    </>
   );
 }

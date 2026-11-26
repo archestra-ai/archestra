@@ -1,16 +1,14 @@
-import { describeUnusableSkillName } from "@archestra/shared";
+import {
+  describeUnusableSkillName,
+  isSpecCompliantSkillName,
+} from "@archestra/shared";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 
-export interface SkillNameProblem {
-  title: string;
-  detail: string;
-}
-
 /**
- * Why the name in the form cannot be saved, to show under the field before
- * the save is tried: it cannot be a folder name, or the same author already
- * has a skill by that name in any letter case.
+ * Why the name in the form cannot be saved, in one sentence to show under the
+ * field before the save is tried: it cannot be a folder name, or the same
+ * author already has a skill by that name in any letter case.
  *
  * Asked only of a name that is new to the skill, like the API's own check. A
  * skill stored under a name this would refuse (an older row, a Git import)
@@ -34,7 +32,7 @@ export function useSkillNameProblem({
   ownerId: string | null | undefined;
   /** The skill being edited, which is not its own duplicate. */
   skillId?: string;
-}): SkillNameProblem | null {
+}): string | null {
   const trimmed = name?.trim() ?? "";
   const isNewName = trimmed !== "" && trimmed !== originalName;
   const unusable = isNewName ? describeUnusableSkillName(trimmed) : null;
@@ -49,7 +47,7 @@ export function useSkillNameProblem({
   );
 
   if (!isNewName) return null;
-  if (unusable) return { title: "This name cannot be used", detail: unusable };
+  if (unusable) return unusable;
 
   // Compared against what is typed now, not against what was searched, so a
   // result kept on screen from the previous keystroke cannot accuse a name it
@@ -63,16 +61,20 @@ export function useSkillNameProblem({
           skill.name.toLowerCase() === lowered,
       )
     : [];
-  // An exact duplicate first: older data can hold both spellings.
-  const twin = twins.find((skill) => skill.name === trimmed) ?? twins[0];
-  if (!twin) return null;
-  return {
-    title: "Name already in use",
-    detail:
-      twin.name === trimmed
-        ? `A skill named "${twin.name}" by the same author already exists.`
-        : `A skill named "${twin.name}" by the same author already exists. Names that differ only by letter case count as the same name.`,
-  };
+  return twins.length > 0 ? SKILL_NAME_TAKEN : null;
 }
+
+/**
+ * Whether a name that can be saved will still keep the skill from being
+ * published over MCP, which takes Agent Skills names only. A warning, not a
+ * refusal: the skill is created and works everywhere else.
+ */
+export function isSkillNameUnpublishable(name: string | null): boolean {
+  const trimmed = name?.trim() ?? "";
+  return trimmed !== "" && !isSpecCompliantSkillName(trimmed);
+}
+
+/** The same words the plugin form uses for a name its owner already holds. */
+const SKILL_NAME_TAKEN = "Name is already in use. Try another one.";
 
 const NAME_LOOKUP_DELAY_MS = 300;

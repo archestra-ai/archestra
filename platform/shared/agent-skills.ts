@@ -62,8 +62,12 @@ export function describeUnusableSkillName(name: string): string | null {
   if (/[\u0000-\u001f\u007f]/.test(name)) {
     return "A skill name must be a single line of text.";
   }
-  if (name.includes("/") || name.includes("\\")) {
-    return "A skill name cannot contain a slash. Use a hyphen instead.";
+  // Backticks mark the character itself; the form sets it as code.
+  if (name.includes("/")) {
+    return "A skill name can't contain a slash `/`. Use hyphen `-` instead.";
+  }
+  if (name.includes("\\")) {
+    return "A skill name can't contain a backslash `\\`. Use hyphen `-` instead.";
   }
   if (name === "." || name.includes("..")) {
     return "A skill name cannot be a dot or contain two dots in a row.";

@@ -184,7 +184,7 @@ describe("NewSkillPage wizard", () => {
     expect(screen.getByLabelText("Skill name")).toHaveValue("");
     expect(screen.getByLabelText("Skill name")).toHaveAttribute(
       "placeholder",
-      "release-checklist",
+      "e.g. release-checklist",
     );
     expect(screen.getByLabelText("Description")).toHaveValue("");
     await user.clear(screen.getByLabelText("Skill name"));
@@ -220,7 +220,26 @@ describe("NewSkillPage wizard", () => {
 
     const editor = screen.getByRole("textbox", { name: "File contents" });
     await user.clear(editor);
-    expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
+    const create = screen.getByRole("button", { name: "Create skill" });
+    expect(create).toHaveAttribute("aria-disabled", "true");
+    // The button says what is missing, one thing at a time.
+    expect(create).toHaveAccessibleDescription("Enter a skill name.");
+  });
+
+  it("says a description is missing when only the name is given", async () => {
+    mockOrganization(false);
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText("Skill name"), "hello");
+
+    const create = screen.getByRole("button", { name: "Create skill" });
+    expect(create).toHaveAttribute("aria-disabled", "true");
+    expect(create).toHaveAccessibleDescription("Enter a description.");
+    await user.type(screen.getByLabelText("Description"), "Says hello.");
+    expect(
+      screen.getByRole("button", { name: "Create skill" }),
+    ).not.toHaveAttribute("aria-disabled");
   });
 
   it("goes back to the source step from the form", async () => {
@@ -326,15 +345,17 @@ describe("NewSkillPage name check", () => {
     renderPage();
     await typeName("Probe-Skill-One");
 
-    expect(screen.getByText("Name already in use")).toBeInTheDocument();
-    expect(
-      screen.getByText(/A skill named "probe-skill-one" by the same author/),
-    ).toBeInTheDocument();
+    // One sentence, the same as on the plugin form.
+    expect(screen.getByLabelText("Skill name")).toHaveAccessibleDescription(
+      "Name is already in use. Try another one.",
+    );
     expect(screen.getByLabelText("Skill name")).toHaveAttribute(
       "aria-invalid",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Create skill" }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("leaves another author's skill of that name alone", async () => {
@@ -345,8 +366,12 @@ describe("NewSkillPage name check", () => {
     renderPage();
     await typeName("Probe-Skill-One");
 
-    expect(screen.queryByText("Name already in use")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create skill" })).toBeEnabled();
+    expect(
+      screen.queryByText(/Name is already in use/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create skill" }),
+    ).not.toHaveAttribute("aria-disabled");
   });
 
   it("refuses a name that cannot be a folder name, and still takes one the Agent Skills rules would not publish", async () => {
@@ -354,17 +379,35 @@ describe("NewSkillPage name check", () => {
     renderPage();
     await typeName("docs/release");
 
-    expect(screen.getByText("This name cannot be used")).toBeInTheDocument();
-    expect(screen.getByText(/cannot contain a slash/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
+    // One sentence with no heading; the characters are shown as code, not
+    // between backticks.
+    const name = screen.getByLabelText("Skill name");
+    expect(name).toHaveAttribute("aria-describedby", "skill-name-problem");
+    expect(document.getElementById("skill-name-problem")).toHaveTextContent(
+      "A skill name can't contain a slash /. Use hyphen - instead.",
+    );
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(
+      screen.getByRole("button", { name: "Create skill" }),
+    ).toHaveAttribute("aria-disabled", "true");
 
     const user = userEvent.setup();
-    await user.clear(screen.getByLabelText("Skill name"));
-    await user.type(screen.getByLabelText("Skill name"), "Release Notes");
+    await user.clear(name);
+    await user.type(name, "Release Notes");
+    // Allowed: a warning under the name, in place of the error, and the
+    // skill can be created.
+    expect(name).not.toHaveAttribute("aria-invalid");
+    expect(name).toHaveAccessibleDescription(
+      /This name can't be published over MCP.*You can keep it/,
+    );
     expect(
-      screen.queryByText("This name cannot be used"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create skill" })).toBeEnabled();
+      screen.getByRole("button", { name: "Create skill" }),
+    ).not.toHaveAttribute("aria-disabled");
+
+    // A name the Agent Skills rules take needs no notice at all.
+    await user.clear(name);
+    await user.type(name, "release-notes");
+    expect(name).not.toHaveAccessibleDescription();
   });
 });
 

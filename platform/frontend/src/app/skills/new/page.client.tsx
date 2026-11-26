@@ -51,6 +51,7 @@ import {
   isSkillDraftDirty,
   type SkillDraft,
   skillArchiveFiles,
+  skillDraftGap,
 } from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
 import { SkillBackLink } from "../_parts/skill-page-shell";
@@ -122,7 +123,6 @@ function NewSkillWizard() {
     () => parseManifestFields(draft.manifest),
     [draft.manifest],
   );
-  const contentComplete = parsed.hasName && parsed.hasDescription;
   const { data: session } = useSession();
   const createSkill = useCreateSkill();
   const nameProblem = useSkillNameProblem({
@@ -134,6 +134,9 @@ function NewSkillWizard() {
     // draft's name and owner, and is not the draft's duplicate.
     skillId: createSkill.data?.id,
   });
+
+  const createGap =
+    skillDraftGap(parsed) ?? nameProblem?.replaceAll("`", "") ?? null;
 
   // The draft exists only on this page, so every way off it asks first: the
   // sidebar, the back link, a reload. The wizard's own steps are buttons that
@@ -416,11 +419,10 @@ function NewSkillWizard() {
                     )}
                     <PermissionButton
                       permissions={{ skill: ["create"] }}
-                      disabled={
-                        !contentComplete ||
-                        nameProblem !== null ||
-                        createSkill.isPending
-                      }
+                      disabled={createGap !== null || createSkill.isPending}
+                      // Says what is missing: a disabled button with no
+                      // reason left the author guessing.
+                      tooltip={createGap ?? undefined}
                       onClick={handleCreate}
                     >
                       {createSkill.isPending ? "Creating..." : "Create skill"}

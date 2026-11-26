@@ -175,6 +175,20 @@ function mockPermissions({ skillAdmin }: { skillAdmin: boolean }) {
   );
 }
 
+const restoreMutateAsync = vi.fn();
+
+/**
+ * A reader who holds every permission except managing all skills
+ * (`skill:update` at `*`), which is what the deleted view asks for.
+ */
+function mockReaderWhoCannotListDeleted() {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (_permissions: Record<string, string[]>, scope?: string) =>
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+      ({ data: scope !== "*", isPending: false }) as any,
+  );
+}
+
 const openRowMenu = (skillName: string) =>
   userEvent.click(
     screen.getByRole("button", { name: `More actions ${skillName}` }),
@@ -216,7 +230,7 @@ describe("SkillsPage rows", () => {
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
     vi.mocked(useRestoreSkill).mockReturnValue({
-      mutate: vi.fn(),
+      mutateAsync: restoreMutateAsync,
       // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
     } as any);
     vi.mocked(usePermanentlyDeleteSkill).mockReturnValue({
@@ -732,5 +746,136 @@ describe("SkillsPage rows", () => {
     expect(
       screen.getByRole("menuitem", { name: /Delete permanently/ }),
     ).toBeInTheDocument();
+  });
+
+  it("takes a reader who may not list deleted skills off ?status=deleted without asking for them", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted&search=pdf") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockReaderWhoCannotListDeleted();
+    render(<SkillsPage />);
+
+    // The parameter is dropped and the rest of the URL kept.
+    expect(replace).toHaveBeenCalledWith("/skills?search=pdf", {
+      scroll: false,
+    });
+    // The deleted list is never requested: it could only come back refused.
+    for (const [params, options] of vi.mocked(useSkillsPaginated).mock.calls) {
+      expect(params.status === "deleted" && options?.enabled).toBeFalsy();
+    }
+    // The reader sees their active skills under the filters, not an error.
+    expect(screen.getByText("pdf-tools")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Restore pdf-tools")).toBeNull();
+  });
+
+  it("waits for the permission answer before asking for either list", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockImplementation(
+      (_permissions: Record<string, string[]>, scope?: string) =>
+        // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+        ({ data: scope !== "*", isPending: scope === "*" }) as any,
+    );
+    render(<SkillsPage />);
+
+    for (const [, options] of vi.mocked(useSkillsPaginated).mock.calls) {
+      expect(options?.enabled).toBe(false);
+    }
+    for (const [, options] of vi.mocked(useSkillsList).mock.calls) {
+      expect(options?.enabled).toBe(false);
+    }
+  });
+
+  it("keeps the filters on screen when the list fails to load, and says a refusal is a refusal", () => {
+    const refused = new Error("Forbidden", {
+      cause: {
+        error: { message: "Forbidden", type: "api_authorization_error" },
+      },
+    });
+    vi.mocked(useSkillsList).mockReturnValue({
+      data: undefined,
+      isFetching: false,
+      isLoadingError: true,
+      error: refused,
+      refetch: vi.fn(),
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    render(<SkillsPage />);
+
+    expect(screen.getByText("Couldn't load your skills")).toBeInTheDocument();
+    // Not "check your internet connection": the request was answered.
+    expect(
+      screen.getByText(/You don't have access to this/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/internet connection/)).toBeNull();
+    // The filter bar is the way out of a filter that cannot be loaded.
+    expect(
+      screen.getByRole("combobox", { name: "Filter by skill source" }),
+    ).toBeInTheDocument();
+    // A failed load is not "No skills yet".
+    expect(screen.queryByText("No skills yet")).toBeNull();
+  });
+
+  it("offers a retry when the list fails for a reason a retry can fix", async () => {
+    const refetch = vi.fn();
+    vi.mocked(useSkillsList).mockReturnValue({
+      data: undefined,
+      isFetching: false,
+      isLoadingError: true,
+      error: new Error("Failed to fetch"),
+      refetch,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    render(<SkillsPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("sends one restore for a double click, and holds the button until it settles", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    // The deleted view belongs to a reader who manages every skill.
+    mockPermissions({ skillAdmin: true });
+    mockSkills([{ ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" }]);
+    let settle: (value: unknown) => void = () => undefined;
+    restoreMutateAsync.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
+    render(<SkillsPage />);
+
+    await userEvent.dblClick(screen.getByLabelText("Restore pdf-tools"));
+
+    // The second click used to send a second restore, which the API answered
+    // with "Skill not found" for a restore that had just worked.
+    expect(restoreMutateAsync).toHaveBeenCalledTimes(1);
+    expect(restoreMutateAsync).toHaveBeenCalledWith(MINE.id);
+    expect(screen.getByLabelText("Restore pdf-tools")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+
+    // A restore that failed leaves the skill in the list, restorable again.
+    settle(null);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Restore pdf-tools")).not.toHaveAttribute(
+        "aria-disabled",
+      ),
+    );
   });
 });

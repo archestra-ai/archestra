@@ -41,3 +41,38 @@ export function isSpecCompliantSkillCompatibility(
 ): boolean {
   return [...(compatibility ?? "")].length <= MAX_SKILL_COMPATIBILITY_LENGTH;
 }
+
+/**
+ * Why a NEW skill name cannot be used, as a sentence for the person typing
+ * it, or null when it can.
+ *
+ * This is the storage rule, far looser than `isSpecCompliantSkillName`: spaces,
+ * capitals and emoji are fine, and a name that breaks the Agent Skills rules
+ * is only withheld from publication. What is refused is a name that cannot be
+ * one folder name, because a skill's files are mounted at `/skills/<name>`
+ * (`skillRootPath`) and a name with a slash, a `..` or a line break never
+ * mounts.
+ *
+ * Asked only when a name is first given or changed. A stored skill that breaks
+ * it (older rows, Git imports) keeps loading and saving under its name.
+ */
+export function describeUnusableSkillName(name: string): string | null {
+  if (name.trim() === "") return "Give the skill a name.";
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are exactly what is being refused
+  if (/[\u0000-\u001f\u007f]/.test(name)) {
+    return "A skill name must be a single line of text.";
+  }
+  if (name.includes("/") || name.includes("\\")) {
+    return "A skill name cannot contain a slash. Use a hyphen instead.";
+  }
+  if (name === "." || name.includes("..")) {
+    return "A skill name cannot be a dot or contain two dots in a row.";
+  }
+  if (new TextEncoder().encode(name).length > MAX_SKILL_NAME_BYTES) {
+    return `A skill name can be at most ${MAX_SKILL_NAME_BYTES} bytes long. Shorten it.`;
+  }
+  return null;
+}
+
+/** The longest folder name the common filesystems hold. */
+const MAX_SKILL_NAME_BYTES = 255;

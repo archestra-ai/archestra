@@ -18,11 +18,14 @@ import {
 export function SkillUsageDialog({
   skillRef,
   skillName,
+  allTime,
   open,
   onOpenChange,
 }: {
   skillRef: SkillUsageReference;
   skillName: string;
+  /** The list's all-time count for this skill; see `SkillUsagePanel`. */
+  allTime?: { usageCount: number; lastUsedAt: string | null };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -43,7 +46,7 @@ export function SkillUsageDialog({
         </Button>
       }
     >
-      <SkillUsagePanel skillRef={skillRef} enabled={open} />
+      <SkillUsagePanel skillRef={skillRef} enabled={open} allTime={allTime} />
     </StandardDialog>
   );
 }

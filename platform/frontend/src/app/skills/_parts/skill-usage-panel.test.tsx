@@ -57,13 +57,20 @@ type UsageActor = UsageStatistics["users"][number];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function renderPanel(stats: UsageStatistics | null, isPending = false) {
+function renderPanel(
+  stats: UsageStatistics | null,
+  isPending = false,
+  allTime?: { usageCount: number; lastUsedAt: string | null },
+) {
   vi.mocked(useSkillUsageStatistics).mockReturnValue({
     data: stats,
     isPending,
   } as unknown as ReturnType<typeof useSkillUsageStatistics>);
   return render(
-    <SkillUsagePanel skillRef={{ kind: "standalone", skillId: "skill-1" }} />,
+    <SkillUsagePanel
+      skillRef={{ kind: "standalone", skillId: "skill-1" }}
+      allTime={allTime}
+    />,
   );
 }
 
@@ -88,7 +95,12 @@ function breakdownRows() {
 
 /** The headline tile carrying `label`, value and caption together. */
 function summaryTile(label: string) {
-  const tile = screen.getByText(label).closest("div");
+  // A tile's caption may follow the label ("Activations · last 30 days").
+  // The breakdown table has an "Activations" column too; the tile's is a term.
+  const tile = screen
+    .getAllByText(new RegExp(`^${label}\\b`))
+    .find((element) => element.tagName === "DT")
+    ?.closest("div");
   if (!tile) throw new Error(`no summary tile for ${label}`);
   return tile;
 }
@@ -232,7 +244,46 @@ describe("SkillUsagePanel", () => {
   it("shows an empty state when nothing was activated in the window", () => {
     renderPanel(statistics([]));
 
-    expect(screen.getByText("No activations yet")).toBeInTheDocument();
+    // Without the all-time count the panel knows the window and nothing
+    // before it, so it does not claim the skill was never used.
+    expect(
+      screen.getByText("No activations in the last 30 days"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No activations yet")).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("tells a quiet month apart from a skill that was never used", () => {
+    // The list's Uses column counts every activation; this view counts the
+    // last 30 days. A skill used 40 times last year has both numbers.
+    const { unmount } = renderPanel(statistics([]), false, {
+      usageCount: 40,
+      lastUsedAt: new Date(Date.now() - 90 * DAY_MS).toISOString(),
+    });
+    expect(
+      screen.getByText("No activations in the last 30 days"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/It has been activated 40 times in total/),
+    ).toBeInTheDocument();
+    unmount();
+
+    renderPanel(statistics([]), false, { usageCount: 0, lastUsedAt: null });
+    expect(screen.getByText("No activations yet")).toBeInTheDocument();
+    expect(
+      screen.getByText("This skill has not been activated."),
+    ).toBeInTheDocument();
+  });
+
+  it("names the window on the activation count, and the all-time total beside it", () => {
+    renderPanel(statistics(people(2)), false, {
+      usageCount: 40,
+      lastUsedAt: new Date().toISOString(),
+    });
+
+    expect(summaryTile("Activations")).toHaveTextContent("3");
+    expect(summaryTile("Activations")).toHaveTextContent(
+      "last 30 days · 40 in total",
+    );
   });
 });

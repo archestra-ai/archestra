@@ -164,6 +164,82 @@ describe("PUT /api/skills/:id", () => {
     expect(renamed.json().error.internal_code).toBeUndefined();
   });
 
+  test("a rename may not differ from another of the author's skills only by letter case", async () => {
+    const created = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: manifestNamed("first-skill") },
+      })
+    ).json();
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("second-skill") },
+    });
+
+    const renamed = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: manifestNamed("Second-Skill") },
+    });
+    expect(renamed.statusCode).toBe(409);
+    expect(renamed.json().error.message).toContain('"second-skill"');
+
+    // Changing only the letter case of a skill's own name is a rename like
+    // any other: it collides with nothing.
+    const recased = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: manifestNamed("First-Skill") },
+    });
+    expect(recased.statusCode).toBe(200);
+    expect(recased.json().name).toBe("First-Skill");
+  });
+
+  test("a skill stored under a name the rule refuses keeps saving its other fields", async () => {
+    // Two rows that differ only by case, and a name with a slash: what older
+    // versions and Git imports could store.
+    const stored = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      name: "docs/Release",
+      sourceRef: "example/skills@main:skills/release",
+    });
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      name: "docs/release",
+      sourceRef: "example/skills@main:skills/release-2",
+    });
+
+    const saved = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${stored.id}`,
+      payload: {
+        content: [
+          "---",
+          "name: docs/Release",
+          "description: An edited description.",
+          "---",
+          "",
+          "# docs/Release",
+        ].join("\n"),
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json().description).toBe("An edited description.");
+
+    // Renaming it is where the rule applies.
+    const renamed = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${stored.id}`,
+      payload: { content: manifestNamed("docs/other") },
+    });
+    expect(renamed.statusCode).toBe(400);
+    expect(renamed.json().error.message).toContain("slash");
+  });
+
   test("omitting baseVersion keeps last-write-wins", async () => {
     const created = (
       await ctx.app.inject({

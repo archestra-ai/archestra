@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeUnusableSkillName,
   isSpecCompliantSkillCompatibility,
   isSpecCompliantSkillDescription,
   isSpecCompliantSkillName,
@@ -54,5 +55,32 @@ describe("isSpecCompliantSkillCompatibility", () => {
     expect(isSpecCompliantSkillCompatibility("c".repeat(500))).toBe(true);
     expect(isSpecCompliantSkillCompatibility("🙂".repeat(500))).toBe(true);
     expect(isSpecCompliantSkillCompatibility("c".repeat(501))).toBe(false);
+  });
+});
+
+describe("describeUnusableSkillName", () => {
+  it.each([
+    "pdf-processing",
+    "My Skill",
+    "PDF_Tools v2.1",
+    "résumé ✍️",
+    "x".repeat(255),
+  ])("accepts %s", (name) => {
+    expect(describeUnusableSkillName(name)).toBeNull();
+  });
+
+  it.each([
+    ["", "Give the skill a name."],
+    ["   ", "Give the skill a name."],
+    ["a/b", "slash"],
+    ["a\\b", "slash"],
+    ["two\nlines", "single line"],
+    [".", "dot"],
+    ["up..and-over", "dot"],
+    ["x".repeat(256), "255 bytes"],
+    // 128 two-byte letters are 128 characters but 256 bytes.
+    ["é".repeat(128), "255 bytes"],
+  ])("refuses %j", (name, reason) => {
+    expect(describeUnusableSkillName(name)).toContain(reason);
   });
 });

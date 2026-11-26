@@ -74,12 +74,14 @@ import {
 } from "../_parts/skill-page-config";
 import {
   SkillBackLink,
+  SkillLoadError,
   SkillNotFound,
   SkillPageLoading,
 } from "../_parts/skill-page-shell";
 import { SkillSourceGlyph } from "../_parts/skill-source-glyph";
 import { SkillUsagePanel } from "../_parts/skill-usage-panel";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
+import { useSkillNameProblem } from "../_parts/use-skill-name-problem";
 
 const SECTION_DESCRIPTIONS: Record<SkillDetailSection, string> = {
   // Settings is the page's default and shows the skill's own description
@@ -96,7 +98,13 @@ const SECTION_DESCRIPTIONS: Record<SkillDetailSection, string> = {
  */
 export function SkillDetailPage({ id }: { id: string }) {
   const router = useRouter();
-  const { data: skill, isPending } = useSkill(id);
+  const {
+    data: skill,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useSkill(id, { toastOnError: false });
 
   // Hold the last skill this mount saw. Deleting it in another tab (or any
   // background refetch that answers 404) turns `data` into null, and dropping
@@ -128,6 +136,10 @@ export function SkillDetailPage({ id }: { id: string }) {
   }
 
   if (isPending || isLeavingAfterDelete) return <SkillPageLoading />;
+  // A request that failed is not a skill that does not exist.
+  if (isError) {
+    return <SkillLoadError error={error} onRetry={() => void refetch()} />;
+  }
   return <SkillNotFound />;
 }
 
@@ -230,10 +242,14 @@ function SkillDetailView({
 
   // Discard is also the way out of a version conflict: the failed save has
   // already invalidated the skill, so this picks up the latest content.
-  const discardChanges = () => {
+  const discardChanges = useCallback(() => {
     setDraft(seed);
     setBase({ draft: seed, version: skill.latestVersion });
-  };
+    // The permissions editor reports its own edits and is unmounted by the
+    // section change that follows a discard, which drops them without a
+    // report; without this the page would stay "dirty" over nothing.
+    setPermissionsDirty(false);
+  }, [seed, skill.latestVersion]);
 
   const isSynced = isSyncedGithubSkill(skill);
   const isGithubSkill = skill.sourceType === "github";
@@ -245,6 +261,12 @@ function SkillDetailView({
     [draft.manifest],
   );
   const contentComplete = parsed.hasName && parsed.hasDescription;
+  const nameProblem = useSkillNameProblem({
+    name: parsed.name,
+    originalName: skill.name,
+    ownerId: skill.authorId,
+    skillId: skill.id,
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -279,6 +301,13 @@ function SkillDetailView({
       if (open) return;
       const href = pendingHrefRef.current;
       pendingHrefRef.current = null;
+      // The guard lets go of a dirty page only when the reader chose to
+      // discard, so that is what happens to the draft. Leaving for another
+      // page unmounts it anyway, but a section change keeps this component,
+      // and the draft with it: "Discard changes" used to switch section with
+      // every edit still in place, so the same warning came back on the way
+      // out of the next section.
+      if (isDirty) discardChanges();
       // A section change is the same page with another query, so it replaces
       // rather than stacking a history entry per section.
       if (href) {
@@ -432,7 +461,13 @@ function SkillDetailView({
           onDirtyChange={setPermissionsDirty}
         />
       ) : section === "usage" ? (
-        <SkillUsagePanel skillRef={{ kind: "standalone", skillId: skill.id }} />
+        <SkillUsagePanel
+          skillRef={{ kind: "standalone", skillId: skill.id }}
+          allTime={{
+            usageCount: skill.usageCount,
+            lastUsedAt: skill.lastUsedAt,
+          }}
+        />
       ) : (
         <div className="flex flex-col gap-4">
           {/* Where the content comes from comes first: it is why the fields
@@ -476,6 +511,7 @@ function SkillDetailView({
             // A synced skill's manifest and files belong to the repository;
             // who may use it is still this organization's to decide.
             contentReadOnly={isSynced}
+            nameProblem={nameProblem}
           />
 
           {!isReadOnly && (
@@ -495,7 +531,13 @@ function SkillDetailView({
                 <PermissionButton
                   permissions={{ skill: ["update"] }}
                   permissionScope={skill.id}
-                  disabled={!isDirty || !contentComplete || isGone || isSaving}
+                  disabled={
+                    !isDirty ||
+                    !contentComplete ||
+                    nameProblem !== null ||
+                    isGone ||
+                    isSaving
+                  }
                   onClick={handleSave}
                 >
                   {isSaving ? (

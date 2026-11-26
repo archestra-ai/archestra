@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
@@ -23,8 +23,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
+import { useSession } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import {
@@ -40,10 +47,12 @@ import { POPULAR_REPOS } from "../_parts/popular-repos";
 import {
   blankSkillDraft,
   buildSkillSaveBody,
+  isSkillDraftDirty,
   type SkillDraft,
 } from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
 import { SkillBackLink } from "../_parts/skill-page-shell";
+import { useSkillNameProblem } from "../_parts/use-skill-name-problem";
 
 type CreateStep = "source" | "configure";
 
@@ -97,7 +106,8 @@ function NewSkillWizard() {
     : CREATE_STEPS;
   const stepIndex = steps.findIndex((s) => s.id === effectiveStep);
 
-  const [draft, setDraft] = useState<SkillDraft>(blankSkillDraft);
+  const [blankDraft] = useState<SkillDraft>(blankSkillDraft);
+  const [draft, setDraft] = useState<SkillDraft>(blankDraft);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const patchDraft = (patch: Partial<SkillDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -106,6 +116,37 @@ function NewSkillWizard() {
     [draft.manifest],
   );
   const contentComplete = parsed.hasName && parsed.hasDescription;
+  const { data: session } = useSession();
+  const nameProblem = useSkillNameProblem({
+    name: parsed.name,
+    originalName: null,
+    ownerId: session?.user?.id,
+  });
+
+  // The draft exists only on this page, so every way off it asks first: the
+  // sidebar, the back link, a reload. The wizard's own steps are buttons that
+  // keep the draft, and a create that succeeded has nothing left to lose.
+  const [isLeavingAfterCreate, setIsLeavingAfterCreate] = useState(false);
+  const isDirty = !isLeavingAfterCreate && isSkillDraftDirty(draft, blankDraft);
+  useBeforeUnloadWhileDirty(isDirty);
+  const pendingHrefRef = useRef<string | null>(null);
+  const guard = useUnsavedChangesGuard({
+    isDirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      if (href) router.push(href);
+    },
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      pendingHrefRef.current = href;
+      guard.requestClose();
+    },
+    [guard],
+  );
+  useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
 
   const createSkill = useCreateSkill();
   const handleCreate = async () => {
@@ -116,7 +157,9 @@ function NewSkillWizard() {
     const created = await createSkill
       .mutateAsync(buildSkillSaveBody({ ...draft, labels: finalLabels }, null))
       .catch(() => null);
-    if (created) router.push(`/skills/${created.id}`);
+    if (!created) return;
+    setIsLeavingAfterCreate(true);
+    router.push(`/skills/${created.id}`);
   };
 
   const openImport = () => setImportState({ repoUrl: "", autoDiscover: false });
@@ -312,6 +355,7 @@ function NewSkillWizard() {
                       }))
                     }
                     labelsRef={labelsRef}
+                    nameProblem={nameProblem}
                   />
                   <WizardFooter>
                     {catalogDisabled ? (
@@ -329,7 +373,11 @@ function NewSkillWizard() {
                     )}
                     <PermissionButton
                       permissions={{ skill: ["create"] }}
-                      disabled={!contentComplete || createSkill.isPending}
+                      disabled={
+                        !contentComplete ||
+                        nameProblem !== null ||
+                        createSkill.isPending
+                      }
                       onClick={handleCreate}
                     >
                       {createSkill.isPending ? "Creating..." : "Create skill"}
@@ -351,6 +399,14 @@ function NewSkillWizard() {
           if (!open) setImportState(null);
         }}
         onImported={goToSkills}
+      />
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={() => {
+          pendingHrefRef.current = null;
+          guard.keepEditing();
+        }}
+        onDiscard={guard.discardChanges}
       />
     </>
   );

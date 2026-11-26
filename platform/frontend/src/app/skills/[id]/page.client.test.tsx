@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,8 @@ vi.mock("@/components/editor");
 vi.mock("@/lib/skills/skill.query", () => ({
   useSkill: vi.fn(),
   useUpdateSkill: vi.fn(),
+  // The name check's lookup among the reader's skills; none by default.
+  useSkillsPaginated: vi.fn(() => ({ data: { data: [] } })),
 }));
 vi.mock("../_parts/skill-version-history-dialog", () => ({
   SkillVersionHistoryDialog: () => null,
@@ -108,6 +110,9 @@ const editor = () =>
   screen.getByRole("textbox", {
     name: "File contents",
   }) as HTMLTextAreaElement;
+
+/** A section's tab. The header renders the row twice, for wide and narrow. */
+const sectionTab = (name: string) => screen.getAllByRole("link", { name })[0];
 
 const save = async () => {
   const user = userEvent.setup();
@@ -357,6 +362,73 @@ describe("SkillDetailPage", () => {
       screen.getByText(/view this skill's configuration but not change it/i),
     ).toBeInTheDocument();
     expect(editor()).toHaveAttribute("readonly");
+  });
+
+  it("drops the edits when the reader discards them on the way to another section", async () => {
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(editor(), " Unsaved line.");
+
+    await user.click(sectionTab("Usage"));
+    const prompt = await screen.findByRole("dialog");
+    await user.click(
+      within(prompt).getByRole("button", { name: "Discard changes" }),
+    );
+
+    expect(replace).toHaveBeenCalledWith("/skills/skill-1?section=usage", {
+      scroll: false,
+    });
+    // The section change keeps this page mounted, so the draft has to be
+    // reset here: it used to survive, and the same prompt came back on the
+    // way out of the next section. (The router is a mock, so Settings is
+    // still on screen to look at.)
+    expect(editor().value).not.toContain("Unsaved line.");
+    expect(
+      screen.queryByRole("button", { name: "Discard changes" }),
+    ).not.toBeInTheDocument();
+
+    // Nothing is unsaved any more, so the next section change just happens.
+    replace.mockClear();
+    await user.click(sectionTab("Permissions"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the edits when the reader chooses to keep editing", async () => {
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(editor(), " Unsaved line.");
+
+    await user.click(sectionTab("Usage"));
+    const prompt = await screen.findByRole("dialog");
+    await user.click(
+      within(prompt).getByRole("button", { name: "Keep editing" }),
+    );
+
+    expect(editor().value).toContain("Unsaved line.");
+    expect(replace).not.toHaveBeenCalledWith(
+      "/skills/skill-1?section=usage",
+      expect.anything(),
+    );
+  });
+
+  it("says a failed load is a failed load, not a missing skill", () => {
+    const refetch = vi.fn();
+    vi.mocked(useSkill).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new Error("Failed to fetch"),
+      refetch,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    renderPage();
+
+    expect(screen.getByText("Couldn't load this skill")).toBeInTheDocument();
+    expect(screen.queryByText("Skill not found")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Skills/ })).toHaveAttribute(
+      "href",
+      "/skills",
+    );
   });
 
   it("keeps usage a section of the same page, including its older URL", () => {

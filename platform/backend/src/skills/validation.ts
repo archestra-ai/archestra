@@ -1,4 +1,6 @@
+import { describeUnusableSkillName } from "@archestra/shared";
 import { z } from "zod";
+import SkillModel from "@/models/skill";
 import {
   MAX_SKILL_FILE_BYTES,
   MAX_SKILL_FILE_CONTENT_CHARS,
@@ -204,6 +206,45 @@ export function refineUniqueFilePaths(
  */
 export function isSkillNameConflict(error: unknown): boolean {
   return isUniqueConstraintError(error, "skills_org_author_name_idx");
+}
+
+/**
+ * Why a skill cannot be given `name`, or null when it can: the name cannot be
+ * one folder name, or it differs only by letter case from another skill of the
+ * same owner.
+ *
+ * Asked only when a name is NEW to the skill (a create, or an update that
+ * changes it), on the REST routes and the MCP skill tools alike. It is never
+ * asked of a stored name: a skill saved under an older rule, or imported from
+ * Git under a name this would refuse, keeps saving every other field.
+ */
+export async function findNewSkillNameProblem(params: {
+  organizationId: string;
+  /** The unique index's owner key; null for a skill no one owns. */
+  ownerKey: string | null;
+  name: string;
+  /** The skill being renamed. */
+  excludeSkillId?: string;
+}): Promise<{ status: 400 | 409; message: string } | null> {
+  const unusable = describeUnusableSkillName(params.name);
+  if (unusable) return { status: 400, message: unusable };
+  // The index leaves an ownerless skill (a built-in, or one whose author was
+  // removed) unconstrained, so there is no owner to collide within.
+  if (!params.ownerKey) return null;
+  const taken = await SkillModel.findNameCaseConflict({
+    organizationId: params.organizationId,
+    ownerKey: params.ownerKey,
+    name: params.name,
+    excludeSkillId: params.excludeSkillId,
+  });
+  if (!taken) return null;
+  return {
+    status: 409,
+    message:
+      taken === params.name
+        ? `A skill named "${taken}" already exists`
+        : `A skill named "${taken}" already exists. Skill names that differ only by letter case count as the same name.`,
+  };
 }
 
 // =============================================================================

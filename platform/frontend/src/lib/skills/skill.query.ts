@@ -1,6 +1,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  isUuid,
   MAX_BULK_IDS,
 } from "@archestra/shared";
 import {
@@ -256,12 +257,27 @@ export function useSkillUsageStatistics(reference: SkillUsageReference | null) {
   });
 }
 
-export function useSkill(id: string | null) {
+/**
+ * One skill, or null when there is none to show: the API answered 404, or the
+ * id is not a skill id at all. A malformed id (a mistyped or truncated URL)
+ * is settled here without a request, because the API can only refuse it, and
+ * its refusal is a validation message about a parameter the reader never
+ * typed.
+ */
+export function useSkill(
+  id: string | null,
+  options?: {
+    /** False on a screen that renders the failure itself, with a retry. */
+    toastOnError?: boolean;
+  },
+) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["skills", id],
     queryFn: async () => {
+      if (!isUuid(id as string)) return null;
       const { data, error } = await getSkill({ path: { id: id as string } });
-      throwOnApiError(error, { allowNotFound: true });
+      throwOnApiError(error, { allowNotFound: true, toastOnError });
       return data ?? null;
     },
     enabled: !!id,
@@ -299,10 +315,21 @@ export function useExternalMcpSkill(params: {
       params.id,
       params.mcpServerId,
     ],
-    enabled: !!params.id && !!params.mcpServerId,
+    // Not gated on `mcpServerId`: a disabled query never settles, and the page
+    // waited on it forever when a link arrived without one.
+    enabled: !!params.id,
     staleTime: 0,
     refetchOnMount: "always",
     queryFn: async () => {
+      // Nothing these could name. Answered here, since the API can only
+      // refuse the request.
+      if (
+        !params.mcpServerId ||
+        !isUuid(params.mcpServerId) ||
+        !isUuid(params.id as string)
+      ) {
+        return null;
+      }
       const { data, error } = await getExternalMcpSkill({
         path: { id: params.id as string },
         query: { mcpServerId: params.mcpServerId as string },
@@ -333,6 +360,7 @@ export function usePluginSkill(params: {
     queryKey: [...pluginSkillDetailQueryKey, params.pluginId, params.skillPath],
     enabled: !!params.pluginId && params.skillPath !== null,
     queryFn: async () => {
+      if (!isUuid(params.pluginId as string)) return null;
       const { data, error } = await getPluginSkill({
         path: { pluginId: params.pluginId as string },
         query: params.skillPath ? { skillPath: params.skillPath } : {},
@@ -535,11 +563,16 @@ export function useRestoreSkill() {
       }
       return data;
     },
-    onSuccess: (data) => {
+    // Returning the refetch keeps the mutation pending until the lists have
+    // been read again, so a caller that holds the row busy for as long as the
+    // request runs releases it only once the row has left the deleted view.
+    onSuccess: async (data) => {
       if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill restored");
+      await queryClient.invalidateQueries({ queryKey: ["skills"] });
     },
+    // A rejection never reaches the `{ error }` branch above.
+    onError: (error) => handleApiError(error),
   });
 }
 

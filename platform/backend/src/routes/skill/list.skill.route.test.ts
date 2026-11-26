@@ -32,6 +32,96 @@ const PUBLISH_TO_ORGANIZATION = [
 describe("GET /api/skills", () => {
   const ctx = useSkillRouteTestApp(skillRoutes);
 
+  test("search matches `_` and `%` literally instead of as wildcards", async () => {
+    for (const [name, sourceRef] of [
+      ["seed-skill-one", "example/skills@main:skills/one"],
+      ["seed_skill_two", "example/skills@main:skills/two"],
+      ["rate-100%-skill", "example/skills@main:skills/three"],
+    ]) {
+      await seedImportedSkill({
+        organizationId: ctx.organizationId,
+        name,
+        sourceRef,
+        access: "org",
+      });
+    }
+    const names = async (query: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/skills?includeContent=false&${query}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      // The count is built from the same filters as the page.
+      expect(body.pagination.total).toBe(body.data.length);
+      return body.data.map((skill: { name: string }) => skill.name).sort();
+    };
+
+    // `_` used to match any one character and `%` any run, so each of these
+    // returned all three skills.
+    expect(await names("search=_")).toEqual(["seed_skill_two"]);
+    expect(await names("search=%25")).toEqual(["rate-100%-skill"]);
+    expect(await names("search=seed_skill")).toEqual(["seed_skill_two"]);
+    expect(await names("search=seed-skill")).toEqual(["seed-skill-one"]);
+    // A backslash is the escape character itself and must not swallow the
+    // character after it.
+    expect(await names("search=%5C")).toEqual([]);
+    // The description is searched the same way.
+    expect(await names("search=two%20description")).toEqual(["seed_skill_two"]);
+  });
+
+  test("the deleted view escapes search wildcards too", async () => {
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
+    for (const name of ["trashed-skill", "trashed_skill"]) {
+      const created = (
+        await ctx.app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: { content: manifestNamed(name) },
+        })
+      ).json();
+      await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/skills/${created.id}`,
+      });
+    }
+    const deleted = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills?status=deleted&search=trashed_skill",
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect(
+      deleted.json().data.map((skill: { name: string }) => skill.name),
+    ).toEqual(["trashed_skill"]);
+  });
+
+  test("the repository filter matches `_` in a repository name literally", async () => {
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "underscore-repo-skill",
+      sourceRef: "example/my_skills@main:skills/a",
+      access: "org",
+    });
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "hyphen-repo-skill",
+      sourceRef: "example/my-skills@main:skills/a",
+      access: "org",
+    });
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?sourceRepo=${encodeURIComponent("example/my_skills")}`,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      response.json().data.map((skill: { name: string }) => skill.name),
+    ).toEqual(["underscore-repo-skill"]);
+  });
+
   test("compact lists omit manifest bodies while preserving visibility and counts", async ({
     makeMember,
     makeUser,

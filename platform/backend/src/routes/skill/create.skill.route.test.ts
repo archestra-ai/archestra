@@ -14,6 +14,7 @@ import skillRoutes from "./skill.routes";
 import {
   MANIFEST,
   manifestNamed,
+  seedImportedSkill,
   useSkillRouteTestApp,
 } from "./skill.test-helpers";
 
@@ -220,6 +221,120 @@ describe("POST /api/skills", () => {
     });
 
     expect(response.statusCode).toBe(409);
+  });
+
+  test("rejects a name that differs from one of the author's skills only by letter case", async () => {
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("probe-skill-one") },
+    });
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("Probe-Skill-One") },
+    });
+
+    expect(response.statusCode).toBe(409);
+    // Names the skill that is in the way, as it is actually spelled.
+    expect(response.json().error.message).toContain('"probe-skill-one"');
+    expect(response.json().error.message).toContain("letter case");
+  });
+
+  test("another author may hold the same name in a different letter case", async ({
+    makeUser,
+  }) => {
+    const other = await makeUser();
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: other.id,
+      name: "Shared-Name",
+      sourceRef: "example/skills@main:skills/shared",
+    });
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("shared-name") },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test.each([
+    ["a slash", "name: docs/release", "slash"],
+    ["a line break", 'name: "two\\nlines"', "single line"],
+    ["a parent-directory step", 'name: "up..over"', "dot"],
+    ["more than a folder name holds", `name: ${"x".repeat(256)}`, "255 bytes"],
+  ])("rejects a new name with %s", async (_label, nameLine, reason) => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: ["---", nameLine, "description: A skill.", "---", ""].join(
+          "\n",
+        ),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(reason);
+  });
+
+  test("keeps accepting names the Agent Skills rules would not publish", async () => {
+    // Spaces, capitals and emoji only withhold a skill from MCP publication.
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: [
+          "---",
+          'name: "Release Notes ✍️"',
+          "description: A skill.",
+          "---",
+          "",
+        ].join("\n"),
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().name).toBe("Release Notes ✍️");
+  });
+
+  test("a manifest YAML cannot read is refused with one plain line", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: [
+          "---",
+          "name: release-notes",
+          "description: Use when: the user asks",
+          "---",
+          "",
+        ].join("\n"),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message: string = response.json().error.message;
+    expect(message).toContain("wrap it in quotes");
+    // The whole message is shown in a toast: no parser code frame.
+    expect(message).not.toContain("\n");
+  });
+
+  test("a name YAML reads as a number is told to be text", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: ["---", "name: 123", "description: A skill.", "---", ""].join(
+          "\n",
+        ),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("`name` must be text");
   });
 
   test("rejects duplicate resource file paths with a 400", async () => {

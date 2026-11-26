@@ -13,6 +13,7 @@ import { useExternalMcpSkill } from "@/lib/skills/skill.query";
 import { SkillContentEditor } from "../../_parts/skill-content-editor";
 import {
   SkillBackLink,
+  SkillLoadError,
   SkillNotFound,
   SkillPageLoading,
 } from "../../_parts/skill-page-shell";
@@ -21,7 +22,13 @@ export function ExternalMcpSkillPage({ id }: { id: string }) {
   const appName = useAppName();
   const search = useSearchParams();
   const mcpServerId = search.get("mcpServerId");
-  const { data: skill, isPending } = useExternalMcpSkill({ id, mcpServerId });
+  const {
+    data: skill,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useExternalMcpSkill({ id, mcpServerId });
   const manifest = useMemo(
     () =>
       skill
@@ -41,6 +48,9 @@ export function ExternalMcpSkillPage({ id }: { id: string }) {
   );
 
   if (isPending) return <SkillPageLoading />;
+  if (isError) {
+    return <SkillLoadError error={error} onRetry={() => void refetch()} />;
+  }
   if (!skill) return <SkillNotFound />;
 
   return (

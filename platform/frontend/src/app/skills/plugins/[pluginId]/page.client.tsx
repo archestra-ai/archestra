@@ -10,6 +10,7 @@ import { usePluginSkill } from "@/lib/skills/skill.query";
 import { SkillContentEditor } from "../../_parts/skill-content-editor";
 import {
   SkillBackLink,
+  SkillLoadError,
   SkillNotFound,
   SkillPageLoading,
 } from "../../_parts/skill-page-shell";
@@ -21,9 +22,18 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
     { plugin: ["read"] },
     pluginId,
   );
-  const { data: skill, isPending } = usePluginSkill({ pluginId, skillPath });
+  const {
+    data: skill,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = usePluginSkill({ pluginId, skillPath });
 
   if (isPending) return <SkillPageLoading />;
+  if (isError) {
+    return <SkillLoadError error={error} onRetry={() => void refetch()} />;
+  }
   if (!skill) return <SkillNotFound />;
 
   return (

@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -123,7 +123,10 @@ import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { PluginSourceIcon } from "../plugins/_parts/plugin-source-icon";
-import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
+import {
+  DeleteSkillDialog,
+  skillDeleteDescription,
+} from "./_parts/delete-skill-dialog";
 import {
   getSkillActionModel,
   skillAction,
@@ -138,6 +141,7 @@ import { SkillSourceGlyph } from "./_parts/skill-source-glyph";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
 import { SkillUsageSummary } from "./_parts/skill-usage-summary";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
+import { useSingleFlight } from "./_parts/use-single-flight";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
 type ExternalSkill =
@@ -201,9 +205,36 @@ function SkillsList() {
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
   const scopeFilter = useScopeFilterParams();
-  // The trash view; the backend restricts `status=deleted` to admins/team-admins
-  // and the status filter itself is only shown to skill admins.
-  const isDeletedView = searchParams.get("status") === "deleted";
+  // The deleted view is listed only for a reader who manages every skill
+  // (`skill:update` at `*`, the grant the backend asks for). A `?status=deleted`
+  // that anyone else arrives with (a shared link, a bookmark from before a
+  // role change) is dropped from the URL below instead of being sent: the
+  // request could only come back refused, and nothing on the page could fix
+  // it.
+  const isDeletedRequested = searchParams.get("status") === "deleted";
+  const { data: isSkillAdmin, isPending: isSkillAdminPending } =
+    useHasPermissions({ skill: ["update"] }, "*");
+  const isDeletedView = isDeletedRequested && isSkillAdmin === true;
+  // Whether the reader may see the deleted view is not known yet, so neither
+  // list is asked for: the page would otherwise load the active skills under
+  // a URL that asks for the deleted ones, or send a request it may be refused.
+  const isDeletedViewUndecided = isDeletedRequested && isSkillAdminPending;
+  useEffect(() => {
+    if (!isDeletedRequested || isSkillAdminPending || isSkillAdmin) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("status");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [
+    isDeletedRequested,
+    isSkillAdminPending,
+    isSkillAdmin,
+    searchParams,
+    router,
+    pathname,
+  ]);
 
   type SkillSortBy = NonNullable<
     NonNullable<archestraApiTypes.GetSkillsData["query"]>["sortBy"]
@@ -240,10 +271,14 @@ function SkillsList() {
       ? "all"
       : requestedKind;
   const showStandaloneSkills = kind === "all" || kind === "standalone";
-  const showMcpSkills = !isDeletedView && (kind === "all" || kind === "mcp");
+  const showMcpSkills =
+    !isDeletedView &&
+    !isDeletedViewUndecided &&
+    (kind === "all" || kind === "mcp");
   const showPluginSkills =
     pluginSkillsEnabled &&
     !isDeletedView &&
+    !isDeletedViewUndecided &&
     (kind === "all" || kind === "plugin");
   // Name-based edit links may target a skill beyond the visible page, so keep
   // their existing complete standalone list until the name has resolved.
@@ -281,6 +316,7 @@ function SkillsList() {
     isPending: isDeletedSkillsPending,
     isFetching: isDeletedSkillsFetching,
     isLoadingError: isDeletedSkillsLoadError,
+    error: deletedSkillsError,
     refetch: refetchSkills,
   } = useSkillsPaginated(
     {
@@ -288,17 +324,24 @@ function SkillsList() {
       offset: pageIndex * pageSize,
       ...listFilters,
     },
-    { enabled: usesPaginatedSkills, toastOnError: false },
+    {
+      enabled: usesPaginatedSkills && !isDeletedViewUndecided,
+      toastOnError: false,
+    },
   );
   const {
     data: activeSkills = [],
     isPending: isActiveSkillsPending,
     isFetching: isActiveSkillsFetching,
     isLoadingError: isActiveSkillsLoadError,
+    error: activeSkillsError,
     refetch: refetchActiveSkills,
   } = useSkillsList(listFilters, {
     enabled:
-      !isDeletedView && showStandaloneSkills && !isStandalonePaginatedView,
+      !isDeletedView &&
+      !isDeletedViewUndecided &&
+      showStandaloneSkills &&
+      !isStandalonePaginatedView,
     toastOnError: false,
   });
   const isFetching = usesPaginatedSkills
@@ -307,6 +350,9 @@ function SkillsList() {
   const isSkillsLoadError = usesPaginatedSkills
     ? isDeletedSkillsLoadError
     : isActiveSkillsLoadError;
+  const skillsLoadError = usesPaginatedSkills
+    ? deletedSkillsError
+    : activeSkillsError;
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
   const {
@@ -336,6 +382,31 @@ function SkillsList() {
         scope: scopeFilter.scope,
       });
   const restoreSkill = useRestoreSkill();
+  // One restore per skill at a time. The request settles only once the list
+  // has been read again (see `useRestoreSkill`), so the id stays held until
+  // the row has left the deleted view; the ref refuses a second click that
+  // lands before the first one has re-rendered the button as busy.
+  const restoringIdsRef = useRef(new Set<string>());
+  const [restoringIds, setRestoringIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const handleRestore = useCallback(
+    (id: string) => {
+      const held = restoringIdsRef.current;
+      if (held.has(id)) return;
+      held.add(id);
+      setRestoringIds(new Set(held));
+      void restoreSkill
+        .mutateAsync(id)
+        // A rejection is reported by the mutation's own `onError`.
+        .catch(() => null)
+        .finally(() => {
+          held.delete(id);
+          setRestoringIds(new Set(held));
+        });
+    },
+    [restoreSkill],
+  );
   const admin = useIsGlobalAdmin();
 
   const setSourceRepoFilter = useCallback(
@@ -414,12 +485,12 @@ function SkillsList() {
   const [usageSkill, setUsageSkill] = useState<{
     reference: SkillUsageReference;
     name: string;
+    allTime: { usageCount: number; lastUsedAt: string | null };
   } | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   // Resolved once for the whole table, then applied per row: the scope check
   // is a pure function precisely so a table cell does not have to call hooks.
-  const { data: isSkillAdmin } = useHasPermissions({ skill: ["update"] }, "*");
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: userTeams } = useMyTeams({ enabled: !!canReadTeams });
   const userTeamIdSet = new Set((userTeams ?? []).map((team) => team.id));
@@ -513,6 +584,18 @@ function SkillsList() {
     selection.clearSelection();
     setEscalatedFor(null);
   };
+  // One request per confirmation: a second click before the button has
+  // re-rendered as busy would repeat the delete, and the repeat reports every
+  // skill as not found.
+  const confirmBulkDelete = useSingleFlight(async () => {
+    const result = await bulkDeleteSkills
+      .mutateAsync(selectedSkills.map((skill) => skill.id))
+      // A rejection is reported by the mutation's own `onError`.
+      .catch(() => null);
+    if (!result || result.succeeded.length === 0) return;
+    clearSelection();
+    setBulkDeleteOpen(false);
+  });
 
   // Deep-link support: /skills?openEdit=<name> opens the matching skill's page
   // (e.g. from the chat SkillPill). The name resolves to an id once the items
@@ -557,11 +640,14 @@ function SkillsList() {
    * which is only true during a first load of a query that is switched on.
    */
   const isInitialSkillsLoad =
+    isDeletedViewUndecided ||
     ((usesPaginatedSkills ? isDeletedSkillsPending : isActiveSkillsPending) &&
       isFetching) ||
     (showMcpSkills && isExternalSkillsPending && isExternalSkillsFetching) ||
     (showPluginSkills && isPluginSkillsPending && isPluginSkillsFetching);
   const showEmptyState =
+    // A list that failed to load is not an empty one.
+    !isSkillsLoadError &&
     !isFetching &&
     !(showMcpSkills && isExternalSkillsFetching) &&
     !(showPluginSkills && isPluginSkillsFetching) &&
@@ -623,9 +709,9 @@ function SkillsList() {
             icon: <ArchiveRestore className="h-4 w-4" />,
             label: ACTION_LABEL.restore,
             permissions: { skill: ["delete"] },
-            disabled: !canModify,
-            disabledTooltip: notYours,
-            onClick: () => restoreSkill.mutate(skill.id),
+            disabled: !canModify || restoringIds.has(skill.id),
+            disabledTooltip: canModify ? "Restoring…" : notYours,
+            onClick: () => handleRestore(skill.id),
           },
         ]
       : [
@@ -718,6 +804,10 @@ function SkillsList() {
         setUsageSkill({
           reference: usageReference,
           name: skill.name,
+          allTime: {
+            usageCount: skill.usageCount,
+            lastUsedAt: skill.lastUsedAt,
+          },
         }),
     };
     const actions: TableRowAction[] =
@@ -871,6 +961,10 @@ function SkillsList() {
                         skillPath: item.skill.skillPath,
                       },
                 name: item.skill.name,
+                allTime: {
+                  usageCount: item.skill.usageCount,
+                  lastUsedAt: item.skill.lastUsedAt,
+                },
               });
             }}
           />
@@ -888,19 +982,6 @@ function SkillsList() {
       ),
     },
   ];
-
-  if (isSkillsLoadError) {
-    return (
-      <PageLayout title="Skills" description={SKILLS_DESCRIPTION}>
-        <QueryLoadError
-          title="Couldn't load your skills"
-          onRetry={() =>
-            usesPaginatedSkills ? refetchSkills() : refetchActiveSkills()
-          }
-        />
-      </PageLayout>
-    );
-  }
 
   return (
     <>
@@ -1002,11 +1083,13 @@ function SkillsList() {
                     </Select>
                   )}
 
-                  {/* Backend gates status=deleted on isAdmin||isTeamAdmin; the
-                    checker has no `skill:delete` boolean, so this shows the
-                    trash toggle to skill admins to avoid a control that 403s. */}
+                  {/* The same grant the backend asks of `status=deleted`
+                    (`skill:update` at `*`), so the filter is offered only to a
+                    reader the deleted list will answer. `skill:delete` alone
+                    is held by anyone who can delete their own skill. */}
                   <ResourceDeletedStatusFilter
-                    deletePermission={{ skill: ["delete"] }}
+                    deletePermission={{ skill: ["update"] }}
+                    deletePermissionScope="*"
                   />
                   {/* Only imported skills have a repository, so the filter would
                     be a single inert "All repositories" entry until at least
@@ -1069,143 +1152,160 @@ function SkillsList() {
                 <ActiveFilterBadges />
               </CollectionFilters>
 
-              <section className="space-y-3" aria-label="Skills">
-                <BulkActions
-                  count={selectedSkills.length}
-                  noun="skill"
-                  countTestId={E2eTestId.SkillsBulkSelectionCount}
-                  onClear={clearSelection}
-                  busy={
-                    allMatchingSelected &&
-                    (isAllMatchingFetching || isAllMatchingError)
-                  }
-                  selectAllMatching={
+              {isSkillsLoadError ? (
+                // In place of the table only: the filters above stay, since a
+                // filter is as likely as the network to be what failed, and
+                // clearing it is the way back. Given the error, the panel
+                // tells a refusal from a lost connection.
+                <QueryLoadError
+                  title="Couldn't load your skills"
+                  error={skillsLoadError}
+                  onRetry={() =>
                     usesPaginatedSkills
-                      ? {
-                          ...selection.selectAllMatching,
-                          total: skills?.pagination.total ?? 0,
-                          active: allMatchingSelected,
-                          onSelectAll: () => setEscalatedFor(filterSignature),
-                        }
-                      : selection.selectAllMatching
+                      ? refetchSkills()
+                      : refetchActiveSkills()
                   }
-                >
-                  <PermissionButton
-                    permissions={{ skill: ["delete"] }}
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setBulkDeleteOpen(true)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span>Delete</span>
-                  </PermissionButton>
-                </BulkActions>
-
-                <SkillCollection
-                  forceTable={isDeletedView}
-                  items={items}
-                  columns={columns}
-                  getRowId={(item) => item.key}
-                  renderCard={(item) => {
-                    const fileCount = listedSkillFileCount(item);
-                    const standalone =
-                      item.source === "standalone" ? item.skill : null;
-                    const href = listedSkillHref(item);
-                    return (
-                      <TableCard
-                        key={item.key}
-                        icon={
-                          <ListedSkillIcon
-                            item={item}
-                            appIconLogo={appIconLogo}
-                          />
-                        }
-                        title={
-                          <span className="flex min-w-0 items-center gap-2">
-                            <Link href={href} className="truncate">
-                              {item.skill.name}
-                            </Link>
-                            <ListedSkillSourceBadge
-                              item={item}
-                              canOpenPluginDetails={
-                                item.source === "plugin" &&
-                                canOpenPluginDetails(item.skill.pluginId)
-                              }
-                            />
-                            {standalone ? (
-                              <LabelTags labels={standalone.labels} />
-                            ) : null}
-                          </span>
-                        }
-                        description={item.skill.description}
-                        actions={renderListedSkillActions(item)}
-                        onNavigate={
-                          isDeletedView
-                            ? undefined
-                            : () => router.push(listedSkillHref(item))
-                        }
-                        {...cardSelection(item)}
-                        selectionLabel={`Select ${item.skill.name}`}
-                        footer={
-                          <div className="flex items-center justify-between gap-3">
-                            <span>
-                              {fileCount} {fileCount === 1 ? "file" : "files"}
-                            </span>
-                            <span>
-                              {item.skill.usageCount}{" "}
-                              {item.skill.usageCount === 1 ? "use" : "uses"}
-                            </span>
-                          </div>
-                        }
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          {standalone?.templated ? (
-                            <Badge variant="outline">
-                              <Braces className="mr-1 h-3 w-3" />
-                              <span>templated</span>
-                            </Badge>
-                          ) : null}
-                          {item.source === "plugin" &&
-                          !item.skill.pluginEnabled ? (
-                            <Badge variant="outline">Plugin disabled</Badge>
-                          ) : null}
-                        </div>
-                      </TableCard>
-                    );
-                  }}
-                  isLoading={
-                    isFetching ||
-                    (showMcpSkills && isExternalSkillsFetching) ||
-                    (showPluginSkills && isPluginSkillsFetching)
-                  }
-                  emptyIcon={Sparkles}
-                  emptyMessage="No skills yet."
-                  hasActiveFilters={hasActiveFilters}
-                  filteredEmptyMessage={
-                    isDeletedView
-                      ? "No deleted skills found."
-                      : "No skills match the current filters."
-                  }
-                  onClearFilters={clearFilters}
-                  manualPagination={usesPaginatedSkills}
-                  manualSorting={usesPaginatedSkills}
-                  sorting={sorting}
-                  onSortingChange={handleSortingChange}
-                  pagination={{ pageIndex, pageSize, total: totalSkills }}
-                  onPaginationChange={handlePaginationChange}
-                  onRowClick={
-                    isDeletedView
-                      ? undefined
-                      : (item) => router.push(listedSkillHref(item))
-                  }
-                  rowSelection={effectiveRowSelection}
-                  onRowSelectionChange={onRowSelectionChange}
-                  onPageRowIdsChange={selection.onPageRowIdsChange}
-                  rangeSelection={rangeSelection}
-                  fixedWidthColumnIds={["source", "files", "usageCount"]}
-                  flexibleColumnIds={["name"]}
+                  className="min-h-[40vh]"
                 />
-              </section>
+              ) : (
+                <section className="space-y-3" aria-label="Skills">
+                  <BulkActions
+                    count={selectedSkills.length}
+                    noun="skill"
+                    countTestId={E2eTestId.SkillsBulkSelectionCount}
+                    onClear={clearSelection}
+                    busy={
+                      allMatchingSelected &&
+                      (isAllMatchingFetching || isAllMatchingError)
+                    }
+                    selectAllMatching={
+                      usesPaginatedSkills
+                        ? {
+                            ...selection.selectAllMatching,
+                            total: skills?.pagination.total ?? 0,
+                            active: allMatchingSelected,
+                            onSelectAll: () => setEscalatedFor(filterSignature),
+                          }
+                        : selection.selectAllMatching
+                    }
+                  >
+                    <PermissionButton
+                      permissions={{ skill: ["delete"] }}
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setBulkDeleteOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete</span>
+                    </PermissionButton>
+                  </BulkActions>
+
+                  <SkillCollection
+                    forceTable={isDeletedView}
+                    items={items}
+                    columns={columns}
+                    getRowId={(item) => item.key}
+                    renderCard={(item) => {
+                      const fileCount = listedSkillFileCount(item);
+                      const standalone =
+                        item.source === "standalone" ? item.skill : null;
+                      const href = listedSkillHref(item);
+                      return (
+                        <TableCard
+                          key={item.key}
+                          icon={
+                            <ListedSkillIcon
+                              item={item}
+                              appIconLogo={appIconLogo}
+                            />
+                          }
+                          title={
+                            <span className="flex min-w-0 items-center gap-2">
+                              <Link href={href} className="truncate">
+                                {item.skill.name}
+                              </Link>
+                              <ListedSkillSourceBadge
+                                item={item}
+                                canOpenPluginDetails={
+                                  item.source === "plugin" &&
+                                  canOpenPluginDetails(item.skill.pluginId)
+                                }
+                              />
+                              {standalone ? (
+                                <LabelTags labels={standalone.labels} />
+                              ) : null}
+                            </span>
+                          }
+                          description={item.skill.description}
+                          actions={renderListedSkillActions(item)}
+                          onNavigate={
+                            isDeletedView
+                              ? undefined
+                              : () => router.push(listedSkillHref(item))
+                          }
+                          {...cardSelection(item)}
+                          selectionLabel={`Select ${item.skill.name}`}
+                          footer={
+                            <div className="flex items-center justify-between gap-3">
+                              <span>
+                                {fileCount} {fileCount === 1 ? "file" : "files"}
+                              </span>
+                              <span>
+                                {item.skill.usageCount}{" "}
+                                {item.skill.usageCount === 1 ? "use" : "uses"}
+                              </span>
+                            </div>
+                          }
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            {standalone?.templated ? (
+                              <Badge variant="outline">
+                                <Braces className="mr-1 h-3 w-3" />
+                                <span>templated</span>
+                              </Badge>
+                            ) : null}
+                            {item.source === "plugin" &&
+                            !item.skill.pluginEnabled ? (
+                              <Badge variant="outline">Plugin disabled</Badge>
+                            ) : null}
+                          </div>
+                        </TableCard>
+                      );
+                    }}
+                    isLoading={
+                      isFetching ||
+                      (showMcpSkills && isExternalSkillsFetching) ||
+                      (showPluginSkills && isPluginSkillsFetching)
+                    }
+                    emptyIcon={Sparkles}
+                    emptyMessage="No skills yet."
+                    hasActiveFilters={hasActiveFilters}
+                    filteredEmptyMessage={
+                      isDeletedView
+                        ? "No deleted skills found."
+                        : "No skills match the current filters."
+                    }
+                    onClearFilters={clearFilters}
+                    manualPagination={usesPaginatedSkills}
+                    manualSorting={usesPaginatedSkills}
+                    sorting={sorting}
+                    onSortingChange={handleSortingChange}
+                    pagination={{ pageIndex, pageSize, total: totalSkills }}
+                    onPaginationChange={handlePaginationChange}
+                    onRowClick={
+                      isDeletedView
+                        ? undefined
+                        : (item) => router.push(listedSkillHref(item))
+                    }
+                    rowSelection={effectiveRowSelection}
+                    onRowSelectionChange={onRowSelectionChange}
+                    onPageRowIdsChange={selection.onPageRowIdsChange}
+                    rangeSelection={rangeSelection}
+                    fixedWidthColumnIds={["source", "files", "usageCount"]}
+                    flexibleColumnIds={["name"]}
+                  />
+                </section>
+              )}
             </>
           )}
         </TableCardView>
@@ -1215,24 +1315,20 @@ function SkillsList() {
         <DeleteConfirmDialog
           open={bulkDeleteOpen}
           onOpenChange={setBulkDeleteOpen}
-          title="Delete skills"
-          description={`Delete ${selectedSkills.length} ${
-            selectedSkills.length === 1 ? "skill" : "skills"
-          }? Each one is removed along with its instructions and resource files.`}
+          title={selectedSkills.length === 1 ? "Delete skill" : "Delete skills"}
+          description={skillDeleteDescription({
+            subject:
+              selectedSkills.length === 1
+                ? "1 skill"
+                : `${selectedSkills.length} skills`,
+            count: selectedSkills.length,
+            canOpenDeletedView: isSkillAdmin === true,
+          })}
           isPending={bulkDeleteSkills.isPending}
-          onConfirm={() => {
-            bulkDeleteSkills.mutate(
-              selectedSkills.map((skill) => skill.id),
-              {
-                onSuccess: (result) => {
-                  if (!result || result.succeeded.length === 0) return;
-                  clearSelection();
-                  setBulkDeleteOpen(false);
-                },
-              },
-            );
-          }}
-          confirmLabel="Delete skills"
+          onConfirm={confirmBulkDelete}
+          confirmLabel={
+            selectedSkills.length === 1 ? "Delete skill" : "Delete skills"
+          }
           pendingLabel="Deleting..."
         />
       )}
@@ -1265,6 +1361,7 @@ function SkillsList() {
         <SkillUsageDialog
           skillRef={usageSkill.reference}
           skillName={usageSkill.name}
+          allTime={usageSkill.allTime}
           open
           onOpenChange={(open) => !open && setUsageSkill(null)}
         />
@@ -1581,12 +1678,14 @@ function PermanentlyDeleteSkillDialog({
 }) {
   const permanentlyDeleteSkill = usePermanentlyDeleteSkill();
 
-  const handleDelete = useCallback(async () => {
+  // One request per confirmation: a second click before the button has
+  // re-rendered as busy would ask to destroy a skill that is already gone.
+  const handleDelete = useSingleFlight(async () => {
     const result = await permanentlyDeleteSkill.mutateAsync(skill.id);
     if (result) {
       onOpenChange(false);
     }
-  }, [skill.id, permanentlyDeleteSkill, onOpenChange]);
+  });
 
   return (
     <DeleteConfirmDialog

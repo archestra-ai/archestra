@@ -51,6 +51,40 @@ describe("GET /api/skills/catalog/search", () => {
     expect(body.results.length).toBeLessThanOrEqual(5);
   });
 
+  test.each([
+    "a",
+    "an",
+    "the",
+    "of",
+  ])("answers the common word %j with skills that start with it", async (word) => {
+    // These are stop words the index leaves out, and each is also how a
+    // longer word starts ("the" → "theme"). They used to return nothing.
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/skills/catalog/search?q=${word}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { results } = response.json() as {
+      results: Array<{
+        name: string;
+        repo: string;
+        skillPath: string;
+        description: string;
+      }>;
+    };
+    expect(results.length).toBeGreaterThan(0);
+    // Every result holds a word that starts with what was typed.
+    const startsWithWord = new RegExp(`(^|[^a-z0-9])${word}[a-z0-9]`, "i");
+    for (const result of results) {
+      expect(
+        [result.name, result.repo, result.skillPath, result.description].join(
+          "\n",
+        ),
+      ).toMatch(startsWithWord);
+    }
+  });
+
   test("403s when the org has disabled the online skill catalog", async () => {
     await OrganizationModel.patch(organizationId, {
       onlineSkillCatalogEnabled: false,

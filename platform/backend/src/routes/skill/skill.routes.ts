@@ -75,6 +75,7 @@ import {
 } from "@/skills/parser";
 import { skillCatalog } from "@/skills/skill-catalog";
 import {
+  findNewSkillNameProblem,
   isSkillNameConflict,
   refineUniqueFilePaths,
   SkillFileInputSchema,
@@ -823,6 +824,15 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentIds,
       });
 
+      await assertNewSkillNameUsable({
+        organizationId,
+        ownerKey: await SkillModel.nameOwnerKeyForPrincipal({
+          organizationId,
+          principalId: user.id,
+        }),
+        name: parsed.name,
+      });
+
       const resourceId = crypto.randomUUID();
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
@@ -1021,6 +1031,17 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // GitHub makes it editable.
       if (existing.githubSyncInterval !== null) {
         assertSyncedSkillContentUnchanged({ existing, parsed, body });
+      }
+
+      // Asked of a rename only: a skill stored under a name the rule would
+      // now refuse keeps saving its other fields.
+      if (parsed.name !== existing.name) {
+        await assertNewSkillNameUsable({
+          organizationId,
+          ownerKey: existing.authorId ?? existing.createdByServiceAccountId,
+          name: parsed.name,
+          excludeSkillId: existing.id,
+        });
       }
 
       // Changing a skill's environment assignments is gated like assigning
@@ -1275,13 +1296,32 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SkillDetailSchema),
       },
     },
-    async ({ params: { id }, organizationId, user }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        organizationId,
+        user,
+      } = request;
       // The soft-deleted row: findById/findSkillOrThrow filter deleted rows and
       // would 404 every restore. Authorize this object directly — junction
       // rows survive soft-delete, so its scope/team lookups still resolve.
       const skill = await SkillModel.findDeletedById(id, organizationId);
       if (!skill) {
-        throw new ApiError(404, "Skill not found");
+        // Restoring a skill that is already active changes nothing, so a
+        // repeated request (a double click, a retry after a lost response)
+        // gets the skill back instead of a "not found" for a restore that
+        // worked. It is authorized exactly like the restore itself, and an id
+        // the caller cannot see is still a 404.
+        const active = await findSkillOrThrow(id, organizationId);
+        await authorizeSkillModify({
+          skill: active,
+          userId: user.id,
+          organizationId,
+          action: "delete",
+        });
+        // Nothing was restored, so there is nothing to audit.
+        request.auditSkip = true;
+        return reply.send(await loadSkillDetail(active));
       }
 
       await authorizeSkillModify({
@@ -2421,6 +2461,14 @@ function parseManifestOrThrow(raw: string) {
     }
     throw error;
   }
+}
+
+/** Refuse a name a skill is being given for the first time; see the helper. */
+async function assertNewSkillNameUsable(
+  params: Parameters<typeof findNewSkillNameProblem>[0],
+): Promise<void> {
+  const problem = await findNewSkillNameProblem(params);
+  if (problem) throw new ApiError(problem.status, problem.message);
 }
 
 function skillNameConflict(name: string): ApiError {

@@ -24,11 +24,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useHasPermissions,
   useMissingPermissions,
+  useSession,
 } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
   useCreateSkill,
   useSearchSkillCatalog,
+  useSkillsPaginated,
 } from "@/lib/skills/skill.query";
 import NewSkillPage from "./page.client";
 
@@ -60,6 +62,11 @@ beforeEach(() => {
     // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
   } as any);
   vi.mocked(useMissingPermissions).mockReturnValue({});
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+    // biome-ignore lint/suspicious/noExplicitAny: partial session is enough
+  } as any);
+  mockOwnSkills([]);
   vi.mocked(useSearchSkillCatalog).mockReturnValue({
     data: undefined,
     isLoading: false,
@@ -70,6 +77,16 @@ beforeEach(() => {
     isPending: false,
   } as unknown as ReturnType<typeof useCreateSkill>);
 });
+
+/** What the name lookup finds among the skills the reader can see. */
+function mockOwnSkills(
+  skills: Array<{ id: string; name: string; authorId: string | null }>,
+) {
+  vi.mocked(useSkillsPaginated).mockReturnValue({
+    data: { data: skills },
+    // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+  } as any);
+}
 
 function renderPage() {
   const queryClient = new QueryClient({
@@ -202,5 +219,141 @@ describe("NewSkillPage wizard", () => {
     await user.click(screen.getByText("Blank template"));
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByText("Popular repositories")).toBeInTheDocument();
+  });
+});
+
+describe("NewSkillPage unsaved draft", () => {
+  const fillName = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByText("Blank template"));
+    await user.type(screen.getByLabelText("Skill name"), "release-checklist");
+  };
+  /** A link the page does not own, as the sidebar's are. */
+  const outsideLink = () => {
+    const link = document.createElement("a");
+    link.href = "/plugins";
+    link.textContent = "Plugins";
+    document.body.appendChild(link);
+    return link;
+  };
+
+  it("asks before a link elsewhere in the app discards the draft", async () => {
+    mockOrganization(true);
+    renderPage();
+    const user = userEvent.setup();
+    await fillName(user);
+
+    const link = outsideLink();
+    await user.click(link);
+
+    // The draft lives only on this page, so leaving it used to lose it
+    // without a word.
+    const prompt = await screen.findByRole("dialog");
+    expect(prompt).toHaveTextContent("Discard unsaved changes?");
+    expect(routerPush).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByLabelText("Skill name")).toHaveValue(
+      "release-checklist",
+    );
+    expect(routerPush).not.toHaveBeenCalled();
+
+    await user.click(link);
+    await user.click(
+      await screen.findByRole("button", { name: "Discard changes" }),
+    );
+    expect(routerPush).toHaveBeenCalledWith("/plugins");
+    link.remove();
+  });
+
+  it("does not ask when nothing has been typed", async () => {
+    mockOrganization(true);
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Blank template"));
+
+    const link = outsideLink();
+    // Nothing intercepts the click, so the link is left to navigate.
+    let prevented = true;
+    link.addEventListener("click", (event) => {
+      prevented = event.defaultPrevented;
+      event.preventDefault();
+    });
+    await user.click(link);
+
+    expect(prevented).toBe(false);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    link.remove();
+  });
+
+  it("moves between the wizard's own steps without asking, and keeps the draft", async () => {
+    mockOrganization(true);
+    renderPage();
+    const user = userEvent.setup();
+    await fillName(user);
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByText("Blank template"));
+    expect(screen.getByLabelText("Skill name")).toHaveValue(
+      "release-checklist",
+    );
+  });
+});
+
+describe("NewSkillPage name check", () => {
+  const typeName = async (name: string) => {
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Blank template"));
+    await user.type(screen.getByLabelText("Skill name"), name);
+    await user.type(screen.getByLabelText("Description"), "A skill.");
+  };
+
+  it("says before the save that the author already has the name in another letter case", async () => {
+    mockOrganization(true);
+    mockOwnSkills([
+      { id: "skill-1", name: "probe-skill-one", authorId: "user-1" },
+    ]);
+    renderPage();
+    await typeName("Probe-Skill-One");
+
+    expect(screen.getByText("Name already in use")).toBeInTheDocument();
+    expect(
+      screen.getByText(/A skill named "probe-skill-one" by the same author/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Skill name")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
+  });
+
+  it("leaves another author's skill of that name alone", async () => {
+    mockOrganization(true);
+    mockOwnSkills([
+      { id: "skill-1", name: "probe-skill-one", authorId: "someone-else" },
+    ]);
+    renderPage();
+    await typeName("Probe-Skill-One");
+
+    expect(screen.queryByText("Name already in use")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create skill" })).toBeEnabled();
+  });
+
+  it("refuses a name that cannot be a folder name, and still takes one the Agent Skills rules would not publish", async () => {
+    mockOrganization(true);
+    renderPage();
+    await typeName("docs/release");
+
+    expect(screen.getByText("This name cannot be used")).toBeInTheDocument();
+    expect(screen.getByText(/cannot contain a slash/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
+
+    const user = userEvent.setup();
+    await user.clear(screen.getByLabelText("Skill name"));
+    await user.type(screen.getByLabelText("Skill name"), "Release Notes");
+    expect(
+      screen.queryByText("This name cannot be used"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create skill" })).toBeEnabled();
   });
 });

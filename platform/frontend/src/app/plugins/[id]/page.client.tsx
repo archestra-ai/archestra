@@ -80,8 +80,9 @@ import { PluginSourceGlyph } from "../_parts/plugin-source-icon";
 /**
  * `/plugins/[id]` — one plugin's page. Its metadata, payload and access are
  * edited here rather than behind an Edit button that opened a wizard on a
- * second route: the plugin's settings are the page. The layout intentionally
- * mirrors the skill page.
+ * second route: the plugin's settings are the page. It sits in the same column
+ * as the Plugins list (the layout's default width), so the header, its
+ * actions and the content keep their edges when a row is opened.
  */
 export default function PluginDetailPage({ id }: { id: string }) {
   const {
@@ -117,7 +118,6 @@ export default function PluginDetailPage({ id }: { id: string }) {
         title="Plugin"
         description=""
         backLink={<PluginBackLink href="/plugins" label="Plugins" />}
-        maxWidth="wizard"
       >
         <QueryLoadError
           title="Couldn't load this plugin"
@@ -319,7 +319,6 @@ function PluginDetailView({
       documentTitle={plugin.displayName}
       description={plugin.description || PLUGIN_DESCRIPTION_FALLBACK}
       backLink={<PluginBackLink href="/plugins" label="Plugins" />}
-      maxWidth="wizard"
       minWidth="phone"
       contentOverflowX="clip"
       tabs={[

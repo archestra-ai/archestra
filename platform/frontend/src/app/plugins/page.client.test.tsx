@@ -156,9 +156,7 @@ describe("PluginsPage", () => {
         "Extensions for local agents like Claude Code or Codex.",
       ),
     ).toBeVisible();
-    expect(
-      screen.getByText("Extend your agent with custom skills and behaviors."),
-    ).toBeVisible();
+    expect(screen.getByText("Extend your agent")).toBeVisible();
     expect(
       screen.getByText(
         "A plugin can bundle reusable instructions in form of skills, executable scripts, and hooks in any combination to extend functionality of your agent. Add ready plugins from marketplaces or create your own. Then install with a single command.",
@@ -183,9 +181,7 @@ describe("PluginsPage", () => {
     access.isPending = true;
     render(<PluginsPage />);
 
-    expect(
-      screen.getByText("Extend your agent with custom skills and behaviors."),
-    ).toBeVisible();
+    expect(screen.getByText("Extend your agent")).toBeVisible();
     expect(
       screen.queryByText("Your admins haven't shared a plugin yet."),
     ).not.toBeInTheDocument();

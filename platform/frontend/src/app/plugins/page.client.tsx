@@ -807,7 +807,8 @@ function PluginsEmptyState() {
     <EmptyState
       variant="firstUse"
       icon={Puzzle}
-      title="Extend your agent with custom skills and behaviors."
+      align="start"
+      title="Extend your agent"
       description="A plugin can bundle reusable instructions in form of skills, executable scripts, and hooks in any combination to extend functionality of your agent. Add ready plugins from marketplaces or create your own. Then install with a single command."
       canAct={isPending ? undefined : canCreate}
       readerMessage="Your admins haven't shared a plugin yet."

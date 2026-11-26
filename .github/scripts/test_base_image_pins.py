@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import unittest
 
+from test_dependabot_release_lines import assert_release_targets
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("release_image_policy", ROOT / ".github/scripts/release-image-policy.py")
@@ -42,7 +44,8 @@ class BaseImagePinTest(unittest.TestCase):
         by_target = {}
         for entry in entries:
             by_target.setdefault(entry["target"] or "main", []).append(entry)
-        self.assertEqual(sorted(by_target), sorted(["main", *lines]))
+        self.assertIn("main", by_target)
+        assert_release_targets(self, set(by_target) - {"main"}, lines)
         for target, target_entries in by_target.items():
             with self.subTest(target=target):
                 covered = [directory for entry in target_entries for directory in entry["directories"]]

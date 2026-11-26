@@ -1,5 +1,6 @@
 import {
   AGENT_TOOL_PREFIX,
+  isLoadBalancedRuntimeRouterTool,
   LOAD_BALANCED_RUNTIME_ROUTER_META_KEY,
   type ModelSelection,
   normalizeSubagentLoadBalancingConfig,
@@ -105,6 +106,104 @@ function selfForkInputSchema(tiers: ForkTier[]): Tool["inputSchema"] {
 
 // === Exports ===
 
+type DelegationToolContext = {
+  agentId: string;
+  organizationId: string;
+  userId?: string;
+  /** Skip user access check (for A2A/ChatOps flows where caller has elevated permissions) */
+  skipAccessCheck?: boolean;
+  lookups?: RequestLookups;
+  /** The model and key the caller runs on, which its fork starts from. */
+  parentLlm?: ModelSelection;
+  /** The caller's own delegation chain; a fork's ends in its agent twice. */
+  delegationChain?: string;
+  oauthExecution?: A2AOAuthExecution;
+  /** Whether the caller is a machine OAuth application barred from Agent Runtime. */
+  disallowOAuthApp?: boolean;
+};
+
+/**
+ * Whether an agent keeps its subagents behind search_tools/run_tool instead of
+ * listing each as an `agent__…` tool. "All agents" always does: that set is
+ * every agent the caller can access, which has no bound. "Manual" does when
+ * "Progressive subagent loading" is on.
+ */
+export function loadsSubagentsProgressively(
+  agent: Pick<Agent, "accessAllSubagents" | "progressiveSubagentLoading">,
+): boolean {
+  return agent.accessAllSubagents || agent.progressiveSubagentLoading;
+}
+
+/**
+ * The delegation tools an agent lists in its own tool list. With progressive
+ * subagent loading that is only its fork: every other target stays reachable
+ * through search_tools/run_tool, which resolve {@link getAgentTools}, and is
+ * not read here at all. Otherwise it is the full set.
+ */
+export async function getListedAgentTools(
+  context: DelegationToolContext & {
+    /** The calling agent, when the caller already holds it. */
+    caller?: Pick<
+      Agent,
+      "agentType" | "accessAllSubagents" | "progressiveSubagentLoading"
+    >;
+  },
+): Promise<Tool[]> {
+  const caller =
+    context.caller ??
+    (context.lookups
+      ? await context.lookups.gatewayAgent(context.agentId)
+      : await AgentModel.findGatewayAgentById(context.agentId));
+  if (!caller || !loadsSubagentsProgressively(caller)) {
+    return getAgentTools(context);
+  }
+  // Only an internal agent has a fork, so a gateway lists nothing and every
+  // tools/list it answers stays free of delegation reads.
+  if (caller.agentType !== "agent") {
+    return [];
+  }
+  return finishDelegationTools(context, [], await isGuardrailsV2Active());
+}
+
+/**
+ * Tool names of the load-balanced router subagents an agent can delegate to
+ * but does not list, for the system prompt: its routing instruction has to
+ * name them before the model has searched for anything. Empty when the agent
+ * lists its subagents, since the prompt reads those from the tool list.
+ *
+ * "All agents" reads only the routers. A router that shares its tool name with
+ * another agent sorting before it is still named here, although that name
+ * dispatches to the other agent; telling them apart would take the full read
+ * this exists to avoid.
+ */
+export async function getUnlistedLoadBalancedRouterToolNames(context: {
+  agentId: string;
+  organizationId: string;
+  userId?: string;
+}): Promise<string[]> {
+  const { agentId, organizationId, userId } = context;
+  // Only a real user can launch a runtime pool, so only they see routers.
+  if (!userId || userId === "system") return [];
+  const caller = await AgentModel.findGatewayAgentById(agentId);
+  if (!caller || !loadsSubagentsProgressively(caller)) return [];
+
+  const tools = caller.accessAllSubagents
+    ? await buildAutoDelegationTools({
+        agentId,
+        organizationId,
+        userId,
+        environmentId: caller.environmentId,
+        attestable: false,
+        hideRuntimeWorkerTools: false,
+        runtimeCapableActor: true,
+        only: "load_balanced_routers",
+      })
+    : await getAgentTools({ agentId, organizationId, userId });
+  return tools
+    .filter((tool) => isLoadBalancedRuntimeRouterTool(tool))
+    .map((tool) => tool.name);
+}
+
 /**
  * Get agent delegation tools for an agent. Each eligible target agent becomes a
  * separate tool (e.g. `agent__research_bot`). Two modes, mirroring the Auto/
@@ -119,21 +218,9 @@ function selfForkInputSchema(tiers: ForkTier[]): Tool["inputSchema"] {
  *
  * Note: Agent delegation tools are separate from Archestra tools.
  */
-export async function getAgentTools(context: {
-  agentId: string;
-  organizationId: string;
-  userId?: string;
-  /** Skip user access check (for A2A/ChatOps flows where caller has elevated permissions) */
-  skipAccessCheck?: boolean;
-  lookups?: RequestLookups;
-  /** The model and key the caller runs on, which its fork starts from. */
-  parentLlm?: ModelSelection;
-  /** The caller's own delegation chain; a fork's ends in its agent twice. */
-  delegationChain?: string;
-  oauthExecution?: A2AOAuthExecution;
-  /** Whether the caller is a machine OAuth application barred from Agent Runtime. */
-  disallowOAuthApp?: boolean;
-}): Promise<Tool[]> {
+export async function getAgentTools(
+  context: DelegationToolContext,
+): Promise<Tool[]> {
   const { agentId, organizationId, userId, skipAccessCheck, lookups } = context;
 
   // Delegation never crosses environment boundaries (null is the Default
@@ -757,6 +844,8 @@ async function buildAutoDelegationTools(params: {
   attestable: boolean;
   hideRuntimeWorkerTools: boolean;
   runtimeCapableActor: boolean;
+  /** Read and build only this kind of target. */
+  only?: "load_balanced_routers";
 }): Promise<Tool[]> {
   const {
     agentId,
@@ -783,6 +872,7 @@ async function buildAutoDelegationTools(params: {
       organizationId,
       excludeAgentId: agentId,
       environmentId,
+      only: params.only,
     }),
     AgentExcludedSubagentModel.findTargetAgentIdsByAgent(agentId),
   ]);
@@ -1131,12 +1221,13 @@ async function resolveLoadBalancedRouterPools(params: {
                     organizationId: params.organizationId,
                     includeDetails: false,
                     environmentId,
+                    // A pool holds runtime agents only.
+                    only: "runtime",
                   });
                 for (const target of targets) {
                   nameByAgentId.set(target.id, target.name);
                 }
                 const sortedRuntimeIds = targets
-                  .filter((target) => target.hasRuntime)
                   .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
                   .map((target) => target.id);
                 return [

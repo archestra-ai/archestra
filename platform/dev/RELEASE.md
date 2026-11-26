@@ -67,9 +67,10 @@ track, set a temporary `packages.platform.release-as` in
 `.github/release-please/release-please-config.json` to the next unpublished RC on the
 intended track. For example, after `1.4.0-rc.35`, use `1.4.0-rc.36`.
 Merge the configuration PR and verify the existing release PR updates its version
-while retaining the breaking-change notes. After that RC publishes, remove only
-`release-as`; the workflow pauses new release PRs while the override matches the
-manifest.
+while retaining the breaking-change notes. The workflow pauses new release PRs while
+the override matches the manifest. After that RC publishes, **Release Finalize**
+opens a PR that removes only `release-as` and sets it to merge once it is approved
+(`stable-line.py clear-release-as`); approve it to resume rolling RCs.
 
 1. [ ] Open the release-please PR on `main` (for example, `1.4.0-rc.14`).
 2. [ ] Review the changelog and confirm checks pass, including migration upgrades from the active stable line.
@@ -170,36 +171,52 @@ See [migration upgrade checks](../backend/src/database/migrations/README.md) for
 
 ## Cut A New Stable Feature Line
 
-This is a complete cutover. Once the new stable release publishes, it becomes the only supported stable line and the previous line becomes read-only. The release operator or release agent completes all GitHub configuration and pull-request steps; contributors do not need to change their workflow.
+This is a complete cutover. Once the new stable release publishes, it becomes the only supported stable line, and the previous line stops getting backports and Dependabot updates. The previous line stays open unless you lock it (step 9). A repository admin runs the cut with `.github/scripts/stable-line.py`: only admins create `release/*` branches, and the release automation has no admin rights. Contributors do not change their workflow. The steps below use `1.5` (cut from `1.5.0-rc.N`, previous line `1.4`); `plan` prints the actual versions.
 
-1. [ ] Choose a tested RC tag (for example, `platform-v1.4.0-rc.14`). Confirm it is a published prerelease on `main` and passed qualification. Reconcile any existing target branch, tag, draft release, release PR, queue ruleset, and candidate workflow before continuing: resume only exact, protected state for that RC commit; never recreate objects or overwrite ambiguous state.
-2. [ ] Get explicit approval for the stable cut. State the RC tag, `X.Y.0` version, new branch, previous line that will become EOL, repository-setting changes, and PRs that will be created and merged.
-3. [ ] If the live `release/*` required-check rule blocks branch creation, temporarily set only `do_not_enforce_on_create: true` under the approved setting changes. Preserve the original ruleset payload and arrange restoration before changing it. If branch creation or any following verification fails, restore and read back the original ruleset before stopping.
-4. [ ] Create `release/1.4` from that tag (not from `main`), then immediately restore and verify the original core ruleset:
+Rulesets belong to Terraform in archestra-ai/infra: the per-line merge queue and end-of-life rulesets follow `github/org/archestra-release-lines.json`. Never change them through the API or settings UI; the next apply reverts it.
+
+**Before cut day**
+
+1. [ ] In archestra-ai/infra, add `"1.5"` to `mergeQueue` in `github/org/archestra-release-lines.json`, merge it, and wait for its Terraform apply. A ruleset for a branch that does not exist yet applies once the branch is created.
+2. [ ] Choose a qualified RC published after `stable-line.py` landed on `main`; `plan` rejects an older one, because Release Finalize runs the new line's own copy of the script.
+
+**Cut**
+
+3. [ ] Get explicit approval for the stable cut: the RC tag, `1.5.0`, `release/1.5`, whether `release/1.4` gets locked, and the PRs below.
+4. [ ] Preview it. `plan` only reads; fix every `BLOCKED` line and rerun:
    ```bash
-   git checkout -b release/1.4 platform-v1.4.0-rc.14
-   git push origin release/1.4
+   python3 .github/scripts/stable-line.py plan --rc-tag platform-v1.5.0-rc.N
    ```
-5. [ ] Before merging any PR, configure and verify GitHub protections:
-   - The live `release/*` core ruleset applies and matches `main` for pull requests, required checks, deletion, non-fast-forward protection, and bypass actors.
-   - An exact `release/1.4` ruleset has the same merge-queue parameters and bypass actors as `main`. GitHub does not support a merge queue on the wildcard ruleset.
-   - Derive settings from the live rulesets. Do not hard-code ruleset IDs, check names, integration IDs, reviewer IDs, or queue parameters.
-6. [ ] Open a PR to `release/1.4` configuring `.github/release-please/release-please-config.json` with the **Stable cut** settings below. Merge it through the new queue.
-7. [ ] Inventory open `release/1.3` PRs. Recreate still-required fixes that already landed on `main` as `cherry-pick -x` backports to `release/1.4`, merge them, and wait for the release PR to update.
-8. [ ] Write the upgrade guide and merge it to `release/1.4`. See **Write The Upgrade Guide** below. The `Release Freeze Check` on the `1.4.0` release PR fails until it exists.
-9. [ ] Verify the generated `1.4.0` release PR and its required checks. Complete qualification before merging: publication will run automatically after successful builds.
-10. [ ] Before merging that release PR, retire the previous stable line under the stable-cut approval:
-   - Confirm no `release/1.3` release workflow is running or waiting for approval, then close its remaining PRs with an EOL explanation.
-   - Delete its exact merge-queue ruleset.
-   - Add an exact active EOL ruleset that blocks updates to `release/1.3`, has no bypass actors, and sets `update_allows_fetch_and_merge: false`.
-   - Keep its branch, tags, releases, images, and charts for reproducibility.
-11. [ ] Verify the old line rejects updates, merge the `1.4.0` release PR through the queue, and complete **Verify Stable Publication**. The stable-cut approval covers this planned merge and its automatic publication.
-12. [ ] Open and merge a PR that removes `release-as` from `release/1.4`. Future patches become `1.4.1`, `1.4.2`, etc.
-13. [ ] Get separate explicit approval to cut `1.5.0-rc.1`. State the current `main` SHA and the configuration and release PRs that will be merged.
-14. [ ] On `main`, open and merge a PR setting the **Next RC** configuration below. Merge the generated `1.5.0-rc.1` release PR through the queue.
-15. [ ] Confirm the RC published and moved only `archestra/platform:latest`, then open and merge a PR removing `release-as` from `main`. Confirm rolling RC PRs resume.
+5. [ ] Cut it:
+   ```bash
+   python3 .github/scripts/stable-line.py cut --rc-tag platform-v1.5.0-rc.N
+   ```
+   - Creates `release/1.5` at the RC's commit and the `backport release/1.5` label. Creating the branch starts a **Release Please** run on it that fails its release policy check, because the branch still has main's RC configuration; that is expected and changes nothing. When the RC commit lacks a check that the `release/*` ruleset requires on creation (on `main` the check is named `Supply-Chain Policy`, the ruleset requires `Supply Chain Policy`), it sets that ruleset's `do_not_enforce_on_create` for the creation only, then restores and reads it back, even when creation fails.
+   - Opens a PR to `release/1.5` with the **Stable cut** settings below and a new `platform/release-line.json` that records the cut. The file is under `platform/`, so Release Please opens the `1.5.0` release PR once it merges.
+   - Opens a PR to `main` with the **Next RC** `release-as`, and a copy of each `release/1.4` Dependabot entry for `release/1.5`, so `1.5.0` gets the same dependency fixes as the line it replaces. Release Please reuses the open RC release PR and renames it to `1.6.0-rc.1`. Do not merge that open release PR until this PR merges: as `1.5.0-rc.N+1` it would ship main commits that `release/1.5` lacks. After the rename, the RC can be published whenever it is ready; it does not wait for `1.5.0`.
+   - Both PRs merge on their own after checks pass and a Core reviewer approves them (they change release configuration).
+   - Rerunning `cut` resumes after any failure: it keeps what exists and stops on anything it did not make. If it reports that a ruleset did not restore, dispatch the infra **Terraform apply** workflow for `github/org` before anything else.
+6. [ ] Until `1.5.0` publishes, backports still target `release/1.4` only. Recreate every still-required `release/1.4` fix as a `cherry-pick -x` backport to `release/1.5` through a PR from `backport/release-1.5/pr-<main PR>`, the branch name Open Backport PRs uses, so `handoff` recognizes it. Merge them and wait for the release PR to update.
+7. [ ] Finish the upgrade guide on `release/1.5`. See **Write The Upgrade Guide** below. The `Release Freeze Check` on the `1.5.0` release PR fails until it exists.
+8. [ ] Verify the generated `1.5.0` release PR and its required checks. Complete qualification before merging: publication runs automatically after successful builds.
 
-The operator or release agent must create, queue, monitor, and verify these PRs and settings directly. Human actions are limited to the two explicit cut approvals, reviewer selection when it cannot be derived safely, and exceptional recovery decisions.
+**Hand off from the previous line, then publish**
+
+9. [ ] Run `handoff`; it stops at the first unmet condition, so rerun it after each fix:
+   ```bash
+   python3 .github/scripts/stable-line.py handoff --line 1.5
+   ```
+   - No `release/1.4` Release Please run is active and no `1.4.Z` draft release awaits publication.
+   - Every PR merged into `release/1.4` after the cut is on `release/1.5`: its source commit is in `release/1.5`'s history, or a `backport/release-1.5/pr-<N>` PR merged. It lists other PRs (hand-made backports, and Dependabot PRs merged before `release/1.5`'s own entries landed) to check by hand; that check is yours, `handoff` does not block on them.
+   - Optional: lock `release/1.4`. Move `"1.4"` from `mergeQueue` to `readOnly` in archestra-ai/infra, label that PR `terraform-allow-destroy` (it destroys the line's queue ruleset), merge it, wait for its Terraform apply, and rerun `handoff`; it then closes `release/1.4`'s open PRs with an end-of-life comment. Left open, the line keeps its merge queue and its open PRs.
+10. [ ] When you are ready to announce, merge the `1.5.0` release PR through the queue, have a second Engineering member approve the publisher run within 6 hours, and complete **Verify Stable Publication**.
+
+**After publication (automatic; approve the PRs)**
+
+- Before publishing `1.5.0`, **Release Finalize** adds an "Upgrading from 1.4" header to its GitHub release: the upgrade guide, the `1.5.0` RC releases up to the one it was cut from, and a comparison with the newest published `1.4.Z`. Release Please's changelog alone covers only the changes since the last RC. When the header cannot be added, the step fails visibly and the release publishes without it; edit the release by hand.
+- **Release Finalize** opens the PR removing the consumed `release-as` from `release/1.5`; future patches become `1.5.1`, `1.5.2`, and so on. It does the same on `main` once `1.6.0-rc.1` publishes, which resumes rolling RCs.
+- **Move Release Line** opens the PR on `main` that moves backports, the nightly image scan, and client-version updates to `release/1.5`, and removes the `release/1.4` Dependabot entries.
+- archestra.ai serves `/docs/v1.5` on its own: the website builds a docs version for every `release/X.Y` from `1.4` on, at the next `main` commit after the branch exists.
 
 ### Write The Upgrade Guide
 
@@ -209,14 +226,14 @@ Write it with the `archestra-upgrade-guide` skill. Start from the draft on `main
 
 ### Release Please Configuration
 
-Edit `packages.platform` in `.github/release-please/release-please-config.json`:
+`stable-line.py cut` sets `packages.platform` in `.github/release-please/release-please-config.json`:
 
-| Field | Stable cut (`release/1.4`) | Next RC (`main`) |
+| Field | Stable cut (`release/1.5`) | Next RC (`main`) |
 | --- | --- | --- |
 | `versioning` | `always-bump-patch` | `prerelease` |
 | `prerelease` | `false` | `true` |
 | `prerelease-type` | Remove field | `rc` |
-| `release-as` (temporary) | `1.4.0` | `1.5.0-rc.1` |
+| `release-as` (temporary) | `1.5.0` | `1.6.0-rc.1` |
 | `draft` | `true` | `true` |
 
 `draft: true` creates a draft GitHub release. It does not make the pull request a draft.
@@ -252,7 +269,7 @@ Apply the workflow change separately to each supported release branch; changing 
   - Usually, abandon the version as below: delete the draft and keep its tag. The next release PR on the branch, carrying the fix, then proceeds under a new version.
   - When a finding no longer applies (a withdrawn or reclassified advisory) and the queue scan is under 24 hours old, scan the same bytes once more: `gh workflow run release-please.yml --ref <branch> -f retry-held-release=true`.
   - For a release that already handed off, re-run only the **Publish release images and chart** job of its Release Please run; it rebuilds nothing.
-- **Cutover fails after the old line is locked but before publication:** Stop. With explicit recovery authorization, cancel the new run, delete its blocking draft but keep its tag, restore the old line's merge queue, and remove its EOL rule before accepting old-line changes. Resume the cut with a fixed, newly versioned patch candidate; never recreate the tagged version.
+- **Cutover fails after the old line is locked but before publication:** Stop. With explicit recovery authorization, cancel the new run, delete its blocking draft but keep its tag, and move the old line back from `readOnly` to `mergeQueue` in archestra-ai/infra `github/org/archestra-release-lines.json` before accepting old-line changes. Resume the cut with a fixed, newly versioned patch candidate; never recreate the tagged version.
 - **Partial publication:**
   1. Do not publish artifacts or move `latest` manually.
   2. Inspect GitHub releases and container registries.

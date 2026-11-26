@@ -2,7 +2,6 @@
 title: Add a Server
 description: Configure a remote or self-hosted MCP server and test its connection
 order: 1
-lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -114,7 +114,16 @@ def check_anchor(target: Path, fragment: str, url: str, source: Path | str) -> s
 
 @cache
 def page_anchors(page: Path) -> frozenset[str]:
-    """Anchor ids the website renders for a page: slugged headings, raw HTML ids, env var entries."""
+    """Anchor ids the website renders for a page: slugged headings, raw HTML ids, env var entries.
+    The page's `-agentic.md` companion counts too: the website lands its anchors on the page."""
+    anchors = set(file_anchors(page))
+    agentic = page.with_name(f"{page.stem}-agentic.md")
+    if agentic.is_file():
+        anchors.update(file_anchors(agentic))
+    return frozenset(anchors)
+
+
+def file_anchors(page: Path) -> frozenset[str]:
     text = HTML_COMMENT.sub("", page.read_text(encoding="utf-8"))
     counts: dict[str, int] = {}
     anchors: set[str] = set()

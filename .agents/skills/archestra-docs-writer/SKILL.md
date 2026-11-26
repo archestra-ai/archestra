@@ -17,6 +17,13 @@ Solution introduction. Here it's important to be sharp, not to use slogans.
 
 Animation as part of the solution introduction. Show the reader's world before Archestra, then the same world with it, so the change is visible at a glance. Design it as part of the website, not as a separate drawing: use the site's colors, fonts, and logo tiles, with orange only for what goes through Archestra. Use real logos for every product it shows, taken from the vendor's brand page and kept in the website repo next to the agent logos.
 
+## Main docs and agentic docs
+
+Each page `<page>.md` can have a sibling `<page>-agentic.md`.
+
+- Main docs (`<page>.md`) must be carefully reviewed by people.
+- Agents can update agentic docs (`<page>-agentic.md`).
+
 ## Links
 
 Make sure that each .md file has:

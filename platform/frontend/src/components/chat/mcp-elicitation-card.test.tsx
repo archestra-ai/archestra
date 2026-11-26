@@ -1146,6 +1146,63 @@ describe("McpElicitationCard", () => {
     expect(screen.queryByRole("button", { name: "Apple" })).toBeNull();
   });
 
+  it("keeps a lone question's option buttons while its answer is on its way", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const question = singleChoice({
+      id: "q-1",
+      toolCallId: "call-1",
+      message: "Pick a city",
+      options: ["Lima", "Oslo"],
+    });
+    const { rerender } = render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[groupMember("call-1", "Pick a city", { status: "waiting" })]}
+        requests={[question]}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Lima" }));
+    expect(onRespond).toHaveBeenCalledTimes(1);
+
+    // The answer is accepted, so the request leaves; the call's result has
+    // not arrived yet.
+    rerender(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[groupMember("call-1", "Pick a city", { status: "waiting" })]}
+        requests={[]}
+        onRespond={onRespond}
+      />,
+    );
+
+    // The options stay the buttons they were, not a radio list.
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lima" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Oslo" })).toBeDisabled();
+
+    rerender(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", "Pick a city", {
+            status: "answered",
+            selected: ["Lima"],
+          }),
+        ]}
+        requests={[]}
+        onRespond={onRespond}
+      />,
+    );
+    expect(screen.getByTestId("ask-user-tool-group")).toHaveAttribute(
+      "data-state",
+      "settled",
+    );
+  });
+
   it("orders tabs by members even when requests arrive in reverse order", async () => {
     const user = userEvent.setup();
     const first = singleChoice({

@@ -685,8 +685,6 @@ describe("protected runtime protocol", () => {
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 1,
-        fallbackEnabled: true,
       },
     });
     await makeAgentTool(lobsterEnv.id, workerDelegationTool.id);
@@ -702,8 +700,6 @@ describe("protected runtime protocol", () => {
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     await makeAgentTool(lbGateway.id, workerDelegationTool.id);
@@ -806,8 +802,6 @@ describe("protected runtime protocol", () => {
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",
-        retries: 0,
-        fallbackEnabled: true,
       },
     });
     const autoCtx = request(org.id);

@@ -45,7 +45,7 @@ const RunToolArgsSchema = z
       .string()
       .min(1)
       .describe(
-        "Name of the tool to invoke. Use the exact name as it appears in the tools list, e.g. 'archestra__whoami', 'context7__resolve-library-id', or an agent delegation name 'agent-<id>'.",
+        "Name of the tool to invoke. Use the exact name as it appears in the tools list, e.g. 'archestra__whoami', 'context7__resolve-library-id', or an agent delegation name 'agent__<name>'.",
       ),
     tool_args: z
       .record(z.string(), z.unknown())
@@ -64,7 +64,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). When the agent allows dynamic tool access, a tool the user can access but the agent does not have runs directly without being assigned to the agent; the MCP server's connection policy decides which credential the call uses. Target-tool RBAC, guardrails, argument validation, and output validation all still apply. The app-authoring tools, when available to this agent, are reached this way too: when asked to make, build, or create an interactive app, start with 'scaffold_app' through this tool instead of writing app code in a reply (an unavailable tool is refused with a clear error).`,
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent__<name>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). When the agent allows dynamic tool access, a tool the user can access but the agent does not have runs directly without being assigned to the agent; the MCP server's connection policy decides which credential the call uses. Target-tool RBAC, guardrails, argument validation, and output validation all still apply. The app-authoring tools, when available to this agent, are reached this way too: when asked to make, build, or create an interactive app, start with 'scaffold_app' through this tool instead of writing app code in a reply (an unavailable tool is refused with a clear error).`,
     schema: RunToolArgsSchema,
     handler: ({ args, context }) => runToolHandler({ args, context }),
   }),
@@ -205,7 +205,7 @@ type ShortNameResolution =
 
 /**
  * Resolve a requested run_tool name that omits the canonical `server__tool`
- * prefix. Names already in canonical form (containing `__`) and `agent-<id>`
+ * prefix. Names already in canonical form (containing `__`) and `agent__<name>`
  * delegations are taken as-is (`none`). A built-in short name is a reserved
  * namespace and wins unconditionally (`builtin`) — downstream RBAC/assignment in
  * executeArchestraTool still gates whether it runs. Otherwise the bare name is
@@ -400,7 +400,7 @@ async function dispatchTool({
   };
 
   if (route === "archestra") {
-    // Delegation (agent-<id>) names are gated here; executeArchestraTool
+    // Delegation (agent__<name>) names are gated here; executeArchestraTool
     // enforces existence/assignment for genuinely unknown archestra names.
     const gateError = await checkConversationGate(resolvedName);
     if (gateError) return gateError;
@@ -412,7 +412,7 @@ async function dispatchTool({
     );
     // Envelope repair against the built-in's published input schema, so the
     // handler's strict zod validation sees the repaired args. Delegations
-    // (agent-<id>) have no published JSON schema — the lookup returns
+    // (agent__<name>) have no published JSON schema — the lookup returns
     // undefined and nothing is repaired. The LLM proxy applies this repair
     // before policy, so only calls that bypass it still arrive enveloped.
     const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
@@ -432,7 +432,7 @@ async function dispatchTool({
   }
 
   // Third-party MCP Gateway path. Hallucinated archestra-prefixed names and
-  // bogus agent-<id> delegations are handled by the "archestra" route above
+  // bogus agent__<name> delegations are handled by the "archestra" route above
   // (executeArchestraTool / checkToolAssignedToAgent), not this check.
   if (!context.agentId) {
     return dispatchRefusalResult({

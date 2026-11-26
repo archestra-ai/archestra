@@ -2,7 +2,6 @@
 title: "Microsoft Entra Agent ID"
 description: "Give each agent its own Microsoft Entra identity, so consent and sign-in logs apply per agent"
 order: 1
-lastUpdated: 2026-11-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

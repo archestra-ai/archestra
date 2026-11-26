@@ -22,7 +22,7 @@ describe("personalSubscriptionCard", () => {
     // The account is the provider's: "ChatGPT account", not "ChatGPT
     // Subscription account".
     expect(card.description).toBe(
-      `Everyone connects their own ${name} account once. Not billed to the company, no cost limits. A run's container only gets a short-lived key.`,
+      `Everyone connects their own ${name} account once. No cost limits. A run's container only gets a short-lived key.`,
     );
   });
 });

@@ -2,7 +2,6 @@
 title: Dropbox
 description: Connect Dropbox documents to Knowledge and configure source access
 order: 11
-lastUpdated: 2026-10-05
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

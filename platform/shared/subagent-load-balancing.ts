@@ -15,7 +15,8 @@ export type SubagentLoadBalancingAlgorithm = z.infer<
 
 export const SUBAGENT_LOAD_BALANCING_MIN_WEIGHT = 1;
 export const SUBAGENT_LOAD_BALANCING_MAX_WEIGHT = 1000;
-export const SUBAGENT_LOAD_BALANCING_MAX_RETRIES = 3;
+/** Hard-coded retries on the same subagent after a temporary failure when load balancing is enabled. */
+export const SUBAGENT_LOAD_BALANCING_RETRIES = 2;
 
 export const SubagentLoadBalancingConfigSchema = z.object({
   /** Whether load balancing is enabled for subagents assigned to this agent or MCP gateway. */
@@ -36,15 +37,6 @@ export const SubagentLoadBalancingConfigSchema = z.object({
         .max(SUBAGENT_LOAD_BALANCING_MAX_WEIGHT),
     )
     .optional(),
-  /** Number of retries on the same subagent after a retriable failure (0..3). */
-  retries: z
-    .number()
-    .int()
-    .min(0)
-    .max(SUBAGENT_LOAD_BALANCING_MAX_RETRIES)
-    .default(1),
-  /** Whether failed subagent requests fall back to alternative assigned subagents. */
-  fallbackEnabled: z.boolean().default(true),
 });
 
 export type SubagentLoadBalancingConfig = z.infer<
@@ -62,13 +54,6 @@ export const StoredSubagentLoadBalancingConfigSchema = z.object({
     .record(z.string(), z.number().int().min(1).max(1000))
     .optional()
     .catch(undefined),
-  retries: z
-    .number()
-    .int()
-    .min(0)
-    .max(SUBAGENT_LOAD_BALANCING_MAX_RETRIES)
-    .catch(SUBAGENT_LOAD_BALANCING_MAX_RETRIES),
-  fallbackEnabled: z.boolean().catch(true),
 });
 
 export function normalizeSubagentLoadBalancingConfig(
@@ -78,6 +63,27 @@ export function normalizeSubagentLoadBalancingConfig(
     return null;
   }
   return StoredSubagentLoadBalancingConfigSchema.parse(config);
+}
+
+/**
+ * Returns the effective load-balancing policy for a given subagent access mode.
+ * Custom weights require explicit Manual assignments, so an enabled `weighted`
+ * policy in All-agents mode falls back to `round_robin`.
+ */
+export function resolveEffectiveSubagentLoadBalancingConfig(
+  config: SubagentLoadBalancingConfig | null | undefined,
+  accessAllSubagents?: boolean | null,
+): SubagentLoadBalancingConfig | null {
+  if (!config) {
+    return null;
+  }
+  if (accessAllSubagents && config.enabled && config.algorithm === "weighted") {
+    return {
+      ...config,
+      algorithm: "round_robin",
+    };
+  }
+  return config;
 }
 
 export interface SubagentLoadBalancerScopeInput {

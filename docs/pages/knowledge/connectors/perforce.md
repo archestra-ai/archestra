@@ -2,7 +2,6 @@
 title: Perforce (Helix Core)
 description: Connect Perforce (Helix Core) documents to Knowledge and configure source access
 order: 16
-lastUpdated: 2026-10-05
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

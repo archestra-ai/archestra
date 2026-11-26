@@ -35,12 +35,14 @@ vi.mock("@/components/ai-elements/conversation", () => ({
   ConversationScrollButton: () => null,
 }));
 
+const mockStopScroll = vi.hoisted(() => vi.fn());
+
 vi.mock("use-stick-to-bottom", () => ({
   useStickToBottomContext: () => ({
     isAtBottom: true,
     scrollRef: { current: null },
     scrollToBottom: vi.fn(),
-    stopScroll: vi.fn(),
+    stopScroll: mockStopScroll,
   }),
 }));
 
@@ -1803,6 +1805,38 @@ describe("ChatMessages", () => {
       id: "approval-1",
       approved: true,
     });
+  });
+
+  it("stops following the bottom when a circle is clicked, so the row stays in place", () => {
+    mockStopScroll.mockClear();
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-workspace__clock",
+            toolCallId: "call-clock",
+            state: "output-available",
+            input: {},
+            output: "noon",
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+    expect(mockStopScroll).not.toHaveBeenCalled();
+
+    // Opening the card would grow the chat and pull it to its new bottom.
+    fireEvent.click(screen.getByRole("button", { name: "clock" }));
+    expect(mockStopScroll).toHaveBeenCalledTimes(1);
   });
 
   it("renders approval controls for run_tool when its target requires approval", () => {

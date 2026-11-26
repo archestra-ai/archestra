@@ -2,7 +2,6 @@
 title: User Provisioning from Microsoft Entra ID
 description: Let Microsoft Entra ID create and deactivate Archestra users
 order: 3
-lastUpdated: 2026-11-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

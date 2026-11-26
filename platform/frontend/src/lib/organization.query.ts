@@ -401,12 +401,18 @@ export function useOrganization(
  * What "Organization default" runs on, readable by every member: the default
  * model, or the trio auto routing routes it across.
  */
-export function useOrganizationDefaultModelSummary(enabled = true) {
+export function useOrganizationDefaultModelSummary(
+  enabled = true,
+  forChat = false,
+) {
   return useQuery({
-    queryKey: organizationKeys.defaultModel(),
+    queryKey: forChat
+      ? [...organizationKeys.defaultModel(), "chat"]
+      : organizationKeys.defaultModel(),
     queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.getOrganizationDefaultModel();
+      const { data, error } = await archestraApiSdk.getOrganizationDefaultModel(
+        forChat ? { query: { forChat: "true" } } : undefined,
+      );
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },

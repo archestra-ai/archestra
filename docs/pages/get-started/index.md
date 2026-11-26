@@ -4,7 +4,6 @@ sectionTitle: Get Started
 description: What Archestra is, how its parts fit together, and how to run it
 order: 1
 explore: false
-lastUpdated: 2026-11-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

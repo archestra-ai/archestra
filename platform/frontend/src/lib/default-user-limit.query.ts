@@ -124,9 +124,10 @@ export function useDeleteDefaultUserLimit() {
 }
 
 /** The first `limit` users, closest to their limit first, plus the summary. */
-export function useUserLimitUsageTop(limit: number) {
+export function useUserLimitUsageTop(limit: number, enabled = true) {
   return useQuery({
     queryKey: [...USER_USAGE_KEY, "top", limit],
+    enabled,
     queryFn: async () => {
       const { data, error } = await listUserLimitUsage({ query: { limit } });
       throwOnApiError(error);

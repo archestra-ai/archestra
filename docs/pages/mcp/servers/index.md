@@ -2,7 +2,6 @@
 title: MCP Servers
 description: Add MCP servers to your organization's registry, install them, and give their tools to agents and gateways
 order: 1
-lastUpdated: 2026-11-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

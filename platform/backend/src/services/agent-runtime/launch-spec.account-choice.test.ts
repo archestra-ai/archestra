@@ -232,7 +232,7 @@ describe("a person's own account for their runs", () => {
     ).rejects.toMatchObject({
       statusCode: 409,
       message:
-        "Connect your own SuperGrok before starting this Agent, or choose a company API key as your account.",
+        "Connect your own SuperGrok before starting this Agent, or choose an API key as your account.",
     });
 
     const run = await launch({

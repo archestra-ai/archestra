@@ -2,7 +2,6 @@
 title: Writing Skills
 description: Create and edit SKILL.md skills in the UI or from chat
 order: 1
-lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

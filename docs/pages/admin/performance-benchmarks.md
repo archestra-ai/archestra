@@ -2,7 +2,6 @@
 title: Performance Benchmarks
 description: Compare Archestra and LiteLLM latency and requests per second on the same hardware.
 order: 10
-lastUpdated: 2026-11-21
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
@@ -39,9 +38,9 @@ Tool calls include authentication, access checks and call logging.
 <!-- mcp-gateway-benchmark-results:start -->
 | Gateway | Requests per Second | Median Added Latency | P95 Added Latency | P99 Added Latency |
 | --- | ---: | ---: | ---: | ---: |
-| Archestra | 263.2 | 175.92 ms | 242.97 ms | 285.70 ms |
+| Archestra | 389.8 | 120.05 ms | 153.69 ms | 159.92 ms |
 
-Archestra 1.5.0-rc.44 on 4 logical CPUs, 8 GiB RAM; one worker, 50 concurrent calls, 600 measured calls and zero errors.
+Archestra 1.5.0-rc.45 on 4 logical CPUs, 8 GiB RAM; one worker, 50 concurrent calls, 600 measured calls and zero errors.
 <!-- mcp-gateway-benchmark-results:end -->
 
 Added latency uses the gateway’s internal timer minus the mock MCP server’s duration. It differs from the LLM comparison’s client timer.

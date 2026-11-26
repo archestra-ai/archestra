@@ -5,6 +5,8 @@ import type {
   OrganizationDefaultModel,
   OrganizationDefaultModelRef,
 } from "@/types/organization";
+import { userModelRouterAuth } from "./eligibility";
+import { chatAutoRouterAvailability } from "./router";
 import { loadTrio } from "./tiers";
 
 /**
@@ -42,16 +44,30 @@ export async function agentAutoRouterId(
  */
 export async function describeOrganizationDefaultModel(
   organizationId: string,
+  chatUserId?: string,
 ): Promise<OrganizationDefaultModel> {
   const organization = await OrganizationModel.getById(organizationId);
   const routers = await AutoRouterModel.list(organizationId);
+  const auth =
+    chatUserId && routers.some((router) => router.enabled)
+      ? await userModelRouterAuth({ organizationId, userId: chatUserId })
+      : null;
   const autoRouters: OrganizationDefaultModel["autoRouters"] = [];
   for (const router of routers) {
     const loaded = router.enabled ? await loadTrio(router) : null;
     if (loaded?.kind !== "ok") continue;
+    const availability = auth
+      ? await chatAutoRouterAvailability({ router, auth, trio: loaded.trio })
+      : null;
     autoRouters.push({
       id: router.id,
       name: router.name,
+      ...(availability && {
+        unavailableReason:
+          availability.kind === "unavailable" ? availability.reason : null,
+        normalOnlyReason:
+          availability.kind === "normal" ? availability.reason : null,
+      }),
       tiers: {
         fast: toRef(loaded.trio[0]),
         normal: toRef(loaded.trio[1]),

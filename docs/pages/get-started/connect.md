@@ -2,13 +2,16 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-11-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->
 
-In organisation, every developer sets up their coding agent on their own. One pastes a personal API key into Claude Code. Another adds an MCP server they found on GitHub to Cursor. It all works, and nobody else can see any of it: which tools the agent can call, what data it reads, or what it costs.
+In organisation, every developer sets up their coding agent on their own. One pastes a personal API key into Claude Code. Another adds an MCP server they found on GitHub to Cursor.
+
+Such a setup is quite dangerous as may cause agentic data leaks from one MCP server to another, simply compromise developer's machine due to usage of non-approved MCP server, or cause uncontrollable token spend.
+
+Archestra's here to help!
 
 :::connect-animation:::
 

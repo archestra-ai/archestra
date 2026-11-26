@@ -191,13 +191,13 @@ describe("GET /api/agents/:id/runtime/account", () => {
     const refused = await choose(onSubscriptions.id, "provider");
     expect(refused.statusCode).toBe(409);
     expect(refused.json().error.message).toBe(
-      "This agent is locked to each person's own subscription, so you cannot choose a company API key for it.",
+      "This agent is locked to each person's own subscription, so you cannot choose an API key for it.",
     );
     for (const agentId of [onItsKey.id, onTheDefault.id]) {
       const refusedSubscription = await choose(agentId, "subscription");
       expect(refusedSubscription.statusCode).toBe(409);
       expect(refusedSubscription.json().error.message).toBe(
-        "This agent is locked to a company API key, so you cannot choose a personal subscription for it.",
+        "This agent is locked to an API key, so you cannot choose a personal subscription for it.",
       );
     }
   });
@@ -1085,7 +1085,7 @@ describe("GET /api/agents/:id/runtime/account", () => {
       lock: "key",
       choice: { authentication: "subscription", modelId: null },
       choiceError:
-        "This agent is locked to a company API key, so your own choice is not used.",
+        "This agent is locked to an API key, so your own choice is not used.",
     });
 
     const bySubscription = await lockedTo("subscription");
@@ -1204,7 +1204,7 @@ describe("GET /api/agents/:id/runtime/account", () => {
     expect(preflight.json()).toMatchObject({
       ready: false,
       accountError:
-        "This agent is locked to a company API key, but this run would use a personal subscription. Someone who can configure its runtime must change its account or its lock.",
+        "This agent is locked to an API key, but this run would use a personal subscription. Someone who can configure its runtime must change its account or its lock.",
       accountErrorFromChoice: false,
       accountErrorFromModel: false,
       missingSubscription: null,
@@ -1324,7 +1324,7 @@ describe("GET /api/agents/:id/runtime/account", () => {
     expect((await read(agent.id)).json()).toMatchObject({
       lock: "key",
       choiceError:
-        "This agent is locked to a company API key, so your own choice is not used.",
+        "This agent is locked to an API key, so your own choice is not used.",
     });
     const preflight = await app.inject({
       method: "GET",

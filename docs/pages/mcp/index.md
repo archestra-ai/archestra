@@ -2,7 +2,6 @@
 title: MCP
 description: Add MCP servers once, then give agents and MCP clients their tools through governed gateways
 order: 3
-lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

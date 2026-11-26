@@ -2,7 +2,6 @@
 title: Auto Routing API
 description: Manage auto routers, plans, dry-run previews, simulations, and historical backfill
 order: 2
-lastUpdated: 2026-11-19
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

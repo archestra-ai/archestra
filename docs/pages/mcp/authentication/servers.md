@@ -3,7 +3,6 @@ title: MCP Server Credentials
 sidebarTitle: Server Credentials
 description: Set how Archestra signs in to each MCP server, and whose account each call uses
 order: 3
-lastUpdated: 2026-11-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

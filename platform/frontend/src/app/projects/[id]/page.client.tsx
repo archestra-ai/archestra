@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { buildCreateConversationInput } from "@/app/chat/chat-initial-state";
 import {
   collapseProjectChats,
   countRunsByTrigger,
@@ -326,7 +327,16 @@ function ProjectChatInput({
     <NewChatComposer
       projectDefaultAgentId={defaultAgentId}
       isSubmitting={createConversation.isPending || startRun.isPending}
-      onSubmit={({ text, agentId, modelId, apiKeyId, files, runtimeMode }) => {
+      onSubmit={({
+        text,
+        agentId,
+        modelId,
+        apiKeyId,
+        files,
+        runtimeMode,
+        followDefaults,
+        modelPoolId,
+      }) => {
         // Ignore a second submit while the first create is still in flight.
         if (createConversation.isPending || startRun.isPending) return;
         if (runtimeMode) {
@@ -342,35 +352,36 @@ function ProjectChatInput({
           );
           return;
         }
+        const input = buildCreateConversationInput({
+          agentId,
+          modelId,
+          chatApiKeyId: apiKeyId,
+          projectId,
+          followDefaults,
+          modelPoolId,
+        });
+        if (!input) return;
         setPendingChatHandoffFiles(files);
-        createConversation.mutate(
-          {
-            agentId,
-            modelId: modelId || undefined,
-            chatApiKeyId: apiKeyId ?? undefined,
-            projectId,
+        createConversation.mutate(input, {
+          onSuccess: (conversation) => {
+            if (!conversation) return;
+            // The opening prompt travels to /chat/<id>, which sends it (with
+            // any attachments the composer stashed) as the first message.
+            setPendingProjectChatHandoff({
+              conversationId: conversation.id,
+              prompt: text,
+            });
+            // Continuity with the project page: when the project already has
+            // files, open the new chat with its Files panel showing. Persisted
+            // per conversation, since /chat reads this on mount.
+            if (projectHasFiles) {
+              const keys = conversationStorageKeys(conversation.id);
+              localStorage.setItem(keys.rightPanelOpen, "true");
+              localStorage.setItem(keys.rightPanelTab, "files");
+            }
+            router.push(`/chat/${conversation.id}`);
           },
-          {
-            onSuccess: (conversation) => {
-              if (!conversation) return;
-              // The opening prompt travels to /chat/<id>, which sends it (with
-              // any attachments the composer stashed) as the first message.
-              setPendingProjectChatHandoff({
-                conversationId: conversation.id,
-                prompt: text,
-              });
-              // Continuity with the project page: when the project already has
-              // files, open the new chat with its Files panel showing. Persisted
-              // per conversation, since /chat reads this on mount.
-              if (projectHasFiles) {
-                const keys = conversationStorageKeys(conversation.id);
-                localStorage.setItem(keys.rightPanelOpen, "true");
-                localStorage.setItem(keys.rightPanelTab, "files");
-              }
-              router.push(`/chat/${conversation.id}`);
-            },
-          },
-        );
+        });
       }}
     />
   );

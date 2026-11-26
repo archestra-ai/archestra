@@ -65,6 +65,12 @@ class AnchorTest(DocsFixture):
         self.assertTrue({"real", "custom"} <= anchors)
         self.assertFalse({"in-code", "in-comment"} & anchors)
 
+    def test_agentic_docs_anchors_count_for_their_page(self):
+        self.write("a/index.md", "## Main\n")
+        self.write("a/index-agentic.md", '<span id="old-name"></span>\n\n## Moved Here\n')
+        anchors = links.page_anchors(Path("docs/pages/a/index.md"))
+        self.assertTrue({"main", "old-name", "moved-here"} <= anchors)
+
     def test_reports_missing_anchors_across_pages_same_page_and_redirects(self):
         self.write("a/index.md", "## Here\n\n[ok](/docs/b#there) [bad](/docs/b#gone) [self](#here) [selfbad](#nope)\n")
         self.write("b.md", "## There\n")

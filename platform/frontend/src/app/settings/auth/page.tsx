@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { RemoteUserSelect } from "@/components/remote-user-select";
 import {
   isRoleAssignmentBlocked,
   RoleAssignmentBlockedNotice,
@@ -36,6 +37,7 @@ import {
   getSelectedOauthLifetimeSeconds,
   getSelectedSessionLifetimeSeconds,
   getServerOauthLifetimeSeconds,
+  LONGEST_STANDING_ADMIN,
 } from "./_parts/auth-settings-form";
 import { OAuthTokenLifetimeSection } from "./_parts/oauth-token-lifetime-section";
 import { SessionLifetimeSection } from "./_parts/session-lifetime-section";
@@ -111,6 +113,13 @@ export default function AuthSettingsPage() {
 
     if (values.defaultMemberRole !== serverValues.defaultMemberRole) {
       data.defaultMemberRole = values.defaultMemberRole;
+    }
+
+    if (values.departingMemberOwnerId !== serverValues.departingMemberOwnerId) {
+      data.departingMemberOwnerId =
+        values.departingMemberOwnerId === LONGEST_STANDING_ADMIN
+          ? null
+          : values.departingMemberOwnerId;
     }
 
     return data;
@@ -231,6 +240,30 @@ export default function AuthSettingsPage() {
               />
             )}
           </SettingsBlock>
+
+          <SettingsBlock
+            title="New Owner When Someone Leaves"
+            description="When someone is deactivated by your identity provider or leaves on their own, what they shared with others, such as agents, skills and MCP servers, moves to this person. When you remove someone yourself, you pick the new owner then."
+            control={
+              <FormField
+                control={form.control}
+                name="departingMemberOwnerId"
+                render={({ field }) => (
+                  <RemoteUserSelect
+                    source="members"
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    ariaLabel="New owner when someone leaves"
+                    className="w-full sm:w-80"
+                    pinnedOption={{
+                      value: LONGEST_STANDING_ADMIN,
+                      label: "Longest-standing admin",
+                    }}
+                  />
+                )}
+              />
+            }
+          />
 
           {/* Single save bar: every dirty auth field lands in one PATCH. */}
           <SettingsSaveBar

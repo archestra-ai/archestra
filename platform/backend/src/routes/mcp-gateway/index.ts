@@ -9,7 +9,10 @@ import {
 } from "@archestra/shared";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import type {
+  FastifyPluginAsyncZod,
+  ZodTypeProvider,
+} from "fastify-type-provider-zod";
 import { RateLimiterRes } from "rate-limiter-flexible";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
@@ -57,6 +60,7 @@ import {
   readCapabilitySession,
 } from "./client-capabilities";
 import { isCursorClient } from "./cursor-forms";
+import { FILE_UPLOAD_PATH_SEGMENT, relayFileUpload } from "./files";
 import {
   dispatchLegacySseMessage,
   LEGACY_SSE_MESSAGES_SEGMENT,
@@ -107,6 +111,7 @@ import {
   ensureRequestSocketDestroySoon,
   extractBearerToken,
   extractPassthroughHeaders,
+  type TokenAuthResult,
 } from "./utils";
 
 // =============================================================================
@@ -234,8 +239,8 @@ async function handleMcpPostRequest(
   profileId: string,
   tokenAuthContext: TokenAuthContext | undefined,
   resolution: ProtocolResolution,
-  /** Rounds already spent on this call, from a verified requestState. */
-  mrtrRound: number,
+  /** What a verified requestState carried: rounds spent, upload session. */
+  verifiedState: { round: number; uploadSessionId?: string },
   pendingRequests: PendingInboundRequests,
   lookups?: RequestLookups,
 ): Promise<unknown> {
@@ -477,7 +482,8 @@ async function handleMcpPostRequest(
         // client keeps the in-band elicitation it has always used.
         enabled: revision === STATELESS_MCP_PROTOCOL_REVISION,
         inputResponses: mrtrParams.inputResponses,
-        round: mrtrRound,
+        round: verifiedState.round,
+        uploadSessionId: verifiedState.uploadSessionId,
         clientCapabilities,
       },
     });
@@ -1096,6 +1102,75 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     },
   );
 
+  // Files extension: the target a caller uploads a relayed file to. The body
+  // is the file itself, streamed on to the upstream target without being
+  // parsed or buffered, so this route gets its own body handling.
+  await fastify.register(async (uploads) => {
+    uploads.removeAllContentTypeParsers();
+    uploads.addContentTypeParser("*", (_request, payload, done) =>
+      done(null, payload),
+    );
+    uploads.withTypeProvider<ZodTypeProvider>().route({
+      method: ["PUT", "POST"],
+      url: `${endpoint}/:profileId/${FILE_UPLOAD_PATH_SEGMENT}/:relayId`,
+      schema: {
+        operationId: "mcpGatewayFileUpload",
+        hide: true,
+        params: z.object({
+          profileId: UuidOrSlugSchema,
+          relayId: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+        }),
+      },
+      handler: async (request, reply) => {
+        const { token, profileId } = await extractRequestCredentials(
+          request,
+          reply,
+        );
+        if (!profileId || !token) throw new ApiError(401, "Unauthorized");
+        const { result: tokenAuth, reason } = await authenticate(
+          request,
+          reply,
+          profileId,
+          token,
+        );
+        if (!tokenAuth) {
+          if (reason === "no_gateway_access") {
+            throw new ApiError(403, describeGatewayAuthFailure(reason));
+          }
+          throw new ApiError(401, "Unauthorized");
+        }
+
+        const contentLength = request.headers["content-length"];
+        const controller = new AbortController();
+        request.raw.once("close", () => {
+          if (!request.raw.complete) controller.abort();
+        });
+        const outcome = await relayFileUpload({
+          relayId: request.params.relayId,
+          profileId,
+          tokenAuth: callerTokenAuthContext(tokenAuth, request),
+          principal: deriveStatePrincipal({
+            userId: tokenAuth.userId,
+            tokenId: tokenAuth.tokenId,
+            organizationId: tokenAuth.organizationId,
+          }),
+          method: request.method === "POST" ? "POST" : "PUT",
+          contentLength:
+            contentLength === undefined ? undefined : Number(contentLength),
+          body: request.raw,
+          signal: controller.signal,
+        });
+        if (outcome.status !== 200) {
+          throw new ApiError(
+            outcome.status,
+            outcome.message ?? "The upload failed.",
+          );
+        }
+        return reply.status(200).send();
+      },
+    });
+  });
+
   // POST endpoint for JSON-RPC requests with profile ID in URL
   // New auth: Validates a platform-managed token for the profile
   fastify.post(
@@ -1213,6 +1288,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       // client, so it is verified — signature, principal, expiry, and the
       // originating request — before anything acts on it.
       let mrtrRound = 0;
+      let uploadSessionId: string | undefined;
       const retryState = extractMrtrParams(request.body).requestState;
       if (retryState) {
         const method = (request.body as { method?: string })?.method;
@@ -1241,6 +1317,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
 
         if (verified.ok) {
           mrtrRound = verified.payload.round;
+          uploadSessionId = verified.payload.upload;
         }
 
         if (!verified.ok) {
@@ -1447,24 +1524,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
             })
           : undefined);
       const tokenAuthContext: TokenAuthContext = {
-        tokenId: tokenAuth.tokenId,
-        teamId: tokenAuth.teamId,
-        isOrganizationToken: tokenAuth.isOrganizationToken,
-        organizationId: tokenAuth.organizationId,
-        ...(tokenAuth.isUserToken && { isUserToken: true }),
-        ...(tokenAuth.userId && { userId: tokenAuth.userId }),
-        // The account, not its team, is who acts: runtime binding and run
-        // ownership checks, call-time credentials, and tool permissions all
-        // read it.
-        ...(tokenAuth.serviceAccountId && {
-          serviceAccountId: tokenAuth.serviceAccountId,
-        }),
-        ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
-        ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
-        ...(tokenAuth.oauthClientId && {
-          oauthClientId: tokenAuth.oauthClientId,
-        }),
-        source: gatewayCallSource(request),
+        ...callerTokenAuthContext(tokenAuth, request),
         ...(runId && { runId }),
         ...(llmSessionId && { llmSessionId }),
         ...(llmToolCallId && { llmToolCallId }),
@@ -1493,7 +1553,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         profileId,
         tokenAuthContext,
         resolution,
-        mrtrRound,
+        { round: mrtrRound, uploadSessionId },
         pendingRequests,
         lookups,
       );
@@ -1504,6 +1564,33 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
 /**
  * Only the built-in client can attest that a gateway request came from chat.
  */
+/** Who a gateway request acts as, in the form the MCP client takes. */
+function callerTokenAuthContext(
+  tokenAuth: TokenAuthResult,
+  request: FastifyRequest,
+): TokenAuthContext {
+  return {
+    tokenId: tokenAuth.tokenId,
+    teamId: tokenAuth.teamId,
+    isOrganizationToken: tokenAuth.isOrganizationToken,
+    organizationId: tokenAuth.organizationId,
+    ...(tokenAuth.isUserToken && { isUserToken: true }),
+    ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+    // The account, not its team, is who acts: runtime binding and run
+    // ownership checks, call-time credentials, and tool permissions all
+    // read it.
+    ...(tokenAuth.serviceAccountId && {
+      serviceAccountId: tokenAuth.serviceAccountId,
+    }),
+    ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
+    ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
+    ...(tokenAuth.oauthClientId && {
+      oauthClientId: tokenAuth.oauthClientId,
+    }),
+    source: gatewayCallSource(request),
+  };
+}
+
 function gatewayCallSource(request: FastifyRequest): McpGatewayCallSource {
   return readHeader(request, SOURCE_HEADER) === "chat" &&
     internalCallProvenance(request).inProcess
@@ -1613,7 +1700,14 @@ function sharesCallerLookups(body: unknown): boolean {
     method?: unknown;
     params?: { name?: unknown };
   };
-  if (method === "tools/list") return true;
+  if (
+    method === "tools/list" ||
+    method === "resources/list" ||
+    method === "resources/templates/list" ||
+    method === "prompts/list"
+  ) {
+    return true;
+  }
   const name = params?.name;
   if (
     method === "tools/call" &&

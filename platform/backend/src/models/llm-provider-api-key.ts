@@ -1,14 +1,18 @@
 import {
   getProvidersWithOptionalApiKey,
+  isAnthropicOAuthToken,
   isCredentialLevelSubscriptionProvider,
   isGithubAppCredential,
   PROVIDERS_REQUIRING_BASE_URL,
+  type ProviderPlan,
   providerHasEndpointLocalModels,
+  providerKeyPlan,
   providerRequiresPerUserCredential,
   type ResourcePermissionGrant,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindForProvider,
   subscriptionKindFromCredential,
 } from "@archestra/shared";
 import {
@@ -282,13 +286,15 @@ class LlmProviderApiKeyModel {
    * chat/agent preflight needs to know that the pinned credential is somebody's
    * personal subscription — and which one — to gate sending behind "connect
    * your own account" for every subscription kind, not just ChatGPT. Only
-   * credential-level subscription providers' secrets are ever resolved, and
-   * only the derived kind is returned — never the value.
+   * credential-level subscription providers' and Anthropic keys' secrets are
+   * inspected (to classify `sk-ant-oat…` OAuth tokens under Claude Code), and
+   * only the derived kind and plan are returned — never the value.
    */
   static async findByIdWithSubscriptionInfo(id: string): Promise<
     | (LlmProviderApiKey & {
         subscriptionKind: SubscriptionCredentialKind | null;
         isGithubAppKey: boolean;
+        plan: ProviderPlan;
         githubOrganization: string | null;
         githubOrganizationName: string | null;
       })
@@ -322,14 +328,26 @@ class LlmProviderApiKeyModel {
       },
     ]);
     const { credentialKind: _credentialKind, ...apiKey } = row.apiKey;
+    const resolvedKind = kinds.get(apiKey.id) ?? null;
+    const subscriptionKind = subscriptionKindOf(apiKey.provider, resolvedKind);
+    const isGithubAppKey = resolvedKind === "github_app";
+    const plan = await resolveKeyPlan(
+      {
+        id: apiKey.id,
+        provider: apiKey.provider,
+        secretId: apiKey.secretId,
+        secret: row.secret,
+        secretIsVault: row.secretIsVault,
+        credentialKind: resolvedKind,
+      },
+      { inspectAnthropicSecret: true },
+    );
 
     return {
       ...apiKey,
-      subscriptionKind: subscriptionKindOf(
-        apiKey.provider,
-        kinds.get(apiKey.id),
-      ),
-      isGithubAppKey: kinds.get(apiKey.id) === "github_app",
+      subscriptionKind,
+      isGithubAppKey,
+      plan,
       ...githubOrganizationFields(
         await githubOrganizationOf(
           {
@@ -513,30 +531,49 @@ class LlmProviderApiKeyModel {
 
     return CreatedByModel.attach(
       await Promise.all(
-        accessibleKeys.map(async (key) => ({
-          ...toApiKeyWithScopeInfo(
-            {
-              ...key,
-              // `scope` from the owner column and grants, not the retired one.
-              scope: displayScopes.get(key.id) ?? key.scope,
-              credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
-            },
+        accessibleKeys.map(async (key) => {
+          const resolvedKind =
+            credentialKinds.get(key.id) ?? key.credentialKind;
+          const subscriptionKind =
             options?.includeSubscriptionInfo === true
               ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
-              : null,
-          ),
-          ...githubOrganizationFields(
-            await githubOrganizationOf(
+              : null;
+          const plan = await resolveKeyPlan(
+            {
+              id: key.id,
+              provider: key.provider,
+              secretId: key.secretId,
+              secret: key.secret,
+              secretIsVault: key.secretIsVault,
+              credentialKind: resolvedKind,
+            },
+            {
+              inspectAnthropicSecret: options?.includeSubscriptionInfo === true,
+            },
+          );
+          return {
+            ...toApiKeyWithScopeInfo(
               {
                 ...key,
-                credentialKind:
-                  credentialKinds.get(key.id) ?? key.credentialKind,
+                // `scope` from the owner column and grants, not the retired one.
+                scope: displayScopes.get(key.id) ?? key.scope,
+                credentialKind: resolvedKind,
               },
-              { withName: options?.includeSubscriptionInfo === true },
+              subscriptionKind,
+              plan,
             ),
-          ),
-          labels: labelsByKey.get(key.id) ?? [],
-        })),
+            ...githubOrganizationFields(
+              await githubOrganizationOf(
+                {
+                  ...key,
+                  credentialKind: resolvedKind,
+                },
+                { withName: options?.includeSubscriptionInfo === true },
+              ),
+            ),
+            labels: labelsByKey.get(key.id) ?? [],
+          };
+        }),
       ),
       (key) => key.createdBy,
     );
@@ -609,30 +646,49 @@ class LlmProviderApiKeyModel {
 
     return CreatedByModel.attach(
       await Promise.all(
-        keys.map(async (key) => ({
-          ...toApiKeyWithScopeInfo(
-            {
-              ...key,
-              credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
-            },
+        keys.map(async (key) => {
+          const resolvedKind =
+            credentialKinds.get(key.id) ?? key.credentialKind;
+          const subscriptionKind =
             options?.includeSubscriptionInfo === true
               ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
-              : null,
-          ),
-          ...githubOrganizationFields(
-            await githubOrganizationOf(
+              : null;
+          const plan = await resolveKeyPlan(
+            {
+              id: key.id,
+              provider: key.provider,
+              secretId: key.secretId,
+              secret: key.secret,
+              secretIsVault: key.secretIsVault,
+              credentialKind: resolvedKind,
+            },
+            {
+              inspectAnthropicSecret: options?.includeSubscriptionInfo === true,
+            },
+          );
+          return {
+            ...toApiKeyWithScopeInfo(
               {
                 ...key,
-                credentialKind:
-                  credentialKinds.get(key.id) ?? key.credentialKind,
+                credentialKind: resolvedKind,
               },
-              // Only the key lists people read ask GitHub for the name; the
-              // proxy and key resolution use this list too.
-              { withName: options?.includeSubscriptionInfo === true },
+              subscriptionKind,
+              plan,
             ),
-          ),
-          labels: labelsByKey.get(key.id) ?? [],
-        })),
+            ...githubOrganizationFields(
+              await githubOrganizationOf(
+                {
+                  ...key,
+                  credentialKind: resolvedKind,
+                },
+                // Only the key lists people read ask GitHub for the name; the
+                // proxy and key resolution use this list too.
+                { withName: options?.includeSubscriptionInfo === true },
+              ),
+            ),
+            labels: labelsByKey.get(key.id) ?? [],
+          };
+        }),
       ),
       (key) => key.createdBy,
     );
@@ -809,24 +865,14 @@ class LlmProviderApiKeyModel {
     // one user ride on another's token. Returns null (→ "link your account"
     // prompt) when the user has no personal key of their own.
     if (providerRequiresPerUserCredential(provider)) {
-      // A GitHub App key is a separate, shared way to use Copilot. It is used
-      // only when named: the agent's configured key or the conversation's pick.
-      // It never stands in for a missing personal sign-in.
-      if (
-        provider === "github-copilot" &&
-        (await LlmProviderApiKeyModel.isGithubAppKey(agentLlmApiKeyId))
-      ) {
-        const agentKey = await LlmProviderApiKeyModel.findById(
-          agentLlmApiKeyId as string,
-        );
-        if (agentKey?.organizationId === organizationId) return agentKey;
-      }
-      if (provider === "github-copilot" && conversationId) {
-        const conversation = await ConversationModel.findById({
-          id: conversationId,
-          userId,
-          organizationId,
-        });
+      if (provider === "github-copilot") {
+        const conversation = conversationId
+          ? await ConversationModel.findById({
+              id: conversationId,
+              userId,
+              organizationId,
+            })
+          : null;
         const picked = conversation?.chatApiKeyId
           ? await LlmProviderApiKeyModel.findById(conversation.chatApiKeyId)
           : null;
@@ -841,6 +887,21 @@ class LlmProviderApiKeyModel {
             )))
         ) {
           return picked;
+        }
+        // A model without a stored key denotes the member's personal
+        // connection. Keep the chat's Copilot choice ahead of the agent's App.
+        const chatSelectedCopilot =
+          conversation?.modelId &&
+          (conversation.chatApiKeyId === null ||
+            picked?.provider === "github-copilot");
+        if (
+          !chatSelectedCopilot &&
+          agentLlmApiKeyId &&
+          (await LlmProviderApiKeyModel.isGithubAppKey(agentLlmApiKeyId))
+        ) {
+          const agentKey =
+            await LlmProviderApiKeyModel.findById(agentLlmApiKeyId);
+          if (agentKey?.organizationId === organizationId) return agentKey;
         }
       }
       return LlmProviderApiKeyModel.findPersonalKey({
@@ -901,6 +962,32 @@ class LlmProviderApiKeyModel {
       }
     }
 
+    const available = await LlmProviderApiKeyModel.getRankedAvailableKeys({
+      organizationId,
+      userId,
+      userTeamIds,
+      provider,
+    });
+    return available[0]
+      ? LlmProviderApiKeyModel.findById(available[0].id)
+      : null;
+  }
+
+  /**
+   * Accessible keys for a provider ordered by resolution precedence:
+   * ownership rank (personal → team → org), primary first, then oldest first.
+   */
+  static async getRankedAvailableKeys({
+    organizationId,
+    userId,
+    userTeamIds,
+    provider,
+  }: {
+    organizationId: string;
+    userId: string;
+    userTeamIds: string[];
+    provider: SupportedProvider;
+  }) {
     const available = await LlmProviderApiKeyModel.withoutOrphans({
       organizationId,
       keys: await LlmProviderApiKeyModel.getAvailableKeysForUser(
@@ -922,9 +1009,7 @@ class LlmProviderApiKeyModel {
         Number(b.isPrimary) - Number(a.isPrimary) ||
         a.createdAt.getTime() - b.createdAt.getTime(),
     );
-    return available[0]
-      ? LlmProviderApiKeyModel.findById(available[0].id)
-      : null;
+    return available;
   }
 
   /**
@@ -1387,6 +1472,44 @@ class LlmProviderApiKeyModel {
             : readApiKeyValue(row.secret),
       })),
     );
+  }
+
+  /**
+   * Which of its provider's plans a key belongs to (API key, personal
+   * subscription, or GitHub Copilot enterprise plan), read from its recorded
+   * credential kind. A key whose secret could not be classified counts as a
+   * personal subscription on a provider that offers one. Anthropic OAuth
+   * subscription tokens (`sk-ant-oat…`) stored as Anthropic keys also count
+   * as `personal` without changing their stored credential kind.
+   */
+  static async findPlan(apiKey: {
+    id: string;
+    provider: SupportedProvider;
+    secretId?: string | null;
+  }): Promise<ProviderPlan> {
+    const kind = await LlmProviderApiKeyModel.findCredentialKind(apiKey.id);
+    const plan = planFromCredentialKind(apiKey.provider, kind);
+    if (apiKey.provider === "anthropic" && plan === "apiKey") {
+      const secretId =
+        apiKey.secretId !== undefined
+          ? apiKey.secretId
+          : (await LlmProviderApiKeyModel.findById(apiKey.id))?.secretId;
+      if (secretId) {
+        try {
+          const secretValue =
+            await getSecretValueForLlmProviderApiKey(secretId);
+          if (isAnthropicOAuthToken(secretValue)) {
+            return "personal";
+          }
+        } catch (err) {
+          logger.warn(
+            { apiKeyId: apiKey.id, err },
+            "findPlan: failed to read Anthropic secret; falling back to stored plan",
+          );
+        }
+      }
+    }
+    return plan;
   }
 
   /** True when the key stores an organization's GitHub App credential. */
@@ -1884,6 +2007,55 @@ class LlmProviderApiKeyModel {
   }
 }
 
+function planFromCredentialKind(
+  provider: SupportedProvider,
+  kind: LlmProviderCredentialKind | null | undefined,
+): ProviderPlan {
+  return providerKeyPlan({
+    provider,
+    isGithubAppKey: kind === "github_app",
+    subscriptionKind:
+      kind == null
+        ? subscriptionKindForProvider(provider)
+        : subscriptionKindOf(provider, kind),
+  });
+}
+
+async function resolveKeyPlan(
+  key: {
+    id: string;
+    provider: SupportedProvider;
+    secretId: string | null;
+    secret: SecretValue | null;
+    secretIsVault: boolean | null;
+    credentialKind: LlmProviderCredentialKind | null | undefined;
+  },
+  options: { inspectAnthropicSecret: boolean },
+): Promise<ProviderPlan> {
+  const plan = planFromCredentialKind(key.provider, key.credentialKind);
+  if (
+    options.inspectAnthropicSecret &&
+    key.provider === "anthropic" &&
+    plan === "apiKey"
+  ) {
+    try {
+      const value =
+        key.secretIsVault && key.secretId
+          ? await getSecretValueForLlmProviderApiKey(key.secretId)
+          : readApiKeyValue(key.secret);
+      if (isAnthropicOAuthToken(value)) {
+        return "personal";
+      }
+    } catch (err) {
+      logger.warn(
+        { apiKeyId: key.id, err },
+        "resolveKeyPlan: failed to read Anthropic secret; falling back to stored plan",
+      );
+    }
+  }
+  return plan;
+}
+
 function toApiKeyWithScopeInfo<
   T extends {
     provider: string;
@@ -1896,10 +2068,12 @@ function toApiKeyWithScopeInfo<
 >(
   key: T,
   subscriptionKind: SubscriptionCredentialKind | null,
+  plan: ProviderPlan,
 ): Omit<T, "secret" | "secretIsVault" | "credentialKind"> & {
   secretStorageType: SecretStorageType;
   subscriptionKind: SubscriptionCredentialKind | null;
   isGithubAppKey: boolean;
+  plan: ProviderPlan;
 } {
   const {
     secret: _secret,
@@ -1914,6 +2088,7 @@ function toApiKeyWithScopeInfo<
     secretStorageType: computeSecretStorageType(key.secretId, secretIsVault),
     subscriptionKind,
     isGithubAppKey: key.credentialKind === "github_app",
+    plan,
   };
 }
 

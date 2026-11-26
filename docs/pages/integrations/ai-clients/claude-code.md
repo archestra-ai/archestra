@@ -2,7 +2,6 @@
 title: Claude Code
 description: Connect Claude Code with subscription or API-key inference
 order: 1
-lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

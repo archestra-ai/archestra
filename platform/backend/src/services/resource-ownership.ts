@@ -21,8 +21,16 @@ import { isUniqueConstraintError } from "@/utils/db";
 import { assertNoStaticPinsBrokenByTargetChange } from "./mcp-server-assignability";
 import { ResourcePermissions } from "./resource-permissions";
 
+type TransferableKind =
+  | "skill"
+  | "plugin"
+  | "project"
+  | "app"
+  | "catalog"
+  | "remoteAgent";
+
 export async function transferResourceOwnership(params: {
-  kind: "skill" | "plugin" | "project" | "app" | "catalog" | "remoteAgent";
+  kind: TransferableKind;
   id: string;
   ownerId: string;
   userId: string;
@@ -43,6 +51,22 @@ export async function transferResourceOwnership(params: {
     ownerId,
   });
   // SPDX-SnippetEnd
+  await handOffResourceOwnership({ kind, id, ownerId, organizationId });
+}
+
+/**
+ * Give a resource to a new owner without checking who asked: the caller
+ * already decided the handoff (a member leaving the organization). Every
+ * other transfer rule still applies.
+ */
+export async function handOffResourceOwnership(params: {
+  kind: TransferableKind;
+  id: string;
+  ownerId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { kind, id, ownerId, organizationId } = params;
+  const scoped = SCOPED_RESOURCE_KINDS[kind];
   const entry = await loadResource(params);
   if (!entry || entry.row.organizationId !== organizationId)
     throw new ApiError(404, "Resource not found");
@@ -119,10 +143,7 @@ export async function transferResourceOwnership(params: {
 }
 
 /** The grant policy that decides who may transfer each kind. */
-const SCOPED_RESOURCE_KINDS: Record<
-  "skill" | "plugin" | "project" | "app" | "catalog" | "remoteAgent",
-  ScopedResource
-> = {
+const SCOPED_RESOURCE_KINDS: Record<TransferableKind, ScopedResource> = {
   skill: "skill",
   app: "app",
   catalog: "mcpRegistry",
@@ -134,7 +155,7 @@ const SCOPED_RESOURCE_KINDS: Record<
 };
 
 async function loadResource(params: {
-  kind: "skill" | "plugin" | "project" | "app" | "catalog" | "remoteAgent";
+  kind: TransferableKind;
   id: string;
   organizationId: string;
 }) {

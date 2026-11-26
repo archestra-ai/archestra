@@ -97,7 +97,7 @@ jobs:
       - name: Generate releaser token
         if: steps.bump.outputs.changed == 'true'
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
+        uses: archestra-ai/.github/actions/github-app-token@v1.31.1
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -129,6 +129,10 @@ jobs:
           git switch -c "$branch"
           git add -- platform/Dockerfile platform/docker_images/agent/Dockerfile
           git -c core.hooksPath=/dev/null commit -m "$title"
+          # The checkout has only the base branch. Without a remote-tracking ref for an
+          # existing bot branch, --force-with-lease rejects the push as stale; fetch it
+          # so a rerun replaces the open pull request's branch. A new branch has none.
+          git fetch --no-tags --depth=1 origin "+refs/heads/$branch:refs/remotes/origin/$branch" || true
           git push --force-with-lease origin "HEAD:refs/heads/$branch"
           note=""
           [[ "$BASE" == "main" ]] || note=", patch releases only on this release line"

@@ -30,6 +30,7 @@ import type {
   UsageView,
 } from "@/types";
 import { asRecord } from "@/utils/as-record";
+import { type PoolWire, providerChatWire } from "@/utils/model-pool-wire";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import {
@@ -89,13 +90,7 @@ import {
   withOpenAiResponsesToolCallIds,
 } from "./utils/tool-call-ids";
 
-/** The request formats a pool can carry a request in. */
-export type PoolWire =
-  | "openai-chat"
-  | "openai-responses"
-  | "anthropic"
-  | "bedrock-converse"
-  | "gemini";
+export { canReachMember, type PoolWire } from "@/utils/model-pool-wire";
 
 /** Sends a request in the client's shapes to one member, and answers in them. */
 export interface MemberTransport {
@@ -134,27 +129,11 @@ export function inboundPoolWire(
   const [provider, surface] = interactionType.split(":");
   if (
     surface === "chatCompletions" &&
-    wireOf(provider as SupportedProvider) === "openai-chat"
+    providerChatWire(provider as SupportedProvider) === "openai-chat"
   ) {
     return "openai-chat";
   }
   return null;
-}
-
-/** Whether a client on `inbound` can be answered by a member on `provider`. */
-export function canReachMember(
-  inbound: PoolWire,
-  provider: SupportedProvider,
-): boolean {
-  if (inbound === "openai-responses")
-    return (
-      provider === "openai" ||
-      provider === "azure" ||
-      provider === "github-copilot"
-    );
-  const target = wireOf(provider);
-  if (!target) return false;
-  return target === inbound || TRANSLATED.has(`${inbound}>${target}`);
 }
 
 /**
@@ -179,7 +158,7 @@ export function memberTransport(params: {
   const transport = memberTransportOnWire(params);
   const inboundOutside = params.inboundReasoningOutsideCompletion ?? false;
   const memberOutside =
-    wireOf(params.provider) === "openai-chat" &&
+    providerChatWire(params.provider) === "openai-chat" &&
     reportsReasoningOutsideCompletion(params.provider);
   if (params.inbound !== "openai-chat" || inboundOutside === memberOutside) {
     return transport;
@@ -228,7 +207,7 @@ function memberTransportOnWire(params: {
     ? "anthropic"
     : inbound === "openai-responses" && adapter
       ? "openai-responses"
-      : wireOf(provider);
+      : providerChatWire(provider);
   if (!adapter || !target) {
     throw new Error(`Provider ${provider} cannot serve a model pool`);
   }
@@ -665,21 +644,6 @@ const MEMBER_ADAPTERS: Record<ModelPoolProvider, unknown> = {
   zhipuai: zhipuaiAdapterFactory,
 };
 
-/** Wire pairs a translator connects, as `inbound>member`. */
-const TRANSLATED = new Set([
-  "openai-chat>anthropic",
-  "openai-chat>bedrock-converse",
-  "openai-chat>gemini",
-  "bedrock-converse>openai-chat",
-  "bedrock-converse>anthropic",
-  "anthropic>openai-chat",
-  "anthropic>bedrock-converse",
-  "anthropic>gemini",
-  "gemini>openai-chat",
-  "gemini>anthropic",
-  "gemini>bedrock-converse",
-]);
-
 function readOpenAiUsage(
   raw: OpenAi.Types.ChatCompletionChunk["usage"],
 ): UsageView | null {
@@ -693,14 +657,6 @@ function readOpenAiUsage(
     cacheWrite1hTokens: tokens.cacheWrite1h,
     reasoningTokens: tokens.reasoning,
   };
-}
-
-function wireOf(provider: SupportedProvider): PoolWire | null {
-  if (!isModelPoolProvider(provider)) return null;
-  if (provider === "anthropic") return "anthropic";
-  if (provider === "bedrock") return "bedrock-converse";
-  if (provider === "gemini") return "gemini";
-  return "openai-chat";
 }
 
 /** Only an empty, usage-free transient failure is safe to try elsewhere. */

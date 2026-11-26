@@ -2,7 +2,6 @@
 title: A2A
 description: Connect Archestra agents to remote agents and manage agent-to-agent communication
 order: 2
-lastUpdated: 2026-11-04
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

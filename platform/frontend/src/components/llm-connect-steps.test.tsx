@@ -14,7 +14,12 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { EndpointCard } from "@/app/llm/proxy/_parts/endpoint-card";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useProviderBaseUrls } from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
@@ -96,6 +101,9 @@ describe("LlmConnectSteps", () => {
     } as unknown as ReturnType<typeof useSession>);
     server.use(
       http.get(`${API_ORIGIN}/api/llm-models`, () => HttpResponse.json([])),
+      http.get(`${API_ORIGIN}/api/llm-models/key-model-ids`, () =>
+        HttpResponse.json([]),
+      ),
       http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
         HttpResponse.json([]),
       ),
@@ -263,17 +271,25 @@ describe("LlmConnectSteps", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "New virtual key for Jev",
     });
-    // The provider picker is already expanded; both keys are offered, but a
-    // virtual key maps only one per provider.
+    const providers = within(dialog).getByRole("region", { name: "Providers" });
+    expect(providers).toHaveTextContent("TypeSafe");
+    expect(providers).not.toHaveTextContent("Via OpenRouter");
     await user.click(
-      await within(dialog).findByRole("combobox", { name: "Jev key" }),
+      within(providers).getByRole("button", { name: "Stop using Jev" }),
+    );
+    await user.click(
+      within(dialog).getByRole("combobox", {
+        name: "Add a provider, model pool or auto router",
+      }),
     );
     expect(
-      await screen.findByRole("option", { name: /^TypeSafe/ }),
-    ).toHaveAttribute("aria-selected", "true");
-    expect(
-      screen.getByRole("option", { name: /^Via OpenRouter/ }),
-    ).toHaveAttribute("aria-selected", "false");
+      await screen.findByRole("option", { name: /^Jev\s*TypeSafe/ }),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("option", { name: /^Jev\s*Via OpenRouter/ }),
+    );
+    expect(providers).toHaveTextContent("Via OpenRouter");
+    expect(providers).not.toHaveTextContent("TypeSafe");
   });
 
   it("fills a key created here into the request", async () => {
@@ -322,6 +338,122 @@ describe("LlmConnectSteps", () => {
         "Authorization: Bearer arch_fresh_secret_value",
       );
     });
+  });
+
+  it.each([
+    true,
+    false,
+  ])("shows the outcome of creating an automatic key from Endpoint (shared primary: %s)", async (hasSharedPrimary) => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "llmProviderApiKey", action: "use", scope: "*" }],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    const created = {
+      ...JUDGE_KEY,
+      id: "vk-new",
+      name: "Fresh key",
+      authorId: "user-1",
+      includeFutureProviders: true,
+      providerApiKeys: [],
+    };
+    const existing = {
+      ...JUDGE_KEY,
+      name: "Existing personal mapping",
+      providerApiKeys: [
+        {
+          provider: "openai",
+          providerApiKeyId: "pk-openai",
+          providerApiKeyName: "Personal OpenAI",
+        },
+      ],
+    };
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          {
+            ...JEV_PROVIDER_KEY,
+            id: "pk-openai",
+            name: hasSharedPrimary ? "Shared OpenAI" : "Personal OpenAI",
+            provider: "openai",
+            isPrimary: true,
+            scope: hasSharedPrimary ? "org" : "personal",
+            userId: hasSharedPrimary ? null : "user-1",
+          },
+        ]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
+        // The freshly created key need not be on the first page.
+        HttpResponse.json(page(hasSharedPrimary ? [] : [existing])),
+      ),
+      http.post(`${API_ORIGIN}/api/llm-virtual-keys`, async ({ request }) => {
+        expect(await request.json()).toMatchObject({
+          includeFutureProviders: true,
+          providerApiKeys: [],
+        });
+        return HttpResponse.json({
+          ...created,
+          value: "arch_fresh_secret_value",
+        });
+      }),
+      http.get(`${API_ORIGIN}/api/model-pools`, () => HttpResponse.json([])),
+      http.get(`${API_ORIGIN}/api/auto-routers`, () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EndpointCard baseUrl="http://localhost:3000/v1" />
+      </QueryClientProvider>,
+    );
+    if (!hasSharedPrimary) {
+      await waitFor(() =>
+        expect(
+          screen.getByRole("combobox", { name: "Virtual key" }),
+        ).toHaveTextContent(existing.name),
+      );
+    }
+    await user.click(screen.getByRole("combobox", { name: "Virtual key" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Create new virtual key" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "New virtual key for Unified Model API",
+    });
+    await user.click(
+      within(dialog).getByRole("radio", {
+        name: /Current and future providers/,
+      }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create key" }),
+    );
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+
+    if (hasSharedPrimary) {
+      await waitFor(() =>
+        expect(
+          screen.getByRole("combobox", { name: "Virtual key" }),
+        ).toHaveTextContent("Fresh key"),
+      );
+      expect(
+        screen.queryByText("Pick a credential first"),
+      ).not.toBeInTheDocument();
+    } else {
+      expect(await screen.findByText(/was created, but/)).toHaveTextContent(
+        "Fresh key was created, but it has no access to this endpoint.",
+      );
+      expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
+      expect(
+        screen.getByRole("combobox", { name: "Virtual key" }),
+      ).toHaveTextContent(/Fresh key\s*No access yet/);
+      expect(
+        screen.getByRole("link", { name: "Edit key to add access" }),
+      ).toHaveAttribute(
+        "href",
+        "/llm/proxy/virtual-keys?keyType=standard&search=Fresh+key&edit=vk-new",
+      );
+    }
   });
 
   it("lists and picks the reader's own keys before anyone else's", async () => {

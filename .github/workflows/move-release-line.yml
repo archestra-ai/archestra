@@ -6,7 +6,8 @@ run-name: Make the release line of ${{ inputs.release_tag }} the supported one
 # opens a pull request on main that moves .github/backport-targets.json
 # (backports, the nightly release image scan, client-version updates) and
 # every Dependabot target-branch in .github/dependabot.yml to release/X.Y
-# (set-release-line.py). It waits for review like any change to main's
+# (set-release-line.py). When release/X.Y already has its own Dependabot
+# entries (stable-line.py cut adds them), it removes the other lines' entries. It waits for review like any change to main's
 # release automation.
 #
 # Release Finalize dispatches it after publishing a stable X.Y.0. Run it by
@@ -79,7 +80,7 @@ jobs:
       - name: Generate releaser token
         if: steps.move.outputs.changed == 'true'
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@v1.25.2
+        uses: archestra-ai/.github/actions/github-app-token@v1.31.1
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

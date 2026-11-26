@@ -2,7 +2,6 @@
 title: Sizing and High Availability
 description: Size web, worker, and database capacity, and run Archestra without a single point of failure
 order: 3
-lastUpdated: 2026-11-04
 ---
 
 <!-- Check docs writer skill at .agents/skills/archestra-docs-writer/SKILL.md -->

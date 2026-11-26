@@ -1,6 +1,9 @@
 import {
+  isProviderPlanHidden,
   PROVIDERS_REQUIRING_BASE_URL,
+  type ProviderPlan,
   providerDisplayNames,
+  providerPlanTurnedOffMessage,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -59,12 +62,44 @@ export async function ensurePrimaryProviderKey(
         mappedKeys: await VirtualApiKeyModel.getProviderApiKeys(existing.id),
       }
     : params;
-  const mapped = await getMappedKeys(context);
-  const primaries = includeFutureProviders
-    ? (await getSharedPrimaryProviderKeys(params.organizationId)).filter(
-        (key) => params.supportedProviders.includes(key.provider),
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(params.organizationId);
+  const keepEnabled = async <
+    T extends {
+      id: string;
+      provider: SupportedProvider;
+      secretId?: string | null;
+    },
+  >(
+    candidates: readonly T[],
+  ): Promise<{
+    kept: T[];
+    firstHidden: { provider: SupportedProvider; plan: ProviderPlan } | null;
+  }> => {
+    const kept: T[] = [];
+    let hidden: { provider: SupportedProvider; plan: ProviderPlan } | null =
+      null;
+    for (const key of candidates) {
+      const plan = await LlmProviderApiKeyModel.findPlan(key);
+      if (isProviderPlanHidden(modelProviderOverrides, key.provider, plan)) {
+        hidden ??= { provider: key.provider, plan };
+        continue;
+      }
+      kept.push(key);
+    }
+    return { kept, firstHidden: hidden };
+  };
+  const mappedResult = await keepEnabled(await getMappedKeys(context));
+  const primariesResult = includeFutureProviders
+    ? await keepEnabled(
+        (await getSharedPrimaryProviderKeys(params.organizationId)).filter(
+          (key) => params.supportedProviders.includes(key.provider),
+        ),
       )
-    : await getPrimaryKeys(params);
+    : await keepEnabled(await getPrimaryKeys(params));
+  const mapped = mappedResult.kept;
+  const primaries = primariesResult.kept;
+  const firstHidden = mappedResult.firstHidden ?? primariesResult.firstHidden;
   const keys = includeFutureProviders
     ? [
         ...mapped,
@@ -77,6 +112,16 @@ export async function ensurePrimaryProviderKey(
       ? mapped
       : primaries;
   if (keys.length === 0) {
+    if (firstHidden) {
+      throw new ApiError(
+        400,
+        providerPlanTurnedOffMessage(
+          modelProviderOverrides,
+          firstHidden.provider,
+          firstHidden.plan,
+        ),
+      );
+    }
     throw new ApiError(
       400,
       "No usable primary provider keys are available. Mark a compatible provider key as primary, ask an admin to choose provider keys for this client, or choose another routing option.",

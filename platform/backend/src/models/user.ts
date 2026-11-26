@@ -166,12 +166,16 @@ class UserModel {
   /**
    * Find a user by their email address
    */
+  /**
+   * Emails are stored lowercase, so the lookup lowercases its input: an IdP
+   * such as Entra sends the email claim with the directory's capitals.
+   */
   static async findByEmail(email: string) {
     logger.debug({ email }, "UserModel.findByEmail: fetching user");
     const [user] = await db
       .select()
       .from(schema.usersTable)
-      .where(eq(schema.usersTable.email, email))
+      .where(eq(schema.usersTable.email, email.toLowerCase()))
       .limit(1);
     logger.debug({ email, found: !!user }, "UserModel.findByEmail: completed");
     return user;

@@ -2,15 +2,19 @@
 
 import {
   builtInProviderLabel,
-  type CopilotPlan,
-  CopilotPlanSchema,
   GITHUB_COPILOT_ORGANIZATION_LABEL,
+  isPersonalSubscriptionProvider,
   MAX_INTEGRATION_DISPLAY_NAME_LENGTH,
+  type ModelProviderOverride,
   type ModelProviderOverrides,
-  PERSONAL_SUBSCRIPTION_PROVIDERS,
+  PERSONAL_SUBSCRIPTION_LABELS,
+  type ProviderPlan,
+  ProviderPlanSchema,
+  providerPlans,
   pruneIntegrationOverrides,
   type SupportedProvider,
   SupportedProviders,
+  subscriptionKindForProvider,
 } from "@archestra/shared";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -25,6 +29,7 @@ import {
   SettingsBlock,
   SettingsSaveBar,
 } from "@/components/settings/settings-block";
+import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -44,9 +49,11 @@ import { providerSearchHaystack } from "@/lib/provider-search";
  * controls.
  *
  * A provider switched off leaves every picker, and the API refuses to
- * configure it. Keys that already exist keep working. GitHub Copilot gets one
- * card per plan, so personal subscriptions and enterprise plans switch off
- * separately; both off is GitHub Copilot off.
+ * configure it. Keys that already exist keep working. A provider with more
+ * than one way in gets one card per plan, so each switches off separately:
+ * OpenAI, Anthropic and xAI API keys beside ChatGPT, Claude Code and
+ * SuperGrok, and GitHub Copilot personal subscriptions beside enterprise
+ * plans. Every plan off is the provider off.
  */
 export function ModelProvidersSection() {
   const { data: organization } = useOrganization();
@@ -77,13 +84,15 @@ export function ModelProvidersSection() {
   // by the name people here actually know it by, and the entry's aliases, so a
   // generic entry is findable by the products it serves.
   const query = search.trim().toLowerCase();
-  const visible = CARDS.filter(({ provider, plan }) =>
+  const visible = CARDS.filter((card) =>
     providerSearchHaystack({
-      provider,
+      provider: card.provider,
       labels: [
-        cardLabel({ provider, plan }),
-        cardName(draft[provider] ?? EMPTY_DRAFT_ENTRY, plan),
-        cardNote({ provider, plan }),
+        cardLabel(card),
+        cardName(draft[card.provider] ?? EMPTY_DRAFT_ENTRY, card),
+        cardNote(card),
+        // A personal subscription is also found by the provider it runs on.
+        isPersonalCard(card) ? builtInProviderLabel(card.provider) : null,
       ],
     })
       .toLowerCase()
@@ -99,34 +108,7 @@ export function ModelProvidersSection() {
   const handleSave = async () => {
     const next: ModelProviderOverrides = {};
     for (const provider of SupportedProviders) {
-      const entry = draft[provider];
-      const displayName = entry.displayName.trim() || null;
-      if (provider !== "github-copilot") {
-        next[provider] = { hidden: entry.hidden, displayName };
-        continue;
-      }
-      // Both plan cards off is GitHub Copilot off, stored as the provider
-      // switch so every other place reads one answer.
-      const bothOff = CopilotPlanSchema.options.every(
-        (plan) => entry.hiddenPlans[plan],
-      );
-      const enterpriseName = entry.enterpriseDisplayName.trim() || null;
-      next[provider] = bothOff
-        ? {
-            hidden: true,
-            displayName,
-            plans: { enterprise: { displayName: enterpriseName } },
-          }
-        : {
-            displayName,
-            plans: {
-              personal: { hidden: entry.hiddenPlans.personal },
-              enterprise: {
-                hidden: entry.hiddenPlans.enterprise,
-                displayName: enterpriseName,
-              },
-            },
-          };
+      next[provider] = toOverride(provider, draft[provider]);
     }
     await updateMutation.mutateAsync({
       modelProviderOverrides: pruneIntegrationOverrides(next),
@@ -170,13 +152,15 @@ export function ModelProvidersSection() {
                   </p>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {visible.map(({ provider, plan }) => {
+                    {visible.map((card) => {
+                      const { provider, plan } = card;
                       const entry = draft[provider] ?? EMPTY_DRAFT_ENTRY;
-                      const label = cardLabel({ provider, plan });
-                      const id = plan ? `${provider}-${plan}` : provider;
-                      const note = cardNote({ provider, plan });
+                      const label = cardLabel(card);
+                      const id = cardId(card);
+                      const note = cardNote(card);
+                      // "ChatGPT personal subscription", "OpenAI API keys".
                       const fullLabel = note
-                        ? `${label} ${note.toLowerCase()}`
+                        ? `${label} ${note.replace(/^[A-Z][a-z]/, (start) => start.toLowerCase())}`
                         : label;
                       const available = plan
                         ? !entry.hiddenPlans[plan]
@@ -191,7 +175,15 @@ export function ModelProvidersSection() {
                           <div className="mb-2 flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <div className="flex min-w-0 items-center gap-2">
-                                <ProviderIcon provider={provider} size={18} />
+                                {isPersonalCard(card) ? (
+                                  <SubscriptionBrandIcon
+                                    provider={provider}
+                                    kind={subscriptionKindForProvider(provider)}
+                                    size={18}
+                                  />
+                                ) : (
+                                  <ProviderIcon provider={provider} size={18} />
+                                )}
                                 <span className="truncate text-sm font-medium">
                                   {label}
                                 </span>
@@ -227,16 +219,11 @@ export function ModelProvidersSection() {
                           </div>
                           <Input
                             aria-label={`${fullLabel} display name`}
-                            value={cardName(entry, plan)}
+                            value={cardName(entry, card)}
                             onChange={(event) =>
-                              patch(
-                                provider,
-                                plan === "enterprise"
-                                  ? {
-                                      enterpriseDisplayName: event.target.value,
-                                    }
-                                  : { displayName: event.target.value },
-                              )
+                              patch(provider, {
+                                [cardNameField(card)]: event.target.value,
+                              })
                             }
                             placeholder={`Show as “${label}”`}
                             maxLength={MAX_INTEGRATION_DISPLAY_NAME_LENGTH}
@@ -264,65 +251,107 @@ export function ModelProvidersSection() {
   );
 }
 
-/** One card in the grid: a provider, or one of GitHub Copilot's two plans. */
-type ProviderCard = { provider: SupportedProvider; plan?: CopilotPlan };
+/**
+ * One card in the grid: a provider, or one plan of a provider with more than
+ * one way in.
+ */
+type ProviderCard = { provider: SupportedProvider; plan?: ProviderPlan };
 
 const CARDS: ProviderCard[] = SupportedProviders.flatMap(
-  (provider): ProviderCard[] =>
-    provider === "github-copilot"
-      ? CopilotPlanSchema.options.map((plan) => ({ provider, plan }))
-      : [{ provider }],
+  (provider): ProviderCard[] => {
+    const plans = providerPlans(provider);
+    return plans.length > 0
+      ? plans.map((plan) => ({ provider, plan }))
+      : [{ provider }];
+  },
 );
 
 /**
- * The name a card ships with: the GitHub Copilot enterprise plan has its own,
- * every other card the provider's.
+ * The card's id in test ids and control ids. A provider's API key card keeps
+ * the provider's own id, as it had before the provider got a second card.
  */
-function cardLabel({ provider, plan }: ProviderCard): string {
-  return plan === "enterprise"
-    ? GITHUB_COPILOT_ORGANIZATION_LABEL
-    : builtInProviderLabel(provider);
+function cardId({ provider, plan }: ProviderCard): string {
+  return plan && plan !== "apiKey" ? `${provider}-${plan}` : provider;
 }
 
-/** The name an admin typed on this card: the plan's own, or the provider's. */
-function cardName(entry: DraftEntry, plan: CopilotPlan | undefined): string {
-  return plan === "enterprise"
-    ? entry.enterpriseDisplayName
-    : entry.displayName;
+/**
+ * A card that stands for a person's own subscription: a personal plan, or a
+ * provider that is a personal subscription and nothing else.
+ */
+function isPersonalCard({ provider, plan }: ProviderCard): boolean {
+  return (
+    plan === "personal" ||
+    (plan === undefined && isPersonalSubscriptionProvider(provider))
+  );
+}
+
+/**
+ * The name a card ships with: the GitHub Copilot enterprise plan and the
+ * personal subscriptions beside API keys (ChatGPT, Claude Code, SuperGrok)
+ * have their own, every other card the provider's.
+ */
+function cardLabel(card: ProviderCard): string {
+  if (card.plan === "enterprise") return GITHUB_COPILOT_ORGANIZATION_LABEL;
+  if (cardNameField(card) === "personalDisplayName") {
+    return PERSONAL_SUBSCRIPTION_LABELS[
+      card.provider as keyof typeof PERSONAL_SUBSCRIPTION_LABELS
+    ];
+  }
+  return builtInProviderLabel(card.provider);
+}
+
+/** The draft field a card's name input edits. */
+function cardNameField(
+  card: ProviderCard,
+): "displayName" | "personalDisplayName" | "enterpriseDisplayName" {
+  if (card.plan === "enterprise") return "enterpriseDisplayName";
+  // GitHub Copilot's personal plan shows under the provider's name.
+  if (card.plan === "personal" && card.provider !== "github-copilot") {
+    return "personalDisplayName";
+  }
+  return "displayName";
+}
+
+/** The name an admin typed on this card. */
+function cardName(entry: DraftEntry, card: ProviderCard): string {
+  return entry[cardNameField(card)];
 }
 
 const PERSONAL_SUBSCRIPTION_NOTE = "Personal subscription";
 const ENTERPRISE_PLAN_NOTE = "Enterprise plan";
+const API_KEYS_NOTE = "API keys";
 
 /**
- * The note beside a card's name: every personal subscription provider gets
- * one, from the shared list, so a subscription added later is noted with no
- * edit here. GitHub Copilot's enterprise plan card is the one exception.
+ * The note beside a card's name, so an admin tells the cards of one provider
+ * apart: "API keys", "Personal subscription" or "Enterprise plan". Every
+ * personal subscription is noted, from the shared list, so a subscription
+ * added later is noted with no edit here.
  */
-function cardNote({ provider, plan }: ProviderCard): string | null {
-  if (plan === "enterprise") return ENTERPRISE_PLAN_NOTE;
-  return PERSONAL_SUBSCRIPTION_PROVIDERS.includes(provider)
-    ? PERSONAL_SUBSCRIPTION_NOTE
-    : null;
+function cardNote(card: ProviderCard): string | null {
+  if (card.plan === "enterprise") return ENTERPRISE_PLAN_NOTE;
+  if (card.plan === "apiKey") return API_KEYS_NOTE;
+  return isPersonalCard(card) ? PERSONAL_SUBSCRIPTION_NOTE : null;
 }
 
 /**
  * The name inputs are controlled, so the draft holds "" rather than null. The
- * GitHub Copilot personal card edits the provider's name, the enterprise card
- * its own.
+ * provider's name is `displayName`; the personal subscription beside API keys
+ * and the GitHub Copilot enterprise plan have their own.
  */
 type DraftEntry = {
   hidden: boolean;
   displayName: string;
-  /** GitHub Copilot only: its cards read and write these, never `hidden`. */
-  hiddenPlans: Record<CopilotPlan, boolean>;
+  /** Providers with plans: their cards read and write these, never `hidden`. */
+  hiddenPlans: Record<ProviderPlan, boolean>;
+  personalDisplayName: string;
   enterpriseDisplayName: string;
 };
 
 const EMPTY_DRAFT_ENTRY: DraftEntry = {
   hidden: false,
   displayName: "",
-  hiddenPlans: { personal: false, enterprise: false },
+  hiddenPlans: { apiKey: false, personal: false, enterprise: false },
+  personalDisplayName: "",
   enterpriseDisplayName: "",
 };
 
@@ -336,13 +365,49 @@ function toDraft(
     draft[provider] = {
       hidden,
       displayName: override?.displayName ?? "",
-      // GitHub Copilot switched off as a provider shows both plan cards off.
-      hiddenPlans: {
-        personal: hidden || override?.plans?.personal?.hidden === true,
-        enterprise: hidden || override?.plans?.enterprise?.hidden === true,
-      },
+      // A provider switched off as a whole shows every plan card off.
+      hiddenPlans: Object.fromEntries(
+        ProviderPlanSchema.options.map((plan) => [
+          plan,
+          hidden || override?.plans?.[plan]?.hidden === true,
+        ]),
+      ) as Record<ProviderPlan, boolean>,
+      personalDisplayName: override?.plans?.personal?.displayName ?? "",
       enterpriseDisplayName: override?.plans?.enterprise?.displayName ?? "",
     };
   }
   return draft;
+}
+
+/**
+ * What one provider's cards save. Every plan card off is the provider off,
+ * stored as the provider switch so every other place reads one answer; the
+ * plans' names stay, so switching back on restores them.
+ */
+function toOverride(
+  provider: SupportedProvider,
+  entry: DraftEntry,
+): ModelProviderOverride {
+  const displayName = entry.displayName.trim() || null;
+  const plans = providerPlans(provider);
+  if (plans.length === 0) return { hidden: entry.hidden, displayName };
+  const allOff = plans.every((plan) => entry.hiddenPlans[plan]);
+  const names: Partial<Record<ProviderPlan, string | null>> = {
+    personal:
+      provider === "github-copilot"
+        ? undefined
+        : entry.personalDisplayName.trim() || null,
+    enterprise: entry.enterpriseDisplayName.trim() || null,
+  };
+  const planOverrides: NonNullable<ModelProviderOverride["plans"]> = {};
+  for (const plan of plans) {
+    const name = names[plan];
+    planOverrides[plan] = {
+      ...(allOff ? {} : { hidden: entry.hiddenPlans[plan] }),
+      ...(name !== undefined ? { displayName: name } : {}),
+    };
+  }
+  return allOff
+    ? { hidden: true, displayName, plans: planOverrides }
+    : { displayName, plans: planOverrides };
 }

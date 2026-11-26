@@ -62,6 +62,7 @@ function bindings(overrides: Partial<PortBindings> = {}): PortBindings {
     mountedSkillsReadability: unused,
     embeddingFinalization: unused,
     selfServiceInclude: unused,
+    ownedResourceHandoff: unused,
     ...overrides,
   };
 }

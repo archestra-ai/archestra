@@ -129,6 +129,8 @@ export interface ModelPoolCaller {
   virtualKeyId?: string;
   /** Provider keys the caller may already use. */
   providerApiKeyIds: string[];
+  /** Resolve other keys only when a user credential names an existing pool. */
+  loadUsableProviderApiKeyIds?: () => Promise<string[]>;
   /**
    * Pools an OAuth client calling as the app was given, the only ones it may
    * use. Unset for a caller that has no list of its own.
@@ -194,12 +196,18 @@ export async function planModelPool(params: {
       throw new ApiError(404, "The selected model pool no longer exists");
     return null;
   }
-  if (
-    pool.id !== params.poolId &&
-    pool.id !== params.grantedPoolId &&
-    !mayUseModelPool({ pool, caller: params.caller })
-  ) {
-    return null;
+  const { caller } = params;
+  if (pool.id !== params.poolId && pool.id !== params.grantedPoolId) {
+    if (!mayUseModelPool({ pool, caller })) {
+      if (caller.virtualKeyId || caller.modelPoolIds) return null;
+      const providerApiKeyIds = await caller.loadUsableProviderApiKeyIds?.();
+      if (
+        !providerApiKeyIds ||
+        !mayUseModelPool({ pool, caller: { ...caller, providerApiKeyIds } })
+      ) {
+        return null;
+      }
+    }
   }
   const allEnabled = pool.members.filter((member) => member.enabled);
   if (allEnabled.length === 0)

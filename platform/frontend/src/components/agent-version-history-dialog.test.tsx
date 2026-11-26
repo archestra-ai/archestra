@@ -67,6 +67,7 @@ const snapshot = (
   missingCredentialBehavior: "allow",
   accessAllTools: false,
   accessAllSubagents: false,
+  progressiveSubagentLoading: false,
   activationSkillMode: "all",
   activationSkillRuleCounts: { allowed: 0, excluded: 0 },
   activationSkillRuleDigest: "0".repeat(64),

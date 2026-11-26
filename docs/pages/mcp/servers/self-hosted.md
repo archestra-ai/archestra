@@ -2,7 +2,6 @@
 title: Self-Hosted Servers
 description: Run MCP server processes in Kubernetes and manage their runtime
 order: 4
-lastUpdated: 2026-11-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

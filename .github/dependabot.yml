@@ -120,7 +120,7 @@ updates:
       - dependency-name: "*uv"
         update-types:
           - version-update:semver-minor
-      - dependency-name: "*dotnet/sdk"
+      - dependency-name: "dotnet"
         update-types:
           - version-update:semver-minor
     labels:
@@ -156,7 +156,7 @@ updates:
       - dependency-name: "rust"
         update-types:
           - version-update:semver-minor
-      - dependency-name: "*dotnet/sdk"
+      - dependency-name: "dotnet"
         update-types:
           - version-update:semver-minor
       # The uv base must equal DEFAULT_BASE_IMAGE in sandbox-core's dagger.rs
@@ -201,7 +201,7 @@ updates:
       - dependency-name: "*uv"
         update-types:
           - version-update:semver-minor
-      - dependency-name: "*dotnet/sdk"
+      - dependency-name: "dotnet"
         update-types:
           - version-update:semver-minor
     labels:
@@ -236,7 +236,7 @@ updates:
       - dependency-name: "rust"
         update-types:
           - version-update:semver-minor
-      - dependency-name: "*dotnet/sdk"
+      - dependency-name: "dotnet"
         update-types:
           - version-update:semver-minor
       # The uv base must equal DEFAULT_BASE_IMAGE in sandbox-core's dagger.rs

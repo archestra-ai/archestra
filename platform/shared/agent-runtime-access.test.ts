@@ -197,9 +197,9 @@ describe("companyAccountWords", () => {
     ]) {
       expect(companyAccountWords(command)).toMatchObject({
         plan: false,
-        a: "a company API key",
-        the: "the company API key",
-        companys: "company's API key",
+        a: "an API key",
+        the: "the API key",
+        companys: "a provider API key",
         short: "API key",
         connection: "connection",
         aConnection: "a connection",

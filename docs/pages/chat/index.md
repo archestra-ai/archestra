@@ -2,7 +2,6 @@
 title: Chat & Projects
 description: Start conversations, delegate tasks, attach files, and collaborate with autonomous agents in real time
 order: 7
-lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

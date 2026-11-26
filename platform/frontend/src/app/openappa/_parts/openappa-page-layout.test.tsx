@@ -6,6 +6,10 @@ import { setupServer } from "msw/node";
 import { usePathname, useSearchParams } from "next/navigation";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  PageTitleProvider,
+  useCurrentPageTitle,
+} from "@/lib/hooks/use-page-title";
 import { OpenAppaPageLayout } from "./openappa-page-layout";
 
 vi.mock("@/lib/auth/auth.query");
@@ -44,9 +48,17 @@ function show(children: React.ReactNode) {
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      {children}
+      <PageTitleProvider>
+        <TabTitleProbe />
+        {children}
+      </PageTitleProvider>
     </QueryClientProvider>,
   );
+}
+
+/** Shows the title the page hands to the browser tab's one writer. */
+function TabTitleProbe() {
+  return <output data-testid="tab-title">{useCurrentPageTitle()}</output>;
 }
 vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name", () => ({
@@ -131,5 +143,5 @@ test("the header labels the feature as Beta on every tab", () => {
 
   expect(screen.getByText("Beta")).toBeInTheDocument();
   // The browser tab keeps the plain name; the badge is only for the page.
-  expect(document.title).toBe("Policy - Archestra");
+  expect(screen.getByTestId("tab-title")).toHaveTextContent(/^Policy$/);
 });

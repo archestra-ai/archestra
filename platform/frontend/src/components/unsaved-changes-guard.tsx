@@ -237,7 +237,9 @@ export function UnsavedChangesDialog({
             Discard unsaved changes?
           </DialogTitle>
           <DialogDescription>
-            You have unsaved changes. If you close now, they will be lost.
+            {/* True for a dialog being closed and for a page being left:
+                the guard serves both, so the sentence names neither. */}
+            You have unsaved changes. If you continue, they will be lost.
           </DialogDescription>
         </DialogHeader>
         <DialogForm

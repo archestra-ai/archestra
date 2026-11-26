@@ -69,4 +69,35 @@ describe("DeleteConfirmDialog", () => {
       vi.useRealTimers();
     }
   });
+  it("confirms once for a double click, and again after the first attempt has settled", async () => {
+    let settle: () => void = () => {};
+    const onConfirm = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    render(
+      <DeleteConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Delete plugin?"
+        description="Installed copies stay."
+        // The caller's pending flag has not reached the dialog yet: this is
+        // the render the second click of a double click lands in.
+        isPending={false}
+        onConfirm={onConfirm}
+      />,
+    );
+    const remove = screen.getByRole("button", { name: "Delete" });
+
+    fireEvent.click(remove);
+    fireEvent.click(remove);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+
+    // A failed attempt leaves the dialog open, and it can be tried again.
+    await act(async () => settle());
+    fireEvent.click(remove);
+    expect(onConfirm).toHaveBeenCalledTimes(2);
+  });
 });

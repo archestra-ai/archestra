@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
@@ -15,7 +15,7 @@ type DeleteConfirmDialogProps = {
   title: string;
   description: string | React.ReactNode;
   isPending: boolean;
-  onConfirm: () => void;
+  onConfirm: () => unknown;
   confirmLabel?: string;
   pendingLabel?: string;
   confirmDisabled?: boolean;
@@ -72,6 +72,41 @@ export function DeleteConfirmDialog({
     coolingDown ||
     (confirmationPhrase !== undefined && typed.trim() !== confirmationPhrase);
 
+  // `isPending` reaches the button one render after the click that started
+  // the request, and the second click of a double click lands inside that
+  // gap: the removal was sent twice, and the repeat came back "not found" for
+  // one that had just worked. The ref closes the gap, being set in the same
+  // tick as the first confirm.
+  const confirmingRef = useRef(false);
+  const isPendingRef = useRef(isPending);
+  isPendingRef.current = isPending;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: released when the request settles or the dialog opens or closes
+  useEffect(() => {
+    if (!isPending) confirmingRef.current = false;
+  }, [isPending, open]);
+  const confirm = () => {
+    if (blocked || confirmingRef.current) return;
+    confirmingRef.current = true;
+    const result = onConfirm();
+    if (result instanceof Promise) {
+      void result.then(
+        () => {
+          confirmingRef.current = false;
+        },
+        () => {
+          confirmingRef.current = false;
+        },
+      );
+      return;
+    }
+    // A confirm that starts no request (it refused, and left the dialog open)
+    // never turns `isPending`, so nothing above would release the button.
+    // Later than any double click, it is released unless a request is running.
+    setTimeout(() => {
+      if (!isPendingRef.current) confirmingRef.current = false;
+    }, DOUBLE_CLICK_WINDOW_MS);
+  };
+
   return (
     <FormDialog
       open={open}
@@ -87,17 +122,11 @@ export function DeleteConfirmDialog({
             return;
           }
           e.preventDefault();
-          if (blocked) {
-            return;
-          }
-          onConfirm();
+          confirm();
         }}
         onSubmit={(e) => {
           e.preventDefault();
-          if (blocked) {
-            return;
-          }
-          onConfirm();
+          confirm();
         }}
       >
         {confirmationPhrase !== undefined && (
@@ -134,3 +163,6 @@ export function DeleteConfirmDialog({
     </FormDialog>
   );
 }
+
+/** Longer than the gap between the two clicks of a double click. */
+const DOUBLE_CLICK_WINDOW_MS = 600;

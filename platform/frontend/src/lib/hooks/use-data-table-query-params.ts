@@ -24,16 +24,17 @@ export function useDataTableQueryParams(params?: {
     params?.queryParamsAdapter?.searchParams ?? searchParams;
 
   const defaultPageSize = params?.defaultPageSize ?? DEFAULT_TABLE_LIMIT;
+  // A hand-edited `page=abc` parses to NaN, which `Math.max` would pass on.
   const pageIndex = Math.max(
     0,
-    Number.parseInt(activeSearchParams.get("page") || "1", 10) - 1,
+    (Number.parseInt(activeSearchParams.get("page") || "1", 10) || 1) - 1,
   );
   const pageSize = Math.max(
     1,
     Number.parseInt(
       activeSearchParams.get("pageSize") || `${defaultPageSize}`,
       10,
-    ),
+    ) || defaultPageSize,
   );
   const offset = pageIndex * pageSize;
 

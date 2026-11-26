@@ -146,52 +146,51 @@ describe("PluginsPage", () => {
     ).toHaveAttribute("href", "/plugins/new");
   });
 
-  it("explains plugins to a creator on an empty page, with create and browse as the next steps", () => {
+  it("explains plugins to a creator on an empty page, with one way forward under the text", () => {
     access.plugins = [];
     access.role = { plugin: ["create"] };
     render(<PluginsPage />);
 
     expect(
-      screen.getByText("Extend the coding tools your team already uses"),
-    ).toBeVisible();
-    expect(
-      screen.getByText(/A skill teaches an agent how to do a task/),
-    ).toHaveTextContent(
-      "A plugin bundles files such as skills, commands, and hooks for one coding tool.",
-    );
-    expect(
-      screen.getByRole("link", { name: /Create a plugin/ }),
-    ).toHaveAttribute("href", "/plugins/new?source=blank");
-    // The wizard's first step is where the popular marketplaces are listed.
-    expect(
-      screen.getByRole("link", { name: "Browse popular marketplaces" }),
-    ).toHaveAttribute("href", "/plugins/new#popular-marketplaces");
-    // The header keeps its line and its Add button, so the first plugin
-    // doesn't shift the page.
-    expect(
       screen.getByText(
-        "Plugins install client-native files on developer machines.",
+        "Extensions for local agents like Claude Code or Codex.",
       ),
     ).toBeVisible();
     expect(
-      screen.getByRole("link", { name: /Add new plugin/ }),
-    ).toHaveAttribute("href", "/plugins/new");
+      screen.getByText("Extend your agent with custom skills and behaviors."),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "A plugin can bundle reusable instructions in form of skills, executable scripts, and hooks in any combination to extend functionality of your agent. Add ready plugins from marketplaces or create your own. Then install with a single command.",
+      ),
+    ).toBeVisible();
+    // One button, under the text and not repeated in the header.
+    const add = screen.getAllByRole("link", { name: /Add new plugin/ });
+    expect(add).toHaveLength(1);
+    expect(add[0]).toHaveAttribute("href", "/plugins/new");
+    expect(add[0].closest("[data-page-actions]")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Create a plugin/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Browse popular/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it("waits for permissions before showing first-use actions or the reader message", () => {
+  it("waits for permissions before showing the first-use button or the reader message", () => {
     access.plugins = [];
     access.role = {};
     access.isPending = true;
     render(<PluginsPage />);
 
     expect(
-      screen.getByText("Extend the coding tools your team already uses"),
+      screen.getByText("Extend your agent with custom skills and behaviors."),
     ).toBeVisible();
     expect(
       screen.queryByText("Your admins haven't shared a plugin yet."),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /Create a plugin/ }),
+      screen.queryByRole("link", { name: /Add new plugin/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -204,10 +203,10 @@ describe("PluginsPage", () => {
       screen.getByText("Your admins haven't shared a plugin yet."),
     ).toBeVisible();
     expect(
-      screen.queryByRole("link", { name: /Create a plugin/ }),
+      screen.queryByRole("link", { name: /Add new plugin/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /Create a plugin/ }),
+      screen.queryByRole("button", { name: /Add new plugin/ }),
     ).not.toBeInTheDocument();
   });
 

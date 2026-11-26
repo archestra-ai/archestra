@@ -96,7 +96,7 @@ import {
 import { PluginSourceLabel } from "./_parts/plugin-source-info";
 
 const PLUGINS_DESCRIPTION =
-  "Plugins install client-native files on developer machines.";
+  "Extensions for local agents like Claude Code or Codex.";
 
 export default function PluginsPage() {
   return (
@@ -435,16 +435,9 @@ function PluginsList() {
         // first plugin doesn't shift it.
         actionButton={
           <div className="flex items-center gap-2">
-            <PermissionButton
-              permissions={{ plugin: ["create"] }}
-              size="sm"
-              asChild
-            >
-              <Link href="/plugins/new">
-                <Plus className="h-4 w-4" />
-                Add new plugin
-              </Link>
-            </PermissionButton>
+            {/* On an empty page the one way forward is the button under the
+                text, so it is not repeated up here. */}
+            {!showEmptyState && <AddPluginButton />}
             <ResourceListActions resource="plugin" />
           </div>
         }
@@ -794,6 +787,18 @@ function PluginsList() {
   );
 }
 
+/** The page's way to a new plugin: in the header, or under the first-use text. */
+function AddPluginButton() {
+  return (
+    <PermissionButton permissions={{ plugin: ["create"] }} size="sm" asChild>
+      <Link href="/plugins/new">
+        <Plus className="h-4 w-4" />
+        Add new plugin
+      </Link>
+    </PermissionButton>
+  );
+}
+
 function PluginsEmptyState() {
   const { data: canCreate, isPending } = useHasPermissions({
     plugin: ["create"],
@@ -802,28 +807,11 @@ function PluginsEmptyState() {
     <EmptyState
       variant="firstUse"
       icon={Puzzle}
-      title="Extend the coding tools your team already uses"
-      description="A skill teaches an agent how to do a task. A plugin bundles files such as skills, commands, and hooks for one coding tool. Share it, and each person installs it with one command."
+      title="Extend your agent with custom skills and behaviors."
+      description="A plugin can bundle reusable instructions in form of skills, executable scripts, and hooks in any combination to extend functionality of your agent. Add ready plugins from marketplaces or create your own. Then install with a single command."
       canAct={isPending ? undefined : canCreate}
       readerMessage="Your admins haven't shared a plugin yet."
-      action={
-        <Button size="sm" asChild>
-          <Link href="/plugins/new?source=blank">
-            <Plus />
-            <span>Create a plugin</span>
-          </Link>
-        </Button>
-      }
-      secondaryAction={
-        // The wizard's first step lists the popular marketplaces; the link
-        // lands on that list, not on the step's top like "Add new plugin".
-        <Link
-          href="/plugins/new#popular-marketplaces"
-          className="text-sm text-primary hover:underline"
-        >
-          Browse popular marketplaces
-        </Link>
-      }
+      action={<AddPluginButton />}
     />
   );
 }

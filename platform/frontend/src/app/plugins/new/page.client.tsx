@@ -261,10 +261,7 @@ function NewPluginWizard() {
                 />
               </div>
 
-              <Card
-                id="popular-marketplaces"
-                className="scroll-mt-4 gap-0 py-0"
-              >
+              <Card className="gap-0 py-0">
                 <CardHeader className="gap-3 border-b py-4">
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-base">

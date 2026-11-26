@@ -8,7 +8,6 @@ import {
   SKILL_NAME_RULE,
   SKILL_NAME_SPEC_URL,
 } from "@archestra/shared";
-import { AlertTriangle } from "lucide-react";
 import { type Ref, useMemo, useState } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { IdentityFields } from "@/components/identity-fields";
@@ -16,7 +15,6 @@ import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
-import { InlineNotice } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -243,7 +241,8 @@ function FieldLabel({
     <div className="flex items-center gap-1">
       <Label htmlFor={htmlFor}>{children}</Label>
       {required && (
-        <span className="text-destructive" aria-hidden="true">
+        // The label's own colour: the mark says "required", not "wrong".
+        <span className="text-sm font-medium leading-none" aria-hidden="true">
           *
         </span>
       )}
@@ -251,7 +250,12 @@ function FieldLabel({
   );
 }
 
-/** Why a field's value cannot be saved, under the field. */
+/**
+ * Why a field's value cannot be saved, under the field: one line of small
+ * red text, as the app's other forms write a field's error. The field's own
+ * red outline already marks it, so a boxed notice here would be a second
+ * red frame for the same thing.
+ */
 function FieldProblem({
   id,
   children,
@@ -260,10 +264,9 @@ function FieldProblem({
   children: React.ReactNode;
 }) {
   return (
-    <InlineNotice id={id} variant="error" size="xs">
-      <AlertTriangle aria-hidden />
-      <span className="font-medium">{children}</span>
-    </InlineNotice>
+    <p id={id} className="text-xs text-destructive">
+      {children}
+    </p>
   );
 }
 

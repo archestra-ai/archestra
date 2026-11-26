@@ -31,14 +31,16 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
+import { useSession } from "@/lib/auth/auth.query";
 import { useCreatePlugin, usePlugins } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
 import {
   blankPluginDraft,
-  hasPluginNameTwin,
   isPluginDraftDirty,
+  OWN_PLUGIN_NAME_TAKEN,
   type PluginDraft,
   pluginDraftGap,
+  pluginNameTwin,
 } from "../_parts/plugin-draft";
 import { PluginForm } from "../_parts/plugin-form";
 import { PluginBackLink } from "../_parts/plugin-page-shell";
@@ -103,13 +105,17 @@ function NewPluginWizard() {
   const patchDraft = (patch: Partial<PluginDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
 
-  const draftGap = pluginDraftGap({ draft, isGithubPlugin: false });
   const { data: plugins } = usePlugins();
-  const nameTaken = hasPluginNameTwin({
+  const { data: session } = useSession();
+  const nameTaken = pluginNameTwin({
     displayName: draft.displayName,
     clientType: draft.clientType,
+    ownerId: session?.user?.id,
     plugins: plugins ?? [],
   });
+  const draftGap =
+    pluginDraftGap({ draft, isGithubPlugin: false }) ??
+    (nameTaken === "own" ? OWN_PLUGIN_NAME_TAKEN : null);
 
   // The draft exists only on this page, so every way off it asks first. The
   // wizard's own steps and tabs keep the draft and pass straight through.

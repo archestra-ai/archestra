@@ -14,6 +14,7 @@ import {
   isNotNull,
   isNull,
   like,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -608,6 +609,77 @@ class PluginModel {
     });
   }
 
+  /**
+   * The display name of another live plugin of the same owner, for the same
+   * client, that equals `displayName` ignoring letter case. Null when there
+   * is none.
+   *
+   * Clients install a plugin by its slug, which is unique on its own, so the
+   * database does not constrain the display name. What this guards is the
+   * list: two of one person's plugins for one client under one name cannot be
+   * told apart. It is asked only when a manual plugin is named or renamed.
+   * Imports are not asked (two marketplaces may ship the same name), other
+   * owners' plugins are not compared (the caller may not be able to see
+   * them), and stored duplicates keep saving their other fields.
+   *
+   * `owner` is who the plugin belongs to: the acting principal on create
+   * (see {@link PluginModel.ownerOfPrincipal}), the stored owner on a rename.
+   */
+  static async findOwnNameTwin(params: {
+    organizationId: string;
+    owner: PluginOwner;
+    clientType: ClientType;
+    displayName: string;
+    /** The plugin being renamed, which never conflicts with itself. */
+    excludeId?: string;
+  }): Promise<string | null> {
+    const { owner } = params;
+    const ownedBy = owner.authorId
+      ? eq(schema.pluginsTable.authorId, owner.authorId)
+      : owner.createdByServiceAccountId
+        ? eq(
+            schema.pluginsTable.createdByServiceAccountId,
+            owner.createdByServiceAccountId,
+          )
+        : null;
+    if (!ownedBy) return null;
+    const [twin] = await db
+      .select({ displayName: schema.pluginsTable.displayName })
+      .from(schema.pluginsTable)
+      .where(
+        and(
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          ownedBy,
+          eq(schema.pluginsTable.clientType, params.clientType),
+          sql`lower(${schema.pluginsTable.displayName}) = lower(${params.displayName.trim()})`,
+          ...(params.excludeId
+            ? [ne(schema.pluginsTable.id, params.excludeId)]
+            : []),
+          notDeleted(schema.pluginsTable),
+        ),
+      )
+      .limit(1);
+    return twin?.displayName ?? null;
+  }
+
+  /**
+   * The owner columns a plugin created by this principal gets: the user, or
+   * the service account behind a service account principal.
+   */
+  static async ownerOfPrincipal(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<PluginOwner> {
+    const owner = await CreatedByModel.forInsert({
+      data: { organizationId: params.organizationId, authorId: params.userId },
+      userIdField: "authorId",
+    });
+    return {
+      authorId: owner.authorId ?? null,
+      createdByServiceAccountId: owner.createdByServiceAccountId,
+    };
+  }
+
   static async delete(params: {
     id: string;
     organizationId: string;
@@ -945,6 +1017,12 @@ class PluginModel {
 export default PluginModel;
 
 // === Internal helpers ===
+
+/** Who a plugin belongs to: a user, or the service account that created it. */
+interface PluginOwner {
+  authorId: string | null;
+  createdByServiceAccountId: string | null;
+}
 
 function derivePluginSlug(displayName: string, id: string): string {
   const base =

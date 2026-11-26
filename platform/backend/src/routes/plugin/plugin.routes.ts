@@ -34,6 +34,7 @@ import {
   GithubMarketplaceChangedError,
   prepareGithubMarketplaceImports,
 } from "@/plugins/github-marketplace-import";
+import { findPluginNameProblem } from "@/plugins/plugin-name";
 import {
   assertPluginSourceHost,
   hasSinglePluginGitAuth,
@@ -790,6 +791,13 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
+      const nameProblem = await findPluginNameProblem({
+        organizationId,
+        clientType: body.clientType,
+        displayName: body.displayName,
+        creatorUserId: user.id,
+      });
+      if (nameProblem) throw new ApiError(409, nameProblem);
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -887,6 +895,22 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           409,
           "Only GitHub-sourced plugins have GitHub source settings",
         );
+      }
+      // Asked of a rename only, and only of a manual plugin: a plugin stored
+      // under a name its owner holds twice keeps saving its other fields, and
+      // a Git plugin's name is its repository's.
+      if (
+        body.displayName !== undefined &&
+        existing.sourceKind !== "github" &&
+        body.displayName.toLowerCase() !== existing.displayName.toLowerCase()
+      ) {
+        const nameProblem = await findPluginNameProblem({
+          organizationId,
+          clientType: existing.clientType,
+          displayName: body.displayName,
+          existing,
+        });
+        if (nameProblem) throw new ApiError(409, nameProblem);
       }
       const githubSource = body.githubSource;
       const authentication = githubSource?.authentication;

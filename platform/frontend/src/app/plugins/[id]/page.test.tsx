@@ -263,6 +263,37 @@ describe("PluginDetailPage", () => {
     );
   });
 
+  it("refuses a rename into a name the owner already holds, and only notes a stored duplicate", async () => {
+    const twin = (displayName: string) => ({
+      id: "plugin-2",
+      displayName,
+      clientType: BASE_PLUGIN.clientType,
+      authorId: BASE_PLUGIN.authorId,
+    });
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [twin("Release helper")],
+    } as unknown as ReturnType<typeof usePlugins>);
+    const user = userEvent.setup();
+    const { unmount } = renderPage(BASE_PLUGIN);
+
+    await user.clear(screen.getByLabelText("Display name"));
+    await user.type(screen.getByLabelText("Display name"), "release HELPER");
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toHaveAttribute("aria-disabled", "true");
+    expect(save).toHaveAccessibleDescription(/You already have a plugin/);
+
+    // Stored under the same name as another of the owner's plugins: nothing
+    // was renamed, so its other fields still save.
+    unmount();
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [twin(BASE_PLUGIN.displayName)],
+    } as unknown as ReturnType<typeof usePlugins>);
+    renderPage(BASE_PLUGIN);
+    expect(screen.getByText("Name already in use")).toBeVisible();
+    await user.type(screen.getByLabelText("Description"), " More.");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
   it("deletes a manual plugin from a button, since a menu would hold nothing else", () => {
     renderPage(BASE_PLUGIN);
 

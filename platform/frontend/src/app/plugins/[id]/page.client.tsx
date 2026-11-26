@@ -56,11 +56,12 @@ import {
   pluginAction,
 } from "../_parts/plugin-actions-model";
 import {
-  hasPluginNameTwin,
   isPluginDraftDirty,
+  OWN_PLUGIN_NAME_TAKEN,
   type PluginDraft,
   pluginDraftFromPlugin,
   pluginDraftGap,
+  pluginNameTwin,
 } from "../_parts/plugin-draft";
 import { PluginForm } from "../_parts/plugin-form";
 import { PluginGitSourceCard } from "../_parts/plugin-git-source";
@@ -210,16 +211,25 @@ function PluginDetailView({
     setDraft((prev) => ({ ...prev, ...patch }));
   const discardChanges = () => setDraft(base);
 
-  const draftGap = pluginDraftGap({ draft, isGithubPlugin });
   const { data: plugins } = usePlugins();
-  const nameTaken =
-    !isGithubPlugin &&
-    hasPluginNameTwin({
-      displayName: draft.displayName,
-      clientType: plugin.clientType,
-      pluginId: plugin.id,
-      plugins: plugins ?? [],
-    });
+  const nameTwin = isGithubPlugin
+    ? null
+    : pluginNameTwin({
+        displayName: draft.displayName,
+        clientType: plugin.clientType,
+        ownerId: plugin.authorId,
+        pluginId: plugin.id,
+        plugins: plugins ?? [],
+      });
+  // Only a rename is refused. A plugin stored under a name its owner already
+  // holds twice keeps saving its other fields, so there it is a note.
+  const isRenamed =
+    draft.displayName.trim().toLowerCase() !==
+    plugin.displayName.trim().toLowerCase();
+  const nameTaken = nameTwin === "own" && !isRenamed ? "other" : nameTwin;
+  const draftGap =
+    pluginDraftGap({ draft, isGithubPlugin }) ??
+    (nameTaken === "own" ? OWN_PLUGIN_NAME_TAKEN : null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {

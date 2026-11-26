@@ -15,6 +15,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { SkillContentEditor } from "../../skills/_parts/skill-content-editor";
 import { PluginClientIcon } from "./plugin-client-icon";
+import { OWN_PLUGIN_NAME_TAKEN } from "./plugin-draft";
 import { type PluginPlatform, PluginPlatforms } from "./plugin-platforms";
 
 export interface PluginFileDraft {
@@ -53,7 +54,7 @@ export function PluginContentFields({
   onFilesChange,
   readOnly = false,
   locked = false,
-  nameTaken = false,
+  nameTaken = null,
 }: {
   displayName: string;
   onDisplayNameChange: (value: string) => void;
@@ -75,8 +76,8 @@ export function PluginContentFields({
    * reads as locked rather than as fields that ignore typing.
    */
   locked?: boolean;
-  /** Another visible plugin for the same client carries this display name. */
-  nameTaken?: boolean;
+  /** Whose visible plugin for the same client carries this name, if any. */
+  nameTaken?: "own" | "other" | null;
 }) {
   return (
     <div className="space-y-6">
@@ -109,7 +110,18 @@ export function PluginContentFields({
             }
           />
         </IdentityFields>
-        {nameTaken && (
+        {nameTaken === "own" && (
+          <InlineNotice
+            id="plugin-display-name-taken"
+            size="xs"
+            variant="error"
+          >
+            <AlertTriangle aria-hidden />
+            <span className="font-medium">Name already in use</span>
+            <InlineNoticeText>{OWN_PLUGIN_NAME_TAKEN}</InlineNoticeText>
+          </InlineNotice>
+        )}
+        {nameTaken === "other" && (
           <InlineNotice id="plugin-display-name-taken" size="xs">
             <AlertTriangle aria-hidden />
             <span className="font-medium">Name already in use</span>

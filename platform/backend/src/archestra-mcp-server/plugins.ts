@@ -14,6 +14,7 @@ import { userHasPermission } from "@/auth";
 import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
 import { PluginModel, PluginTeamModel } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
+import { findPluginNameProblem } from "@/plugins/plugin-name";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -344,6 +345,14 @@ const registry = defineArchestraTools([
       )
         return errorResult("This tool requires plugin:create permission.");
 
+      const nameProblem = await findPluginNameProblem({
+        organizationId: ctx.organizationId,
+        clientType: args.clientType,
+        displayName: args.displayName,
+        creatorUserId: ctx.userId,
+      });
+      if (nameProblem) return errorResult(nameProblem);
+
       if (args.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -415,6 +424,19 @@ const registry = defineArchestraTools([
       if (!existing) return unknownPluginError(args.id);
       const githubFilesError = checkManualFilesUpdate(existing, args.files);
       if (githubFilesError) return errorResult(githubFilesError);
+      if (
+        args.displayName !== undefined &&
+        existing.sourceKind !== "github" &&
+        args.displayName.toLowerCase() !== existing.displayName.toLowerCase()
+      ) {
+        const nameProblem = await findPluginNameProblem({
+          organizationId: ctx.organizationId,
+          clientType: existing.clientType,
+          displayName: args.displayName,
+          existing,
+        });
+        if (nameProblem) return errorResult(nameProblem);
+      }
 
       const { id, baseContentHash, ...input } = args;
       const plugin = await PluginModel.update({

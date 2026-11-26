@@ -136,29 +136,44 @@ export function pluginDraftGap(params: {
   return null;
 }
 
+/** Shown, and sent back by the API, when an owner would hold a name twice. */
+export const OWN_PLUGIN_NAME_TAKEN =
+  "You already have a plugin with this name for this client. Give this one a different name.";
+
 /**
  * Whether another plugin the viewer can see already carries this name for the
- * same client. Two such rows cannot be told apart in the list, so the form
- * says so; it does not refuse the name, because a plugin the viewer cannot
- * see may hold it too and the server cannot say that without revealing it.
+ * same client, and whose it is.
+ *
+ * `own`: the plugin's owner holds the name already. The API refuses that, so
+ * the form does too. `other`: someone else's plugin holds it. That is allowed
+ * (the server cannot refuse it without revealing plugins the viewer may not
+ * see), but the two rows cannot be told apart in the list, so the form says so.
  */
-export function hasPluginNameTwin(params: {
+export function pluginNameTwin(params: {
   displayName: string;
   clientType: string;
+  /** Who the plugin belongs to: the viewer on create, its author on edit. */
+  ownerId: string | null | undefined;
   /** The plugin being edited, left out of the comparison. */
   pluginId?: string;
   plugins: ReadonlyArray<{
     id: string;
     displayName: string;
     clientType: string;
+    authorId?: string | null;
   }>;
-}): boolean {
+}): "own" | "other" | null {
   const name = params.displayName.trim().toLowerCase();
-  if (!name) return false;
-  return params.plugins.some(
+  if (!name) return null;
+  const twins = params.plugins.filter(
     (plugin) =>
       plugin.id !== params.pluginId &&
       plugin.clientType === params.clientType &&
       plugin.displayName.trim().toLowerCase() === name,
   );
+  if (twins.length === 0) return null;
+  return params.ownerId &&
+    twins.some((plugin) => plugin.authorId === params.ownerId)
+    ? "own"
+    : "other";
 }

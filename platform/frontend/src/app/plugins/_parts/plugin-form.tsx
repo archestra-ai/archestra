@@ -34,7 +34,7 @@ export function PluginForm({
   isCreate = false,
   pluginId,
   activeSection,
-  nameTaken = false,
+  nameTaken = null,
 }: {
   draft: PluginDraft;
   onChange: (patch: Partial<PluginDraft>) => void;
@@ -59,8 +59,8 @@ export function PluginForm({
    */
   pluginId?: string;
   activeSection: "general" | "permissions";
-  /** Another visible plugin for the same client carries this display name. */
-  nameTaken?: boolean;
+  /** Whose visible plugin for the same client carries this name, if any. */
+  nameTaken?: "own" | "other" | null;
 }) {
   return (
     <>

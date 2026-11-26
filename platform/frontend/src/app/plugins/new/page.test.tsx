@@ -715,6 +715,37 @@ describe("NewPluginPage", () => {
     expect(screen.getByText("Name already in use")).toBeVisible();
   });
 
+  it("refuses a name one of the author's own plugins for the client already has", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [
+        {
+          id: "p1",
+          displayName: "Session Guard",
+          clientType: "claude-code",
+          authorId: "user-1",
+        },
+      ],
+    } as unknown as ReturnType<typeof usePlugins>);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("Display name"), "session guard");
+    await user.type(
+      screen.getByRole("textbox", { name: "File contents" }),
+      "{{}",
+    );
+
+    // Everything else is filled in; the name alone holds Create back.
+    const create = screen.getByRole("button", { name: /Create plugin/ });
+    expect(create).toHaveAttribute("aria-disabled", "true");
+    expect(create).toHaveAccessibleDescription(
+      "You already have a plugin with this name for this client. Give this one a different name.",
+    );
+  });
+
   it("asks before a link elsewhere drops a started draft", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,

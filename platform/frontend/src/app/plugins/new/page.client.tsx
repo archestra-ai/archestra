@@ -225,12 +225,13 @@ function NewPluginWizard() {
             }}
           />
         }
-        maxWidth="wizard"
+        // The Plugins list's column (the layout's default), so the header,
+        // its actions and the content keep their edges on the way in.
         contentOverflowX="clip"
       >
         <div className="space-y-6">
           {step === "source" && (
-            <div className="mx-auto max-w-3xl space-y-8">
+            <div className="space-y-8">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <CatalogSourceCard
                   icon={<GitBranch className="size-5" />}

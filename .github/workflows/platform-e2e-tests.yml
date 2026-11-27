@@ -183,12 +183,13 @@ jobs:
 
       # Untrusted PRs (Dependabot's, private mirrors) have no OIDC token: they
       # log in with the DOCKERHUB_DHI_TOKEN secret (a Dependabot secret too).
-      # There is no build without the hardened base.
+      # There is no build without the hardened base. Both legs build from
+      # dhi.io (the MCP Server Base too, whenever its input-hash reuse misses),
+      # and the action does nothing for a Dockerfile that does not.
       - name: Log in to Docker Hardened Images
-        if: ${{ matrix.use-build-action }}
         uses: $/.github/actions/dhi-login
         with:
-          dockerfile: ${{ matrix.context }}/Dockerfile
+          dockerfile: ${{ matrix.dockerfile || format('{0}/Dockerfile', matrix.context) }}
           dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
           token: ${{ env.UNTRUSTED_PR == 'true' && secrets.DOCKERHUB_DHI_TOKEN || '' }}
 

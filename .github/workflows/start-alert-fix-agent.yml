@@ -61,6 +61,12 @@ on:
 
 permissions: {}
 
+# One start per kind at a time; a second waits instead of cancelling the first,
+# so no alert loses its agent run or its thread reply.
+concurrency:
+  group: start-alert-fix-agent-${{ inputs.kind }}
+  cancel-in-progress: false
+
 jobs:
   start:
     name: Start the CI Fixer agent
@@ -74,10 +80,6 @@ jobs:
       contents: read # Check out the scripts.
       actions: read # List the failed jobs of the alerting run.
       id-token: write # Sign in to Google Cloud (staging tunnel) and to Archestra.
-    # One start per kind at a time; a second waits instead of cancelling the first.
-    concurrency:
-      group: start-alert-fix-agent-${{ inputs.kind }}
-      cancel-in-progress: false
     outputs:
       run_url: ${{ steps.start.outputs.run_url }}
     steps:

@@ -73,4 +73,30 @@ Required permissions:
 - [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) to write the policy.
 - [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off.
 
+## Off, Observe, and Enforce
+
+Guardrails run in one of three states:
+
+- **Off:** nothing is checked. A deployment starts here, and the switch in **Settings → Guardrails** turns Guardrails off again.
+- **Observe:** every call is checked and every label change is recorded, but the platform applies the remedy plan for the agent: it gives the approvals and accepts the restrictions, so the agent keeps working. Use it to see what your policy would block before you enforce it. Approvals for `enforcedMarks` and for tools tagged `enforced` still wait as in Enforce, and a call that no plan can lift, such as one marked `blocked`, is still refused.
+- **Enforce:** a blocked call waits until the agent or a person applies a remedy plan. Saving the first policy starts Enforce, unless you already chose a state.
+
+The switch turns Guardrails off, and back on in Enforce. A session keeps Observe or Enforce from the moment it starts, and its subagents and forks follow it, so a change between the two applies to sessions that start after it.
+
+Set the state with [`PUT /api/guardrails-deployment`](/docs/reference/api/llm-proxy#tag/guardrails/PUT/api/guardrails-deployment):
+
+- **`mode`:** `off`, `observe`, or `enforce`.
+- **`personApproval`:** who answers in Enforce when a plan needs a person. `ask` asks the person running the session. `auto_unattended` approves for the agent in [Agent Runtime](/docs/agents/runtime) runs and asks a person everywhere else. `auto_everywhere` approves for the agent in every session. [`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE), while set, fixes it.
+- **`enforcedMarks`:** attention marks the approvals of Observe, `auto_unattended`, and `auto_everywhere` never cover. A call that needs one waits as in Enforce, for a person or for an approver your policy declares for that mark. A tool tagged `enforced` in the policy keeps all its checks the same way.
+
+If your policy can't take the approvals Observe or `personApproval` adds, the save warns you, and new sessions run under plain Enforce.
+
+What Guardrails no longer let through:
+
+- **Allow mode waives nothing.** [`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE) and `unapprovableBlockMode` let no refused call through. To run without blocking, use Observe.
+- **A missing fact always refuses.** When the annotator or another source Guardrails need gives no answer, the call doesn't run. The agent is told whether to retry now or after an administrator fixes the problem.
+- **A yell only reports.** It no longer turns Guardrails off for the session.
+- **`X-Archestra-Unattended` is gone.** Agent Runtime runs are recognized by their credential, and only they count as unattended.
+- **A background subagent stays under its parent's label.** A subagent that runs in the background, such as an Agent Runtime run that another agent delegates to, answers its parent as spoken. In Enforce, a read that would lower its trust or narrow its audience below the parent's label is refused with no remedy plan. If the subagent must read such data, have the parent declare a lower floor right before it delegates, with [`execute_remedy_plan`](/docs/reference/archestra-mcp-server/guardrails#execute_remedy_plan) and a `label` such as `{trust: "suspicious"}`. The subagent's answer then brings that label back to the parent. In Observe, the read runs and is recorded, and the parent takes the narrower label when the subagent answers.
+
 **Next:** Check how to [manage your policy](/docs/agents/guardrails/policies) to cover more tools, [test your policy](/docs/agents/guardrails/policies#validating-the-policy), and [deal with agents stuck because of the policy](/docs/agents/guardrails/policies#yells).

@@ -1617,20 +1617,18 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: unset (the saved setting applies, off unless changed).
   - Values: `enabled`, `disabled`. Other values stop startup.
 
-- **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
+- **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets the deployment's [person approval](/docs/agents/guardrails#off-observe-and-enforce), `personApproval` in the Guardrails deployment API. While it is set, the API refuses to change that setting. **Settings → Guardrails** has no control for it.
   - Default: unset (the saved setting applies, `block` unless changed)
-  - Values: `block`, `unattended`, `everywhere`. Other values stop startup.
-  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
+  - Values: `block` (`ask`), `unattended` (`auto_unattended`), `everywhere` (`auto_everywhere`). Other values stop startup.
+  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same setting.
 
-- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Sets **Other blocked calls** under [Break the glass](/docs/agents/guardrails/policies#yells): an emergency override for soft refusals across tool calls and results, child returns, runtime exports, peer messages, failed helpers, and fork or compaction admission. `allow` releases the operation and turns Guardrails off for the session, even at its first refusal and even if yell reporting is disabled or fails. Platform authentication and access checks remain enforced. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. An explicit `blocked` refusal cannot trigger a waiver. After a soft refusal turns Guardrails off, subsequent operations bypass all policy checks, including explicit `blocked` marks.
-  - Default: unset (the saved setting applies, `refuse` unless changed)
+- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Still read, so a deployment configured with it keeps starting, but it waives nothing: a refused call stays refused, and Guardrails stay on for the session. While it is set, the API refuses to change `unapprovableBlockMode`.
+  - Default: unset
   - Values: `refuse`, `allow`. Other values stop startup.
-  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`
-  - With reports off, no yell is recorded. [`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE=allow`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE) still waives soft refusals and turns session enforcement off.
 
 - **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Forwards agent reports to the shared OpenAPPA reporting service, independently of [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS). Requires [`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
   - Default: `false`, including after upgrades. Values: `true`, `false`; unset or empty means off, and invalid values stop startup.

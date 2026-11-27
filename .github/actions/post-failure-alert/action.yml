@@ -4,9 +4,9 @@ description: >-
   Secret Manager by ci-archestra-alerts, which trusts only the workflows listed
   in archestra-ai/infra gcp/workload_identity/ci-workflow-trust.tf. The calling
   job grants `actions: read` and `id-token: write`. With slack-channel set it
-  posts as a bot instead (ci-alerts-slack-bot-token) and returns the message's
-  channel and ts, so a later job can reply in its thread
-  (start-alert-fix-agent.yml); a webhook post returns neither.
+  posts as the same Slack app's bot instead (release-image-scan-slack-bot-token)
+  and returns the message's channel and ts, so a later job can reply in its
+  thread (start-alert-fix-agent.yml); a webhook post returns neither.
 inputs:
   summary:
     description: One line saying what failed and what it means, such as "VEX Triage did not start".
@@ -57,15 +57,15 @@ runs:
         secrets: |-
           slack_webhook_url:friendly-path-465518-r6/ci-release-image-scan-slack-webhook-url
 
-    # A send-only bot in #alerts. Unlike the webhook, its post returns the
-    # message's ts.
+    # The bot of Release Image Scan, the app the webhook posts as, so the
+    # alert looks the same. Unlike the webhook, its post returns the ts.
     - name: Read the alerting bot token
       id: bot
       if: inputs.slack-channel != ''
       uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
       with:
         secrets: |-
-          bot_token:friendly-path-465518-r6/ci-alerts-slack-bot-token
+          bot_token:friendly-path-465518-r6/release-image-scan-slack-bot-token
 
     - name: Post to #alerts
       id: post

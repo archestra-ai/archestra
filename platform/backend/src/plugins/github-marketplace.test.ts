@@ -540,6 +540,36 @@ describe("discoverGithubMarketplace", () => {
     );
   });
 
+  test("names a branch that does not exist when the quota is used up as well", async () => {
+    // The API refuses for the quota, so the lookup goes over Git. The
+    // repository answers there, and has no such branch or tag.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { message: "API rate limit exceeded for 203.0.113.7." },
+          { status: 403, headers: { "x-ratelimit-remaining": "0" } },
+        ),
+      ),
+    );
+    gitFallback.resolvePublicGithubCommit.mockRejectedValue(
+      new Error(
+        "Public Git ref lookup returned no commit for acme/plugins@no-such-branch",
+      ),
+    );
+
+    const failure = await discoverGithubMarketplace({
+      repoUrl: "acme/plugins",
+      ref: "no-such-branch",
+    }).catch((error: Error) => error);
+
+    expect((failure as Error).message).toBe(
+      'acme/plugins has no branch or tag named "no-such-branch".',
+    );
+    // Not the quota's fault, so not reported as the host's request limit.
+    expect((failure as { code?: string | null }).code ?? null).toBeNull();
+  });
+
   test("falls back to public Git when the anonymous REST quota is exhausted", async () => {
     const fetchMock = stubGithub([
       {

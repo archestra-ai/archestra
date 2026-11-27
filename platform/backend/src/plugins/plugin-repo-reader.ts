@@ -302,6 +302,13 @@ class GithubCloudReader implements PluginRepoReader {
           GIT_REPOSITORY_NOT_FOUND_CODE,
         );
       }
+      // The repository answered and has no such branch or tag: the name is
+      // the thing to correct, not the access and not the time of day.
+      if (/returned no commit/i.test(errorMessage(error))) {
+        throw new GitReadError(
+          `${params.repository.slug} has no branch or tag named "${params.ref}".`,
+        );
+      }
       throw new GitReadError(
         `Could not read ${params.repository.slug}: GitHub's request limit is used up, and reading it over Git failed too. Try again later.`,
         GIT_HOST_RATE_LIMITED_CODE,

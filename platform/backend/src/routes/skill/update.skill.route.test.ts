@@ -1,4 +1,6 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { EnvironmentModel, SkillModel } from "@/models";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -607,6 +609,71 @@ describe("PUT /api/skills/:id on a GitHub-synced skill", () => {
     // still synced, still at version 1 — nothing content-wise changed
     expect(response.json().githubSyncInterval).toBe("1d");
     expect(response.json().latestVersion).toBe(1);
+  });
+
+  test("rejects a frontmatter key the repository does not have, and keeps the stored frontmatter as written", async () => {
+    const stored = [
+      "name: synced-locked",
+      "description: synced-locked description",
+      "# The repository's own comment.",
+      "model: fast",
+    ].join("\n");
+    const skill = await seedSynced();
+    await db
+      .update(schema.skillsTable)
+      .set({ frontmatterSource: stored })
+      .where(eq(schema.skillsTable.id, skill.id));
+    const save = (frontmatter: string, extra: Record<string, unknown>) =>
+      ctx.app.inject({
+        method: "PUT",
+        url: `/api/skills/${skill.id}`,
+        payload: {
+          content: `---\n${frontmatter}\n---\n\n# body`,
+          ...extra,
+        },
+      });
+    const storedNow = async () =>
+      (await SkillModel.findById(skill.id))?.frontmatterSource;
+
+    // A key the repository does not have, sent with a settings change.
+    const added = await save(`${stored}\nhooks: on`, { icon: "📘" });
+    expect(added.statusCode).toBe(409);
+    expect(added.json().error.message).toContain("synced from GitHub");
+    // Another value for a key it has.
+    expect((await save(stored.replace("fast", "slow"), {})).statusCode).toBe(
+      409,
+    );
+    expect(await storedNow()).toBe(stored);
+
+    // The same frontmatter written another way is an echo: the settings are
+    // saved, and the repository's text stays as it was.
+    const rewritten = [
+      "name: 'synced-locked'",
+      "description: synced-locked description",
+      'model:   "fast"',
+    ].join("\r\n");
+    const echoed = await save(rewritten, { icon: "📘" });
+    expect(echoed.statusCode, echoed.body).toBe(200);
+    expect(echoed.json()).toMatchObject({ icon: "📘", latestVersion: 1 });
+    expect(await storedNow()).toBe(stored);
+  });
+
+  test("rejects a new frontmatter key on a synced skill stored without its frontmatter", async () => {
+    // Synced before the frontmatter was kept: there is nothing beyond the
+    // columns, so a key the columns have no place for is a change.
+    const skill = await seedSynced();
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: {
+        content: echoManifest.replace("---\n\n", "model: fast\n---\n\n"),
+        icon: "📘",
+      },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(
+      (await SkillModel.findById(skill.id))?.frontmatterSource ?? null,
+    ).toBeNull();
   });
 
   test("sets and keeps an icon without forking a version", async () => {

@@ -71,7 +71,6 @@ import {
   SkillImportError,
 } from "@/skills/github-import";
 import {
-  extraFrontmatter,
   normalizeAllowedTools,
   parseSkillManifest,
   SkillParseError,
@@ -1112,12 +1111,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skill: {
               ...toSkillInsertFields(parsed),
               allowedTools: resolveAllowedTools(body, parsed),
-              // A synced skill's frontmatter is its repository's text: the
-              // echo of a settings-only save says the same, but need not be
-              // written the same (comments, spacing), so the stored text stays.
-              ...(existing.githubSyncInterval !== null && {
-                frontmatterSource: existing.frontmatterSource,
-              }),
               // Presentation only: never forks a version, and stays editable
               // on a Git-synced skill.
               ...(body.icon !== undefined && { icon: body.icon }),
@@ -2312,18 +2305,7 @@ function assertSyncedSkillContentUnchanged(params: {
   ).some((field) => next[field] !== existing[field]);
   const metadataChanged =
     JSON.stringify(next.metadata) !== JSON.stringify(existing.metadata);
-  // The frontmatter the columns do not store is the repository's too: a new
-  // key, or another value for one. Compared as values, so an echo with other
-  // line endings or quoting is still an echo.
-  const extrasChanged =
-    JSON.stringify(extraFrontmatter(parsed.frontmatterSource)) !==
-    JSON.stringify(extraFrontmatter(existing.frontmatterSource));
-  if (
-    scalarChanged ||
-    metadataChanged ||
-    extrasChanged ||
-    body.files !== undefined
-  ) {
+  if (scalarChanged || metadataChanged || body.files !== undefined) {
     throw new ApiError(
       409,
       "This skill is synced from GitHub and its content is read-only. Disconnect it from the GitHub source to edit it in the app.",

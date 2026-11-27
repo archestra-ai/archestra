@@ -1,4 +1,5 @@
 import type { Locator } from "@playwright/test";
+import { DEMO_SKILL_IDS } from "../src/mocks/data/skills";
 import { expect, test } from "./fixtures";
 
 // Exercise actual browser layout: jsdom cannot detect actions moving below
@@ -12,7 +13,7 @@ for (const width of [320, 360, 640, 768, 1024, 1280]) {
       "/agents",
       "/mcp/registry",
       "/skills/new",
-      "/skills/skill-jira-task",
+      `/skills/${DEMO_SKILL_IDS.jiraTask}`,
     ]) {
       test(`${route} keeps actions beside the title`, async ({ page }) => {
         await page.goto(route);

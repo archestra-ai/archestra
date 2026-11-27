@@ -11,13 +11,23 @@ type GithubImport = archestraApiTypes.ImportGithubSkillsResponses["200"];
 type ImportedSkill = GithubImport["created"][number];
 
 /**
+ * The demo skills' ids. UUIDs, like every stored skill's: the skill page
+ * takes any other id for a skill that does not exist and never asks the API.
+ */
+export const DEMO_SKILL_IDS = {
+  jiraTask: "5a1e0000-0000-4000-8000-000000000001",
+  releaseChecklist: "5a1e0000-0000-4000-8000-000000000002",
+  incidentPostmortem: "5a1e0000-0000-4000-8000-000000000003",
+} as const;
+
+/**
  * The organization's skills. `jira-task` is the heavily used one the usage
  * demo hangs off; the others give the list something to sort and the Usage tab
  * its quieter and never-used cases.
  */
 export const demoSkills: SkillListItem[] = [
   makeSkillListItem({
-    id: "skill-jira-task",
+    id: DEMO_SKILL_IDS.jiraTask,
     name: "jira-task",
     description:
       "Perform Jira issue operations via the Atlassian Cloud MCP server.",
@@ -27,7 +37,7 @@ export const demoSkills: SkillListItem[] = [
     lastUsedAt: minutesAgo(43),
   }),
   makeSkillListItem({
-    id: "skill-release-checklist",
+    id: DEMO_SKILL_IDS.releaseChecklist,
     name: "release-checklist",
     description: "Walk a release through its pre-flight checks and sign-off.",
     fileCount: 2,
@@ -36,7 +46,7 @@ export const demoSkills: SkillListItem[] = [
     lastUsedAt: minutesAgo(180),
   }),
   makeSkillListItem({
-    id: "skill-incident-postmortem",
+    id: DEMO_SKILL_IDS.incidentPostmortem,
     name: "incident-postmortem",
     description: "Draft a blameless postmortem from an incident timeline.",
     scope: "team",

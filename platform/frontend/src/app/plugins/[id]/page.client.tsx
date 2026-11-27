@@ -56,7 +56,6 @@ import {
 } from "../_parts/plugin-actions-model";
 import {
   isPluginDraftDirty,
-  OWN_PLUGIN_NAME_TAKEN,
   type PluginDraft,
   pluginDraftFromPlugin,
   pluginDraftGap,
@@ -226,15 +225,10 @@ function PluginDetailView({
         pluginId: plugin.id,
         plugins: plugins ?? [],
       });
-  // Only a rename is refused. A plugin stored under a name its owner already
-  // holds twice keeps saving its other fields, so there it is a note.
-  const isRenamed =
-    draft.displayName.trim().toLowerCase() !==
-    plugin.displayName.trim().toLowerCase();
-  const nameTaken = nameTwin === "own" && !isRenamed ? "other" : nameTwin;
-  const draftGap =
-    pluginDraftGap({ draft, isGithubPlugin }) ??
-    (nameTaken === "own" ? OWN_PLUGIN_NAME_TAKEN : null);
+  // A note, not a refusal: the API takes the name, and the form says the two
+  // plugins cannot be told apart in the list.
+  const nameTaken = nameTwin ? "other" : null;
+  const draftGap = pluginDraftGap({ draft, isGithubPlugin });
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {

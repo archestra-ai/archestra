@@ -57,10 +57,7 @@ import {
 import { SkillForm } from "../_parts/skill-form";
 import { SkillBackLink } from "../_parts/skill-page-shell";
 import { useNoVisibleSkills } from "../_parts/use-no-visible-skills";
-import {
-  skillDescriptionProblem,
-  useSkillNameProblem,
-} from "../_parts/use-skill-name-problem";
+import { useSkillNameProblem } from "../_parts/use-skill-name-problem";
 
 type CreateStep = "source" | "configure";
 
@@ -147,12 +144,7 @@ function NewSkillWizard() {
     skillId: createSkill.data?.id,
   });
 
-  const descriptionProblem = skillDescriptionProblem({
-    description: parsed.description,
-    originalDescription: null,
-  });
-  const createGap =
-    skillDraftGap(parsed) ?? nameProblem?.message ?? descriptionProblem ?? null;
+  const createGap = skillDraftGap(parsed) ?? nameProblem?.message ?? null;
 
   // The draft exists only on this page, so every way off it asks first: the
   // sidebar, the back link, a reload. The wizard's own steps are buttons that
@@ -412,7 +404,6 @@ function NewSkillWizard() {
                     }
                     labelsRef={labelsRef}
                     nameProblem={nameProblem}
-                    descriptionProblem={descriptionProblem}
                     manifestProblem={manifestProblem}
                   />
                   <WizardFooter>

@@ -307,36 +307,25 @@ describe("PluginDetailPage", () => {
     );
   });
 
-  it("refuses a rename into a name the owner already holds, and only notes a stored duplicate", async () => {
-    const twin = (displayName: string) => ({
-      id: "plugin-2",
-      displayName,
-      clientType: BASE_PLUGIN.clientType,
-      authorId: BASE_PLUGIN.authorId,
-    });
+  it("notes a name another plugin for the client already has, and still saves", async () => {
     vi.mocked(usePlugins).mockReturnValue({
-      data: [twin("Release helper")],
+      data: [
+        {
+          id: "plugin-2",
+          displayName: "Release helper",
+          clientType: BASE_PLUGIN.clientType,
+          authorId: BASE_PLUGIN.authorId,
+        },
+      ],
     } as unknown as ReturnType<typeof usePlugins>);
     const user = userEvent.setup();
-    const { unmount } = renderPage(BASE_PLUGIN);
+    renderPage(BASE_PLUGIN);
 
     await user.clear(screen.getByLabelText("Display name"));
     await user.type(screen.getByLabelText("Display name"), "release HELPER");
-    const save = screen.getByRole("button", { name: "Save" });
-    expect(save).toHaveAttribute("aria-disabled", "true");
-    expect(save).toHaveAccessibleDescription(
-      "Name is already in use. Try another one.",
-    );
 
-    // Stored under the same name as another of the owner's plugins: nothing
-    // was renamed, so its other fields still save.
-    unmount();
-    vi.mocked(usePlugins).mockReturnValue({
-      data: [twin(BASE_PLUGIN.displayName)],
-    } as unknown as ReturnType<typeof usePlugins>);
-    renderPage(BASE_PLUGIN);
+    // A note: the API takes the name, the list just cannot tell them apart.
     expect(screen.getByText("Name already in use")).toBeVisible();
-    await user.type(screen.getByLabelText("Description"), " More.");
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 

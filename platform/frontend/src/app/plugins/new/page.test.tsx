@@ -752,7 +752,7 @@ describe("NewPluginPage", () => {
     expect(screen.getByText("Name already in use")).toBeVisible();
   });
 
-  it("refuses a name one of the author's own plugins for the client already has", async () => {
+  it("notes a name one of the author's own plugins for the client already has, and still creates", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
     );
@@ -775,12 +775,11 @@ describe("NewPluginPage", () => {
       "{{}",
     );
 
-    // Everything else is filled in; the name alone holds Create back.
-    const create = screen.getByRole("button", { name: /Create plugin/ });
-    expect(create).toHaveAttribute("aria-disabled", "true");
-    expect(create).toHaveAccessibleDescription(
-      "Name is already in use. Try another one.",
-    );
+    // A note: the API takes the name, the list just cannot tell them apart.
+    expect(screen.getByText("Name already in use")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /Create plugin/ }),
+    ).not.toHaveAttribute("aria-disabled");
   });
 
   it("does not call the name taken by the plugin it has just created", async () => {

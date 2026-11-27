@@ -1596,67 +1596,6 @@ class SkillModel {
   }
 
   /**
-   * The name of a live skill that equals `name` in every way but, at most,
-   * letter case, among the skills of one owner. Null when there is none.
-   *
-   * `skills_org_author_name_idx` compares names exactly, so `pdf-tools` and
-   * `PDF-Tools` are two rows to it while a reader, a slash command and a
-   * case-insensitive folder take them for one skill. Stored pairs like that
-   * keep working; this is what a write path asks before it gives a skill a
-   * NEW name. Advisory, like `getRestoreConflictMessage`: two concurrent
-   * creates can both pass it, and the index still refuses the exact duplicate.
-   *
-   * `ownerKey` is the index's owner key: the author's user id, or the service
-   * account's id for a skill a service account wrote.
-   */
-  static async findNameCaseConflict(params: {
-    organizationId: string;
-    ownerKey: string;
-    name: string;
-    /** The skill being renamed, which never conflicts with itself. */
-    excludeSkillId?: string;
-  }): Promise<string | null> {
-    const [conflict] = await db
-      .select({ name: schema.skillsTable.name })
-      .from(schema.skillsTable)
-      .where(
-        and(
-          eq(schema.skillsTable.organizationId, params.organizationId),
-          sql`${skillNameOwnerKey()} = ${params.ownerKey}`,
-          sql`lower(${schema.skillsTable.name}) = lower(${params.name})`,
-          ...(params.excludeSkillId
-            ? [ne(schema.skillsTable.id, params.excludeSkillId)]
-            : []),
-          notDeleted(schema.skillsTable),
-        ),
-      )
-      // An exact duplicate first: older data can hold both spellings, and
-      // the caller then names the one that matches what was typed.
-      .orderBy(desc(eq(schema.skillsTable.name, params.name)))
-      .limit(1);
-    return conflict?.name ?? null;
-  }
-
-  /**
-   * The name-uniqueness owner key (see `skillNameOwnerKey`) a skill created
-   * by this authenticated principal gets: the user's id, or the service
-   * account's own id for a service account principal.
-   */
-  static async nameOwnerKeyForPrincipal(params: {
-    organizationId: string;
-    principalId: string;
-  }): Promise<string | null> {
-    const owner = await CreatedByModel.forInsert({
-      data: {
-        organizationId: params.organizationId,
-        authorId: params.principalId,
-      },
-      userIdField: "authorId",
-    });
-    return owner.authorId ?? owner.createdByServiceAccountId;
-  }
-
-  /**
    * Identity of a skill for the audit trail, and nothing else. The
    * permanent-delete route uses this rather than {@link findByIdForAudit}: a
    * purge is audited by identity only, never by keeping a copy of the content

@@ -76,8 +76,6 @@ import {
 } from "@/skills/parser";
 import { skillCatalog } from "@/skills/skill-catalog";
 import {
-  findNewSkillDescriptionProblem,
-  findNewSkillNameProblem,
   isSkillNameConflict,
   refineUniqueFilePaths,
   SkillFileInputSchema,
@@ -821,16 +819,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentIds,
       });
 
-      await assertNewSkillNameUsable({
-        organizationId,
-        ownerKey: await SkillModel.nameOwnerKeyForPrincipal({
-          organizationId,
-          principalId: user.id,
-        }),
-        name: parsed.name,
-      });
-      assertNewSkillDescriptionUsable(parsed.description);
-
       const resourceId = crypto.randomUUID();
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
@@ -1029,21 +1017,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // GitHub makes it editable.
       if (existing.githubSyncInterval !== null) {
         assertSyncedSkillContentUnchanged({ existing, parsed, body });
-      }
-
-      // Asked of a rename only: a skill stored under a name the rule would
-      // now refuse keeps saving its other fields.
-      if (parsed.name !== existing.name) {
-        await assertNewSkillNameUsable({
-          organizationId,
-          ownerKey: existing.authorId ?? existing.createdByServiceAccountId,
-          name: parsed.name,
-          excludeSkillId: existing.id,
-        });
-      }
-      // The same for the description: only a new one is asked.
-      if (parsed.description !== existing.description) {
-        assertNewSkillDescriptionUsable(parsed.description);
       }
 
       // Changing a skill's environment assignments is gated like assigning
@@ -2571,20 +2544,6 @@ function parseManifestOrThrow(raw: string) {
     }
     throw error;
   }
-}
-
-/** Refuse a name a skill is being given for the first time; see the helper. */
-async function assertNewSkillNameUsable(
-  params: Parameters<typeof findNewSkillNameProblem>[0],
-): Promise<void> {
-  const problem = await findNewSkillNameProblem(params);
-  if (problem) throw new ApiError(problem.status, problem.message);
-}
-
-/** Refuse a description a skill is being given for the first time. */
-function assertNewSkillDescriptionUsable(description: string): void {
-  const problem = findNewSkillDescriptionProblem(description);
-  if (problem) throw new ApiError(problem.status, problem.message);
 }
 
 /**

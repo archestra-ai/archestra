@@ -156,17 +156,11 @@ export function pluginDraftGap(params: {
   return null;
 }
 
-/** Shown, and sent back by the API, when an owner would hold a name twice. */
-export const OWN_PLUGIN_NAME_TAKEN = "Name is already in use. Try another one.";
-
 /**
  * Whether another plugin the viewer can see already carries this name for the
- * same client, and whose it is.
- *
- * `own`: the plugin's owner holds the name already. The API refuses that, so
- * the form does too. `other`: someone else's plugin holds it. That is allowed
- * (the server cannot refuse it without revealing plugins the viewer may not
- * see), but the two rows cannot be told apart in the list, so the form says so.
+ * same client, and whose it is: the plugin's owner (`own`) or someone else
+ * (`other`). Either is allowed, but the two rows cannot be told apart in the
+ * list, so the form says so.
  */
 export function pluginNameTwin(params: {
   displayName: string;

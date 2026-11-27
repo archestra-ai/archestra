@@ -38,7 +38,6 @@ import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
 import {
   blankPluginDraft,
   isPluginDraftDirty,
-  OWN_PLUGIN_NAME_TAKEN,
   type PluginDraft,
   patchNewPluginDraft,
   pluginDraftGap,
@@ -120,7 +119,7 @@ function NewPluginWizard() {
   // explanation arrives above them.
   const isFirstPluginUnknown = isPluginsPending && isPluginsFetching;
   const { data: session } = useSession();
-  const nameTaken = pluginNameTwin({
+  const nameTwin = pluginNameTwin({
     displayName: draft.displayName,
     clientType: draft.clientType,
     ownerId: session?.user?.id,
@@ -131,9 +130,10 @@ function NewPluginWizard() {
     pluginId: createPlugin.data?.id,
     plugins: plugins ?? [],
   });
-  const draftGap =
-    pluginDraftGap({ draft, isGithubPlugin: false }) ??
-    (nameTaken === "own" ? OWN_PLUGIN_NAME_TAKEN : null);
+  // A note, not a refusal: the API takes the name, and the form says the two
+  // plugins cannot be told apart in the list.
+  const nameTaken = nameTwin ? "other" : null;
+  const draftGap = pluginDraftGap({ draft, isGithubPlugin: false });
 
   // The draft exists only on this page, so every way off it asks first. The
   // wizard's own steps and tabs keep the draft and pass straight through.

@@ -1,4 +1,3 @@
-import { describeUnusableSkillName } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -385,36 +384,15 @@ describe("NewSkillPage name and description checks", () => {
 
   it.each([
     "Release Notes",
-    "docs/release",
     "pdf_tools",
     "PDF-Tools",
-  ])("refuses the name %j, which breaks the Agent Skills naming rules, and links the rules", async (name) => {
+  ])("takes the name %j, as this release line always has", async (name) => {
     mockOrganization(true);
     renderPage();
     await typeName(name);
 
-    // The words the API sends for the same name.
-    expect(problem("name")).toHaveTextContent(
-      describeUnusableSkillName(name) as string,
-    );
-    expect(problem("name")).toHaveTextContent(
-      "This name can't be used. Skill name can only contain lowercase letters, digits and single hyphens, up to 64 characters.",
-    );
-    expect(
-      screen.getByRole("link", {
-        name: "lowercase letters, digits and single hyphens, up to 64 characters",
-      }),
-    ).toHaveAttribute(
-      "href",
-      "https://agentskills.io/specification#name-field",
-    );
-    expect(screen.getByLabelText("Skill name")).toHaveAttribute(
-      "aria-invalid",
-      "true",
-    );
-    // Refused, not warned about: there is no skill to create under it.
-    expect(createButton()).toHaveAttribute("aria-disabled", "true");
-    expect(screen.queryByText(/published over MCP/)).not.toBeInTheDocument();
+    expect(problem("name")).toBeNull();
+    expect(createButton()).not.toHaveAttribute("aria-disabled");
   });
 
   it("takes a name the naming rules allow, with no notice", async () => {
@@ -464,30 +442,6 @@ describe("NewSkillPage name and description checks", () => {
     expect(problem("description")).toBeNull();
     expect(screen.getByLabelText("Description")).not.toHaveAttribute(
       "aria-invalid",
-    );
-  });
-
-  it("refuses a description longer than the Agent Skills specification takes, and links the limit", async () => {
-    mockOrganization(true);
-    renderPage();
-    const user = await openBlank();
-    await user.type(screen.getByLabelText("Skill name"), "release-notes");
-    // Pasted: 1025 keystrokes would take the test seconds.
-    await user.click(screen.getByLabelText("Description"));
-    await user.paste("d".repeat(1025));
-
-    expect(problem("description")).toHaveTextContent(
-      "This description is too long. Skill description can be up to 1024 characters.",
-    );
-    expect(
-      screen.getByRole("link", { name: "up to 1024 characters" }),
-    ).toHaveAttribute(
-      "href",
-      "https://agentskills.io/specification#description-field",
-    );
-    expect(createButton()).toHaveAttribute("aria-disabled", "true");
-    expect(createButton()).toHaveAccessibleDescription(
-      "This description is too long. Skill description can be up to 1024 characters.",
     );
   });
 });

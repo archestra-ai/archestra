@@ -1,13 +1,5 @@
 "use client";
 
-import {
-  INVALID_SKILL_DESCRIPTION_LEAD,
-  INVALID_SKILL_NAME_LEAD,
-  SKILL_DESCRIPTION_RULE,
-  SKILL_DESCRIPTION_SPEC_URL,
-  SKILL_NAME_RULE,
-  SKILL_NAME_SPEC_URL,
-} from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import { type Ref, useMemo, useState } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
@@ -52,7 +44,6 @@ export function SkillForm({
   readOnly = false,
   contentReadOnly = false,
   nameProblem = null,
-  descriptionProblem = null,
   manifestProblem = null,
 }: {
   draft: SkillDraft;
@@ -71,8 +62,6 @@ export function SkillForm({
   contentReadOnly?: boolean;
   /** Why the typed name cannot be saved; shown under the field. */
   nameProblem?: SkillNameProblem | null;
-  /** Why the typed description cannot be saved; shown under the field. */
-  descriptionProblem?: string | null;
   /** The line of SKILL.md a save was refused for; marked in the editor. */
   manifestProblem?: { line: number; message: string } | null;
 }) {
@@ -90,7 +79,7 @@ export function SkillForm({
   const descriptionMissing =
     namesEditable && visited.description && !parsed.hasDescription;
   const nameInvalid = nameProblem !== null || nameMissing;
-  const descriptionInvalid = descriptionProblem !== null || descriptionMissing;
+  const descriptionInvalid = descriptionMissing;
 
   // What the save would drop, said while the author can still move it: a
   // repository-owned or read-only manifest is not this reader's to change.
@@ -148,15 +137,7 @@ export function SkillForm({
             />
             {nameInvalid && (
               <FieldProblem id="skill-name-problem">
-                {nameProblem?.kind === "invalid" ? (
-                  <RuleRefusal
-                    lead={INVALID_SKILL_NAME_LEAD}
-                    rule={SKILL_NAME_RULE}
-                    href={SKILL_NAME_SPEC_URL}
-                  />
-                ) : (
-                  <span>{nameProblem?.message ?? "Enter a skill name."}</span>
-                )}
+                <span>{nameProblem?.message ?? "Enter a skill name."}</span>
               </FieldProblem>
             )}
           </IdentityFields>
@@ -193,15 +174,7 @@ export function SkillForm({
             />
             {descriptionInvalid && (
               <FieldProblem id="skill-description-problem">
-                {descriptionProblem ? (
-                  <RuleRefusal
-                    lead={INVALID_SKILL_DESCRIPTION_LEAD}
-                    rule={SKILL_DESCRIPTION_RULE}
-                    href={SKILL_DESCRIPTION_SPEC_URL}
-                  />
-                ) : (
-                  <span>Enter a description.</span>
-                )}
+                <span>Enter a description.</span>
               </FieldProblem>
             )}
           </div>
@@ -302,36 +275,5 @@ function FieldProblem({
     <p id={id} className="text-xs text-destructive">
       {children}
     </p>
-  );
-}
-
-/**
- * A value refused by a rule of the Agent Skills specification: what is wrong,
- * then the rule itself as a link to where the specification states it. The
- * words are the ones the API sends (`describeUnusableSkillName`,
- * `describeUnusableSkillDescription`).
- */
-function RuleRefusal({
-  lead,
-  rule,
-  href,
-}: {
-  lead: string;
-  rule: string;
-  href: string;
-}) {
-  return (
-    <>
-      <span>{lead}</span>
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline underline-offset-4"
-      >
-        {rule}
-      </a>
-      <span>.</span>
-    </>
   );
 }

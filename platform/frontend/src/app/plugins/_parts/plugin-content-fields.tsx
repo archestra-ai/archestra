@@ -15,7 +15,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { SkillContentEditor } from "../../skills/_parts/skill-content-editor";
 import { PluginClientIcon } from "./plugin-client-icon";
-import { OWN_PLUGIN_NAME_TAKEN } from "./plugin-draft";
 import { type PluginPlatform, PluginPlatforms } from "./plugin-platforms";
 
 export interface PluginFileDraft {
@@ -110,16 +109,6 @@ export function PluginContentFields({
             }
           />
         </IdentityFields>
-        {nameTaken === "own" && (
-          <InlineNotice
-            id="plugin-display-name-taken"
-            size="xs"
-            variant="error"
-          >
-            <AlertTriangle aria-hidden />
-            <span className="font-medium">{OWN_PLUGIN_NAME_TAKEN}</span>
-          </InlineNotice>
-        )}
         {nameTaken === "other" && (
           <InlineNotice id="plugin-display-name-taken" size="xs">
             <AlertTriangle aria-hidden />

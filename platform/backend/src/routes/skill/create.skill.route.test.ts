@@ -223,27 +223,6 @@ describe("POST /api/skills", () => {
     expect(response.statusCode).toBe(409);
   });
 
-  test("rejects a name that differs from one of the author's skills only by letter case", async () => {
-    // A new name is lowercase by rule, so the other spelling can only be a
-    // stored one: saved before the rule was asked, or imported from Git.
-    await seedImportedSkill({
-      organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
-      name: "Probe-Skill-One",
-      sourceRef: "example/skills@main:skills/probe",
-    });
-    const response = await ctx.app.inject({
-      method: "POST",
-      url: "/api/skills",
-      payload: { content: manifestNamed("probe-skill-one") },
-    });
-
-    expect(response.statusCode).toBe(409);
-    // Names the skill that is in the way, as it is actually spelled.
-    expect(response.json().error.message).toContain('"Probe-Skill-One"');
-    expect(response.json().error.message).toContain("letter case");
-  });
-
   test("another author may hold the same name in a different letter case", async ({
     makeUser,
   }) => {
@@ -261,59 +240,6 @@ describe("POST /api/skills", () => {
     });
 
     expect(response.statusCode).toBe(200);
-  });
-
-  // One rule and one sentence for every new name: the Agent Skills naming
-  // rules. A name they refuse is not stored and then left out of a gateway.
-  test.each([
-    ["a slash", "name: docs/release"],
-    ["a line break", 'name: "two\\nlines"'],
-    ["a parent-directory step", 'name: "up..over"'],
-    ["more than 64 characters", `name: ${"x".repeat(65)}`],
-    ["a space and capitals", 'name: "Release Notes"'],
-    ["an emoji", 'name: "notes ✍️"'],
-    ["an underscore", "name: pdf_tools"],
-    ["a leading hyphen", 'name: "-pdf"'],
-    ["two hyphens in a row", "name: pdf--tools"],
-  ])("rejects a new name with %s", async (_label, nameLine) => {
-    const response = await ctx.app.inject({
-      method: "POST",
-      url: "/api/skills",
-      payload: {
-        content: ["---", nameLine, "description: A skill.", "---", ""].join(
-          "\n",
-        ),
-      },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toBe(
-      "This name can't be used. Skill name can only contain lowercase letters, digits and single hyphens, up to 64 characters.",
-    );
-  });
-
-  test("rejects a description longer than the Agent Skills specification takes", async () => {
-    const create = (description: string) =>
-      ctx.app.inject({
-        method: "POST",
-        url: "/api/skills",
-        payload: {
-          content: [
-            "---",
-            "name: long-description",
-            `description: ${description}`,
-            "---",
-            "",
-          ].join("\n"),
-        },
-      });
-
-    const refused = await create("d".repeat(1025));
-    expect(refused.statusCode).toBe(400);
-    expect(refused.json().error.message).toBe(
-      "This description is too long. Skill description can be up to 1024 characters.",
-    );
-    expect((await create("d".repeat(1024))).statusCode).toBe(200);
   });
 
   test("a manifest YAML cannot read is refused with one plain line", async () => {

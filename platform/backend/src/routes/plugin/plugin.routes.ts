@@ -34,7 +34,6 @@ import {
   GithubMarketplaceChangedError,
   prepareGithubMarketplaceImports,
 } from "@/plugins/github-marketplace-import";
-import { findPluginNameProblem } from "@/plugins/plugin-name";
 import {
   assertPluginSourceHost,
   hasSinglePluginGitAuth,
@@ -823,13 +822,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
-      const nameProblem = await findPluginNameProblem({
-        organizationId,
-        clientType: body.clientType,
-        displayName: body.displayName,
-        creatorUserId: user.id,
-      });
-      if (nameProblem) throw new ApiError(409, nameProblem);
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -936,25 +928,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           409,
           "A Git plugin's client is the one its repository was imported for. Import the repository again for another client.",
         );
-      }
-      // Asked of a rename and of a move to another client, and only of a
-      // manual plugin: a plugin stored under a name its owner holds twice
-      // keeps saving its other fields, and a Git plugin's name is its
-      // repository's. A name is unique per client, so a new client is a new
-      // place for the name to be taken in.
-      const displayName = body.displayName ?? existing.displayName;
-      if (
-        existing.sourceKind !== "github" &&
-        (clientChanged ||
-          displayName.toLowerCase() !== existing.displayName.toLowerCase())
-      ) {
-        const nameProblem = await findPluginNameProblem({
-          organizationId,
-          clientType: body.clientType ?? existing.clientType,
-          displayName,
-          existing,
-        });
-        if (nameProblem) throw new ApiError(409, nameProblem);
       }
       const githubSource = body.githubSource;
       const authentication = githubSource?.authentication;

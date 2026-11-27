@@ -187,9 +187,11 @@ describe("PluginVersionHistoryDialog", () => {
     await user.click(restoreButton());
 
     const confirm = screen.getByRole("dialog", { name: "Restore version 1?" });
+    // The title asks; the text says only what else changes.
     expect(confirm).toHaveTextContent(
-      "Version 1's 1 file become the plugin's files, as a new version.",
+      "Installed copies change the next time they are updated.",
     );
+    expect(confirm).not.toHaveTextContent("become the plugin's files");
     // The script the plugin has now is not in version 1.
     expect(confirm).toHaveTextContent(
       "The 1 file the plugin has now that version 1 does not is removed.",

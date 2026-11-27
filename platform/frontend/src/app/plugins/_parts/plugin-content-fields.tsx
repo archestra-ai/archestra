@@ -34,9 +34,9 @@ export type PluginClientType =
 
 /**
  * The wizard's Content step, shared by the create and edit wizards: the
- * plugin's metadata beside its payload files. Client type is create-only
- * (it is part of the plugin's identity), and the slug, shown as a hint on the
- * name, is edit-only.
+ * plugin's metadata beside its payload files. The client is shown wherever it
+ * can be chosen: on create, and on a plugin that is not from Git. The slug,
+ * shown as a hint on the name, is edit-only.
  */
 export function PluginContentFields({
   displayName,

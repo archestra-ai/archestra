@@ -200,6 +200,43 @@ describe("a plugin's version history", () => {
     expect(current.statusCode, current.body).toBe(200);
   });
 
+  test("moves a manual plugin to another client, leaving its files and history as they are", async () => {
+    const plugin = await create();
+
+    const moved = await save(plugin.id, { clientType: "cursor" });
+
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect(moved.json()).toMatchObject({
+      clientType: "cursor",
+      files: [expect.objectContaining({ path: "README.md", content: "one" })],
+    });
+    // The files did not change, so no version was added.
+    expect((await versions(plugin.id)).data.map((v) => v.version)).toEqual([1]);
+  });
+
+  test("refuses a move to a client where the owner already has a plugin of that name", async () => {
+    const plugin = await create();
+    const twin = await app.inject({
+      method: "POST",
+      url: "/api/plugins",
+      payload: {
+        displayName: "Versioned",
+        description: "The same name, for another client.",
+        clientType: "cursor",
+        supportedPlatforms: ["posix"],
+        files: [file("README.md", "cursor")],
+      },
+    });
+    expect(twin.statusCode, twin.body).toBe(200);
+
+    const moved = await save(plugin.id, { clientType: "cursor" });
+
+    expect(moved.statusCode).toBe(409);
+    expect(moved.json().error.message).toContain(
+      'You already have a plugin named "Versioned" for this client.',
+    );
+  });
+
   test("pages the history", async () => {
     const plugin = await create();
     await save(plugin.id, { files: [file("README.md", "two")] });

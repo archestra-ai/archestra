@@ -129,6 +129,10 @@ const UpdatePluginToolSchema = z
       .min(1)
       .optional()
       .describe("Operating systems the payload supports."),
+    clientType: ClientTypeSchema.optional().describe(
+      "The coding client the plugin is for. Manual plugins only. The files " +
+        "are left as they are, so they have to suit the new client's layout.",
+    ),
     baseContentHash: z
       .string()
       .min(1)
@@ -417,15 +421,25 @@ const registry = defineArchestraTools([
       if (!existing) return unknownPluginError(args.id);
       const githubFilesError = checkManualFilesUpdate(existing, args.files);
       if (githubFilesError) return errorResult(githubFilesError);
+      const clientChanged =
+        args.clientType !== undefined &&
+        args.clientType !== existing.clientType;
+      if (clientChanged && existing.sourceKind === "github") {
+        return errorResult(
+          "A Git plugin's client is the one its repository was imported for. Import the repository again for another client.",
+        );
+      }
+      // As on PUT /api/plugins/:id: a rename or a move to another client.
+      const displayName = args.displayName ?? existing.displayName;
       if (
-        args.displayName !== undefined &&
         existing.sourceKind !== "github" &&
-        args.displayName.toLowerCase() !== existing.displayName.toLowerCase()
+        (clientChanged ||
+          displayName.toLowerCase() !== existing.displayName.toLowerCase())
       ) {
         const nameProblem = await findPluginNameProblem({
           organizationId: ctx.organizationId,
-          clientType: existing.clientType,
-          displayName: args.displayName,
+          clientType: args.clientType ?? existing.clientType,
+          displayName,
           existing,
         });
         if (nameProblem) return errorResult(nameProblem);

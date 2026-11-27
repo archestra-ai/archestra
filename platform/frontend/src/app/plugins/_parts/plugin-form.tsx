@@ -28,7 +28,6 @@ export function PluginForm({
   readOnly = false,
   pluginSlug,
   isGithubPlugin = false,
-  isCreate = false,
   pluginId,
   activeSection,
   nameTaken = null,
@@ -45,8 +44,6 @@ export function PluginForm({
    * the page edits the source that owns it instead.
    */
   isGithubPlugin?: boolean;
-  /** Client type is part of a plugin's identity, so it is set once, at create. */
-  isCreate?: boolean;
   /**
    * The saved plugin whose access policy this form edits.
    *
@@ -73,9 +70,13 @@ export function PluginForm({
               onIconChange={(icon) => onChange({ icon })}
               description={draft.description}
               onDescriptionChange={(description) => onChange({ description })}
-              clientType={isCreate ? draft.clientType : undefined}
+              // A Git plugin's client is the one its repository was imported
+              // for; any other plugin's can be changed, as its platforms can.
+              clientType={isGithubPlugin ? undefined : draft.clientType}
               onClientTypeChange={
-                isCreate ? (clientType) => onChange({ clientType }) : undefined
+                isGithubPlugin
+                  ? undefined
+                  : (clientType) => onChange({ clientType })
               }
               pluginSlug={pluginSlug}
               platforms={draft.supportedPlatforms}

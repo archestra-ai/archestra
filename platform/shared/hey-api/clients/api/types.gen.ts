@@ -140022,6 +140022,10 @@ export type UpdatePluginData = {
          */
         icon?: string | null;
         supportedPlatforms?: Array<'posix' | 'windows'>;
+        /**
+         * The client the plugin is for. Manual plugins only: a Git plugin's client is the one its repository was imported for. The files are left as they are, so they have to suit the new client's layout.
+         */
+        clientType?: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         labels?: Array<{
             key: string;
             value: string;

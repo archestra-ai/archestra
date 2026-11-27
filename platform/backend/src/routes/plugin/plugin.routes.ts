@@ -915,18 +915,30 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Only GitHub-sourced plugins have GitHub source settings",
         );
       }
-      // Asked of a rename only, and only of a manual plugin: a plugin stored
-      // under a name its owner holds twice keeps saving its other fields, and
-      // a Git plugin's name is its repository's.
+      const clientChanged =
+        body.clientType !== undefined &&
+        body.clientType !== existing.clientType;
+      if (clientChanged && existing.sourceKind === "github") {
+        throw new ApiError(
+          409,
+          "A Git plugin's client is the one its repository was imported for. Import the repository again for another client.",
+        );
+      }
+      // Asked of a rename and of a move to another client, and only of a
+      // manual plugin: a plugin stored under a name its owner holds twice
+      // keeps saving its other fields, and a Git plugin's name is its
+      // repository's. A name is unique per client, so a new client is a new
+      // place for the name to be taken in.
+      const displayName = body.displayName ?? existing.displayName;
       if (
-        body.displayName !== undefined &&
         existing.sourceKind !== "github" &&
-        body.displayName.toLowerCase() !== existing.displayName.toLowerCase()
+        (clientChanged ||
+          displayName.toLowerCase() !== existing.displayName.toLowerCase())
       ) {
         const nameProblem = await findPluginNameProblem({
           organizationId,
-          clientType: existing.clientType,
-          displayName: body.displayName,
+          clientType: body.clientType ?? existing.clientType,
+          displayName,
           existing,
         });
         if (nameProblem) throw new ApiError(409, nameProblem);

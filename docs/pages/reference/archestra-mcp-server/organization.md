@@ -654,6 +654,7 @@ Required RBAC permission: [`plugin:update`](/docs/reference/permissions#plugin:u
 | `displayName` | `string` | No | Human-readable plugin name. |
 | `description` | `string` | No | What the plugin does. |
 | `supportedPlatforms` | `string[]` | No | Operating systems the payload supports. |
+| `clientType` | `"claude-code" \| "claude-desktop" \| "copilot-cli" \| "codex" \| "cursor"` | No | The coding client the plugin is for. Manual plugins only. The files are left as they are, so they have to suit the new client's layout. |
 | `baseContentHash` | `string` | No | Required when files is provided. Use the current contentHash from get_plugin; the replacement is rejected if newer bytes landed first. |
 | `files` | `object[]` | No | WHEN PROVIDED, REPLACES THE PLUGIN'S ENTIRE file set. Omit it to edit only metadata/visibility. Manual plugins only — GitHub-sourced files are read-only. For a small change to one file, prefer edit_plugin over resending every file. |
 | `files[].path` | `string` | Yes |  |

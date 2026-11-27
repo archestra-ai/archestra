@@ -296,7 +296,6 @@ function VersionHistory({
           title={`Restore version ${activeVersion}?`}
           description={restoreEffects({
             version: activeVersion,
-            fileCount: detail.files.length,
             droppedCount: filesDroppedByRestore,
           })}
           isPending={restoreVersion.isPending}
@@ -338,20 +337,20 @@ function versionFilesOf(
   }));
 }
 
-/** What a restore does to the plugin as it stands today. */
+/**
+ * What a restore changes beyond the plugin's own files, which the title
+ * already names: the installed copies, and any file it would remove.
+ */
 function restoreEffects({
   version,
-  fileCount,
   droppedCount,
 }: {
   version: number;
-  fileCount: number;
   /** Files the plugin has today that this version does not. */
   droppedCount: number;
 }): string {
-  const files = `${fileCount} ${fileCount === 1 ? "file" : "files"}`;
-  const restored = `Version ${version}'s ${files} become the plugin's files, as a new version. Installed copies change the next time they are updated.`;
-  if (droppedCount === 0) return restored;
+  const installed = "Installed copies change the next time they are updated.";
+  if (droppedCount === 0) return installed;
   const dropped = `${droppedCount} ${droppedCount === 1 ? "file" : "files"}`;
-  return `${restored} The ${dropped} the plugin has now that version ${version} does not ${droppedCount === 1 ? "is" : "are"} removed.`;
+  return `${installed} The ${dropped} the plugin has now that version ${version} does not ${droppedCount === 1 ? "is" : "are"} removed.`;
 }

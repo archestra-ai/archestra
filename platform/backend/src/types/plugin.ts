@@ -119,6 +119,11 @@ export const UpdatePluginSchema = z
       .optional()
       .describe("Emoji or base64 image data URL shown with the name."),
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
+    clientType: ClientTypeSchema.optional().describe(
+      "The client the plugin is for. Manual plugins only: a Git plugin's " +
+        "client is the one its repository was imported for. The files are " +
+        "left as they are, so they have to suit the new client's layout.",
+    ),
     labels: z.array(LabelWithDetailsSchema).optional(),
     githubSource: z
       .object({

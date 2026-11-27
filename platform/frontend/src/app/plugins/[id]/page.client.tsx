@@ -218,7 +218,8 @@ function PluginDetailView({
     ? null
     : pluginNameTwin({
         displayName: draft.displayName,
-        clientType: plugin.clientType,
+        // The client being saved: a name is unique per client.
+        clientType: draft.clientType,
         ownerId: plugin.authorId,
         pluginId: plugin.id,
         plugins: plugins ?? [],
@@ -248,6 +249,7 @@ function PluginDetailView({
               displayName: submitted.displayName.trim(),
               description: submitted.description,
               supportedPlatforms: submitted.supportedPlatforms,
+              clientType: submitted.clientType,
               files: submitted.files,
             }),
         labels: submitted.labels,

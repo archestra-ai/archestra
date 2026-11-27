@@ -545426,6 +545426,17 @@
                       ]
                     }
                   },
+                  "clientType": {
+                    "description": "The client the plugin is for. Manual plugins only: a Git plugin's client is the one its repository was imported for. The files are left as they are, so they have to suit the new client's layout.",
+                    "type": "string",
+                    "enum": [
+                      "claude-code",
+                      "claude-desktop",
+                      "copilot-cli",
+                      "codex",
+                      "cursor"
+                    ]
+                  },
                   "labels": {
                     "type": "array",
                     "items": {

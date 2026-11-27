@@ -567,6 +567,7 @@ class PluginModel {
           description: params.input.description,
           icon: params.input.icon,
           supportedPlatforms: params.input.supportedPlatforms,
+          clientType: params.input.clientType,
           syncGeneration: sql`${schema.pluginsTable.syncGeneration} + 1`,
           ...sourceUpdate,
           ...githubSourceUpdate,

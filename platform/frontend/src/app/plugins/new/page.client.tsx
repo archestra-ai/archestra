@@ -40,6 +40,7 @@ import {
   isPluginDraftDirty,
   OWN_PLUGIN_NAME_TAKEN,
   type PluginDraft,
+  patchNewPluginDraft,
   pluginDraftGap,
   pluginNameTwin,
 } from "../_parts/plugin-draft";
@@ -104,7 +105,7 @@ function NewPluginWizard() {
   const [draft, setDraft] = useState<PluginDraft>(blankDraft);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const patchDraft = (patch: Partial<PluginDraft>) =>
-    setDraft((prev) => ({ ...prev, ...patch }));
+    setDraft((prev) => patchNewPluginDraft(prev, patch));
 
   const createPlugin = useCreatePlugin();
   const {
@@ -366,7 +367,6 @@ function NewPluginWizard() {
                 draft={draft}
                 onChange={patchDraft}
                 labelsRef={labelsRef}
-                isCreate
                 activeSection={activeSection}
                 nameTaken={nameTaken}
               />

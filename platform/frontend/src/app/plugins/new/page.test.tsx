@@ -657,13 +657,16 @@ describe("NewPluginPage", () => {
     expect(screen.getByTestId("plugin-platforms")).toHaveTextContent(
       "posix,windows",
     );
-    // The payload's one file is open in the workspace's explorer.
-    expect(
-      within(screen.getByRole("navigation", { name: "Files" })).getByRole(
-        "button",
-        { name: "hooks.json" },
-      ),
-    ).toHaveAttribute("aria-current", "page");
+    // The starter files of the default client are there to edit from, with
+    // the README, which explains them, open.
+    const explorer = within(screen.getByRole("navigation", { name: "Files" }));
+    expect(explorer.getByRole("button", { name: "README.md" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    for (const name of ["plugin.json", "hooks.json", "SKILL.md"]) {
+      expect(explorer.getByRole("button", { name })).toBeVisible();
+    }
     expect(
       screen.getByRole("button", { name: "New file or folder" }),
     ).toBeVisible();
@@ -698,20 +701,18 @@ describe("NewPluginPage", () => {
     expect(create()).toHaveAttribute("aria-disabled", "true");
     expect(create()).toHaveAccessibleDescription("Enter a display name.");
 
+    // The starter files have content, so a name is all that is missing.
     await user.type(screen.getByLabelText("Display name"), "Session guard");
-    // Nor is a named one whose only file is still blank: it would install
-    // an empty folder.
-    expect(create()).toHaveAttribute("aria-disabled", "true");
-    expect(create()).toHaveAccessibleDescription(
-      "Add content to at least one file.",
-    );
-
-    await user.type(
-      screen.getByRole("textbox", { name: "File contents" }),
-      "{{}",
-    );
     expect(create()).toBeEnabled();
     expect(create()).not.toHaveAttribute("aria-disabled");
+    // The starter files follow the name for as long as they are untouched.
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "File contents",
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toContain("# Session guard");
   });
 
   it("goes back to Source by URL, so a later visit opens General, not the last tab", async () => {

@@ -6,6 +6,7 @@ import type {
   PluginFileDraft,
 } from "./plugin-content-fields";
 import type { PluginPlatform } from "./plugin-platforms";
+import { pluginStarterFiles, samePluginFiles } from "./plugin-starter";
 
 /**
  * A plugin as it sits in the form before a write: what it is and what it
@@ -34,6 +35,26 @@ export interface PluginDraft {
   gitCredential: string;
 }
 
+/**
+ * A change to a new plugin's draft. The starter files follow the client, the
+ * platforms, the name and the description for as long as nobody has touched
+ * them: another client reads another layout, and another platform runs
+ * another shell. Files that were edited are the author's, and stay.
+ */
+export function patchNewPluginDraft(
+  draft: PluginDraft,
+  patch: Partial<PluginDraft>,
+): PluginDraft {
+  const next = { ...draft, ...patch };
+  if (
+    patch.files === undefined &&
+    samePluginFiles(draft.files, pluginStarterFiles(draft))
+  ) {
+    next.files = pluginStarterFiles(next);
+  }
+  return next;
+}
+
 /** The credential columns a plugin's Git source saves. */
 export function pluginGitAuthentication(gitCredential: string): {
   githubAppConfigId: string | null;
@@ -48,22 +69,21 @@ export function pluginGitAuthentication(gitCredential: string): {
   };
 }
 
-/** A blank plugin, as the create page starts it. */
+/**
+ * A blank plugin, as the create page starts it: no name yet, and the starter
+ * files of its client and platforms to edit from.
+ */
 export function blankPluginDraft(): PluginDraft {
-  return {
+  const start = {
     displayName: "",
-    icon: null,
     description: "",
-    clientType: "claude-code",
-    supportedPlatforms: ["posix", "windows"],
-    files: [
-      {
-        path: "hooks/hooks.json",
-        content: "",
-        encoding: "utf8",
-        mode: "100644",
-      },
-    ],
+    clientType: "claude-code" as const,
+    supportedPlatforms: ["posix", "windows"] as PluginPlatform[],
+  };
+  return {
+    ...start,
+    icon: null,
+    files: pluginStarterFiles(start),
     initialGrants: [],
     labels: [],
     githubRepoUrl: "",

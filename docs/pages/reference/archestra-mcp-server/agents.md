@@ -61,9 +61,18 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `run_id` | `string` | Yes | From start_agent_run or list_agent_runs. |
 | `direction` | `"download" \| "upload"` | Yes | download reads from the workspace; upload writes to it. |
 | `path` | `string` | Yes | Workspace-relative path, for example reports/summary.md. |
-| `local_path` | `string` | Yes | Absolute path on this machine, used to build the command. |
+| `local_path` | `string` | No | Absolute path on this machine, used to build the command. |
 | `size` | `integer` | No | Upload only: the local file's size in bytes. |
 | `sha256` | `string` | No | Upload only: the local file's sha256, as hex. |
+| `file` | `object` | No | Upload only, in place of local_path, size and sha256: the file itself, sent by this client. |
+| `file.id` | `string` | Yes |  |
+| `file.name` | `string` | No |  |
+| `file.mimeType` | `string` | Yes |  |
+| `file.size` | `integer` | Yes |  |
+| `file.digest` | `object` | No |  |
+| `file.digest.algorithm` | `"sha-256"` | Yes |  |
+| `file.digest.value` | `string` | Yes |  |
+| `file.data` | `string` | No |  |
 
 
 ### write_workspace_file

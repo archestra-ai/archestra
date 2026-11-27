@@ -273,6 +273,9 @@ export function ConnectorUserGroupsTable({
       )}
 
       <DataTable
+        // The search and filters live in this component, not in the URL.
+
+        resetPageKey={`${search}|${filter}|${memberFilter}`}
         columns={columns}
         data={visibleGroups}
         isLoading={isFetching}

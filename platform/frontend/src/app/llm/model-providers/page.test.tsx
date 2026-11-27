@@ -23,12 +23,24 @@ const mockUseMyClaudeCodeAccount = vi.fn();
 const mockDeleteApiKey = vi.fn();
 const mockUpdateApiKey = vi.fn();
 const mockSavePermissions = vi.fn();
-const { useDataTableQueryParamsMock, updateQueryParamsMock } = vi.hoisted(
-  () => ({
+const { useDataTableQueryParamsMock, updateQueryParamsMock, setFiltersMock } =
+  vi.hoisted(() => ({
     useDataTableQueryParamsMock: vi.fn(),
     updateQueryParamsMock: vi.fn(),
-  }),
-);
+    setFiltersMock: vi.fn(),
+  }));
+
+/** What the URL hook hands the page and the table for a given URL. */
+function urlState(query = "") {
+  return {
+    searchParams: new URLSearchParams(query),
+    updateQueryParams: updateQueryParamsMock,
+    setFilters: setFiltersMock,
+    pageIndex: 0,
+    pageSize: 10,
+    setPagination: vi.fn(),
+  };
+}
 
 vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("next/image", () => ({
@@ -369,10 +381,7 @@ describe("ApiKeysPage", () => {
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "viewer" } },
     } as ReturnType<typeof useSession>);
-    useDataTableQueryParamsMock.mockReturnValue({
-      searchParams: new URLSearchParams(),
-      updateQueryParams: updateQueryParamsMock,
-    });
+    useDataTableQueryParamsMock.mockReturnValue(urlState());
     vi.mocked(usePathname).mockReturnValue("/llm/model-providers");
     vi.mocked(useRouter).mockReturnValue({
       replace: vi.fn(),
@@ -411,10 +420,7 @@ describe("ApiKeysPage", () => {
   });
 
   it("opens a subscription sign-in linked from an Agent catalog flow", async () => {
-    useDataTableQueryParamsMock.mockReturnValue({
-      searchParams: new URLSearchParams("connect=chatgpt"),
-      updateQueryParams: updateQueryParamsMock,
-    });
+    useDataTableQueryParamsMock.mockReturnValue(urlState("connect=chatgpt"));
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -460,10 +466,9 @@ describe("ApiKeysPage", () => {
       ],
       isPending: false,
     });
-    useDataTableQueryParamsMock.mockReturnValue({
-      searchParams: new URLSearchParams(`reconnect=${kind}&search=kept`),
-      updateQueryParams: updateQueryParamsMock,
-    });
+    useDataTableQueryParamsMock.mockReturnValue(
+      urlState(`reconnect=${kind}&search=kept`),
+    );
     const { rerender } = render(<ApiKeysPage />);
     expect(await screen.findByTestId("create-dialog")).toHaveTextContent(
       `Reconnect ${displayName}`,
@@ -491,30 +496,18 @@ describe("ApiKeysPage", () => {
       data: false,
       isPending: false,
     } as ReturnType<typeof useHasPermissions>);
-    useDataTableQueryParamsMock.mockReturnValue({
-      searchParams: new URLSearchParams("reconnect=unknown"),
-      updateQueryParams: updateQueryParamsMock,
-    });
+    useDataTableQueryParamsMock.mockReturnValue(urlState("reconnect=unknown"));
     const { rerender } = render(<ApiKeysPage />);
     expect(screen.queryByTestId("create-dialog")).not.toBeInTheDocument();
-    useDataTableQueryParamsMock.mockReturnValue({
-      searchParams: new URLSearchParams("reconnect=chatgpt"),
-      updateQueryParams: updateQueryParamsMock,
-    });
+    useDataTableQueryParamsMock.mockReturnValue(urlState("reconnect=chatgpt"));
     rerender(<ApiKeysPage />);
     expect(await screen.findByTestId("create-dialog")).toHaveTextContent(
       "Sign in with ChatGPT",
     );
-    useDataTableQueryParamsMock.mockReturnValue({
-      searchParams: new URLSearchParams(),
-      updateQueryParams: updateQueryParamsMock,
-    });
+    useDataTableQueryParamsMock.mockReturnValue(urlState());
     rerender(<ApiKeysPage />);
     expect(screen.queryByTestId("create-dialog")).not.toBeInTheDocument();
-    useDataTableQueryParamsMock.mockReturnValue({
-      searchParams: new URLSearchParams("reconnect=chatgpt"),
-      updateQueryParams: updateQueryParamsMock,
-    });
+    useDataTableQueryParamsMock.mockReturnValue(urlState("reconnect=chatgpt"));
     rerender(<ApiKeysPage />);
     expect(await screen.findByTestId("create-dialog")).toHaveTextContent(
       "Sign in with ChatGPT",
@@ -532,10 +525,7 @@ describe("ApiKeysPage", () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: { modelProviderOverrides: { xai: { hidden: true } } },
     } as unknown as ReturnType<typeof useOrganization>);
-    useDataTableQueryParamsMock.mockReturnValue({
-      searchParams: new URLSearchParams(query),
-      updateQueryParams: updateQueryParamsMock,
-    });
+    useDataTableQueryParamsMock.mockReturnValue(urlState(query));
     render(<ApiKeysPage />);
     expect(screen.queryByTestId("create-dialog")).not.toBeInTheDocument();
   });
@@ -559,17 +549,15 @@ describe("ApiKeysPage", () => {
       data: true,
       isPending: false,
     } as unknown as ReturnType<typeof useHasPermissions>);
-    useDataTableQueryParamsMock.mockReturnValue({
-      searchParams: new URLSearchParams(
-        "search=claude&provider=anthropic&labels=stage%3Aproduction",
-      ),
-      updateQueryParams: updateQueryParamsMock,
-    });
+    useDataTableQueryParamsMock.mockReturnValue(
+      urlState("search=claude&provider=anthropic&labels=stage%3Aproduction"),
+    );
 
     render(<ApiKeysPage />);
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
 
-    expect(updateQueryParamsMock).toHaveBeenCalledWith({
+    // Through the filter writer, which also returns to the first page.
+    expect(setFiltersMock).toHaveBeenCalledWith({
       search: null,
       provider: null,
       labels: null,

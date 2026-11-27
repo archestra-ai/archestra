@@ -144,7 +144,8 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 export default function ApiKeysPage() {
   const router = useRouter();
   const docsUrl = getFrontendDocsUrl("llm-proxy/providers");
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { searchParams, updateQueryParams, setFilters } =
+    useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
   // Label filtering is server-side, so the value rides the list query.
@@ -166,7 +167,7 @@ export default function ApiKeysPage() {
     search || providerFilter !== "all" || labelsFilter || hasActiveScopeFilters,
   );
   const clearFilters = () =>
-    updateQueryParams({
+    setFilters({
       search: null,
       provider: null,
       labels: null,
@@ -853,7 +854,7 @@ export default function ApiKeysPage() {
                   <Select
                     value={providerFilter}
                     onValueChange={(value) =>
-                      updateQueryParams({
+                      setFilters({
                         provider: value === "all" ? null : value,
                       })
                     }
@@ -921,6 +922,7 @@ export default function ApiKeysPage() {
                   </PermissionButton>
                 </BulkActions>
                 <DataTable
+                  urlPagination
                   columns={columns}
                   data={rows}
                   getRowId={(row) => row.id}

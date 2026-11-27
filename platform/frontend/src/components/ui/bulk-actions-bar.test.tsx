@@ -173,7 +173,8 @@ describe("BulkActionsBar", () => {
       expect(offer()?.textContent).toBe(
         "Select all 203 skills that match this search query.",
       );
-      expect(screen.getByText("10 skills on this page selected.")).toBeTruthy();
+      // The count is already in the bar's label; the offer does not repeat it.
+      expect(screen.queryByText(/on this page selected/)).toBeNull();
     });
 
     it("stays quiet until every row on the page is ticked", () => {

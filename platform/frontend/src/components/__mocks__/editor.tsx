@@ -17,6 +17,8 @@
  * margin, so the decorations are only kept, never drawn; what goes into them
  * is tested where it is computed. A view zone, the block an editor draws
  * between two lines, is put after the textarea, so what it holds can be read.
+ * Markers, the errors an editor underlines, are kept as JSON in the
+ * textarea's `data-markers`, since which line is marked is what a test asks.
  */
 import type { EditorProps } from "@monaco-editor/react";
 import { useEffect, useRef } from "react";
@@ -49,6 +51,7 @@ export function Editor({
   const contentSizeListeners = useRef(new Set<() => void>());
   const zones = useRef(new Map<string, HTMLElement>());
   const zoneHost = useRef<HTMLDivElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const editor = {
       getContentHeight: () =>
@@ -64,6 +67,7 @@ export function Editor({
         getLineCount: () => valueRef.current.split("\n").length,
         getLineMaxColumn: (line: number) =>
           (valueRef.current.split("\n")[line - 1]?.length ?? 0) + 1,
+        isDisposed: () => false,
       }),
       addCommand: () => null,
       changeViewZones: (
@@ -88,6 +92,7 @@ export function Editor({
         }),
       // A line is revealed and marked, never drawn: jsdom scrolls nothing.
       revealLineInCenter: () => {},
+      revealLineInCenterIfOutsideViewport: () => {},
       setPosition: () => {},
       onMouseDown: () => ({ dispose: () => {} }),
       onDidChangeCursorPosition: () => ({ dispose: () => {} }),
@@ -112,7 +117,13 @@ export function Editor({
       editor: {
         registerLinkOpener: () => disposable,
         MouseTargetType: { GUTTER_GLYPH_MARGIN: 2 },
+        setModelMarkers: (_model: unknown, _owner: string, next: unknown[]) => {
+          if (!textarea.current) return;
+          if (next.length === 0) delete textarea.current.dataset.markers;
+          else textarea.current.dataset.markers = JSON.stringify(next);
+        },
       },
+      MarkerSeverity: { Error: 8 },
       Range: class {
         constructor(
           readonly startLineNumber: number,
@@ -137,6 +148,7 @@ export function Editor({
   return (
     <>
       <textarea
+        ref={textarea}
         data-testid="editor"
         data-height={height}
         data-language={language ?? defaultLanguage}

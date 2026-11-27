@@ -1,6 +1,5 @@
 "use client";
 
-import { AlertCircle } from "lucide-react";
 import {
   type ComponentProps,
   createContext,
@@ -15,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogForm,
   DialogHeader,
   DialogStickyFooter,
@@ -230,21 +228,22 @@ export function UnsavedChangesDialog({
         }
       }}
     >
-      <DialogContent className="max-w-md flex flex-col overflow-hidden">
-        <DialogHeader className="border-b-0">
-          <DialogTitle className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-amber-500" />
-            Discard unsaved changes?
-          </DialogTitle>
-          <DialogDescription>
-            You have unsaved changes. If you close now, they will be lost.
-          </DialogDescription>
+      {/* The heading is the whole question, so there is no description under
+          it (Radix is told so) and no icon beside it. With only a heading and
+          two buttons, the box is narrow, has no rule between the two, and the
+          buttons share its width. */}
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex max-w-sm flex-col overflow-hidden"
+      >
+        <DialogHeader className="border-b-0 pb-0">
+          <DialogTitle>Discard unsaved changes?</DialogTitle>
         </DialogHeader>
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={(e) => e.preventDefault()}
         >
-          <DialogStickyFooter className="mt-0">
+          <DialogStickyFooter className="mt-0 border-t-0 shadow-none sm:[&>button]:flex-1">
             <Button type="button" variant="outline" onClick={onKeepEditing}>
               Keep editing
             </Button>
@@ -254,7 +253,7 @@ export function UnsavedChangesDialog({
               className="text-destructive hover:text-destructive hover:bg-destructive/10"
               onClick={onDiscard}
             >
-              Discard changes
+              Discard
             </Button>
           </DialogStickyFooter>
         </DialogForm>

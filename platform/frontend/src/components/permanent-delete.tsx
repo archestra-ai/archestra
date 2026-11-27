@@ -1,6 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import type { TableRowAction } from "@/components/table-row-actions";
 
 /**
@@ -48,6 +49,49 @@ export function permanentDeleteRowAction({
     disabledTooltip: reason,
     onClick,
   };
+}
+
+/**
+ * The one confirmation for destroying deleted items for good. Every trash
+ * that offers "Delete permanently" asks through it, from a row and from the
+ * bulk bar alike, so the question and the words are the same for one item
+ * and for several, and for one kind of item and the next.
+ *
+ * The title says what and how many; the text says the one thing that sets
+ * this apart from a delete.
+ */
+export function PermanentDeleteDialog({
+  noun,
+  count,
+  open,
+  onOpenChange,
+  isPending,
+  onConfirm,
+}: {
+  /** What is being destroyed, in the singular: "skill", "plugin". */
+  noun: string;
+  /** How many of them. */
+  count: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  isPending: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        count === 1
+          ? `Delete ${noun} permanently`
+          : `Delete ${count} ${noun}s permanently`
+      }
+      description="Permanent deletion can not be undone."
+      isPending={isPending}
+      onConfirm={onConfirm}
+      confirmLabel={PERMANENT_DELETE_LABEL}
+    />
+  );
 }
 
 // === internal ===

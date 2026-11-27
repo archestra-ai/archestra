@@ -260,6 +260,7 @@ export function TableCardList({
   isLoading = false,
   emptyMessage = "No results",
   emptyDescription,
+  emptyAction,
   emptyIcon,
   hasActiveFilters = false,
   filteredEmptyMessage = "No results match your filters",
@@ -274,6 +275,8 @@ export function TableCardList({
   isLoading?: boolean;
   emptyMessage?: string;
   emptyDescription?: string;
+  /** A way out of the unfiltered empty state, as the table view takes it. */
+  emptyAction?: ReactNode;
   /** The page's own icon — pass the one its sidebar entry uses. */
   emptyIcon?: LucideIcon;
   hasActiveFilters?: boolean;
@@ -302,6 +305,7 @@ export function TableCardList({
         description={
           hasActiveFilters ? filteredEmptyDescription : emptyDescription
         }
+        action={hasActiveFilters ? undefined : emptyAction}
         onClearFilters={hasActiveFilters ? onClearFilters : undefined}
       />
     );

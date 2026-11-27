@@ -38,11 +38,12 @@ RUN curl -fsSL --retry 3 \
 
 FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS agent-base
 
-# Require fixed apt, OpenSSL and Cyrus SASL packages and refresh cached apt layers.
+# Require fixed apt, OpenSSL, Cyrus SASL and PAM packages and refresh cached apt layers.
 # CVE-2026-109518 (apt), CVE-2026-84782 (OpenSSL), CVE-2026-107161 (Cyrus SASL).
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       apt libapt-pkg6.0 build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less \
+      libpam0g libpam-modules libpam-modules-bin libpam-runtime \
       libsasl2-2 libsasl2-modules-db libssl-dev libssl3 \
       openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
  && for package in apt libapt-pkg6.0; do \
@@ -53,6 +54,9 @@ RUN apt-get update -qq \
     done \
  && for package in libsasl2-2 libsasl2-modules-db; do \
       dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '2.1.28+dfsg-10+deb12u1' || exit 1; \
+    done \
+ && for package in libpam0g libpam-modules libpam-modules-bin libpam-runtime; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '1.5.2-6+deb12u3' || exit 1; \
     done \
  && rm -rf /var/lib/apt/lists/*
 

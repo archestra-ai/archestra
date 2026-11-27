@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -272,6 +272,34 @@ describe("PluginDetailPage", () => {
     await user.type(screen.getByLabelText("Description"), " Once more.");
     await save();
     expect(lastSave()).toMatchObject({ baseContentHash: "saved" });
+  });
+
+  it("holds a save typed during another save against the files that save wrote", async () => {
+    const user = userEvent.setup();
+    renderPage(BASE_PLUGIN);
+    let finishFirstSave: (value: unknown) => void = () => {};
+    updateMutateAsync.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishFirstSave = resolve;
+      }),
+    );
+
+    await user.type(screen.getByLabelText("Description"), " One.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMutateAsync.mock.calls[0][0]).toMatchObject({
+      baseContentHash: "abc123",
+    });
+    // More is typed before the first save answers, so the draft stays dirty
+    // and is not taken from the plugin again.
+    await user.type(screen.getByLabelText("Description"), " Two.");
+    await act(async () => {
+      finishFirstSave({ ...BASE_PLUGIN, contentHash: "after-first-save" });
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMutateAsync.mock.calls[1][0]).toMatchObject({
+      baseContentHash: "after-first-save",
+    });
   });
 
   it("has no switch to turn one plugin off, and always offers Install", () => {

@@ -200,10 +200,9 @@ function PluginDetailView({
   );
   const [draft, setDraft] = useState<PluginDraft>(seed);
   const [base, setBase] = useState<PluginDraft>(seed);
-  // The hash of the files the draft was taken from. A save sends it, so files
+  // The hash of the files the draft builds on. A save sends it, so files
   // written since (in another tab, by a restore) are not replaced unseen. It
-  // moves with the draft: a save puts the saved plugin in the cache, and the
-  // clean draft is then taken from that.
+  // moves when the draft is taken from the plugin, and when a save succeeds.
   const [baseContentHash, setBaseContentHash] = useState(plugin.contentHash);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = isPluginDraftDirty(draft, base);
@@ -265,6 +264,11 @@ function PluginDetailView({
       .catch(() => null);
     setIsSaving(false);
     if (!saved) return;
+    // The saved files are what the draft now builds on, whatever was typed
+    // while the save was on its way: such a draft stays dirty, so the effect
+    // above does not take the plugin again, and the next save must still be
+    // held against the files this one wrote.
+    setBaseContentHash(saved.contentHash);
     setBase(submitted);
   };
 

@@ -119,7 +119,9 @@ jobs:
     # A fixed 16 vCPU size keeps the load client, mock and database off the
     # measured web process. Results record the CPU model; comparisons across
     # different CPUs are suppressed.
-    runs-on: ubuntu-24.04-16core
+    # Standard GCE VMs, never Spot: a preemption would cut a run short, and
+    # every run gets the same CPU (AMD Turin), unlike GitHub's pool.
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && 'archestra-gce-16core' || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch; never for fork PRs.
     timeout-minutes: 60
     # A generated table commit skips this job. Scope cancellation here so
     # that commit cannot cancel the successful run publishing its own docs.

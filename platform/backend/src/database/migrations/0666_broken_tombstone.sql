@@ -34,3 +34,19 @@ INSERT INTO "plugin_version_files" ("version_id", "path", "content", "encoding",
 SELECT v."id", f."path", f."content", f."encoding", f."mode", f."digest"
 FROM "plugin_files" f
 JOIN "plugin_versions" v ON v."plugin_id" = f."plugin_id";
+--> statement-breakpoint
+-- Plugins can no longer be switched off one by one: "enabled" is no longer
+-- read. A plugin that was switched off must not start installing again on its
+-- own, so it moves to the trash, in the state a delete leaves a plugin in.
+-- Restoring it from the Deleted view makes it installable again.
+UPDATE "plugins" SET
+	"deleted_at" = now(),
+	"github_sync_interval" = NULL,
+	"github_app_config_id" = NULL,
+	"github_pat_id" = NULL,
+	"gitlab_token_id" = NULL,
+	"pending_source_sha" = NULL,
+	"pending_content_hash" = NULL,
+	"pending_detected_at" = NULL,
+	"sync_generation" = "sync_generation" + 1
+WHERE "enabled" = false AND "deleted_at" IS NULL;

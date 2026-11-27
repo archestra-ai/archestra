@@ -151,9 +151,13 @@ def plain(value):
 
 def message(kind, run_id, jobs, channel, thread_ts):
     spec = KINDS[kind]
+    # The agent runs the Lobster image, whose bootstrap reads a first line of
+    # `Repository: <repo>` as a request for a managed checkout that pushes to
+    # the private mirror. The agent clones the public repository and opens
+    # public pull requests itself, so the first line must not be that one.
     lines = [
-        f"Repository: {REPOSITORY}",
         f"Alert kind: `{kind}`: {spec['title']}",
+        f"Repository: {REPOSITORY}",
         f"Branch: `{branch(kind)}`"
         + (" (the open pull request's own branch: commit onto it, open no other pull request)"
            if spec.get("existing_pull_request") else ""),

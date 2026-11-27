@@ -15,15 +15,19 @@ curl -LsSf https://raw.githubusercontent.com/archestra-ai/archestra/demo/unified
 ```sh
 ./connect-cli-playbox/archestra --help
 ./connect-cli-playbox/archestra connect
+./connect-cli-playbox/archestra connect -p staging
+./connect-cli-playbox/archestra profiles
 ./connect-cli-playbox/archestra status
+./connect-cli-playbox/archestra status -p staging
 ./connect-cli-playbox/archestra status --degraded
 ./connect-cli-playbox/archestra status --offline
 ./connect-cli-playbox/archestra status --json
-./connect-cli-playbox/archestra doctor
-./connect-cli-playbox/archestra claude
+./connect-cli-playbox/archestra doctor -p local
+./connect-cli-playbox/archestra claude -p staging
 ```
 
 ### Flags
+- `-p, --profile <name>` — target a named profile (`default`, `staging`, `local`, or a new one)
 - `--demo` — simulate a Mac with 4 detected agents instead of scanning your machine
 - `--empty` — simulate a machine with no agents detected yet
 - `--no-bridge` — default local MCP bridge to off

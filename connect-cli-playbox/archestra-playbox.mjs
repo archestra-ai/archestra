@@ -18,10 +18,75 @@ import { homedir, hostname, arch, platform } from "node:os";
 import { join } from "node:path";
 import * as readline from "node:readline";
 
-const ARCHESTRA_URL = process.env.ARCHESTRA_URL || "https://frontend.archestra.dev";
 const CLI_VERSION = "0.14.2";
 const args = process.argv.slice(2);
-const SUBCMD = args[0] && !args[0].startsWith("-") ? args[0] : "";
+
+const PROFILES = [
+  {
+    name: "default",
+    active: true,
+    url: process.env.ARCHESTRA_URL || "https://frontend.archestra.dev",
+    gatewayId: "my-gateway",
+    auth: "valid",
+    expiresIn: "14d",
+    guardrails: "observe",
+  },
+  {
+    name: "staging",
+    active: false,
+    url: "https://staging.archestra.dev",
+    gatewayId: "engineering",
+    auth: "valid",
+    expiresIn: "6d",
+    guardrails: "enforce",
+  },
+  {
+    name: "local",
+    active: false,
+    url: "http://localhost:3000",
+    gatewayId: "personal",
+    auth: "expired",
+    expiresIn: "expired 2d ago",
+    guardrails: "observe",
+  },
+];
+
+function parseProfileFlag(argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if ((a === "-p" || a === "--profile") && argv[i + 1]) return argv[i + 1];
+    if (a.startsWith("--profile=")) return a.slice("--profile=".length);
+  }
+  return process.env.ARCHESTRA_PROFILE || "default";
+}
+
+function parseSubcommand(argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "-p" || a === "--profile") {
+      i++;
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    return a;
+  }
+  return "";
+}
+
+const PROFILE_NAME = parseProfileFlag(args);
+const SUBCMD = parseSubcommand(args);
+const ACTIVE_PROFILE =
+  PROFILES.find((p) => p.name === PROFILE_NAME) || {
+    name: PROFILE_NAME,
+    active: false,
+    url: `https://${PROFILE_NAME}.archestra.dev`,
+    gatewayId: "my-gateway",
+    auth: "valid",
+    expiresIn: "14d",
+    guardrails: "observe",
+    isNew: true,
+  };
+const ARCHESTRA_URL = ACTIVE_PROFILE.url;
 
 const USE_DEMO = args.includes("--demo");
 const USE_EMPTY = args.includes("--empty");
@@ -83,28 +148,30 @@ function printHelp() {
   const cmds = [
     ["connect", "Autodetect agents, link this device, and configure MCP/proxy."],
     ["status", "Show unified device, local MCP bridge, and agent status."],
+    ["profiles", "List or switch named Archestra profiles (default, staging, local)."],
     ["doctor", "Run read-only health checks on gateway, proxy, and bridge."],
     ["bridge", "Start, stop, or inspect the local MCP bridge daemon."],
     ["update", "Update the Archestra CLI to the latest version."],
     ["uninstall", "Unlink this device and remove local Archestra config."],
   ];
   for (const [cmd, desc] of cmds) {
-    console.log(`    ${blue(cmd.padEnd(12))} ${desc}`);
+    console.log(`    ${blue(cmd.padEnd(14))} ${desc}`);
   }
   console.log("");
   console.log(`  ${pink("Options:")}`);
   const opts = [
+    ["-p, --profile", "Target a named profile (e.g. default, staging, local)."],
     ["--demo", "Simulate a Mac with 4 detected agents."],
     ["--empty", "Simulate a machine with no agents detected."],
     ["--no-bridge", "Default local MCP bridge to off."],
     ["--offline", "(status) Simulate stopped MCP bridge."],
     ["--degraded", "(status) Simulate a failing local MCP server."],
-    ["--json", "(status) Emit machine-readable JSON."],
+    ["--json", "(status/profiles) Emit machine-readable JSON."],
     ["-y, --yes", "Accept defaults non-interactively."],
     ["-h, --help", "Show this message and exit."],
   ];
   for (const [flag, desc] of opts) {
-    console.log(`    ${green(flag.padEnd(12))} ${desc}`);
+    console.log(`    ${green(flag.padEnd(14))} ${desc}`);
   }
   console.log("");
 }
@@ -527,6 +594,7 @@ function runStatus({ host, plat, gateway, useProxy, wantBridge, chosenAgents }) 
     console.log(
       JSON.stringify(
         {
+          profile: ACTIVE_PROFILE.name,
           device: { name: host, platform: plat, cliVersion: CLI_VERSION, url: ARCHESTRA_URL },
           gateway: { id: gateway.id, name: gateway.label, mcpServers: gateway.mcp, skills: gateway.skills },
           stats,
@@ -547,11 +615,11 @@ function runStatus({ host, plat, gateway, useProxy, wantBridge, chosenAgents }) 
   }
 
   console.log("");
-  console.log(`${pink("◆")} ${bold("Archestra")} ${dim("· status")}`);
+  console.log(`${pink("◆")} ${bold("Archestra")} ${dim(`· status · profile: ${ACTIVE_PROFILE.name}`)}`);
   gap();
 
+  step("Profile", `${bold(ACTIVE_PROFILE.name)} ${dim(`· ${ARCHESTRA_URL} · ${gateway.label}`)}`);
   step("Device", `${bold(host)} ${dim(`· ${plat} · v${CLI_VERSION}`)}`);
-  step("Deployment", `${cyan(ARCHESTRA_URL)} ${dim(`· ${gateway.label}`)}`);
   gap();
 
   // Activity / usage stats strip
@@ -625,17 +693,85 @@ function runStatus({ host, plat, gateway, useProxy, wantBridge, chosenAgents }) 
   }
 }
 
+async function runProfiles() {
+  if (JSON_OUTPUT) {
+    console.log(
+      JSON.stringify(
+        PROFILES.map((p) => {
+          const gw = GATEWAYS.find((g) => g.id === p.gatewayId) || GATEWAYS[0];
+          return {
+            name: p.name,
+            active: p.name === ACTIVE_PROFILE.name,
+            url: p.url,
+            gateway: gw.label,
+            auth: p.auth,
+            expiresIn: p.expiresIn,
+          };
+        }),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  console.log("");
+  console.log(`${pink("◆")} ${bold("Archestra")} ${dim("· profiles")}`);
+  gap();
+
+  for (const p of PROFILES) {
+    const gw = GATEWAYS.find((g) => g.id === p.gatewayId) || GATEWAYS[0];
+    const isCurrent = p.name === ACTIVE_PROFILE.name;
+    const dot = isCurrent ? green("●") : dim("○");
+    const authTag =
+      p.auth === "valid"
+        ? green(`✓ valid`) + dim(` (${p.expiresIn})`)
+        : yellow(`▲ ${p.expiresIn}`);
+    const nameStr = isCurrent ? bold(p.name.padEnd(10)) : p.name.padEnd(10);
+    console.log(
+      `${RAIL}  ${dot} ${nameStr} ${cyan(p.url.padEnd(32))} ${dim(gw.label.padEnd(12))} ${authTag}`,
+    );
+  }
+
+  gap();
+  if (IS_TTY && !AUTO_YES) {
+    const picked = await singleSelect(
+      "Switch active profile:",
+      PROFILES.map((p) => ({
+        id: p.name,
+        label: p.name,
+        hint: `${p.url} · ${p.auth === "valid" ? `valid (${p.expiresIn})` : p.expiresIn}`,
+      })),
+      Math.max(0, PROFILES.findIndex((p) => p.name === ACTIVE_PROFILE.name)),
+    );
+    if (picked) {
+      ok("Active", `${bold(picked.label)} ${dim("· ~/.config/archestra/profiles.toml (dry-run)")}`);
+      gap();
+    }
+  }
+  console.log(
+    `${END} ${dim("Use")} ${cyan("-p <name>")} ${dim("on any command, or")} ${cyan("archestra connect -p <name>")} ${dim("to add one.")}\n`,
+  );
+}
+
 async function main() {
   const plat = detectPlatform();
   const host = hostname().replace(/\.local$/, "");
   const code = "A7F2-9K3M";
+  const profileGateway =
+    GATEWAYS.find((g) => g.id === ACTIVE_PROFILE.gatewayId) || GATEWAYS[0];
+
+  if (SUBCMD === "profiles" || SUBCMD === "profile") {
+    await runProfiles();
+    return;
+  }
 
   if (SUBCMD === "status") {
     const detected = detectAgents().filter((a) => a.detected);
     runStatus({
       host,
       plat,
-      gateway: GATEWAYS[0],
+      gateway: profileGateway,
       useProxy: true,
       wantBridge: !NO_BRIDGE_FLAG,
       chosenAgents: detected,
@@ -645,19 +781,29 @@ async function main() {
 
   if (SUBCMD === "doctor") {
     console.log("");
-    console.log(`${pink("◆")} ${bold("Archestra")} ${dim("· doctor")}`);
+    console.log(`${pink("◆")} ${bold("Archestra")} ${dim(`· doctor · profile: ${ACTIVE_PROFILE.name}`)}`);
     gap();
-    await spin("Checking gateway reachability...", 320);
-    ok("Gateway", `${green("200 OK")} ${dim("· 38ms · My Gateway")}`);
-    await spin("Checking LLM proxy & guardrails...", 300);
-    ok("Proxy", `${cyan("⇄")} ${bold("reachable")} ${dim("· guardrails: observe")}`);
-    await spin("Checking local MCP bridge daemon...", 300);
+    await spin(`Checking ${ACTIVE_PROFILE.url}...`, 300);
+    if (ACTIVE_PROFILE.auth === "expired") {
+      warn("Auth", `session expired (${ACTIVE_PROFILE.expiresIn}) — run archestra connect -p ${ACTIVE_PROFILE.name}`);
+    } else {
+      ok("Auth", `${green("valid")} ${dim(`· profile: ${ACTIVE_PROFILE.name} · expires in ${ACTIVE_PROFILE.expiresIn}`)}`);
+    }
+    await spin("Checking gateway reachability...", 280);
+    ok("Gateway", `${green("200 OK")} ${dim(`· 38ms · ${profileGateway.label}`)}`);
+    await spin("Checking LLM proxy & guardrails...", 280);
+    ok("Proxy", `${cyan("⇄")} ${bold("reachable")} ${dim(`· guardrails: ${ACTIVE_PROFILE.guardrails}`)}`);
+    await spin("Checking local MCP bridge daemon...", 280);
     live("MCP bridge", `${green("online")} ${dim("· pid 41822 · 3 local servers")}`);
-    await spin("Checking agent configs...", 280);
+    await spin("Checking agent configs...", 260);
     const detected = detectAgents().filter((a) => a.detected);
     ok("Agents", dim(`${detected.length} configs valid · no drift detected`));
     gap();
-    console.log(`${END} ${green("✓")} ${bold("Healthy.")} ${dim("(dry-run)")}\n`);
+    if (ACTIVE_PROFILE.auth === "expired") {
+      console.log(`${END} ${yellow("▲")} Re-authenticate with ${cyan(`archestra connect -p ${ACTIVE_PROFILE.name}`)}.\n`);
+    } else {
+      console.log(`${END} ${green("✓")} ${bold("Healthy.")} ${dim("(dry-run)")}\n`);
+    }
     return;
   }
 
@@ -676,9 +822,10 @@ async function main() {
     console.log("");
     console.log(`${pink("◆")} ${bold("Archestra")} ${dim(`· launching ${agent.name}`)}`);
     gap();
-    step("Gateway", `${bold("My Gateway")} ${dim("· 12 MCP · 88 skills")}`);
+    step("Profile", `${bold(ACTIVE_PROFILE.name)} ${dim(`· ${ACTIVE_PROFILE.url}`)}`);
+    step("Gateway", `${bold(profileGateway.label)} ${dim(`· ${profileGateway.mcp} MCP · ${profileGateway.skills} skills`)}`);
     if (agent.caps.includes("proxy")) {
-      step("Proxy", `${cyan("⇄")} ${bold("on")} ${dim("· guardrails: observe")}`);
+      step("Proxy", `${cyan("⇄")} ${bold("on")} ${dim(`· guardrails: ${ACTIVE_PROFILE.guardrails}`)}`);
     }
     step("Command", cyan(agent.launchCmd));
     gap();
@@ -693,7 +840,7 @@ async function main() {
 
   printBanner("All your agents, MCP servers, and local bridge — one CLI");
   console.log("");
-  console.log(`${pink("◆")} ${bold("Connect")} ${dim("· playbox dry-run")}`);
+  console.log(`${pink("◆")} ${bold("Connect")} ${dim(`· profile: ${ACTIVE_PROFILE.name}${ACTIVE_PROFILE.isNew ? " (new)" : ""} · playbox dry-run`)}`);
   gap();
 
   step("Platform", `${bold(plat)} ${dim(`· ${host}`)}`);

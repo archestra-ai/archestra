@@ -805,6 +805,77 @@ describe("search_tools", () => {
     );
   });
 
+  test("does not return a tool that only its MCP App calls, assigned or not", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Search Agent",
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Blender MCP",
+    });
+    const appOnly = { _meta: { ui: { visibility: ["app"] } } };
+    const assignedAppOnly = await makeTool({
+      name: "blender__viewport_latest",
+      description: "The latest viewport frame of the scene.",
+      catalogId: catalog.id,
+      meta: appOnly,
+    });
+    await makeAgentTool(agent.id, assignedAppOnly.id);
+    await makeTool({
+      name: "blender__viewport_pick",
+      description: "Pick the object under a point of the viewport frame.",
+      catalogId: catalog.id,
+      meta: appOnly,
+    });
+    await makeTool({
+      name: "blender__look",
+      description: "Look at the scene through the viewport.",
+      catalogId: catalog.id,
+      meta: {
+        _meta: {
+          ui: {
+            resourceUri: "ui://mcp-for-blender/viewport-v2",
+            visibility: ["model", "app"],
+          },
+        },
+      },
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "viewport frame" },
+      {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    const toolNames = (
+      result.structuredContent as SearchToolsStructuredContent
+    ).tools.map((tool) => tool.toolName);
+    expect(toolNames).toContain("blender__look");
+    expect(toolNames).not.toContain("blender__viewport_latest");
+    expect(toolNames).not.toContain("blender__viewport_pick");
+  });
+
   test("hides unassigned tools when the agent's access-all-tools setting is off", async ({
     makeAgent,
     makeInternalMcpCatalog,

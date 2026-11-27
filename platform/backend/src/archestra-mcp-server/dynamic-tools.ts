@@ -41,6 +41,19 @@ import { filterToolNamesByPermission } from "./rbac";
 // per-agent "access all tools" setting is the sole gate.
 
 /**
+ * Whether the MCP server marked the tool as one that only its MCP App calls:
+ * `_meta.ui.visibility` without "model". search_tools does not return such a
+ * tool and run_tool does not run it, the same rule as for the chat tool list.
+ * No visibility means that the model and the app can both call the tool.
+ */
+export function isAppOnlyTool(tool: Pick<Tool, "meta">): boolean {
+  const visibility = (
+    tool.meta as { _meta?: { ui?: { visibility?: unknown } } } | null
+  )?._meta?.ui?.visibility;
+  return Array.isArray(visibility) && !visibility.includes("model");
+}
+
+/**
  * Resolve an unassigned third-party tool name to the catalog tool row the user
  * can access, for direct dynamic execution by run_tool. Applies the same gates
  * as discovery (agent setting, org setting, real user, catalog visibility,

@@ -8,22 +8,17 @@ import {
   FilePlus,
   FileTerminal,
   FileText,
-  Folder,
-  FolderPlus,
   LockKeyhole,
   RotateCcw,
   Trash2,
   X,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import type { WorkspaceDownload } from "@/components/file-workspace/download-zip";
 import {
-  FILE_ROW_ACTION_CLASS,
-  FILE_ROW_CLASS,
   FileExplorer,
   type FileExplorerSection,
-  fileRowIndent,
 } from "@/components/file-workspace/file-explorer";
 import type { WorkspaceFile } from "@/components/file-workspace/file-tree";
 import {
@@ -34,7 +29,7 @@ import {
   IconBadge,
 } from "@/components/file-workspace/file-workspace";
 import { WorkspaceEditor } from "@/components/file-workspace/workspace-editor";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -45,7 +40,10 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { formatBytes } from "@/lib/utils/format-bytes";
 import { cn } from "@/lib/utils/tailwind";
+import { contentFilePathProblem } from "./content-file-path";
+import { NewFileDialog } from "./new-file-dialog";
 import type { ResourceFile } from "./skill-draft";
+import { useLineProblemMarks } from "./use-line-problem-marks";
 
 /** Editing viewport with room left for wizard navigation and actions. */
 export const SKILL_WIZARD_EDITOR_CLASS =
@@ -58,7 +56,7 @@ export const SKILL_WIZARD_EDITOR_CLASS =
  * null manifest lists only the files, for a plugin's payload.
  *
  * Controlled — content lives in the caller's draft; only view state (the open
- * file, a name being typed, empty folders, the session trash bin) is kept here.
+ * file, the session trash bin) is kept here.
  */
 export function SkillContentEditor({
   manifest,
@@ -68,6 +66,9 @@ export function SkillContentEditor({
   readOnly = false,
   readOnlyMarker = true,
   downloadName,
+  showDownload = true,
+  nameNotice = true,
+  manifestProblem = null,
   className,
 }: {
   manifest: string | null;
@@ -87,20 +88,28 @@ export function SkillContentEditor({
    * else "skill" or "plugin", when left out.
    */
   downloadName?: string;
+  /**
+   * Whether the bar offers the files as a .zip. Off where the host's own
+   * header does, so the button is not read as "download the open file".
+   */
+  showDownload?: boolean;
+  /**
+   * Whether the editor itself warns about a name that cannot be published
+   * over MCP. Off where a name field above the editor says it instead.
+   */
+  nameNotice?: boolean;
+  /**
+   * The line of SKILL.md a save was just refused for. The manifest is opened
+   * and the line marked; null once the manifest has been edited since.
+   */
+  manifestProblem?: { line: number; message: string } | null;
   className?: string;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(() =>
     manifest !== null ? MANIFEST_KEY : files[0] ? fileKey(files[0].path) : null,
   );
-  // The folder a new file is being named in (null: the top); undefined while
-  // no file is being named.
-  const [addingFileIn, setAddingFileIn] = useState<string | null | undefined>(
-    undefined,
-  );
-  const [addingFolder, setAddingFolder] = useState(false);
-  // Empty folders that exist only in this session: they persist once a file
-  // is put in one.
-  const [pendingFolders, setPendingFolders] = useState<string[]>([]);
+  // Whether the New file dialog is open.
+  const [creating, setCreating] = useState(false);
   // Files moved to the trash, restorable for as long as this editor is open.
   const [trash, setTrash] = useState<TrashedFile[]>([]);
 
@@ -128,11 +137,19 @@ export function SkillContentEditor({
     ],
     [manifest, files],
   );
-  const openItem =
-    items.find((item) => item.key === openKey) ??
-    (manifest !== null ? items[0] : undefined);
+  // Falls back to the first file when the open one is gone (moved to the
+  // trash), so the pane shows a file for as long as there is one.
+  const openItem = items.find((item) => item.key === openKey) ?? items[0];
   const openFile = openItem?.kind === "file" ? openItem.file : null;
   const manifestOpen = openItem?.kind === "manifest";
+  // A refused save brings its line to the reader: the manifest is opened if
+  // another file was, each time a problem is reported.
+  useEffect(() => {
+    if (manifestProblem) setOpenKey(MANIFEST_KEY);
+  }, [manifestProblem]);
+  const markProblemLine = useLineProblemMarks(
+    manifestOpen ? manifestProblem : null,
+  );
 
   const removeFiles = (paths: Set<string>) => {
     const removed = files.filter((file) => paths.has(file.path));
@@ -152,9 +169,6 @@ export function SkillContentEditor({
         ),
       ),
     );
-    setPendingFolders((current) =>
-      current.filter((path) => path !== folder && !path.startsWith(prefix)),
-    );
   };
   const restore = (id: string) => {
     const item = trash.find((entry) => entry.id === id);
@@ -163,24 +177,33 @@ export function SkillContentEditor({
     if (files.some((file) => file.path === item.file.path)) return;
     onFilesChange((current) => [...current, item.file]);
   };
-  const commitNewFile = (folder: string | null, name: string) => {
-    const path = folder ? `${folder}/${name}` : name;
-    if (files.some((file) => file.path === path)) return;
+  // Every folder the files are in: what the dialog offers as the place for
+  // a new file.
+  const folderPaths = useMemo(() => {
+    const paths = new Set<string>();
+    for (const file of files) {
+      const parts = file.path.split("/").slice(0, -1);
+      parts.forEach((_, index) => {
+        paths.add(parts.slice(0, index + 1).join("/"));
+      });
+    }
+    return [...paths];
+  }, [files]);
+  const newPathProblem = (kind: "file" | "folder", path: string) =>
+    contentFilePathProblem({
+      // A folder is its first file's parent, so it answers to the same rules.
+      path: kind === "file" ? path : `${path}/file`,
+      existingPaths: files.map((file) => file.path),
+      manifestPath:
+        kind === "file" && manifest !== null ? MANIFEST_PATH : undefined,
+    });
+  const createFile = (path: string) => {
     onFilesChange((current) => [
       ...current,
       { path, content: "", encoding: "utf8" },
     ]);
     setOpenKey(fileKey(path));
-    setAddingFileIn(undefined);
-  };
-  const commitNewFolder = (name: string) => {
-    if (name.includes("/")) return;
-    if (!pendingFolders.includes(name)) {
-      setPendingFolders((current) => [...current, name]);
-    }
-    setAddingFolder(false);
-    // A folder exists once it holds a file: name its first one now.
-    setAddingFileIn(name);
+    setCreating(false);
   };
   const setEditorValue = (value: string) => {
     if (manifestOpen) onManifestChange(value);
@@ -198,50 +221,7 @@ export function SkillContentEditor({
       title: "Files",
       count: items.length,
       files: items,
-      folders: pendingFolders,
       empty: <p>No files yet.</p>,
-      actions: readOnly ? undefined : (
-        <>
-          <RowAction
-            label="New file"
-            onClick={() => {
-              setAddingFolder(false);
-              setAddingFileIn(null);
-            }}
-          >
-            <FilePlus className="size-3" aria-hidden />
-          </RowAction>
-          <RowAction
-            label="New folder"
-            onClick={() => {
-              setAddingFileIn(undefined);
-              setAddingFolder(true);
-            }}
-          >
-            <FolderPlus className="size-3" aria-hidden />
-          </RowAction>
-        </>
-      ),
-      insertRow: (folder, depth) => (
-        <>
-          {folder === null && addingFolder && (
-            <NewNameRow
-              kind="folder"
-              depth={depth}
-              onCommit={commitNewFolder}
-              onCancel={() => setAddingFolder(false)}
-            />
-          )}
-          {addingFileIn !== undefined && addingFileIn === folder && (
-            <NewNameRow
-              kind="file"
-              depth={depth}
-              onCommit={(name) => commitNewFile(folder, name)}
-              onCancel={() => setAddingFileIn(undefined)}
-            />
-          )}
-        </>
-      ),
     },
     ...(!readOnly && trash.length > 0
       ? [
@@ -273,34 +253,42 @@ export function SkillContentEditor({
       activeKey={openItem?.key ?? null}
       onOpen={(item) => setOpenKey(item.key)}
       fileIcon={(item) => <ContentFileIcon item={item} />}
+      // Shown on every row, not only under the pointer: the delete button
+      // was hard to find.
+      actionsAlwaysShown
       fileActions={
         readOnly
           ? undefined
           : (item) =>
               item.kind === "file" ? (
                 <RowAction
-                  label={`Move ${item.path} to trash`}
+                  label="Delete"
+                  name={`Delete ${item.path}`}
+                  destructive
                   onClick={() => removeFiles(new Set([item.path]))}
                 >
-                  <Trash2 className="size-3" aria-hidden />
+                  <Trash2 aria-hidden />
                 </RowAction>
               ) : item.kind === "trash" ? (
                 <>
                   <RowAction
-                    label={`Restore ${item.path}`}
+                    label="Restore"
+                    name={`Restore ${item.path}`}
                     onClick={() => restore(item.trashId)}
                   >
-                    <RotateCcw className="size-3" aria-hidden />
+                    <RotateCcw aria-hidden />
                   </RowAction>
                   <RowAction
-                    label={`Delete ${item.path} permanently`}
+                    label="Delete permanently"
+                    name={`Delete ${item.path} permanently`}
+                    destructive
                     onClick={() =>
                       setTrash((current) =>
                         current.filter((entry) => entry.id !== item.trashId),
                       )
                     }
                   >
-                    <X className="size-3" aria-hidden />
+                    <X aria-hidden />
                   </RowAction>
                 </>
               ) : null
@@ -311,19 +299,12 @@ export function SkillContentEditor({
           : (folder) => (
               <>
                 <RowAction
-                  label={`New file in ${folder}`}
-                  onClick={() => {
-                    setAddingFolder(false);
-                    setAddingFileIn(folder);
-                  }}
-                >
-                  <FilePlus className="size-3" aria-hidden />
-                </RowAction>
-                <RowAction
-                  label={`Move ${folder} to trash`}
+                  label="Delete"
+                  name={`Delete folder ${folder}`}
+                  destructive
                   onClick={() => removeFolder(folder)}
                 >
-                  <Trash2 className="size-3" aria-hidden />
+                  <Trash2 aria-hidden />
                 </RowAction>
               </>
             )
@@ -332,6 +313,7 @@ export function SkillContentEditor({
   );
 
   const nameNotPublishable =
+    nameNotice &&
     manifestOpen &&
     parsed.name !== null &&
     !isSpecCompliantSkillName(parsed.name);
@@ -358,112 +340,129 @@ export function SkillContentEditor({
       : null;
 
   return (
-    <FileWorkspace
-      className={cn("min-h-0 flex-1", className)}
-      download={download}
-      notice={
-        nameNotPublishable && (
-          <FileWorkspaceNotice title="Not publishable over MCP">
-            Agent Skills names allow only lowercase letters, digits and single
-            hyphens, up to 64 characters. The skill still works everywhere else.
-          </FileWorkspaceNotice>
-        )
-      }
-      explorer={explorer}
-      explorerStorageKey="file-workspace-explorer-open"
-      activeKey={openItem?.key ?? null}
-      quickOpenLabel="Open a file"
-      quickOpen={{
-        title: "Open a file",
-        description: "Search this skill's manifest and files.",
-        groups: [
-          {
-            items: items.map((item) => ({
-              key: item.key,
-              search: item.path,
-              icon: <ContentFileIcon item={item} />,
-              label: item.name,
-              detail: item.path.includes("/") ? item.path : undefined,
-            })),
-          },
-        ],
-        onSelect: setOpenKey,
-      }}
-      title={
-        openItem ? (
+    <>
+      <NewFileDialog
+        open={creating}
+        folders={folderPaths}
+        problem={newPathProblem}
+        onCreate={createFile}
+        onClose={() => setCreating(false)}
+      />
+      <FileWorkspace
+        className={cn("min-h-0 flex-1", className)}
+        download={showDownload ? download : null}
+        notice={
+          nameNotPublishable && (
+            <FileWorkspaceNotice title="Not publishable over MCP">
+              Agent Skills names allow only lowercase letters, digits and single
+              hyphens, up to 64 characters. The skill still works everywhere
+              else.
+            </FileWorkspaceNotice>
+          )
+        }
+        explorer={explorer}
+        // A handful of files: the list is always shown, with no toggle.
+        explorerToggle={false}
+        // A labelled button on the editor's own bar. As a 12px icon in the
+        // file list's header it was hard to find.
+        leading={
+          readOnly ? undefined : (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="h-6"
+              onClick={() => setCreating(true)}
+            >
+              <FilePlus aria-hidden />
+              <span>New file or folder</span>
+            </Button>
+          )
+        }
+        activeKey={openItem?.key ?? null}
+        title={
+          openItem ? (
+            <>
+              <ContentFileIcon item={openItem} />
+              <FilePathLabel path={openItem.path} />
+              {manifestOpen ? (
+                <FileKindChip className="border-primary/30 bg-primary/10 text-primary">
+                  Manifest
+                </FileKindChip>
+              ) : openFile?.encoding === "base64" ? (
+                <FileKindChip className="bg-muted text-muted-foreground">
+                  Binary
+                </FileKindChip>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-muted-foreground">No file open</span>
+          )
+        }
+        actions={
           <>
-            <ContentFileIcon item={openItem} />
-            <FilePathLabel path={openItem.path} />
-            {manifestOpen ? (
-              <FileKindChip className="border-primary/30 bg-primary/10 text-primary">
-                Manifest
-              </FileKindChip>
-            ) : openFile?.encoding === "base64" ? (
-              <FileKindChip className="bg-muted text-muted-foreground">
-                Binary
-              </FileKindChip>
-            ) : null}
+            {manifestOpen && !readOnly && (
+              <FrontmatterStatus
+                hasName={parsed.hasName}
+                hasDescription={parsed.hasDescription}
+              />
+            )}
+            {readOnly && readOnlyMarker && (
+              <IconBadge label="Read-only">
+                <LockKeyhole className="size-3.5" aria-hidden />
+              </IconBadge>
+            )}
           </>
+        }
+      >
+        {!openItem ? (
+          <p className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            {items.length === 0 ? "No files yet." : "Choose a file to open."}
+          </p>
+        ) : openFile?.encoding === "base64" ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 bg-muted/30 text-center text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Binary asset</span>
+            <span className="text-xs">
+              {formatBytes(approxBase64Bytes(openFile.content))} · base64
+              encoded
+            </span>
+            <span className="max-w-xs text-xs">
+              Stored verbatim for redistribution. Not editable here.
+            </span>
+          </div>
         ) : (
-          <span className="text-muted-foreground">No file open</span>
-        )
-      }
-      actions={
-        <>
-          {manifestOpen && !readOnly && (
-            <FrontmatterStatus
-              hasName={parsed.hasName}
-              hasDescription={parsed.hasDescription}
-            />
-          )}
-          {readOnly && readOnlyMarker && (
-            <IconBadge label="Read-only">
-              <LockKeyhole className="size-3.5" aria-hidden />
-            </IconBadge>
-          )}
-        </>
-      }
-    >
-      {!openItem ? (
-        <p className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          {items.length === 0 ? "No files yet." : "Choose a file to read."}
-        </p>
-      ) : openFile?.encoding === "base64" ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 bg-muted/30 text-center text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">Binary asset</span>
-          <span className="text-xs">
-            {formatBytes(approxBase64Bytes(openFile.content))} · base64 encoded
-          </span>
-          <span className="max-w-xs text-xs">
-            Stored verbatim for redistribution. Not editable here.
-          </span>
-        </div>
-      ) : (
-        <WorkspaceEditor
-          className="min-h-0 flex-1"
-          // Keyed by the open file, so Monaco swaps models instead of
-          // carrying one file's undo stack and language into the next.
-          key={openItem.key}
-          language={editorLanguage(openItem.path)}
-          value={openFile ? openFile.content : (manifest ?? "")}
-          onChange={(value) => setEditorValue(value ?? "")}
-          loading={
-            <div className="flex h-full w-full items-center justify-center bg-muted/50">
-              <p className="text-sm text-muted-foreground">Loading editor...</p>
-            </div>
-          }
-          options={{
-            ariaLabel: "File contents",
-            placeholder: openFile ? "File contents..." : MANIFEST_PLACEHOLDER,
-            readOnly,
-            folding: true,
-            tabSize: 2,
-            renderLineHighlight: "line",
-          }}
-        />
-      )}
-      {manifestOpen && parsed.templated && <TemplatedManifestHint />}
-    </FileWorkspace>
+          <WorkspaceEditor
+            className="min-h-0 flex-1"
+            // Keyed by the open file, so Monaco swaps models instead of
+            // carrying one file's undo stack and language into the next.
+            key={openItem.key}
+            language={editorLanguage(openItem.path)}
+            value={openFile ? openFile.content : (manifest ?? "")}
+            onChange={(value) => setEditorValue(value ?? "")}
+            onMount={markProblemLine}
+            loading={
+              <div className="flex h-full w-full items-center justify-center bg-muted/50">
+                <p className="text-sm text-muted-foreground">
+                  Loading editor...
+                </p>
+              </div>
+            }
+            options={{
+              ariaLabel: "File contents",
+              placeholder: openFile ? "File contents..." : MANIFEST_PLACEHOLDER,
+              readOnly,
+              folding: true,
+              tabSize: 2,
+              renderLineHighlight: "line",
+              // Below the line: a marked line is usually in the frontmatter
+              // at the top, where a hover above it is cut off by the bar.
+              hover: { above: false },
+            }}
+          />
+        )}
+        {manifestOpen && parsed.templated && <TemplatedManifestHint />}
+      </FileWorkspace>
+    </>
   );
 }
 
@@ -531,13 +530,21 @@ function fileIconFor(path: string) {
   return FileCode2;
 }
 
-/** A small icon button beside an explorer row or in a section header. */
+/**
+ * An icon button beside an explorer row. Always on the row, at a size and
+ * contrast that can be found without hovering for it. `label` is the short
+ * word shown on hover; `name` adds which row it acts on for a screen reader.
+ */
 function RowAction({
   label,
+  name,
+  destructive = false,
   onClick,
   children,
 }: {
   label: string;
+  name: string;
+  destructive?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -546,63 +553,19 @@ function RowAction({
       <TooltipTrigger asChild>
         <UnstyledButton
           type="button"
-          aria-label={label}
+          aria-label={name}
           onClick={onClick}
-          className={FILE_ROW_ACTION_CLASS}
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center rounded-sm text-foreground/70 outline-none hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground [&>svg]:size-3.5",
+            destructive &&
+              "hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive",
+          )}
         >
           {children}
         </UnstyledButton>
       </TooltipTrigger>
       <TooltipContent side="right">{label}</TooltipContent>
     </Tooltip>
-  );
-}
-
-/** A file or folder name being typed into the explorer. */
-function NewNameRow({
-  kind,
-  depth,
-  onCommit,
-  onCancel,
-}: {
-  kind: "file" | "folder";
-  depth: number;
-  onCommit: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const [value, setValue] = useState("");
-  const Icon = kind === "file" ? FileText : Folder;
-  const commit = () => {
-    const name = value.trim().replace(/\/+$/, "");
-    if (name) onCommit(name);
-  };
-  return (
-    <div
-      className={cn(FILE_ROW_CLASS, "gap-1.5 hover:bg-transparent")}
-      style={{ paddingLeft: fileRowIndent(depth) }}
-    >
-      <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-      <Input
-        autoFocus
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            commit();
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            onCancel();
-          }
-        }}
-        onBlur={() => {
-          if (!value.trim()) onCancel();
-        }}
-        placeholder={kind === "file" ? "filename.md" : "folder name"}
-        aria-label={kind === "file" ? "File name" : "Folder name"}
-        className="h-5 min-w-0 flex-1 rounded-sm px-1 font-mono text-[12px] md:text-[12px]"
-      />
-    </div>
   );
 }
 

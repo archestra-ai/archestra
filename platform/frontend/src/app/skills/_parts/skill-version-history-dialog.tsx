@@ -2,35 +2,24 @@
 
 import { GIT_PROVIDER_LABELS, type Permissions } from "@archestra/shared";
 import { RotateCcw } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { CommitGraphRail } from "@/components/version-history/commit-graph-rail";
-import {
-  CommitHeader,
-  RestoreButton,
-  UnreadVersionHeader,
-} from "@/components/version-history/commit-header";
-import {
-  DiffSummaryStrip,
-  type VersionViewMode,
-} from "@/components/version-history/diff-summary-strip";
-import { HunkScrollArea } from "@/components/version-history/hunk-block";
+import { RestoreButton } from "@/components/version-history/commit-header";
+import type { VersionViewMode } from "@/components/version-history/diff-summary-strip";
 import { LoadFailure } from "@/components/version-history/load-failure";
-import {
-  NothingToDiff,
-  PaneMessage,
-  PaneSkeleton,
-} from "@/components/version-history/pane-states";
-import { ShortHash } from "@/components/version-history/refs";
+import { PaneSkeleton } from "@/components/version-history/pane-states";
 import { VersionHistoryStatusLine } from "@/components/version-history/status-line";
 import { useVersionHistoryShortcuts } from "@/components/version-history/use-version-history-shortcuts";
+import { useVersionTimeline } from "@/components/version-history/use-version-timeline";
+import type { VersionFile } from "@/components/version-history/version-files";
 import {
   VersionHistoryShell,
   VersionHistorySubtitle,
 } from "@/components/version-history/version-history-shell";
+import { VersionPreview } from "@/components/version-history/version-preview";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -41,18 +30,14 @@ import {
   useSkillVersion,
   useSkillVersions,
 } from "@/lib/skills/skill.query";
-import { githubSourceUrlAtCommit } from "@/lib/skills/skill-source";
 import {
   compareSkillVersionFiles,
   type SkillFileChange,
 } from "@/lib/skills/skill-version-diff";
 import { languageForPath } from "@/lib/skills/skill-version-format";
-import {
-  SKILL_MANIFEST_PATH,
-  type SkillVersionFile,
-  SkillVersionFiles,
-  summarizeSkillChanges,
-} from "./skill-version-files";
+
+/** SKILL.md is not a resource file, but the version lists it like one. */
+const SKILL_MANIFEST_PATH = "SKILL.md";
 
 /** The manifest is markdown; resource files take their language from the path. */
 const SKILL_MANIFEST_LANGUAGE = "markdown";
@@ -113,23 +98,18 @@ function VersionHistory({
   const [confirmingRestore, setConfirmingRestore] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
 
-  // Pages are read by offset from a list that grows at the head, so a version
-  // created between two page loads shifts every row down and the next page
-  // re-returns rows the previous one already held. Keyed by id, the second copy
-  // is dropped instead of rendering the version twice under a duplicate key.
-  const versions = useMemo(() => {
-    const seen = new Set<string>();
-    return (versionsQuery.data?.pages ?? []).flatMap((page) =>
-      (page?.data ?? []).filter((version) => {
-        if (seen.has(version.id)) return false;
-        seen.add(version.id);
-        return true;
-      }),
-    );
-  }, [versionsQuery.data]);
-  const headVersion = skill?.latestVersion ?? versions[0]?.version ?? null;
-  const activeVersion = selectedVersion ?? headVersion;
-  const isHead = activeVersion !== null && activeVersion === headVersion;
+  const {
+    versions,
+    headVersion,
+    activeVersion,
+    isHead,
+    hasPredecessor,
+    predecessorVersion,
+  } = useVersionTimeline({
+    versionsQuery,
+    headHint: skill?.latestVersion,
+    selectedVersion,
+  });
 
   const {
     data: detail,
@@ -141,12 +121,15 @@ function VersionHistory({
   // number. There is one rule for the rest: a version is compared against its
   // predecessor when that predecessor loads, and shown on its own when it does
   // not — whether because there is none (version 1) or because the read failed.
-  const hasPredecessor = activeVersion !== null && activeVersion > 1;
   const predecessorQuery = useSkillVersion(
     open ? skillId : null,
-    hasPredecessor ? (activeVersion as number) - 1 : null,
+    predecessorVersion,
   );
   const predecessor = predecessorQuery.data ?? null;
+  const versionFiles = useMemo(
+    () => (detail ? versionFilesOf(detail, predecessor) : []),
+    [detail, predecessor],
+  );
   // Worth saying out loud only when a baseline was expected and did not arrive;
   // version 1 having no predecessor is not a failure to report.
   const baselineFailed = hasPredecessor && predecessorQuery.isError;
@@ -248,7 +231,9 @@ function VersionHistory({
       }
       notice={
         isSynced ? (
-          <InlineNotice>
+          // Information, not a warning: nothing is wrong, the notice only
+          // says why Restore is unavailable.
+          <InlineNotice variant="neutral">
             <InlineNoticeText>
               This skill&apos;s content is synced from GitHub. Earlier versions
               stay viewable, but restoring one is unavailable — stop syncing the
@@ -304,6 +289,8 @@ function VersionHistory({
             isHead={isHead}
             detail={detail ?? null}
             predecessor={predecessor}
+            files={versionFiles}
+            manifestPath={SKILL_MANIFEST_PATH}
             baselineFailed={baselineFailed}
             onRetryBaseline={() => predecessorQuery.refetch()}
             isLoading={isDetailLoading}
@@ -399,163 +386,6 @@ function VersionHistory({
 }
 
 /**
- * One version, read either way: every file it holds, or only what moved as a
- * set of diffs under a `git diff --stat`. The switcher decides both what is
- * listed and how each file renders, so a changed file can be read whole under
- * "All files" and as a comparison under "Changes".
- */
-function VersionPreview({
-  version,
-  isHead,
-  detail,
-  predecessor,
-  baselineFailed,
-  onRetryBaseline,
-  isLoading,
-  isUnavailable,
-  onRetry,
-  viewMode,
-  onViewModeChange,
-  onSelectVersion,
-  sourceRef,
-  sourceOrigin,
-  sourceProvider,
-  restoreAction,
-}: {
-  version: number;
-  isHead: boolean;
-  detail: SkillVersionDetail | null;
-  predecessor: SkillVersionDetail | null;
-  /** A baseline was expected and the read failed, so there is nothing to compare against. */
-  baselineFailed: boolean;
-  onRetryBaseline: () => void;
-  isLoading: boolean;
-  /** This version itself could not be read — distinct from it not existing. */
-  isUnavailable: boolean;
-  onRetry: () => void;
-  /** Already settled against the baseline: "all" whenever there is none. */
-  viewMode: VersionViewMode;
-  onViewModeChange: (mode: VersionViewMode) => void;
-  onSelectVersion: (version: number) => void;
-  /** The skill's provenance string, paired with a version's commit to link out. */
-  sourceRef: string | null;
-  sourceOrigin: string | null;
-  sourceProvider: "github" | "gitlab" | null;
-  restoreAction: ReactNode;
-}) {
-  const versionFiles = useMemo(
-    () => (detail ? versionFilesOf(detail, predecessor) : []),
-    [detail, predecessor],
-  );
-
-  if (isLoading && !detail) return <PaneSkeleton />;
-  // A 404 is the only reading that supports "no longer available": the version
-  // was pruned. A failed read supports nothing about the history at all, so it
-  // says what happened and offers a way back rather than leaving the dialog
-  // with no route out.
-  if (!detail) {
-    return (
-      <>
-        <UnreadVersionHeader version={version} action={restoreAction} />
-        {isUnavailable ? (
-          <div className="p-6">
-            <LoadFailure
-              message={`Version ${version} could not be loaded.`}
-              onRetry={onRetry}
-            />
-          </div>
-        ) : (
-          <PaneMessage>This version is no longer available.</PaneMessage>
-        )}
-      </>
-    );
-  }
-
-  // "All files" is the version itself, so a file it dropped has no hunk there.
-  // "Changes" is what moved, which is exactly where a dropped file belongs —
-  // and an untouched SKILL.md has no place in it.
-  const heldFiles = versionFiles.filter((file) => file.current !== null);
-  const movedFiles = versionFiles.filter(
-    (file) => file.change !== null && file.change !== "unchanged",
-  );
-  const entries = viewMode === "all" ? heldFiles : movedFiles;
-  const summary = summarizeSkillChanges(movedFiles);
-  const provider = sourceProvider ?? "github";
-  const sourceUrl = githubSourceUrlAtCommit({
-    sourceRef,
-    sourceOrigin,
-    provider: sourceProvider,
-    commit: detail.sourceCommit,
-  });
-
-  return (
-    <>
-      <CommitHeader
-        version={version}
-        isHead={isHead}
-        hash={detail.contentHash}
-        parentHash={predecessor?.contentHash ?? null}
-        onSelectParent={onSelectVersion}
-        createdAt={detail.createdAt}
-        extraRows={
-          // Only versions a Git pull produced. The link is named rather than
-          // spelled out as a SHA, which stays in its title.
-          sourceUrl && detail.sourceCommit ? (
-            <>
-              <dt className="leading-5 text-muted-foreground">source</dt>
-              <dd className="flex min-w-0 items-center gap-2 leading-5">
-                <GitProviderLogo provider={provider} size={12} />
-                <ShortHash hash={detail.sourceCommit} />
-                <a
-                  href={sourceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="truncate font-sans text-muted-foreground underline underline-offset-4 hover:text-primary"
-                  title={`Open this version's source on ${GIT_PROVIDER_LABELS[provider]} (${detail.sourceCommit})`}
-                >
-                  Open version in {GIT_PROVIDER_LABELS[provider]}
-                </a>
-              </dd>
-            </>
-          ) : null
-        }
-        action={restoreAction}
-      />
-      <DiffSummaryStrip
-        version={version}
-        unavailableReason={
-          predecessor ? null : compareUnavailableReason(version, baselineFailed)
-        }
-        baselineFailed={baselineFailed}
-        onRetryBaseline={onRetryBaseline}
-        added={summary.added}
-        removed={summary.removed}
-        phrases={summary.phrases}
-        changeCount={movedFiles.length}
-        heldCount={heldFiles.length}
-        allLabel="All files"
-        mode={viewMode}
-        onModeChange={onViewModeChange}
-      />
-      <HunkScrollArea isStale={false}>
-        {entries.length === 0 ? (
-          <NothingToDiff>
-            Version {version} holds the same files as version {version - 1}.
-          </NothingToDiff>
-        ) : (
-          <SkillVersionFiles
-            // Remounting per version and reading resets every hunk's fold.
-            key={`${version}-${viewMode}`}
-            files={entries}
-            mode={viewMode}
-          />
-        )}
-      </HunkScrollArea>
-    </>
-  );
-}
-
-/**
  * SKILL.md and the resource files of a version, each paired with the
  * predecessor's copy when there is one. With no baseline the version is listed
  * on its own — in the same path order the comparison produces — and nothing
@@ -564,13 +394,13 @@ function VersionPreview({
 function versionFilesOf(
   detail: SkillVersionDetail,
   predecessor: SkillVersionDetail | null,
-): SkillVersionFile[] {
+): VersionFile[] {
   const manifestChange: SkillFileChange | null = !predecessor
     ? null
     : predecessor.content !== detail.content
       ? "changed"
       : "unchanged";
-  const manifest: SkillVersionFile = {
+  const manifest: VersionFile = {
     path: SKILL_MANIFEST_PATH,
     change: manifestChange,
     current: { content: detail.content, encoding: "utf8" },
@@ -599,20 +429,6 @@ function versionFilesOf(
       language: languageForPath(file.path),
     })),
   ];
-}
-
-/** Why this version cannot be compared — each reading is a different fact. */
-function compareUnavailableReason(
-  version: number,
-  baselineFailed: boolean,
-): string {
-  if (version <= 1) {
-    return "This is the earliest version, so there is nothing to compare it against.";
-  }
-  if (baselineFailed) {
-    return `Version ${version - 1} could not be loaded, so there is nothing to compare against.`;
-  }
-  return `Loading version ${version - 1}...`;
 }
 
 /**

@@ -18,6 +18,7 @@ export function pluginsQueryKey(filters: {
   access?: unknown;
   sharedWith?: unknown;
   owner?: unknown;
+  status?: "active" | "deleted";
 }) {
   return ["plugins", filters] as const;
 }

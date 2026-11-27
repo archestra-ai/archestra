@@ -14,42 +14,41 @@ import {
 import { lineCount, lineDelta } from "@/components/version-history/line-delta";
 import type { SkillFileChange } from "@/lib/skills/skill-version-diff";
 
-/** SKILL.md is not a resource file, but the version lists it like one. */
-export const SKILL_MANIFEST_PATH = "SKILL.md";
-
 /** One side of a file: its bytes and how they are stored. */
-interface SkillFileSide {
+interface VersionFileSide {
   content: string;
   encoding: "utf8" | "base64";
+  /** The file's Git mode, where the version keeps one (a plugin's files). */
+  mode?: string;
 }
 
 /**
- * One file of the version being read — SKILL.md or a resource file — paired
- * with the predecessor's copy when there is one. `change` is null when there
- * is no baseline (version 1, or a predecessor that could not be read), since
- * nothing about the file is then a comparison, and calling it added would
- * report a failed fetch as a fact about the skill's history.
+ * One file of the version being read, paired with the predecessor's copy when
+ * there is one. `change` is null when there is no baseline (version 1, or a
+ * predecessor that could not be read), since nothing about the file is then a
+ * comparison, and calling it added would report a failed fetch as a fact
+ * about the history.
  */
-export interface SkillVersionFile {
+export interface VersionFile {
   path: string;
   change: SkillFileChange | null;
   /** This version's copy; null for a file it removed. */
-  current: SkillFileSide | null;
+  current: VersionFileSide | null;
   /** The predecessor's copy; null for a file it did not have. */
-  previous: SkillFileSide | null;
+  previous: VersionFileSide | null;
   language: string;
 }
 
 /**
- * A skill version's files as diff hunks, one per path like `git diff`: under
+ * A version's files as diff hunks, one per path like `git diff`: under
  * "Changes", a `--stat` of the files that moved and each one read as a diff;
  * under "All files", every file the version holds, read whole.
  */
-export function SkillVersionFiles({
+export function VersionFiles({
   files,
   mode,
 }: {
-  files: SkillVersionFile[];
+  files: VersionFile[];
   mode: VersionViewMode;
 }) {
   return (
@@ -84,8 +83,15 @@ export function SkillVersionFiles({
   );
 }
 
-/** The strip's one-liner ("SKILL.md edited, +1 file") and its +/− totals. */
-export function summarizeSkillChanges(moved: SkillVersionFile[]): {
+/**
+ * The strip's one-liner ("SKILL.md edited, +1 file") and its +/− totals.
+ * `manifestPath` names a file that is said by name when edited, where the
+ * history has one; the rest are counted.
+ */
+export function summarizeFileChanges(
+  moved: VersionFile[],
+  manifestPath?: string,
+): {
   phrases: ChangePhrase[];
   added: number;
   removed: number;
@@ -99,7 +105,7 @@ export function summarizeSkillChanges(moved: SkillVersionFile[]): {
     added += delta.added;
     removed += delta.removed;
     if (file.change === null || file.change === "unchanged") continue;
-    if (file.path === SKILL_MANIFEST_PATH) {
+    if (manifestPath !== undefined && file.path === manifestPath) {
       manifestEdited = true;
     } else {
       counts[file.change] += 1;
@@ -107,7 +113,7 @@ export function summarizeSkillChanges(moved: SkillVersionFile[]): {
   }
   const phrases: ChangePhrase[] = [];
   if (manifestEdited) {
-    phrases.push({ text: `${SKILL_MANIFEST_PATH} edited`, tone: "changed" });
+    phrases.push({ text: `${manifestPath} edited`, tone: "changed" });
   }
   if (counts.added) {
     phrases.push({ text: `+${files(counts.added)}`, tone: "added" });
@@ -137,16 +143,31 @@ function files(n: number): string {
 }
 
 /** The copy actually rendered: this version's, or the predecessor's for a removed file. */
-function renderedSide(file: SkillVersionFile): SkillFileSide | null {
+function renderedSide(file: VersionFile): VersionFileSide | null {
   return file.current ?? file.previous;
 }
 
-function isBinary(file: SkillVersionFile): boolean {
+/**
+ * The two modes of a file whose content is the same in both versions, or null
+ * when the content changed too or the mode did not.
+ */
+function modeOnlyChange(
+  file: VersionFile,
+): { from: string; to: string } | null {
+  const { current, previous } = file;
+  if (!current?.mode || !previous?.mode) return null;
+  if (current.mode === previous.mode) return null;
+  if (current.content !== previous.content) return null;
+  if (current.encoding !== previous.encoding) return null;
+  return { from: previous.mode, to: current.mode };
+}
+
+function isBinary(file: VersionFile): boolean {
   return renderedSide(file)?.encoding === "base64";
 }
 
 /** Line weight of a file's change; binary files have no lines to count. */
-function fileDelta(file: SkillVersionFile): { added: number; removed: number } {
+function fileDelta(file: VersionFile): { added: number; removed: number } {
   if (isBinary(file) || file.previous?.encoding === "base64") {
     return { added: 0, removed: 0 };
   }
@@ -160,10 +181,13 @@ function FileStat({
   file,
   mode,
 }: {
-  file: SkillVersionFile;
+  file: VersionFile;
   mode: VersionViewMode;
 }) {
   if (isBinary(file)) return <HunkStat summary="binary" />;
+  if (mode === "changes" && modeOnlyChange(file)) {
+    return <HunkStat summary="mode" />;
+  }
   if (mode === "changes") return <HunkStat {...fileDelta(file)} />;
   const lines = lineCount(file.current?.content ?? null);
   return <HunkStat summary={`${lines} ${lines === 1 ? "line" : "lines"}`} />;
@@ -173,7 +197,7 @@ function FileBody({
   file,
   mode,
 }: {
-  file: SkillVersionFile;
+  file: VersionFile;
   mode: VersionViewMode;
 }) {
   // Only the rendered side's encoding decides readability, so a binary
@@ -185,6 +209,14 @@ function FileBody({
         This file is binary, so there is nothing to show here.
       </HunkNote>
     );
+  }
+  // Nothing to read as a diff: the bytes are the same.
+  const modes = mode === "changes" ? modeOnlyChange(file) : null;
+  if (modes) {
+    const executable =
+      modes.to === "100755" ? ", which makes it executable" : "";
+    const sentence = `The file's mode changed from ${modes.from} to ${modes.to}${executable}. Its content is the same.`;
+    return <HunkNote>{sentence}</HunkNote>;
   }
   // A diff needs two readable sides. When only the older copy is binary — a
   // file re-saved as text — the newer one still reads, so it is shown whole

@@ -22,13 +22,14 @@ vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/skills/skill.query", () => ({
   useAllMatchingSkills: () => ({ data: [] }),
   useBulkDeleteSkills: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useBulkRestoreSkills: vi.fn(),
   useSkillsList: vi.fn(),
   useSkillsPaginated: vi.fn(),
   useSkillSourceRepos: vi.fn(),
   useExternalMcpSkills: vi.fn(),
   usePluginSkills: vi.fn(),
   useRestoreSkill: vi.fn(),
-  usePermanentlyDeleteSkill: vi.fn(),
+  usePermanentlyDeleteSkills: vi.fn(),
 }));
 // Filter chrome reads the URL and the org's teams; the row actions are what
 // this file is about.
@@ -62,8 +63,9 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
+  useBulkRestoreSkills,
   useExternalMcpSkills,
-  usePermanentlyDeleteSkill,
+  usePermanentlyDeleteSkills,
   usePluginSkills,
   useRestoreSkill,
   useSkillSourceRepos,
@@ -111,7 +113,6 @@ const PLUGIN_SKILL = {
   pluginId: "11111111-1111-4111-8111-111111111111",
   pluginName: "STE bundle",
   pluginSlug: "ste-bundle-11111111",
-  pluginEnabled: true,
   scope: "org" as const,
   clientType: "claude-code" as const,
   supportedPlatforms: ["posix" as const],
@@ -175,6 +176,22 @@ function mockPermissions({ skillAdmin }: { skillAdmin: boolean }) {
   );
 }
 
+const restoreMutateAsync = vi.fn();
+const bulkRestoreMutateAsync = vi.fn();
+const permanentDeleteMutateAsync = vi.fn();
+
+/**
+ * A reader who holds every permission except managing all skills
+ * (`skill:update` at `*`), which is what the deleted view asks for.
+ */
+function mockReaderWhoCannotListDeleted() {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (_permissions: Record<string, string[]>, scope?: string) =>
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+      ({ data: scope !== "*", isPending: false }) as any,
+  );
+}
+
 const openRowMenu = (skillName: string) =>
   userEvent.click(
     screen.getByRole("button", { name: `More actions ${skillName}` }),
@@ -216,11 +233,16 @@ describe("SkillsPage rows", () => {
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
     vi.mocked(useRestoreSkill).mockReturnValue({
-      mutate: vi.fn(),
+      mutateAsync: restoreMutateAsync,
       // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
     } as any);
-    vi.mocked(usePermanentlyDeleteSkill).mockReturnValue({
-      mutateAsync: vi.fn(),
+    vi.mocked(useBulkRestoreSkills).mockReturnValue({
+      mutateAsync: bulkRestoreMutateAsync,
+      isPending: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
+    } as any);
+    vi.mocked(usePermanentlyDeleteSkills).mockReturnValue({
+      mutateAsync: permanentDeleteMutateAsync,
       isPending: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
     } as any);
@@ -235,6 +257,88 @@ describe("SkillsPage rows", () => {
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
     mockSkills([MINE]);
+  });
+
+  describe("with no skill to list", () => {
+    const replace = vi.fn();
+    beforeEach(() => {
+      replace.mockClear();
+      vi.mocked(useRouter).mockReturnValue({
+        push: vi.fn(),
+        replace,
+      } as unknown as ReturnType<typeof useRouter>);
+      mockSkills([]);
+    });
+
+    it("opens the page that adds the first skill", () => {
+      render(<SkillsPage />);
+
+      // Replaced, so Back does not return to a page that sends forward again.
+      expect(replace).toHaveBeenCalledWith("/skills/new");
+      // Nothing of a list, and no landing panel, on the way there.
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(screen.queryByText("No skills yet")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /Add new skill/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("stays on the list while a skill from an MCP server is visible", () => {
+      vi.mocked(useExternalMcpSkills).mockReturnValue({
+        data: [
+          {
+            source: "external_mcp",
+            id: "22222222-2222-4222-8222-222222222222",
+            catalogId: "33333333-3333-4333-8333-333333333333",
+            mcpServerId: "44444444-4444-4444-8444-444444444444",
+            scope: "org",
+            serverName: "Release server",
+            icon: null,
+            name: "release-notes",
+            description: "Prepare release notes.",
+            uri: "skill://release/SKILL.md",
+            resources: null,
+          },
+        ],
+        isFetching: false,
+        // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+      } as any);
+      render(<SkillsPage />);
+
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it("tells a reader who cannot add a skill who shares them, and sends them nowhere", () => {
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions: Record<string, string[]>) =>
+          ({
+            data: !(permissions.skill ?? []).includes("create"),
+            // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+          }) as any,
+      );
+      render(<SkillsPage />);
+
+      expect(replace).not.toHaveBeenCalled();
+      expect(screen.getByText("No skills yet")).toBeVisible();
+      expect(
+        screen.getByText("Your admins haven't shared a skill yet."),
+      ).toBeVisible();
+    });
+
+    it("waits for permissions before sending anyone on", () => {
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions: Record<string, string[]>) =>
+          ({
+            data: undefined,
+            isPending: (permissions.skill ?? []).includes("create"),
+            // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+          }) as any,
+      );
+      render(<SkillsPage />);
+
+      expect(replace).not.toHaveBeenCalled();
+      expect(screen.queryByText("No skills yet")).not.toBeInTheDocument();
+    });
   });
 
   /**
@@ -718,7 +822,7 @@ describe("SkillsPage rows", () => {
     );
   });
 
-  it("keeps permanent delete in the trash row's menu, not beside Restore", async () => {
+  it("puts permanent delete on the trash row beside Restore, with no one-item menu", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("status=deleted") as ReturnType<
         typeof useSearchParams
@@ -728,9 +832,283 @@ describe("SkillsPage rows", () => {
     render(<SkillsPage />);
 
     expect(screen.getByLabelText("Restore pdf-tools")).toBeInTheDocument();
-    await openRowMenu("pdf-tools");
     expect(
-      screen.getByRole("menuitem", { name: /Delete permanently/ }),
+      screen.getByLabelText("Delete permanently pdf-tools"),
     ).toBeInTheDocument();
+    expect(screen.queryByLabelText("More actions pdf-tools")).toBeNull();
+  });
+
+  it("takes a reader who may not list deleted skills off ?status=deleted without asking for them", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted&search=pdf") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockReaderWhoCannotListDeleted();
+    render(<SkillsPage />);
+
+    // The parameter is dropped and the rest of the URL kept.
+    expect(replace).toHaveBeenCalledWith("/skills?search=pdf", {
+      scroll: false,
+    });
+    // The deleted list is never requested: it could only come back refused.
+    for (const [params, options] of vi.mocked(useSkillsPaginated).mock.calls) {
+      expect(params.status === "deleted" && options?.enabled).toBeFalsy();
+    }
+    // The reader sees their active skills under the filters, not an error.
+    expect(screen.getByText("pdf-tools")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Restore pdf-tools")).toBeNull();
+  });
+
+  it("waits for the permission answer before asking for either list", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockImplementation(
+      (_permissions: Record<string, string[]>, scope?: string) =>
+        // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+        ({ data: scope !== "*", isPending: scope === "*" }) as any,
+    );
+    render(<SkillsPage />);
+
+    for (const [, options] of vi.mocked(useSkillsPaginated).mock.calls) {
+      expect(options?.enabled).toBe(false);
+    }
+    for (const [, options] of vi.mocked(useSkillsList).mock.calls) {
+      expect(options?.enabled).toBe(false);
+    }
+  });
+
+  it("keeps the filters on screen when the list fails to load, and says a refusal is a refusal", () => {
+    const refused = new Error("Forbidden", {
+      cause: {
+        error: { message: "Forbidden", type: "api_authorization_error" },
+      },
+    });
+    vi.mocked(useSkillsList).mockReturnValue({
+      data: undefined,
+      isFetching: false,
+      isLoadingError: true,
+      error: refused,
+      refetch: vi.fn(),
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    render(<SkillsPage />);
+
+    expect(screen.getByText("Couldn't load your skills")).toBeInTheDocument();
+    // Not "check your internet connection": the request was answered.
+    expect(
+      screen.getByText(/You don't have access to this/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/internet connection/)).toBeNull();
+    // The filter bar is the way out of a filter that cannot be loaded.
+    expect(
+      screen.getByRole("combobox", { name: "Filter by skill source" }),
+    ).toBeInTheDocument();
+    // A failed load is not "No skills yet".
+    expect(screen.queryByText("No skills yet")).toBeNull();
+  });
+
+  it("offers a retry when the list fails for a reason a retry can fix", async () => {
+    const refetch = vi.fn();
+    vi.mocked(useSkillsList).mockReturnValue({
+      data: undefined,
+      isFetching: false,
+      isLoadingError: true,
+      error: new Error("Failed to fetch"),
+      refetch,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    render(<SkillsPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("restores the ticked deleted skills from the bulk bar, without a confirmation", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockPermissions({ skillAdmin: true });
+    mockSkills([{ ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" }]);
+    bulkRestoreMutateAsync.mockResolvedValue({
+      succeeded: [{ id: MINE.id, name: MINE.name }],
+      failed: [],
+    });
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    );
+    // Deleting is not what a deleted skill is ticked for.
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    // The bar's button: a row's own is named "Restore pdf-tools".
+    await userEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    expect(bulkRestoreMutateAsync).toHaveBeenCalledExactlyOnceWith([MINE.id]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // What was restored is no longer selected.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+      ).not.toBeChecked(),
+    );
+  });
+
+  it("destroys the ticked deleted skills from the bulk bar, after naming them in the confirmation", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockPermissions({ skillAdmin: true });
+    vi.mocked(useIsGlobalAdmin).mockReturnValue({
+      isGlobalAdmin: true,
+      isLoading: false,
+    });
+    mockSkills([{ ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" }]);
+    permanentDeleteMutateAsync.mockResolvedValue({
+      succeeded: [{ id: MINE.id, name: MINE.name }],
+      failed: [],
+    });
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    );
+    // The bar's button: a row's own is named "Delete permanently pdf-tools".
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete permanently" }),
+    );
+
+    // Nothing is destroyed before the question is answered.
+    expect(permanentDeleteMutateAsync).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Delete skill permanently");
+    expect(dialog).toHaveTextContent("Permanent deletion can not be undone.");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Delete permanently" }),
+    );
+
+    expect(permanentDeleteMutateAsync).toHaveBeenCalledExactlyOnceWith([
+      MINE.id,
+    ]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    ).not.toBeChecked();
+  });
+
+  it("refuses bulk permanent delete while a built-in skill is ticked, as its own row does", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockPermissions({ skillAdmin: true });
+    vi.mocked(useIsGlobalAdmin).mockReturnValue({
+      isGlobalAdmin: true,
+      isLoading: false,
+    });
+    mockSkills([
+      { ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" },
+      {
+        ...MINE,
+        id: "built-in-1",
+        name: "build-app",
+        sourceType: "built_in",
+        deletedAt: "2026-08-19T00:00:00.000Z",
+      },
+    ]);
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select build-app" }),
+    );
+    const purge = screen.getByRole("button", { name: "Delete permanently" });
+    expect(purge).toHaveAttribute("aria-disabled", "true");
+    expect(purge).toHaveAccessibleDescription(
+      /already gone for good.*Untick the built-in skill to delete the rest\./,
+    );
+    await userEvent.click(purge);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // Without the built-in, the rest can go.
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select build-app" }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Delete permanently" }),
+    ).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("offers bulk permanent delete only to the admins who can do it", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    // Manages every skill, but holds no built-in admin role.
+    mockPermissions({ skillAdmin: true });
+    mockSkills([{ ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" }]);
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    );
+
+    expect(screen.getByRole("button", { name: "Restore" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete permanently" }),
+    ).toBeNull();
+  });
+
+  it("sends one restore for a double click, and holds the button until it settles", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    // The deleted view belongs to a reader who manages every skill.
+    mockPermissions({ skillAdmin: true });
+    mockSkills([{ ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" }]);
+    let settle: (value: unknown) => void = () => undefined;
+    restoreMutateAsync.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
+    render(<SkillsPage />);
+
+    await userEvent.dblClick(screen.getByLabelText("Restore pdf-tools"));
+
+    // The second click used to send a second restore, which the API answered
+    // with "Skill not found" for a restore that had just worked.
+    expect(restoreMutateAsync).toHaveBeenCalledTimes(1);
+    expect(restoreMutateAsync).toHaveBeenCalledWith(MINE.id);
+    expect(screen.getByLabelText("Restore pdf-tools")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+
+    // A restore that failed leaves the skill in the list, restorable again.
+    settle(null);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Restore pdf-tools")).not.toHaveAttribute(
+        "aria-disabled",
+      ),
+    );
   });
 });

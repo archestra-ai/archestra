@@ -19,7 +19,6 @@ const PluginSkillCatalogItemSchema = z.object({
   pluginSlug: z.string(),
   sourceRepo: z.string().nullable(),
   sourceMarketplaceRepo: z.string().nullable(),
-  pluginEnabled: z.boolean(),
   scope: ResourceVisibilityScopeSchema,
   /** Provenance only: SKILL.md instructions are portable across clients/OSes. */
   clientType: ClientTypeSchema,

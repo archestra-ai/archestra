@@ -56,7 +56,7 @@ type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type ManagedTeam = archestraApiTypes.GetTeamResponses["200"];
 
 export function TeamsList() {
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { searchParams, setFilters } = useDataTableQueryParams();
   const router = useRouter();
   const pathname = usePathname();
   const setActionButton = useSetSettingsAction();
@@ -366,6 +366,7 @@ export function TeamsList() {
         </BulkActions>
 
         <DataTable
+          urlPagination
           columns={columns}
           data={teams ?? []}
           getRowId={(row) => row.id}
@@ -374,9 +375,7 @@ export function TeamsList() {
           onPageRowIdsChange={onPageRowIdsChange}
           isLoading={isLoading}
           hasActiveFilters={Boolean(search) || hasLabelFilters}
-          onClearFilters={() =>
-            updateQueryParams({ search: null, labels: null, page: "1" })
-          }
+          onClearFilters={() => setFilters({ search: null, labels: null })}
           emptyIcon={Users}
           emptyMessage="No teams found"
           hideSelectedCount

@@ -93,6 +93,8 @@ export function ValidationList({
       if (value) search.set(key, value);
       else search.delete(key);
     }
+    // A narrowed list starts from its first page.
+    search.delete("page");
     router.replace(`/openappa/validation${search.size ? `?${search}` : ""}`, {
       scroll: false,
     });
@@ -335,6 +337,7 @@ export function ValidationList({
           </div>
 
           <DataTable
+            urlPagination
             columns={columns}
             data={visible}
             getRowId={(row) => row.path}

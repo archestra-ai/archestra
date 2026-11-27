@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
+  createPaginatedResponseSchema,
   type GitProvider,
   gitHostFromUrl,
+  PaginationQuerySchema,
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
   parseLabelsParam,
   ResourceAccessQuerySchema,
@@ -13,11 +15,13 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
+import { isGlobalAdmin } from "@/auth/utils";
 import type { GitAccess } from "@/git-hosts/git-access";
 import {
   PluginLabelModel,
   PluginModel,
   PluginTeamModel,
+  PluginVersionModel,
   TaskModel,
 } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
@@ -34,6 +38,7 @@ import {
   GithubMarketplaceChangedError,
   prepareGithubMarketplaceImports,
 } from "@/plugins/github-marketplace-import";
+import { findPluginNameProblem } from "@/plugins/plugin-name";
 import {
   assertPluginSourceHost,
   hasSinglePluginGitAuth,
@@ -56,7 +61,9 @@ import {
   PluginGithubSyncIntervalSchema,
   PluginListItemSchema,
   PluginPlatformSchema,
+  PluginVersionDetailSchema,
   PluginWithFilesSchema,
+  SelectPluginVersionSchema,
   UpdatePluginSchema,
   UuidIdSchema,
 } from "@/types";
@@ -272,6 +279,13 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           access: ResourceAccessQuerySchema,
           sharedWith: ResourceSharedWithQuerySchema,
           owner: ResourceOwnerQuerySchema,
+          status: z
+            .enum(["active", "deleted"])
+            .optional()
+            .describe(
+              "`deleted` lists deleted plugins instead of the live ones. " +
+                "Only for a caller who can update every plugin.",
+            ),
         }),
         response: constructResponseSchema(z.array(PluginListItemSchema)),
       },
@@ -284,16 +298,27 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!checker.canRead) {
         throw new ApiError(403, "You do not have permission to view plugins");
       }
-      const accessiblePluginIds = checker.canReadAll
-        ? undefined
-        : await PluginTeamModel.getUserAccessiblePluginIds({
-            organizationId,
-            userId: user.id,
-          });
+      // The trash is an admin surface, as it is for skills: it takes `update`
+      // on every plugin. Restore itself is still authorized per plugin.
+      if (query.status === "deleted" && !checker.canUpdateAll) {
+        throw new ApiError(403, "Forbidden");
+      }
+      // The trash is not narrowed to the plugins the caller can read. That
+      // lookup knows live plugins only, so it would empty the trash for a
+      // caller who manages every plugin without a read grant on every one.
+      // Managing every plugin is what opened the trash, as it is for skills.
+      const accessiblePluginIds =
+        checker.canReadAll || query.status === "deleted"
+          ? undefined
+          : await PluginTeamModel.getUserAccessiblePluginIds({
+              organizationId,
+              userId: user.id,
+            });
       const plugins = await PluginModel.findByOrganization({
         organizationId,
         accessiblePluginIds,
         labels: parseLabelsParam(query.labels),
+        status: query.status,
         access: await ResourcePermissionSubjectModel.resolveAccessFilter({
           userId: user.id,
           organizationId,
@@ -790,6 +815,13 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, body }, reply) => {
+      const nameProblem = await findPluginNameProblem({
+        organizationId,
+        clientType: body.clientType,
+        displayName: body.displayName,
+        creatorUserId: user.id,
+      });
+      if (nameProblem) throw new ApiError(409, nameProblem);
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -888,6 +920,34 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Only GitHub-sourced plugins have GitHub source settings",
         );
       }
+      const clientChanged =
+        body.clientType !== undefined &&
+        body.clientType !== existing.clientType;
+      if (clientChanged && existing.sourceKind === "github") {
+        throw new ApiError(
+          409,
+          "A Git plugin's client is the one its repository was imported for. Import the repository again for another client.",
+        );
+      }
+      // Asked of a rename and of a move to another client, and only of a
+      // manual plugin: a plugin stored under a name its owner holds twice
+      // keeps saving its other fields, and a Git plugin's name is its
+      // repository's. A name is unique per client, so a new client is a new
+      // place for the name to be taken in.
+      const displayName = body.displayName ?? existing.displayName;
+      if (
+        existing.sourceKind !== "github" &&
+        (clientChanged ||
+          displayName.toLowerCase() !== existing.displayName.toLowerCase())
+      ) {
+        const nameProblem = await findPluginNameProblem({
+          organizationId,
+          clientType: body.clientType ?? existing.clientType,
+          displayName,
+          existing,
+        });
+        if (nameProblem) throw new ApiError(409, nameProblem);
+      }
       const githubSource = body.githubSource;
       const authentication = githubSource?.authentication;
       if (
@@ -920,13 +980,29 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           }
         : body;
+      // The hash guards the files, so it is only asked when files are sent.
+      const { baseContentHash, ...fields } = input;
       const plugin = await PluginModel.update({
         id: params.id,
         organizationId,
         userId: user.id,
-        input,
+        input: fields,
+        expectedContentHash: fields.files ? baseContentHash : undefined,
       });
-      if (!plugin) throw new ApiError(404, "Plugin not found");
+      if (!plugin) {
+        // The plugin was there a moment ago, so a guarded save that wrote
+        // nothing lost to another write, unless the plugin is gone.
+        const stillThere =
+          baseContentHash !== undefined &&
+          (await PluginModel.findById({ id: params.id, organizationId }));
+        if (stillThere) {
+          throw new ApiError(
+            409,
+            `Plugin "${existing.displayName}" changed since its files were read. Load it again and retry.`,
+          );
+        }
+        throw new ApiError(404, "Plugin not found");
+      }
       return reply.send(plugin);
     },
   );
@@ -959,6 +1035,191 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!plugin) throw new ApiError(404, "Plugin not found");
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.get(
+    "/api/plugins/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetPluginVersions,
+        description:
+          "List a plugin's version history, newest first, without the " +
+          "files. Every write that changes the files adds a version; " +
+          "version numbers are contiguous from 1. Paginated.",
+        tags: ["Plugins"],
+        params: PluginParamsSchema,
+        querystring: PaginationQuerySchema,
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectPluginVersionSchema),
+        ),
+      },
+    },
+    async ({ organizationId, user, params, query }, reply) => {
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "read",
+      });
+      await requireLivePlugin({ id: params.id, organizationId });
+      return reply.send(
+        await PluginVersionModel.listForPlugin({
+          pluginId: params.id,
+          organizationId,
+          pagination: query,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/plugins/:id/versions/:version",
+    {
+      schema: {
+        operationId: RouteId.GetPluginVersion,
+        description:
+          "Get one immutable version of a plugin with the files it holds. " +
+          "To restore it, save those files to the plugin: that adds a new " +
+          "version and leaves the history as it is.",
+        tags: ["Plugins"],
+        params: PluginParamsSchema.extend({
+          // Capped at what the integer column holds, so a number past it is a
+          // bad request and not a database error.
+          version: z.coerce.number().int().min(1).max(2_147_483_647),
+        }),
+        response: constructResponseSchema(PluginVersionDetailSchema),
+      },
+    },
+    async ({ organizationId, user, params }, reply) => {
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "read",
+      });
+      await requireLivePlugin({ id: params.id, organizationId });
+      const version = await PluginVersionModel.findByPluginAndVersion({
+        pluginId: params.id,
+        organizationId,
+        version: params.version,
+      });
+      if (!version) throw new ApiError(404, "Plugin version not found");
+      return reply.send(version);
+    },
+  );
+
+  fastify.post(
+    "/api/plugins/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestorePlugin,
+        description:
+          "Restore a deleted plugin. It comes back not syncing: deleting a " +
+          "Git plugin clears its sync schedule and stored credential. 409 " +
+          "when a live plugin has since taken its place, such as the same " +
+          "marketplace entry imported again.",
+        tags: ["Plugins"],
+        params: PluginParamsSchema,
+        response: constructResponseSchema(PluginWithFilesSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, params } = request;
+      // The grant that deleted it brings it back. A plugin's grants survive
+      // its deletion, so this answers for a deleted plugin too.
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "delete",
+      });
+      const deleted = await PluginModel.findDeletedById({
+        id: params.id,
+        organizationId,
+      });
+      if (!deleted) {
+        // Already live: a repeated request (a double click, a retry after a
+        // lost response) gets the plugin back instead of a "not found" for a
+        // restore that worked.
+        const live = await PluginModel.findById({
+          id: params.id,
+          organizationId,
+        });
+        if (!live) throw new ApiError(404, "Plugin not found");
+        // Nothing was restored, so there is nothing to audit.
+        request.auditSkip = true;
+        return reply.send(live);
+      }
+
+      // The name may have been taken while the plugin was in the trash: its
+      // owner cannot hold two manual plugins for one client under one name,
+      // and no index says so, so it is asked here as on create and rename.
+      if (deleted.sourceKind !== "github") {
+        const nameProblem = await findPluginNameProblem({
+          organizationId,
+          clientType: deleted.clientType,
+          displayName: deleted.displayName,
+          existing: deleted,
+        });
+        if (nameProblem) {
+          throw new ApiError(
+            409,
+            `Cannot restore: another of the owner's plugins for this client is named "${deleted.displayName}". Rename or delete that one first.`,
+          );
+        }
+      }
+
+      try {
+        await PluginModel.restore({ id: params.id, organizationId });
+      } catch (error) {
+        // Only a live plugin in the deleted one's place can refuse this
+        // write: the unique indexes all leave deleted rows out.
+        if (isUniqueConstraintError(error)) {
+          throw new ApiError(
+            409,
+            `Cannot restore: a plugin from the same source as "${deleted.displayName}" already exists.`,
+          );
+        }
+        throw error;
+      }
+      const restored = await PluginModel.findById({
+        id: params.id,
+        organizationId,
+      });
+      if (!restored) throw new ApiError(404, "Plugin not found");
+      return reply.send(restored);
+    },
+  );
+
+  fastify.delete(
+    "/api/plugins/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeletePlugin,
+        description:
+          "Permanently destroy a deleted plugin (global admins only). " +
+          "Irreversible, with no grace period: its files and versions are " +
+          "destroyed, along with its grants, labels, usage events and share " +
+          "links. Copies already installed on developer machines are not " +
+          "touched. 404 if there is no deleted plugin with that id in the " +
+          "organization, which is also the answer when the plugin is still " +
+          "live or the caller is not a global admin. Restore wins a race.",
+        tags: ["Plugins"],
+        params: PluginParamsSchema,
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ organizationId, user, params }, reply) => {
+      // Before the plugin is read: a caller who is not a global admin gets
+      // the same 404 whatever the id, so the route never confirms a plugin
+      // exists.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
+        throw new ApiError(404, "Plugin not found");
+      }
+      const purged = await PluginModel.purge({ id: params.id, organizationId });
+      if (!purged) throw new ApiError(404, "Plugin not found");
       return reply.send({ success: true });
     },
   );
@@ -1023,6 +1284,22 @@ async function requirePluginAction(params: {
   );
 }
 
+/**
+ * Refuse a plugin that is not live, as a plugin that is not there.
+ *
+ * A plugin's grants survive its deletion, so that restoring it brings its
+ * access back. A route that reads the plugin's content therefore cannot rely
+ * on the grant alone: it would keep answering for a plugin in the trash,
+ * which its readers can no longer open anywhere else.
+ */
+async function requireLivePlugin(params: {
+  id: string;
+  organizationId: string;
+}): Promise<void> {
+  const plugin = await PluginModel.findById(params);
+  if (!plugin) throw new ApiError(404, "Plugin not found");
+}
+
 async function runGithubImport<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
@@ -1039,7 +1316,7 @@ async function runMarketplaceDiscovery<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } catch (error) {
     if (error instanceof MarketplaceDiscoveryError) {
-      throw new ApiError(400, error.message);
+      throw new ApiError(400, error.message, error.code ?? undefined);
     }
     throw error;
   }

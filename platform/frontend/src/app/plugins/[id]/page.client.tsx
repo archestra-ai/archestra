@@ -2,6 +2,7 @@
 
 import { GIT_PROVIDER_LABELS } from "@archestra/shared";
 import {
+  History,
   Info,
   Loader2,
   MoreHorizontal,
@@ -20,7 +21,7 @@ import {
 } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -46,19 +47,22 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   type PluginDetail,
-  useDeletePlugin,
   usePlugin,
+  usePlugins,
   useUpdatePlugin,
 } from "@/lib/plugins/plugin.query";
+import { DeletePluginsDialog } from "../_parts/delete-plugins-dialog";
 import {
   getPluginActionModel,
   pluginAction,
 } from "../_parts/plugin-actions-model";
 import {
-  isPluginDraftComplete,
   isPluginDraftDirty,
+  OWN_PLUGIN_NAME_TAKEN,
   type PluginDraft,
   pluginDraftFromPlugin,
+  pluginDraftGap,
+  pluginNameTwin,
 } from "../_parts/plugin-draft";
 import { PluginForm } from "../_parts/plugin-form";
 import { PluginGitSourceCard } from "../_parts/plugin-git-source";
@@ -74,15 +78,23 @@ import {
   PluginPageLoading,
 } from "../_parts/plugin-page-shell";
 import { PluginSourceGlyph } from "../_parts/plugin-source-icon";
+import { PluginVersionHistoryDialog } from "../_parts/plugin-version-history-dialog";
 
 /**
  * `/plugins/[id]` — one plugin's page. Its metadata, payload and access are
  * edited here rather than behind an Edit button that opened a wizard on a
- * second route: the plugin's settings are the page. The layout intentionally
- * mirrors the skill page.
+ * second route: the plugin's settings are the page. It sits in the same column
+ * as the Plugins list (the layout's default width), so the header, its
+ * actions and the content keep their edges when a row is opened.
  */
 export default function PluginDetailPage({ id }: { id: string }) {
-  const { data: plugin, isPending, isLoadingError, refetch } = usePlugin(id);
+  const {
+    data: plugin,
+    isPending,
+    isLoadingError,
+    error,
+    refetch,
+  } = usePlugin(id);
 
   // Hold the last plugin this mount saw. Deleting it in another tab (or any
   // background refetch that answers 404) turns `data` into null, and dropping
@@ -105,9 +117,14 @@ export default function PluginDetailPage({ id }: { id: string }) {
 
   if (isLoadingError) {
     return (
-      <PageLayout title="Plugin" description="View plugin configuration.">
+      <PageLayout
+        title="Plugin"
+        description=""
+        backLink={<PluginBackLink href="/plugins" label="Plugins" />}
+      >
         <QueryLoadError
           title="Couldn't load this plugin"
+          error={error}
           onRetry={() => refetch()}
         />
       </PageLayout>
@@ -183,6 +200,10 @@ function PluginDetailView({
   );
   const [draft, setDraft] = useState<PluginDraft>(seed);
   const [base, setBase] = useState<PluginDraft>(seed);
+  // The hash of the files the draft builds on. A save sends it, so files
+  // written since (in another tab, by a restore) are not replaced unseen. It
+  // moves when the draft is taken from the plugin, and when a save succeeds.
+  const [baseContentHash, setBaseContentHash] = useState(plugin.contentHash);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = isPluginDraftDirty(draft, base);
 
@@ -190,13 +211,33 @@ function PluginDetailView({
     if (isDirty) return;
     setDraft(seed);
     setBase(seed);
-  }, [isDirty, seed]);
+    setBaseContentHash(plugin.contentHash);
+  }, [isDirty, seed, plugin.contentHash]);
 
   const patchDraft = (patch: Partial<PluginDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
   const discardChanges = () => setDraft(base);
 
-  const isComplete = isPluginDraftComplete({ draft, isGithubPlugin });
+  const { data: plugins } = usePlugins();
+  const nameTwin = isGithubPlugin
+    ? null
+    : pluginNameTwin({
+        displayName: draft.displayName,
+        // The client being saved: a name is unique per client.
+        clientType: draft.clientType,
+        ownerId: plugin.authorId,
+        pluginId: plugin.id,
+        plugins: plugins ?? [],
+      });
+  // Only a rename is refused. A plugin stored under a name its owner already
+  // holds twice keeps saving its other fields, so there it is a note.
+  const isRenamed =
+    draft.displayName.trim().toLowerCase() !==
+    plugin.displayName.trim().toLowerCase();
+  const nameTaken = nameTwin === "own" && !isRenamed ? "other" : nameTwin;
+  const draftGap =
+    pluginDraftGap({ draft, isGithubPlugin }) ??
+    (nameTaken === "own" ? OWN_PLUGIN_NAME_TAKEN : null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -212,9 +253,10 @@ function PluginDetailView({
           : {
               displayName: submitted.displayName.trim(),
               description: submitted.description,
-              enabled: submitted.enabled,
               supportedPlatforms: submitted.supportedPlatforms,
+              clientType: submitted.clientType,
               files: submitted.files,
+              baseContentHash,
             }),
         labels: submitted.labels,
         icon: submitted.icon,
@@ -222,6 +264,11 @@ function PluginDetailView({
       .catch(() => null);
     setIsSaving(false);
     if (!saved) return;
+    // The saved files are what the draft now builds on, whatever was typed
+    // while the save was on its way: such a draft stays dirty, so the effect
+    // above does not take the plugin again, and the next save must still be
+    // held against the files this one wrote.
+    setBaseContentHash(saved.contentHash);
     setBase(submitted);
   };
 
@@ -255,13 +302,7 @@ function PluginDetailView({
   const [deleteRequested, setDeleteRequested] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
-  const deletePlugin = useDeletePlugin(plugin.id);
-
-  const handleDelete = async () => {
-    const deleted = await deletePlugin.mutateAsync();
-    if (deleted) onDeleted();
-  };
-
+  const [historyOpen, setHistoryOpen] = useState(false);
   return (
     <PageLayout
       icon={
@@ -282,17 +323,11 @@ function PluginDetailView({
           <Badge variant="secondary" className="font-normal">
             {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
           </Badge>
-          {!plugin.enabled && (
-            <Badge variant="outline" className="font-normal">
-              Disabled
-            </Badge>
-          )}
         </div>
       }
       documentTitle={plugin.displayName}
       description={plugin.description || PLUGIN_DESCRIPTION_FALLBACK}
       backLink={<PluginBackLink href="/plugins" label="Plugins" />}
-      maxWidth="wizard"
       minWidth="phone"
       contentOverflowX="clip"
       tabs={[
@@ -322,18 +357,19 @@ function PluginDetailView({
               <CreatedByCell createdBy={plugin.createdBy} />
             </p>
           )}
-          {plugin.enabled && (
-            <PermissionButton
-              permissions={installAction.permissions}
-              permissionScope={installAction.permissionScope}
-              variant="outline"
-              size="sm"
-              onClick={() => setInstallOpen(true)}
-            >
-              <PackagePlus className="h-4 w-4" />
-              {installAction.label}
-            </PermissionButton>
-          )}
+          <DownloadFilesButton name={plugin.pluginSlug} files={draft.files} />
+          <PermissionButton
+            permissions={installAction.permissions}
+            permissionScope={installAction.permissionScope}
+            variant="outline"
+            size="sm"
+            onClick={() => setInstallOpen(true)}
+          >
+            <PackagePlus className="h-4 w-4" />
+            {installAction.label}
+          </PermissionButton>
+          {/* The actions on the plugin as a whole. Two or more for every
+              plugin, so they share a menu. */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon-sm">
@@ -373,7 +409,11 @@ function PluginDetailView({
                   )}
                 </DropdownMenuItem>
               )}
-              {isGithubPlugin && <DropdownMenuSeparator />}
+              <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
+                <History className="h-4 w-4" />
+                <span>Version history</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
                 aria-disabled={canDelete !== true || undefined}
@@ -450,6 +490,7 @@ function PluginDetailView({
           pluginId={plugin.id}
           isGithubPlugin={isGithubPlugin}
           activeSection={activeSection}
+          nameTaken={nameTaken}
         />
 
         {activeSection === "general" && !isReadOnly && (
@@ -469,7 +510,10 @@ function PluginDetailView({
               <PermissionButton
                 permissions={{ plugin: ["update"] }}
                 permissionScope={plugin.id}
-                disabled={!isDirty || !isComplete || isGone || isSaving}
+                disabled={!isDirty || draftGap !== null || isGone || isSaving}
+                tooltip={
+                  isDirty && !isSaving ? (draftGap ?? undefined) : undefined
+                }
                 onClick={handleSave}
               >
                 {isSaving ? (
@@ -494,19 +538,24 @@ function PluginDetailView({
         }}
         onDiscard={guard.discardChanges}
       />
-      <DeleteConfirmDialog
+      <DeletePluginsDialog
+        plugins={[plugin]}
         open={deleteRequested}
         onOpenChange={setDeleteRequested}
-        title="Delete plugin?"
-        description="Installed copies stay on developer machines until you uninstall them."
-        isPending={deletePlugin.isPending}
-        onConfirm={handleDelete}
+        onDeleted={onDeleted}
       />
       {updatesOpen && (
         <PluginGithubUpdatesDialog
           plugin={plugin}
           open={updatesOpen}
           onOpenChange={setUpdatesOpen}
+        />
+      )}
+      {historyOpen && (
+        <PluginVersionHistoryDialog
+          pluginId={plugin.id}
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
         />
       )}
       {installOpen && (

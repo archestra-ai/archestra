@@ -74,7 +74,7 @@ export function ApiKeysCard() {
 }
 
 function ApiKeysCardContent() {
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { searchParams, setFilters } = useDataTableQueryParams();
   const {
     data: apiKeys = [],
     isPending,
@@ -293,9 +293,7 @@ function ApiKeysCardContent() {
               <FilterBar
                 leading
                 onClearFilters={
-                  search
-                    ? () => updateQueryParams({ search: null, page: "1" })
-                    : undefined
+                  search ? () => setFilters({ search: null }) : undefined
                 }
                 search={
                   <SearchInput
@@ -344,6 +342,7 @@ function ApiKeysCardContent() {
                 </BulkActions>
 
                 <DataTable
+                  urlPagination
                   columns={columns}
                   data={filteredApiKeys}
                   getRowId={(row) => row.id}
@@ -354,9 +353,7 @@ function ApiKeysCardContent() {
                   emptyMessage="No API keys yet"
                   hasActiveFilters={search.trim().length > 0}
                   filteredEmptyMessage="No API keys match your search"
-                  onClearFilters={() =>
-                    updateQueryParams({ search: null, page: "1" })
-                  }
+                  onClearFilters={() => setFilters({ search: null })}
                   hidePaginationWhenSinglePage
                   fixedWidthColumnIds={[
                     "start",

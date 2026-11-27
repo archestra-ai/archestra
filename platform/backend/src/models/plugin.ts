@@ -14,12 +14,14 @@ import {
   isNotNull,
   isNull,
   like,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { restore } from "@/database/soft-delete";
 import {
   type ClientType,
   type CreatePlugin,
@@ -35,6 +37,7 @@ import CreatedByModel, { lookupCreator } from "./created-by";
 import { PluginLabelModel } from "./entity-labels";
 import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
+import PluginVersionModel from "./plugin-version";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import type { ResourceAccessFilter } from "./resource-permission-subject";
 
@@ -74,6 +77,8 @@ class PluginModel {
     labels?: Record<string, string[]>;
     /** The list's "Show" filter; omit when not filtering. */
     access?: ResourceAccessFilter;
+    /** `deleted` lists the trash instead of the live plugins. */
+    status?: "active" | "deleted";
   }): Promise<PluginListItem[]> {
     if (params.accessiblePluginIds?.length === 0) return [];
 
@@ -107,7 +112,9 @@ class PluginModel {
               })
             : undefined,
           // SPDX-SnippetEnd
-          notDeleted(schema.pluginsTable),
+          params.status === "deleted"
+            ? isNotNull(schema.pluginsTable.deletedAt)
+            : notDeleted(schema.pluginsTable),
         ),
       )
       .orderBy(desc(schema.pluginsTable.updatedAt));
@@ -159,7 +166,6 @@ class PluginModel {
         and(
           eq(schema.pluginsTable.organizationId, params.organizationId),
           inArray(schema.pluginsTable.id, params.ids),
-          eq(schema.pluginsTable.enabled, true),
           eq(
             schema.pluginsTable.approvedContentHash,
             schema.pluginsTable.contentHash,
@@ -181,7 +187,6 @@ class PluginModel {
         and(
           eq(schema.pluginsTable.organizationId, params.organizationId),
           eq(schema.pluginsTable.clientType, params.clientType),
-          eq(schema.pluginsTable.enabled, true),
           eq(
             schema.pluginsTable.approvedContentHash,
             schema.pluginsTable.contentHash,
@@ -202,6 +207,12 @@ class PluginModel {
     organizationId: string;
     clientType: ClientType;
     platform: "posix" | "windows";
+    /**
+     * How the installing user has to reach a plugin for it to be bundled
+     * without being named: the Plugins list's own filter, so a setup installs
+     * what that list shows.
+     */
+    access?: ResourceAccessFilter;
   }): Promise<Pick<Plugin, "id" | "supportedPlatforms">[]> {
     return db
       .select({
@@ -214,11 +225,23 @@ class PluginModel {
           eq(schema.pluginsTable.organizationId, params.organizationId),
           eq(schema.pluginsTable.clientType, params.clientType),
           sql`${params.platform} = any(${schema.pluginsTable.supportedPlatforms})`,
-          eq(schema.pluginsTable.enabled, true),
           eq(
             schema.pluginsTable.approvedContentHash,
             schema.pluginsTable.contentHash,
           ),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          params.access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                ...params.access,
+                organizationId: schema.pluginsTable.organizationId,
+                resource: "plugin",
+                scopeColumn: schema.pluginsTable.id,
+                ownerColumn: schema.pluginsTable.authorId,
+              })
+            : undefined,
+          // SPDX-SnippetEnd
           notDeleted(schema.pluginsTable),
         ),
       )
@@ -248,7 +271,6 @@ class PluginModel {
         and(
           eq(schema.pluginsTable.organizationId, params.organizationId),
           inArray(schema.pluginsTable.id, params.ids),
-          eq(schema.pluginsTable.enabled, true),
           eq(
             schema.pluginsTable.approvedContentHash,
             schema.pluginsTable.contentHash,
@@ -430,6 +452,13 @@ class PluginModel {
       // SPDX-SnippetEnd
 
       const files = await insertFiles(tx, plugin.id, params.input.files);
+      // Where the plugin's history starts.
+      await PluginVersionModel.append(tx, {
+        pluginId: plugin.id,
+        contentHash,
+        files,
+        sourceCommit: params.source?.sha,
+      });
       return { ...plugin, files };
     });
     if (!created) return null;
@@ -471,9 +500,13 @@ class PluginModel {
     expectedContentHash?: string;
   }): Promise<PluginWithFiles | null> {
     const updated = await withDbTransaction(async (tx) => {
+      // Locked for the transaction: whether this write changes the files, and
+      // so adds a version, is decided against the hash read here, and a
+      // concurrent write must not move it in between.
       const existing = await findRowWithTransaction(tx, {
         id: params.id,
         organizationId: params.organizationId,
+        forUpdate: true,
       });
       if (!existing) return null;
 
@@ -556,8 +589,8 @@ class PluginModel {
           displayName: params.input.displayName,
           description: params.input.description,
           icon: params.input.icon,
-          enabled: params.input.enabled,
           supportedPlatforms: params.input.supportedPlatforms,
+          clientType: params.input.clientType,
           syncGeneration: sql`${schema.pluginsTable.syncGeneration} + 1`,
           ...sourceUpdate,
           ...githubSourceUpdate,
@@ -586,10 +619,23 @@ class PluginModel {
       if (!plugin) return null;
 
       if (fileUpdate) {
+        if (contentHash !== existing.contentHash) {
+          await startHistoryIfMissing(tx, existing);
+        }
         await tx
           .delete(schema.pluginFilesTable)
           .where(eq(schema.pluginFilesTable.pluginId, plugin.id));
-        await insertFiles(tx, plugin.id, fileUpdate);
+        const written = await insertFiles(tx, plugin.id, fileUpdate);
+        // A version per change to the files. A save that sends the same
+        // files again (a settings-only edit resends them) adds none.
+        if (contentHash !== existing.contentHash) {
+          await PluginVersionModel.append(tx, {
+            pluginId: plugin.id,
+            contentHash,
+            files: written,
+            sourceCommit: params.source?.sha ?? params.sourceSha,
+          });
+        }
       }
       const files = await findFilesWithTransaction(tx, plugin.id);
       return { ...plugin, files };
@@ -608,6 +654,77 @@ class PluginModel {
     });
   }
 
+  /**
+   * The display name of another live plugin of the same owner, for the same
+   * client, that equals `displayName` ignoring letter case. Null when there
+   * is none.
+   *
+   * Clients install a plugin by its slug, which is unique on its own, so the
+   * database does not constrain the display name. What this guards is the
+   * list: two of one person's plugins for one client under one name cannot be
+   * told apart. It is asked only when a manual plugin is named or renamed.
+   * Imports are not asked (two marketplaces may ship the same name), other
+   * owners' plugins are not compared (the caller may not be able to see
+   * them), and stored duplicates keep saving their other fields.
+   *
+   * `owner` is who the plugin belongs to: the acting principal on create
+   * (see {@link PluginModel.ownerOfPrincipal}), the stored owner on a rename.
+   */
+  static async findOwnNameTwin(params: {
+    organizationId: string;
+    owner: PluginOwner;
+    clientType: ClientType;
+    displayName: string;
+    /** The plugin being renamed, which never conflicts with itself. */
+    excludeId?: string;
+  }): Promise<string | null> {
+    const { owner } = params;
+    const ownedBy = owner.authorId
+      ? eq(schema.pluginsTable.authorId, owner.authorId)
+      : owner.createdByServiceAccountId
+        ? eq(
+            schema.pluginsTable.createdByServiceAccountId,
+            owner.createdByServiceAccountId,
+          )
+        : null;
+    if (!ownedBy) return null;
+    const [twin] = await db
+      .select({ displayName: schema.pluginsTable.displayName })
+      .from(schema.pluginsTable)
+      .where(
+        and(
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          ownedBy,
+          eq(schema.pluginsTable.clientType, params.clientType),
+          sql`lower(${schema.pluginsTable.displayName}) = lower(${params.displayName.trim()})`,
+          ...(params.excludeId
+            ? [ne(schema.pluginsTable.id, params.excludeId)]
+            : []),
+          notDeleted(schema.pluginsTable),
+        ),
+      )
+      .limit(1);
+    return twin?.displayName ?? null;
+  }
+
+  /**
+   * The owner columns a plugin created by this principal gets: the user, or
+   * the service account behind a service account principal.
+   */
+  static async ownerOfPrincipal(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<PluginOwner> {
+    const owner = await CreatedByModel.forInsert({
+      data: { organizationId: params.organizationId, authorId: params.userId },
+      userIdField: "authorId",
+    });
+    return {
+      authorId: owner.authorId ?? null,
+      createdByServiceAccountId: owner.createdByServiceAccountId,
+    };
+  }
+
   static async delete(params: {
     id: string;
     organizationId: string;
@@ -616,7 +733,6 @@ class PluginModel {
       .update(schema.pluginsTable)
       .set({
         deletedAt: new Date(),
-        enabled: false,
         githubSyncInterval: null,
         githubAppConfigId: null,
         githubPatId: null,
@@ -637,6 +753,86 @@ class PluginModel {
     return plugin ?? null;
   }
 
+  /** A plugin in the organization's trash, or null. */
+  static async findDeletedById(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<Plugin | null> {
+    const [plugin] = await db
+      .select()
+      .from(schema.pluginsTable)
+      .where(
+        and(
+          eq(schema.pluginsTable.id, params.id),
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          isNotNull(schema.pluginsTable.deletedAt),
+        ),
+      )
+      .limit(1);
+    return plugin ?? null;
+  }
+
+  /**
+   * Make a deleted plugin live again. False when it is not in the trash.
+   *
+   * What the delete cleared stays cleared: the plugin comes back not syncing
+   * and without a stored credential, so a Git plugin has to be connected
+   * again by someone who may use that credential.
+   *
+   * Throws the unique violation when a live plugin has since taken the
+   * deleted one's place (the same marketplace entry imported again, say);
+   * the caller turns that into its refusal.
+   */
+  static async restore(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const restored = await restore(
+      db,
+      schema.pluginsTable,
+      and(
+        eq(schema.pluginsTable.id, params.id),
+        eq(schema.pluginsTable.organizationId, params.organizationId),
+      ),
+    );
+    return restored > 0;
+  }
+
+  /**
+   * Destroy a deleted plugin for good: the row, by cascade its files,
+   * versions, labels, usage events and share links, and its permission
+   * policy, which no foreign key ties to the plugin. False when it is not in
+   * the trash, which is also how a restore that won the race reports itself.
+   */
+  static async purge(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    return await withDbTransaction(async (tx) => {
+      const purged = await tx
+        .delete(schema.pluginsTable)
+        .where(
+          and(
+            eq(schema.pluginsTable.id, params.id),
+            eq(schema.pluginsTable.organizationId, params.organizationId),
+            isNotNull(schema.pluginsTable.deletedAt),
+          ),
+        )
+        .returning({ id: schema.pluginsTable.id });
+      if (purged.length === 0) return false;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["plugin"],
+        scope: params.id,
+      });
+      // SPDX-SnippetEnd
+      return true;
+    });
+  }
+
   static async applyGithubUpdate(params: {
     id: string;
     organizationId: string;
@@ -646,6 +842,14 @@ class PluginModel {
   }): Promise<PluginWithFiles | null> {
     const applied = await withDbTransaction(async (tx) => {
       const contentHash = computeContentHash(params.files);
+      // As it is before the update, for a history that starts here. Locked,
+      // so the files it describes are the ones still there below.
+      const existing = await findRowWithTransaction(tx, {
+        id: params.id,
+        organizationId: params.organizationId,
+        forUpdate: true,
+      });
+      if (!existing) return null;
       const [plugin] = await tx
         .update(schema.pluginsTable)
         .set({
@@ -673,10 +877,23 @@ class PluginModel {
         )
         .returning({ id: schema.pluginsTable.id });
       if (!plugin) return null;
+      // A new commit is offered as an update whatever it changed. One that
+      // touched nothing this plugin imports (a file outside its folder) moves
+      // the plugin to that commit and leaves its files, and its history, as
+      // they are.
+      if (contentHash === existing.contentHash) return plugin;
+      await startHistoryIfMissing(tx, existing);
       await tx
         .delete(schema.pluginFilesTable)
         .where(eq(schema.pluginFilesTable.pluginId, params.id));
-      await insertFiles(tx, params.id, params.files);
+      const written = await insertFiles(tx, params.id, params.files);
+      // The applied update is a version, with the commit it came from.
+      await PluginVersionModel.append(tx, {
+        pluginId: params.id,
+        contentHash,
+        files: written,
+        sourceCommit: params.expectedPendingSha,
+      });
       return plugin;
     });
     if (!applied) return null;
@@ -946,6 +1163,12 @@ export default PluginModel;
 
 // === Internal helpers ===
 
+/** Who a plugin belongs to: a user, or the service account that created it. */
+interface PluginOwner {
+  authorId: string | null;
+  createdByServiceAccountId: string | null;
+}
+
 function derivePluginSlug(displayName: string, id: string): string {
   const base =
     urlSlugify(displayName).slice(0, 39).replace(/-+$/g, "") || "plugin";
@@ -1049,11 +1272,42 @@ async function attachVisibility(plugins: Plugin[]) {
   }));
 }
 
+/**
+ * Start the history of a plugin that has none, with the files it holds now.
+ *
+ * A plugin created before versions were kept has no version. Its history
+ * starts at the first write that changes its files: that write calls this
+ * before it replaces them, so what the plugin held until then is version 1
+ * and can be read and restored. Nothing is written for a plugin that already
+ * has a history.
+ *
+ * The caller has updated the plugin row in this transaction, which holds the
+ * row's lock, so two writers cannot both start the history.
+ */
+async function startHistoryIfMissing(
+  tx: Transaction,
+  plugin: Pick<Plugin, "id" | "contentHash" | "sourceSha" | "updatedAt">,
+): Promise<void> {
+  if (await PluginVersionModel.hasAny(tx, plugin.id)) return;
+  await PluginVersionModel.append(tx, {
+    pluginId: plugin.id,
+    contentHash: plugin.contentHash,
+    files: await findFilesWithTransaction(tx, plugin.id),
+    sourceCommit: plugin.sourceSha,
+    createdAt: plugin.updatedAt,
+  });
+}
+
 async function findRowWithTransaction(
   tx: Pick<typeof db, "select">,
-  params: { id: string; organizationId: string },
+  params: {
+    id: string;
+    organizationId: string;
+    /** Hold the row's lock until the transaction ends. */
+    forUpdate?: boolean;
+  },
 ): Promise<Plugin | null> {
-  const [plugin] = await tx
+  const query = tx
     .select()
     .from(schema.pluginsTable)
     .where(
@@ -1064,6 +1318,7 @@ async function findRowWithTransaction(
       ),
     )
     .limit(1);
+  const [plugin] = await (params.forUpdate ? query.for("update") : query);
   return plugin ?? null;
 }
 

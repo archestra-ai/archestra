@@ -15,7 +15,7 @@ type DeleteConfirmDialogProps = {
   title: string;
   description: string | React.ReactNode;
   isPending: boolean;
-  onConfirm: () => void;
+  onConfirm: () => unknown;
   confirmLabel?: string;
   pendingLabel?: string;
   confirmDisabled?: boolean;
@@ -72,6 +72,10 @@ export function DeleteConfirmDialog({
     coolingDown ||
     (confirmationPhrase !== undefined && typed.trim() !== confirmationPhrase);
 
+  const confirm = () => {
+    if (!blocked) onConfirm();
+  };
+
   return (
     <FormDialog
       open={open}
@@ -86,18 +90,17 @@ export function DeleteConfirmDialog({
           if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) {
             return;
           }
-          e.preventDefault();
-          if (blocked) {
+          // A held Enter repeats; only the press itself confirms.
+          if (e.repeat) {
+            e.preventDefault();
             return;
           }
-          onConfirm();
+          e.preventDefault();
+          confirm();
         }}
         onSubmit={(e) => {
           e.preventDefault();
-          if (blocked) {
-            return;
-          }
-          onConfirm();
+          confirm();
         }}
       >
         {confirmationPhrase !== undefined && (
@@ -126,7 +129,20 @@ export function DeleteConfirmDialog({
           >
             Cancel
           </Button>
-          <Button type="submit" variant={confirmVariant} disabled={blocked}>
+          <Button
+            type="submit"
+            variant={confirmVariant}
+            disabled={blocked}
+            // `isPending` reaches this button one render after the click
+            // that started the request, and the second click of a double
+            // click lands inside that gap: the removal was sent twice, and
+            // the repeat came back "not found" for one that had just worked.
+            // The browser counts the clicks of a double click, so the second
+            // is refused by its count, with no timer to guess the gap.
+            onClick={(event) => {
+              if (event.detail > 1) event.preventDefault();
+            }}
+          >
             {isPending ? pendingLabel : confirmLabel}
           </Button>
         </DialogStickyFooter>

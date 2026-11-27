@@ -59,7 +59,9 @@ export const SelectPluginSchema = createSelectSchema(schema.pluginsTable, {
   sourceProvider: z.union([GitProviderSchema, z.null()]),
   scope: ResourceVisibilityScopeSchema,
   githubSyncInterval: z.union([PluginGithubSyncIntervalSchema, z.null()]),
-});
+})
+  // A retired column (see the table), kept out of everything the API says.
+  .omit({ enabled: true });
 
 export const SelectPluginFileSchema = createSelectSchema(
   schema.pluginFilesTable,
@@ -116,8 +118,12 @@ export const UpdatePluginSchema = z
       .nullable()
       .optional()
       .describe("Emoji or base64 image data URL shown with the name."),
-    enabled: z.boolean().optional(),
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
+    clientType: ClientTypeSchema.optional().describe(
+      "The client the plugin is for. Manual plugins only: a Git plugin's " +
+        "client is the one its repository was imported for. The files are " +
+        "left as they are, so they have to suit the new client's layout.",
+    ),
     labels: z.array(LabelWithDetailsSchema).optional(),
     githubSource: z
       .object({
@@ -147,6 +153,15 @@ export const UpdatePluginSchema = z
       .min(1)
       .max(PLUGIN_MAX_FILES)
       .optional(),
+    baseContentHash: z
+      .string()
+      .optional()
+      .describe(
+        "The plugin's `contentHash` when `files` was composed. When sent, " +
+          "the files are replaced only while the plugin still has that " +
+          "hash; otherwise the save is refused with 409. Omit to replace " +
+          "the files whatever they are now.",
+      ),
   })
   // Strict: the retired scope/teamIds/userIds fields are refused, not
   // silently dropped. Access is edited through the resource permissions API.
@@ -183,6 +198,19 @@ export const PluginWithVisibilitySchema = PublicPluginSchema.extend({
   createdBy: CreatedByNullableSchema,
 });
 
+/** One version of a plugin's files, as the history lists it. */
+export const SelectPluginVersionSchema = createSelectSchema(
+  schema.pluginVersionsTable,
+);
+export const SelectPluginVersionFileSchema = createSelectSchema(
+  schema.pluginVersionFilesTable,
+  { encoding: PluginFileEncodingSchema, mode: PluginFileModeSchema },
+);
+/** A version with the files it holds. */
+export const PluginVersionDetailSchema = SelectPluginVersionSchema.extend({
+  files: z.array(SelectPluginVersionFileSchema),
+});
+
 export const PluginWithFilesSchema = PluginWithVisibilitySchema.extend({
   files: z.array(SelectPluginFileSchema),
 });
@@ -203,6 +231,8 @@ export const PluginListItemSchema = PluginWithVisibilitySchema.omit({
 
 export type Plugin = z.infer<typeof SelectPluginSchema>;
 export type PluginFile = z.infer<typeof SelectPluginFileSchema>;
+export type PluginVersion = z.infer<typeof SelectPluginVersionSchema>;
+export type PluginVersionFile = z.infer<typeof SelectPluginVersionFileSchema>;
 export type PluginFileInput = z.infer<typeof PluginFileInputSchema>;
 export type CreatePlugin = z.infer<typeof CreatePluginSchema>;
 export type UpdatePlugin = z.infer<typeof UpdatePluginSchema>;
@@ -249,6 +279,15 @@ export function validateFileSet(
       });
     }
     totalBytes += byteLength;
+  }
+  // A plugin whose files are all blank installs nothing: it would sit in the
+  // list and hand every installer an empty folder.
+  if (files.length > 0 && files.every((file) => file.content.trim() === "")) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["files"],
+      message: "At least one file must have content",
+    });
   }
   if (totalBytes > PLUGIN_MAX_TOTAL_BYTES) {
     ctx.addIssue({

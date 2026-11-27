@@ -229,9 +229,7 @@ describe("AppSettingsDialog", () => {
     expect(nameInput).toHaveValue("Unsaved name");
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Discard changes" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );

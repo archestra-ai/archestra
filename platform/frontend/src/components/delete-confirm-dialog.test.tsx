@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DeleteConfirmDialog } from "./delete-confirm-dialog";
 
@@ -68,5 +69,30 @@ describe("DeleteConfirmDialog", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+  it("confirms once for a double click, and again for a later click", async () => {
+    const onConfirm = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DeleteConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Delete plugin?"
+        description="Installed copies stay."
+        // The caller's pending flag has not reached the dialog yet: this is
+        // the render the second click of a double click lands in.
+        isPending={false}
+        onConfirm={onConfirm}
+      />,
+    );
+    const remove = screen.getByRole("button", { name: "Delete" });
+
+    await user.dblClick(remove);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+
+    // A refused attempt leaves the dialog open, and it can be tried again
+    // at once: nothing waits on a timer.
+    await user.click(remove);
+    expect(onConfirm).toHaveBeenCalledTimes(2);
   });
 });

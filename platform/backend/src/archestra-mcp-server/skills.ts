@@ -62,6 +62,8 @@ import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import {
+  findNewSkillDescriptionProblem,
+  findNewSkillNameProblem,
   isSkillNameConflict,
   refineUniqueFilePaths,
   SkillFileInputSchema,
@@ -551,6 +553,23 @@ const registry = defineArchestraTools([
         });
         // SPDX-SnippetEnd
       }
+      const nameProblem = await findNewSkillNameProblem({
+        organizationId: ctx.organizationId,
+        ownerKey: await SkillModel.nameOwnerKeyForPrincipal({
+          organizationId: ctx.organizationId,
+          principalId: ctx.userId,
+        }),
+        name: parsed.name,
+      });
+      if (nameProblem) {
+        return errorResult(nameProblem.message);
+      }
+      const descriptionProblem = findNewSkillDescriptionProblem(
+        parsed.description,
+      );
+      if (descriptionProblem) {
+        return errorResult(descriptionProblem.message);
+      }
       const skill = await SkillModel.createWithFiles({
         initialPermissionGrants: args.initialGrants,
         skill: {
@@ -622,6 +641,27 @@ const registry = defineArchestraTools([
       const parsed = parseManifest(args.content);
       if (parsed instanceof SkillParseError) {
         return errorResult(parsed.message);
+      }
+
+      // Asked of a rename only, as on PUT /api/skills/:id.
+      if (parsed.name !== skill.name) {
+        const nameProblem = await findNewSkillNameProblem({
+          organizationId: ctx.organizationId,
+          ownerKey: skill.authorId ?? skill.createdByServiceAccountId,
+          name: parsed.name,
+          excludeSkillId: skill.id,
+        });
+        if (nameProblem) {
+          return errorResult(nameProblem.message);
+        }
+      }
+      if (parsed.description !== skill.description) {
+        const descriptionProblem = findNewSkillDescriptionProblem(
+          parsed.description,
+        );
+        if (descriptionProblem) {
+          return errorResult(descriptionProblem.message);
+        }
       }
 
       let updated: Skill | null;

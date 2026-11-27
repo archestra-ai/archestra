@@ -28,8 +28,8 @@ export function SkillUsageSummary({
       ? `${usageUserCount} ${usageUserCount === 1 ? "user" : "users"}`
       : null;
   const activityLabel = usersLabel
-    ? `${usesLabel}, ${usersLabel}, ${lastUsed}`
-    : `${usesLabel}, ${lastUsed}`;
+    ? `${usesLabel} in total, ${usersLabel}, ${lastUsed}`
+    : `${usesLabel} in total, ${lastUsed}`;
   const count = (
     <span className="font-medium tabular-nums text-foreground">
       {usageCount}
@@ -60,7 +60,8 @@ export function SkillUsageSummary({
         )}
       </TooltipTrigger>
       <TooltipContent className="space-y-0.5">
-        <p className="font-medium">{usesLabel}</p>
+        {/* All time, which the skill's Usage view (a recent window) is not. */}
+        <p className="font-medium">{`${usesLabel} in total`}</p>
         <p className="text-xs text-muted-foreground">
           {usersLabel ? `${usersLabel} · ${lastUsed}` : lastUsed}
         </p>

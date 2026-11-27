@@ -2,15 +2,66 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DynamicHead } from "@/components/dynamic-head";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageHeaderBanner } from "@/components/page-header-banner";
 import { PageLayout } from "@/components/page-layout";
+import { PageTitleProvider } from "@/lib/hooks/use-page-title";
+import { useAppearanceSettings } from "@/lib/organization.query";
 
 vi.mock("next/navigation");
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/organization.query");
+
+describe("PageLayout tab title", () => {
+  const appearance = (value: { appName?: string; isFetched: boolean }) =>
+    vi.mocked(useAppearanceSettings).mockReturnValue({
+      data: value.isFetched ? { appName: value.appName } : undefined,
+      isFetched: value.isFetched,
+    } as unknown as ReturnType<typeof useAppearanceSettings>);
+  const page = (title: string) => (
+    <PageTitleProvider>
+      <DynamicHead />
+      <PageLayout title={title} description="">
+        <div />
+      </PageLayout>
+    </PageTitleProvider>
+  );
+
+  beforeEach(() => {
+    document.title = "";
+    vi.mocked(usePathname).mockReturnValue("/plugins");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+  });
+
+  it("keeps the page's name when the app name loads after the page", () => {
+    // The page is up before the appearance settings answer. A second writer
+    // used to put the bare app name back at that moment.
+    appearance({ isFetched: false });
+    const { rerender } = render(page("Plugins"));
+
+    appearance({ appName: "Example App", isFetched: true });
+    rerender(page("Plugins"));
+
+    expect(document.title).toBe("Plugins - Example App");
+  });
+
+  it("uses the short default app name beside a page name, and the full one alone", () => {
+    appearance({ isFetched: true });
+    const { unmount } = render(page("Plugins"));
+    expect(document.title).toBe("Plugins - Archestra");
+
+    unmount();
+    render(
+      <PageTitleProvider>
+        <DynamicHead />
+      </PageTitleProvider>,
+    );
+    expect(document.title).toBe("Archestra.AI");
+  });
+});
 
 describe("PageLayout tabs", () => {
   beforeEach(() => {

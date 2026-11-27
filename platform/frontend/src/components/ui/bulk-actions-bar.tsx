@@ -242,9 +242,6 @@ export function BulkActionsBar({
             )}
             {offerSelectAll && selectAllMatching ? (
               <div className="flex min-w-0 shrink-0 items-center gap-1 text-sm">
-                <span className="hidden text-muted-foreground xl:inline">
-                  {count} {pluralize(count)} on this page selected.
-                </span>
                 <Button
                   variant="link"
                   size="sm"

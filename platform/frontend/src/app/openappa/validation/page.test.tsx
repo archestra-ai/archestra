@@ -408,9 +408,7 @@ test("a rename save completing after leaving the editor does not navigate back i
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await started;
   clickBack();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Discard changes" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
   server.use(http.get(endpoint, () => HttpResponse.json(next)));
   finish();
   await waitFor(() =>
@@ -528,9 +526,7 @@ test("a clean editor reopened during a pending save adopts its completed version
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await started;
   clickBack();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Discard changes" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
   await openValidationFile(scenario.path);
   const reopened = await screen.findByRole("textbox", {
     name: "Policy validation scenario.appa",
@@ -595,9 +591,7 @@ test.each([
     target: { value: "discard this edit" },
   });
   clickBack();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Discard changes" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
   await screen.findByRole("link", { name: scenario.path });
   if (kind === "file") {
     fireEvent.click(screen.getByRole("link", { name: scenario.path }));
@@ -757,9 +751,7 @@ test("file previews show draft diagnostics without changing suite results or his
   expect(savedRuns).toBe(0);
   expect(historyReads).toBe(readsBeforePreview);
   clickBack();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Discard changes" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
   expect(
     await screen.findByRole("button", { name: "1 passing" }),
   ).toBeVisible();
@@ -834,9 +826,7 @@ test("file preview uses the editor draft and Run all uses persisted files after 
     directory: "traces",
   });
   clickBack();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Discard changes" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
   fireEvent.click(await screen.findByRole("button", { name: "Run all" }));
   await waitFor(() =>
     expect(suiteSubmitted).toEqual({
@@ -961,9 +951,7 @@ test("Git directory configuration lives in source settings; browser refresh stil
   window.dispatchEvent(beforeUnload);
   expect(beforeUnload.defaultPrevented).toBe(true);
   clickBack();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Discard changes" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
   await screen.findByRole("link", { name: scenario.path });
   expect(screen.queryByText("Managed in GitHub")).not.toBeInTheDocument();
   await userEvent.click(
@@ -1631,9 +1619,7 @@ test("canceling creation discards its form without adding or saving a file", asy
     screen.getByRole("textbox", { name: "New validation content" }),
   ).toHaveValue("unfinished draft");
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Discard changes" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
   await waitFor(() =>
     expect(screen.getByRole("link", { name: scenario.path })).toBeVisible(),
   );

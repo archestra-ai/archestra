@@ -2,7 +2,6 @@
 
 import type { RowSelectionState } from "@tanstack/react-table";
 import {
-  AlertTriangle,
   CheckCircle2,
   Eye,
   Info,
@@ -29,6 +28,10 @@ import {
   ImportSettings,
 } from "@/components/git/import-selection";
 import {
+  type RepositoryReadFailure,
+  RepositoryReadNotice,
+} from "@/components/git/repository-read-notice";
+import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
 } from "@/components/initial-resource-permissions";
@@ -44,7 +47,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { FieldDescription } from "@/components/ui/field-description";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -122,7 +124,8 @@ export function ImportSkillsDialog({
   const [search, setSearch] = useState("");
   const [selectedOnly, setSelectedOnly] = useState(false);
   const [previewSkillPath, setPreviewSkillPath] = useState<string | null>(null);
-  const [discoverError, setDiscoverError] = useState<string | null>(null);
+  const [discoverError, setDiscoverError] =
+    useState<RepositoryReadFailure | null>(null);
   const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
     [],
   );
@@ -177,13 +180,14 @@ export function ImportSkillsDialog({
 
   const runDiscover = async (fields: NonNullable<typeof repositoryFields>) => {
     setDiscoverError(null);
-    const { data, errorMessage } = await discover.mutateAsync(fields);
+    const { data, errorMessage, errorCode } =
+      await discover.mutateAsync(fields);
     if (data) {
       setDiscovered(data.skills);
       const importableSkills = data.skills.filter((s) => !s.exists);
       setSelected(new Set(importableSkills.map((s) => s.skillPath)));
     } else if (errorMessage) {
-      setDiscoverError(errorMessage);
+      setDiscoverError({ code: errorCode, message: errorMessage });
     }
   };
 
@@ -639,16 +643,10 @@ export function ImportSkillsDialog({
             subpathPlaceholder="skills"
           />
           {discoverError && source.step === "repo" ? (
-            <InlineNotice variant="error">
-              <AlertTriangle />
-              <span className="font-medium">Couldn’t read that repository</span>
-              <InlineNoticeText>
-                <span>{discoverError}</span>
-                {source.access?.kind === "public" ? (
-                  <span> Private? Change the access above.</span>
-                ) : null}
-              </InlineNoticeText>
-            </InlineNotice>
+            <RepositoryReadNotice
+              failure={discoverError}
+              isPublicAccess={source.access?.kind === "public"}
+            />
           ) : null}
         </div>
       )}

@@ -226,6 +226,92 @@ describe("NewPluginPage", () => {
     ).toBeVisible();
   });
 
+  it("tells a repository with nothing to import apart from one it could not read", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const scan = async () => {
+      await user.click(screen.getByRole("button", { name: "Find plugins" }));
+    };
+    await user.click(screen.getByRole("button", { name: /Git repository/ }));
+    await user.click(screen.getByRole("button", { name: /^GitHub/ }));
+    expect(
+      await screen.findByRole("radio", { name: /Public repository/ }),
+    ).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.type(
+      screen.getByPlaceholderText("github.com/owner/repo"),
+      "acme/plugins",
+    );
+
+    // Read fine, holds no plugins: its access is not the thing to change.
+    discoverMock.mockResolvedValue({
+      data: { entries: [], reason: "No plugins found in the repository" },
+      errorMessage: null,
+      errorCode: null,
+    });
+    await scan();
+    expect(
+      await screen.findByText("No plugins found in the repository."),
+    ).toBeVisible();
+    expect(screen.queryByText(/Private\?/)).not.toBeInTheDocument();
+
+    // Read fine, with a manifest that is not valid: said as the API says it,
+    // not as an empty repository.
+    discoverMock.mockResolvedValue({
+      data: { entries: [], reason: "Marketplace manifest is not valid JSON" },
+      errorMessage: null,
+      errorCode: null,
+    });
+    await scan();
+    expect(
+      await screen.findByText("Marketplace manifest is not valid JSON."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("No plugins found in the repository."),
+    ).not.toBeInTheDocument();
+
+    // Not found: a private repository is the likely reason, and the
+    // repository's name is not repeated back.
+    discoverMock.mockResolvedValue({
+      data: null,
+      errorMessage: "Repository acme/plugins was not found.",
+      errorCode: "git_repository_not_found",
+    });
+    await scan();
+    expect(
+      await screen.findByText("Couldn’t find the repository."),
+    ).toBeVisible();
+    expect(screen.getByText("Private? Change the access above.")).toBeVisible();
+    expect(screen.queryByText(/acme\/plugins was not found/)).toBeNull();
+
+    // The host's request limit: the access is not the thing to change.
+    discoverMock.mockResolvedValue({
+      data: null,
+      errorMessage:
+        "Could not read acme/plugins: the host's request limit is used up. Try again later.",
+      errorCode: "git_host_rate_limited",
+    });
+    await scan();
+    expect(
+      await screen.findByText("Couldn’t read the repository."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("The host’s request limit is used up. Try again later."),
+    ).toBeVisible();
+    expect(screen.queryByText(/Private\?/)).not.toBeInTheDocument();
+
+    // Any other failure shows what the server said.
+    discoverMock.mockResolvedValue({
+      data: null,
+      errorMessage: "Marketplace manifest is not valid JSON",
+      errorCode: null,
+    });
+    await scan();
+    expect(
+      await screen.findByText("Marketplace manifest is not valid JSON"),
+    ).toBeVisible();
+  });
+
   it("reads a public GitHub repository without sending a credential", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -537,8 +623,12 @@ describe("NewPluginPage", () => {
     } as unknown as ReturnType<typeof useCreatePlugin>);
     const user = userEvent.setup();
     const view = renderPage();
-    await user.click(screen.getByRole("button", { name: /Blank template/ }));
+    await openBlankTemplate(user, view);
     await user.type(screen.getByLabelText("Display name"), "Shared plugin");
+    await user.type(
+      screen.getByRole("textbox", { name: "File contents" }),
+      "{{}",
+    );
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("source=blank&tab=permissions") as ReturnType<
         typeof useSearchParams
@@ -575,21 +665,26 @@ describe("NewPluginPage", () => {
     const user = userEvent.setup();
     const view = renderPage();
 
-    await user.click(screen.getByRole("button", { name: /Blank template/ }));
+    await openBlankTemplate(user, view);
 
     const displayName = screen.getByLabelText("Display name");
     expect(displayName).toBeVisible();
     expect(screen.getByTestId("plugin-platforms")).toHaveTextContent(
       "posix,windows",
     );
-    // The payload's one file is open in the workspace's explorer.
+    // The starter files of the default client are there to edit from, with
+    // the README, which explains them, open.
+    const explorer = within(screen.getByRole("navigation", { name: "Files" }));
+    expect(explorer.getByRole("button", { name: "README.md" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    for (const name of ["plugin.json", "hooks.json", "SKILL.md"]) {
+      expect(explorer.getByRole("button", { name })).toBeVisible();
+    }
     expect(
-      within(screen.getByRole("navigation", { name: "Files" })).getByRole(
-        "button",
-        { name: "hooks.json" },
-      ),
-    ).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
+      screen.getByRole("button", { name: "New file or folder" }),
+    ).toBeVisible();
     expect(screen.queryByLabelText("Relative path")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("switch", { name: /Enabled/ }),
@@ -614,14 +709,214 @@ describe("NewPluginPage", () => {
     );
     view.rerenderPage();
 
-    const create = screen.getByRole("button", { name: /Create plugin/ });
+    // Refused with its reason readable, not natively disabled: a disabled
+    // button could not say why.
+    const create = () => screen.getByRole("button", { name: /Create plugin/ });
     // An unnamed plugin is not creatable, whatever else is filled in.
-    expect(create).toBeDisabled();
+    expect(create()).toHaveAttribute("aria-disabled", "true");
+    expect(create()).toHaveAccessibleDescription("Enter a display name.");
 
+    // The starter files have content, so a name is all that is missing.
     await user.type(screen.getByLabelText("Display name"), "Session guard");
-    expect(create).toBeEnabled();
+    expect(create()).toBeEnabled();
+    expect(create()).not.toHaveAttribute("aria-disabled");
+    // The starter files follow the name for as long as they are untouched.
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "File contents",
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toContain("# Session guard");
+  });
+
+  it("goes back to Source by URL, so a later visit opens General, not the last tab", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank&tab=permissions") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+
+    // The bare path drops `tab` with `source`; the tab used to stay behind
+    // in the URL and reopen with the next visit to the form.
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith("/plugins/new");
+  });
+
+  it("says when another plugin for the same client already has the name", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [
+        { id: "p1", displayName: "Session Guard", clientType: "claude-code" },
+      ],
+    } as unknown as ReturnType<typeof usePlugins>);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("Display name"), "session guard");
+
+    expect(screen.getByText("Name already in use")).toBeVisible();
+  });
+
+  it("refuses a name one of the author's own plugins for the client already has", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [
+        {
+          id: "p1",
+          displayName: "Session Guard",
+          clientType: "claude-code",
+          authorId: "user-1",
+        },
+      ],
+    } as unknown as ReturnType<typeof usePlugins>);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("Display name"), "session guard");
+    await user.type(
+      screen.getByRole("textbox", { name: "File contents" }),
+      "{{}",
+    );
+
+    // Everything else is filled in; the name alone holds Create back.
+    const create = screen.getByRole("button", { name: /Create plugin/ });
+    expect(create).toHaveAttribute("aria-disabled", "true");
+    expect(create).toHaveAccessibleDescription(
+      "Name is already in use. Try another one.",
+    );
+  });
+
+  it("does not call the name taken by the plugin it has just created", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    const user = userEvent.setup();
+    const view = renderPage();
+    await user.type(screen.getByLabelText("Display name"), "Session guard");
+
+    // The create has succeeded and the list has been re-read, while the page
+    // is still on screen before the navigation to the new plugin.
+    vi.mocked(useCreatePlugin).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+      data: { id: "created-plugin" },
+    } as unknown as ReturnType<typeof useCreatePlugin>);
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [
+        {
+          id: "created-plugin",
+          displayName: "Session guard",
+          clientType: "claude-code",
+          authorId: "user-1",
+        },
+      ],
+    } as unknown as ReturnType<typeof usePlugins>);
+    view.rerenderPage();
+
+    expect(
+      screen.queryByText("Name is already in use. Try another one."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("explains plugins, with no list to go back to, while there are none", () => {
+    // The default here: the plugin list is empty.
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Extend your agent" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/A plugin can bundle reusable instructions/),
+    ).toHaveTextContent(
+      "A plugin can bundle reusable instructions in form of skills, executable scripts, and hooks in any combination to extend functionality of your agent. Add ready plugins from marketplaces or create your own. Then install with a single command.",
+    );
+    expect(
+      screen.queryByRole("link", { name: "Plugins" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("drops the explanation and links back to the list once a plugin exists", () => {
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [
+        { id: "p1", displayName: "Session Guard", clientType: "claude-code" },
+      ],
+    } as unknown as ReturnType<typeof usePlugins>);
+    renderPage();
+
+    expect(screen.queryByText("Extend your agent")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Plugins" })).toHaveAttribute(
+      "href",
+      "/plugins",
+    );
+  });
+
+  it("holds the source step until it knows whether plugins exist, so nothing jumps", () => {
+    vi.mocked(usePlugins).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isFetching: true,
+    } as unknown as ReturnType<typeof usePlugins>);
+    renderPage();
+
+    expect(
+      screen.queryByRole("button", { name: /Blank template/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Extend your agent")).not.toBeInTheDocument();
+  });
+
+  it("asks before a link elsewhere drops a started draft", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <a href="/skills">Skills</a>
+        <NewPluginPage />
+      </QueryClientProvider>,
+    );
+
+    // An untouched form has nothing to lose.
+    await user.click(screen.getByRole("link", { name: "Skills" }));
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Display name"), "Draft");
+    await user.click(screen.getByRole("link", { name: "Skills" }));
+    expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
+    expect(vi.mocked(useRouter)().push).not.toHaveBeenCalledWith("/skills");
+
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith("/skills");
   });
 });
+
+/**
+ * The wizard's step lives in the URL: choosing the blank template navigates,
+ * and the page shows the form once the URL says so.
+ */
+async function openBlankTemplate(
+  user: ReturnType<typeof userEvent.setup>,
+  view: { rerenderPage: () => void },
+) {
+  await user.click(screen.getByRole("button", { name: /Blank template/ }));
+  expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith(
+    "/plugins/new?source=blank",
+  );
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
+  );
+  view.rerenderPage();
+}
 
 function boundedMarketplaceFixture() {
   return {

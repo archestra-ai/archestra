@@ -419,7 +419,7 @@ describe("AgentRuntimeFields", () => {
         name: "Cancel",
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
     await user.click(screen.getByRole("button", { name: "Edit GITHUB_TOKEN" }));
     dialog = screen.getByRole("dialog");
     expect(within(dialog).getByLabelText("Secret source")).toHaveTextContent(

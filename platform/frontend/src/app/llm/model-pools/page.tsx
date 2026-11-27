@@ -76,7 +76,7 @@ export default function ModelPoolsPage() {
   // Benched members come back within a minute, so the list stays fresh.
   const query = useModelPools({ refetchInterval: 5_000, toastOnError: false });
   const pools = query.data ?? [];
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { searchParams, setFilters } = useDataTableQueryParams();
   const search = (searchParams.get("search") ?? "").trim().toLowerCase();
   const providerFilter = searchParams.get("provider") ?? "all";
   const statusFilter = searchParams.get("status") ?? "all";
@@ -157,8 +157,8 @@ export default function ModelPoolsPage() {
   // showing an empty table.
   const isFirstUse = query.isSuccess && pools.length === 0 && !hasActiveFilters;
   const clearFilters = useCallback(
-    () => updateQueryParams({ search: null, provider: null, status: null }),
-    [updateQueryParams],
+    () => setFilters({ search: null, provider: null, status: null }),
+    [setFilters],
   );
   const providers = [
     ...new Set(pools.flatMap((pool) => pool.members.map((m) => m.provider))),
@@ -332,7 +332,7 @@ export default function ModelPoolsPage() {
               <FilterSelect
                 value={providerFilter}
                 onValueChange={(value) =>
-                  updateQueryParams({
+                  setFilters({
                     provider: value === "all" ? null : value,
                   })
                 }
@@ -349,7 +349,7 @@ export default function ModelPoolsPage() {
               <FilterSelect
                 value={statusFilter}
                 onValueChange={(value) =>
-                  updateQueryParams({ status: value === "all" ? null : value })
+                  setFilters({ status: value === "all" ? null : value })
                 }
                 placeholder="Filter by status"
                 showSearch={false}
@@ -414,6 +414,7 @@ export default function ModelPoolsPage() {
             }
             table={
               <DataTable
+                urlPagination
                 columns={columns}
                 flexibleColumnIds={["name"]}
                 fixedWidthColumnIds={["members", "status"]}

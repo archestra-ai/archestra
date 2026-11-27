@@ -54,16 +54,3 @@ test("a folder holding only one folder merges with it, and stops where files beg
   // The merged folder keeps the deepest path, so its key stays unique.
   expect(tree[0]).toMatchObject({ type: "dir", path: "teams/platform" });
 });
-
-test("an empty folder is listed among the others before it holds a file", () => {
-  const tree = buildFileTree(
-    [file("SKILL.md"), file("references/api.md")],
-    ["scripts"],
-  );
-  expect(outline(tree)).toEqual([
-    "references/",
-    "  api.md",
-    "scripts/",
-    "SKILL.md",
-  ]);
-});

@@ -80,6 +80,8 @@ export const AuditEventNameSchema = z.enum([
   "plugin.created",
   "plugin.updated",
   "plugin.deleted",
+  "plugin.restored",
+  "plugin.purged",
   "plugin.syncTriggered",
   "clientConnection.updated",
   "clientPrivacy.updated",
@@ -208,7 +210,12 @@ export const AuditEventNameSchema = z.enum([
   // rather than a burst of unrelated edits.
   "skill.bulk_deleted",
   "skill.restored",
+  // Restored across a batch of deleted skills in one request, for the same
+  // reason the bulk delete has its own action.
+  "skill.bulk_restored",
   "skill.purged",
+  // Permanently deleted across a batch of skills in one request.
+  "skill.bulk_purged",
   "skill.imported",
   "skillShareLink.created",
   "skillShareLink.rotated",

@@ -88,4 +88,35 @@ describe("useDataTableQueryParams", () => {
       scroll: false,
     });
   });
+
+  it("returns a filtered listing to its first page", () => {
+    setSearchParams(new URLSearchParams("page=3&pageSize=25&search=old"));
+    const { result } = renderHook(() => useDataTableQueryParams());
+
+    act(() => result.current.setFilters({ status: "active", search: null }));
+
+    // The page goes, the page size and the other filters stay.
+    expect(mockPush).toHaveBeenCalledWith("/agents?pageSize=25&status=active", {
+      scroll: false,
+    });
+  });
+
+  it("keeps the page for URL state that leaves the rows alone", () => {
+    setSearchParams(new URLSearchParams("page=3"));
+    const { result } = renderHook(() => useDataTableQueryParams());
+
+    act(() => result.current.updateQueryParams({ open: "row-7" }));
+
+    expect(mockPush).toHaveBeenCalledWith("/agents?page=3&open=row-7", {
+      scroll: false,
+    });
+  });
+
+  it("reads a hand-edited page or page size that is not a number as the default", () => {
+    setSearchParams(new URLSearchParams("page=abc&pageSize=xyz"));
+    const { result } = renderHook(() => useDataTableQueryParams());
+
+    expect(result.current.pageIndex).toBe(0);
+    expect(result.current.pageSize).toBe(10);
+  });
 });

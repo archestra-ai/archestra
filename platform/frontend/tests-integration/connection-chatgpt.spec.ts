@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 import JSZip from "jszip";
 import { makeAgent } from "../src/mocks/data/agents";
 import { makeOrganization } from "../src/mocks/data/organization";
-import { makeSkillDetail } from "../src/mocks/data/skills";
+import { DEMO_SKILL_IDS, makeSkillDetail } from "../src/mocks/data/skills";
 import { expect, test } from "./fixtures";
 
 const endpoint = "https://gateway.example.test/v1/mcp/team-tools";
@@ -59,8 +59,8 @@ test("downloads MCP and skill resources in one archive without installer or toke
     },
     {
       method: "get",
-      url: "/api/skills/skill-jira-task",
-      body: makeSkillDetail("skill-jira-task"),
+      url: `/api/skills/${DEMO_SKILL_IDS.jiraTask}`,
+      body: makeSkillDetail(DEMO_SKILL_IDS.jiraTask),
       delayMs: 300,
     },
   ]);
@@ -203,7 +203,7 @@ test("failed skill access stops the archive and permits a clean retry", async ({
 }) => {
   await mswControl.use({
     method: "get",
-    url: "/api/skills/skill-jira-task",
+    url: `/api/skills/${DEMO_SKILL_IDS.jiraTask}`,
     status: 403,
     body: { error: "Forbidden", message: "Skill access was removed" },
     once: true,

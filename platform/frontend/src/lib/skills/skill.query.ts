@@ -1,6 +1,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  isUuid,
   MAX_BULK_IDS,
 } from "@archestra/shared";
 import {
@@ -15,6 +16,10 @@ import { skillNamesQueryKey } from "@/lib/connection-approval-query-keys";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
+  parseSkillManifestProblem,
+  type SkillManifestProblem,
+} from "@/lib/skills/manifest-problem";
+import {
   getApiErrorInternalCode,
   getApiErrorMessage,
   handleApiError,
@@ -23,6 +28,8 @@ import {
 
 const {
   bulkDeleteSkills,
+  bulkPermanentlyDeleteSkills,
+  bulkRestoreSkills,
   getSkills,
   getSkill,
   getExternalMcpSkill,
@@ -40,7 +47,6 @@ const {
   updateSkill,
   updateSkillGithubSync,
   deleteSkill,
-  permanentlyDeleteSkill,
   restoreSkill,
   resetSkill,
   discoverGithubSkills,
@@ -256,12 +262,27 @@ export function useSkillUsageStatistics(reference: SkillUsageReference | null) {
   });
 }
 
-export function useSkill(id: string | null) {
+/**
+ * One skill, or null when there is none to show: the API answered 404, or the
+ * id is not a skill id at all. A malformed id (a mistyped or truncated URL)
+ * is settled here without a request, because the API can only refuse it, and
+ * its refusal is a validation message about a parameter the reader never
+ * typed.
+ */
+export function useSkill(
+  id: string | null,
+  options?: {
+    /** False on a screen that renders the failure itself, with a retry. */
+    toastOnError?: boolean;
+  },
+) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["skills", id],
     queryFn: async () => {
+      if (!isUuid(id as string)) return null;
       const { data, error } = await getSkill({ path: { id: id as string } });
-      throwOnApiError(error, { allowNotFound: true });
+      throwOnApiError(error, { allowNotFound: true, toastOnError });
       return data ?? null;
     },
     enabled: !!id,
@@ -299,10 +320,21 @@ export function useExternalMcpSkill(params: {
       params.id,
       params.mcpServerId,
     ],
-    enabled: !!params.id && !!params.mcpServerId,
+    // Not gated on `mcpServerId`: a disabled query never settles, and the page
+    // waited on it forever when a link arrived without one.
+    enabled: !!params.id,
     staleTime: 0,
     refetchOnMount: "always",
     queryFn: async () => {
+      // Nothing these could name. Answered here, since the API can only
+      // refuse the request.
+      if (
+        !params.mcpServerId ||
+        !isUuid(params.mcpServerId) ||
+        !isUuid(params.id as string)
+      ) {
+        return null;
+      }
       const { data, error } = await getExternalMcpSkill({
         path: { id: params.id as string },
         query: { mcpServerId: params.mcpServerId as string },
@@ -333,6 +365,7 @@ export function usePluginSkill(params: {
     queryKey: [...pluginSkillDetailQueryKey, params.pluginId, params.skillPath],
     enabled: !!params.pluginId && params.skillPath !== null,
     queryFn: async () => {
+      if (!isUuid(params.pluginId as string)) return null;
       const { data, error } = await getPluginSkill({
         path: { pluginId: params.pluginId as string },
         query: params.skillPath ? { skillPath: params.skillPath } : {},
@@ -409,12 +442,23 @@ export function useSkillVersion(id: string | null, version: number | null) {
 
 // ===== Mutation hooks =====
 
-export function useCreateSkill() {
+/**
+ * What a skill save can be asked to report besides its toast.
+ *
+ * `onManifestProblem` is called when the save is refused for a line of
+ * SKILL.md, so the editor can mark the line. The toast still says why.
+ */
+interface SkillSaveOptions {
+  onManifestProblem?: (problem: SkillManifestProblem) => void;
+}
+
+export function useCreateSkill(options?: SkillSaveOptions) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (body: archestraApiTypes.CreateSkillData["body"]) => {
       const { data, error } = await createSkill({ body });
       if (error) {
+        reportManifestProblem({ error, manifest: body.content, options });
         handleApiError(error);
         return null;
       }
@@ -433,7 +477,7 @@ export function useCreateSkill() {
   });
 }
 
-export function useUpdateSkill() {
+export function useUpdateSkill(options?: SkillSaveOptions) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -459,6 +503,7 @@ export function useUpdateSkill() {
           );
           return null;
         }
+        reportManifestProblem({ error, manifest: body.content, options });
         handleApiError(error);
         return null;
       }
@@ -524,6 +569,37 @@ export function useBulkDeleteSkills() {
   });
 }
 
+/**
+ * Restore several deleted skills in one request. Like the bulk delete, the
+ * answer is per skill, so one that cannot come back (its name was taken since,
+ * or it is not the caller's to restore) does not hold up the rest.
+ */
+export function useBulkRestoreSkills() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (skillIds: string[]) => {
+      const { data, error } = await bulkRestoreSkills({ body: { skillIds } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    // Returning the refetch keeps the mutation pending until the lists have
+    // been read again, so the bar's button stays busy until the restored rows
+    // have left the deleted view (see `useRestoreSkill`).
+    onSuccess: async (data) => {
+      if (!data) return;
+      reportBulkSkillOutcome(data, {
+        verb: "Restored",
+        failureVerb: "restore",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["skills"] });
+    },
+    onError: (error) => handleApiError(error),
+  });
+}
+
 export function useRestoreSkill() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -535,41 +611,56 @@ export function useRestoreSkill() {
       }
       return data;
     },
-    onSuccess: (data) => {
+    // Returning the refetch keeps the mutation pending until the lists have
+    // been read again, so a caller that holds the row busy for as long as the
+    // request runs releases it only once the row has left the deleted view.
+    onSuccess: async (data) => {
       if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill restored");
+      await queryClient.invalidateQueries({ queryKey: ["skills"] });
     },
+    // A rejection never reaches the `{ error }` branch above.
+    onError: (error) => handleApiError(error),
   });
 }
 
 /**
- * Permanently destroy a soft-deleted skill: every version and resource file,
- * plus its grants, environment assignments, usage events, and share links.
+ * Permanently destroy soft-deleted skills: every version and resource file,
+ * plus each skill's grants, environment assignments, usage events, and share
+ * links. One skill or many go through the same request, so a row's action and
+ * the bulk bar's cannot differ.
  *
- * The refusals surface their own message through the error toast — a 409 while
- * a sandbox still mounts one of its versions, a 403 for a built-in.
+ * The answer is per skill. A refusal names its own reason in the toast: a
+ * built-in, or a skill a sandbox still has mounted.
  */
-export function usePermanentlyDeleteSkill() {
+export function usePermanentlyDeleteSkills() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data, error } = await permanentlyDeleteSkill({ path: { id } });
+    mutationFn: async (skillIds: string[]) => {
+      const { data, error } = await bulkPermanentlyDeleteSkills({
+        body: { skillIds },
+      });
       if (error) {
         handleApiError(error);
         return null;
       }
       return data;
     },
-    onSuccess: (data, id) => {
+    onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
-      // Drop the detail, versions and usage-statistics queries for an id that
-      // no longer resolves, rather than letting a stale history or edit URL
+      // Drop the detail, versions and usage-statistics queries for ids that
+      // no longer resolve, rather than letting a stale history or edit URL
       // remount them and refetch into a 404.
-      queryClient.removeQueries({ queryKey: ["skills", id] });
-      toast.success("Skill permanently deleted");
+      for (const { id } of data.succeeded) {
+        queryClient.removeQueries({ queryKey: ["skills", id] });
+      }
+      reportBulkSkillOutcome(data, {
+        verb: "Permanently deleted",
+        failureVerb: "permanently delete",
+      });
     },
+    onError: (error) => handleApiError(error),
   });
 }
 
@@ -742,9 +833,13 @@ export function useDiscoverGithubSkills() {
     ) => {
       const { data, error } = await discoverGithubSkills({ body });
       if (error) {
-        return { data: null, errorMessage: getApiErrorMessage(error) };
+        return {
+          data: null,
+          errorMessage: getApiErrorMessage(error),
+          errorCode: getApiErrorInternalCode(error) ?? null,
+        };
       }
-      return { data, errorMessage: null };
+      return { data, errorMessage: null, errorCode: null };
     },
   });
 }
@@ -858,6 +953,16 @@ function reportBulkSkillOutcome(
     `${labels.verb} ${skillCount(succeeded.length)} — ${skillCount(failed.length)} could not be ${labels.failureVerb}d`,
     { description: `${description} — ${failed[0].error}` },
   );
+}
+
+/** Hand a refusal that names a line of SKILL.md to whoever asked for it. */
+function reportManifestProblem(params: {
+  error: unknown;
+  manifest: string;
+  options: SkillSaveOptions | undefined;
+}) {
+  const problem = parseSkillManifestProblem(params.error, params.manifest);
+  if (problem) params.options?.onManifestProblem?.(problem);
 }
 
 /** How many failed skills a bulk toast names before it starts counting. */

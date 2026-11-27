@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,8 +34,9 @@ import { useAppearanceSettings } from "@/lib/organization.query";
 import {
   type PluginDetail,
   useApplyGithubPluginUpdate,
-  useDeletePlugin,
+  useDeletePlugins,
   usePlugin,
+  usePlugins,
   usePreviewGithubPluginUpdate,
   useTriggerPluginGithubSync,
   useUpdatePlugin,
@@ -55,7 +56,6 @@ const BASE_PLUGIN = {
   teams: [],
   users: [],
   authorId: "user-1",
-  enabled: true,
   files: [
     {
       path: "hooks/hooks.json",
@@ -148,8 +148,11 @@ beforeEach(() => {
     isPending: false,
     data: undefined,
   };
-  vi.mocked(useDeletePlugin).mockReturnValue(
-    mutationStub as unknown as ReturnType<typeof useDeletePlugin>,
+  vi.mocked(usePlugins).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof usePlugins>);
+  vi.mocked(useDeletePlugins).mockReturnValue(
+    mutationStub as unknown as ReturnType<typeof useDeletePlugins>,
   );
   vi.mocked(useApplyGithubPluginUpdate).mockReturnValue(
     mutationStub as unknown as ReturnType<typeof useApplyGithubPluginUpdate>,
@@ -225,6 +228,145 @@ describe("PluginDetailPage", () => {
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: "Session sentry" }),
     );
+  });
+
+  it("saves against the files it loaded, so files written since are not replaced unseen", async () => {
+    const user = userEvent.setup();
+    const view = renderPage(BASE_PLUGIN);
+    const rerenderWith = (plugin: PluginDetail) => {
+      vi.mocked(usePlugin).mockReturnValue({
+        data: plugin,
+        isPending: false,
+      } as unknown as ReturnType<typeof usePlugin>);
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <PluginDetailPage id={plugin.id} />
+        </QueryClientProvider>,
+      );
+    };
+    const save = () => user.click(screen.getByRole("button", { name: "Save" }));
+    const lastSave = () => updateMutateAsync.mock.calls.at(-1)?.[0];
+
+    // Refused: someone else wrote the files first.
+    updateMutateAsync.mockRejectedValueOnce(new Error("409"));
+    await user.type(screen.getByLabelText("Description"), " More.");
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "abc123" });
+
+    // The other write arrives under the unsaved draft. The draft still holds
+    // the files it was taken from, so a retry is still held against them.
+    rerenderWith({ ...BASE_PLUGIN, contentHash: "moved" });
+    updateMutateAsync.mockRejectedValueOnce(new Error("409"));
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "abc123" });
+
+    // Discarding takes the plugin as it is now, and its hash with it.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.type(screen.getByLabelText("Description"), " Again.");
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "moved" });
+
+    // A save puts the saved plugin in the cache, and the draft moves on to
+    // the files it wrote.
+    rerenderWith({ ...BASE_PLUGIN, contentHash: "saved" });
+    await user.type(screen.getByLabelText("Description"), " Once more.");
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "saved" });
+  });
+
+  it("holds a save typed during another save against the files that save wrote", async () => {
+    const user = userEvent.setup();
+    renderPage(BASE_PLUGIN);
+    let finishFirstSave: (value: unknown) => void = () => {};
+    updateMutateAsync.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishFirstSave = resolve;
+      }),
+    );
+
+    await user.type(screen.getByLabelText("Description"), " One.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMutateAsync.mock.calls[0][0]).toMatchObject({
+      baseContentHash: "abc123",
+    });
+    // More is typed before the first save answers, so the draft stays dirty
+    // and is not taken from the plugin again.
+    await user.type(screen.getByLabelText("Description"), " Two.");
+    await act(async () => {
+      finishFirstSave({ ...BASE_PLUGIN, contentHash: "after-first-save" });
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMutateAsync.mock.calls[1][0]).toMatchObject({
+      baseContentHash: "after-first-save",
+    });
+  });
+
+  it("has no switch to turn one plugin off, and always offers Install", () => {
+    renderPage(BASE_PLUGIN);
+
+    expect(
+      screen.queryByRole("switch", { name: /Available to install/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Disabled")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install" })).toBeVisible();
+  });
+
+  it("refuses a rename into a name the owner already holds, and only notes a stored duplicate", async () => {
+    const twin = (displayName: string) => ({
+      id: "plugin-2",
+      displayName,
+      clientType: BASE_PLUGIN.clientType,
+      authorId: BASE_PLUGIN.authorId,
+    });
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [twin("Release helper")],
+    } as unknown as ReturnType<typeof usePlugins>);
+    const user = userEvent.setup();
+    const { unmount } = renderPage(BASE_PLUGIN);
+
+    await user.clear(screen.getByLabelText("Display name"));
+    await user.type(screen.getByLabelText("Display name"), "release HELPER");
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toHaveAttribute("aria-disabled", "true");
+    expect(save).toHaveAccessibleDescription(
+      "Name is already in use. Try another one.",
+    );
+
+    // Stored under the same name as another of the owner's plugins: nothing
+    // was renamed, so its other fields still save.
+    unmount();
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [twin(BASE_PLUGIN.displayName)],
+    } as unknown as ReturnType<typeof usePlugins>);
+    renderPage(BASE_PLUGIN);
+    expect(screen.getByText("Name already in use")).toBeVisible();
+    await user.type(screen.getByLabelText("Description"), " More.");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("offers the whole plugin as a download in the header, not on the file editor", () => {
+    renderPage(BASE_PLUGIN);
+
+    expect(screen.getByRole("button", { name: "Download" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Download as .zip" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers a manual plugin's version history and its delete from one menu", async () => {
+    const user = userEvent.setup();
+    renderPage(BASE_PLUGIN);
+
+    // Two actions on the plugin as a whole, so they share a menu.
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Version history" }),
+    ).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+    // A manual plugin has no repository to take updates from.
+    expect(screen.queryByRole("menuitem", { name: "Updates" })).toBeNull();
   });
 
   it("shows permissions from the page-header URL", () => {

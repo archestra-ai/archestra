@@ -24,16 +24,17 @@ export function useDataTableQueryParams(params?: {
     params?.queryParamsAdapter?.searchParams ?? searchParams;
 
   const defaultPageSize = params?.defaultPageSize ?? DEFAULT_TABLE_LIMIT;
+  // A hand-edited `page=abc` parses to NaN, which `Math.max` would pass on.
   const pageIndex = Math.max(
     0,
-    Number.parseInt(activeSearchParams.get("page") || "1", 10) - 1,
+    (Number.parseInt(activeSearchParams.get("page") || "1", 10) || 1) - 1,
   );
   const pageSize = Math.max(
     1,
     Number.parseInt(
       activeSearchParams.get("pageSize") || `${defaultPageSize}`,
       10,
-    ),
+    ) || defaultPageSize,
   );
   const offset = pageIndex * pageSize;
 
@@ -67,6 +68,20 @@ export function useDataTableQueryParams(params?: {
     [pathname, router, searchParams, params?.queryParamsAdapter],
   );
 
+  /**
+   * Write what narrows the listing (a search, a filter, a sort) and return to
+   * its first page: that is where the first matches are, and the page the
+   * reader was on may not exist in the narrowed listing. Filter controls
+   * write through this, so no table has to remember the reset.
+   * `updateQueryParams` stays for URL state that leaves the rows alone, such
+   * as which row is open.
+   */
+  const setFilters = useCallback(
+    (updates: QueryParamUpdates) =>
+      updateQueryParams({ ...updates, page: null }),
+    [updateQueryParams],
+  );
+
   const setPagination = useCallback(
     (pagination: { pageIndex: number; pageSize: number }) => {
       updateQueryParams({
@@ -84,6 +99,7 @@ export function useDataTableQueryParams(params?: {
     pageSize,
     offset,
     updateQueryParams,
+    setFilters,
     setPagination,
   };
 }

@@ -212,7 +212,12 @@ test.describe("Bulk actions bar", () => {
     expect(listRequests).toHaveLength(2);
     expect(listRequests[1].searchParams.get("limit")).toBe("100");
     await deleteButton.click();
-    await expect(page.getByRole("dialog")).toContainText("Delete 7 skills?");
+    await expect(
+      page.getByRole("dialog").getByRole("heading", {
+        name: "Delete 7 skills",
+        exact: true,
+      }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     // The offer has nothing left to escalate to.
     await expect(offer).toBeHidden();

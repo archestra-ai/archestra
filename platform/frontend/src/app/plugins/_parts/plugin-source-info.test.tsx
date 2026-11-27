@@ -54,26 +54,17 @@ describe("PluginSourceInfo", () => {
     expect(tooltip).not.toHaveTextContent("GitHub");
   });
 
-  it("keeps file metadata available for manually authored plugins", async () => {
-    const user = userEvent.setup();
-    renderInfo({ sourceKind: "manual", fileCount: 1 });
+  it("shows nothing for a plugin written in the app, which has no source to name", () => {
+    const { container } = renderInfo({ sourceKind: "manual", fileCount: 1 });
 
-    await user.hover(
-      screen.getByRole("button", { name: "Manual source details" }),
-    );
-
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent("Manually authored plugin.");
-    expect(tooltip).toHaveTextContent("1 file");
-    expect(tooltip).not.toHaveTextContent("1 files");
-    expect(tooltip).not.toHaveTextContent("GitHub");
+    expect(container).toBeEmptyDOMElement();
   });
 });
 
 function renderInfo(
   overrides: Partial<Parameters<typeof PluginSourceInfo>[0]["plugin"]> = {},
 ) {
-  render(
+  return render(
     <PluginSourceInfo
       plugin={{
         sourceKind: "github",

@@ -82,6 +82,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "plugin.created": "Plugin created",
   "plugin.updated": "Plugin updated",
   "plugin.deleted": "Plugin deleted",
+  "plugin.restored": "Plugin restored",
+  "plugin.purged": "Plugin permanently deleted",
   "plugin.syncTriggered": "Plugin update check started",
   // Connector
   "clientConnection.updated": "Client connection request reviewed",
@@ -218,7 +220,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "skill.deleted": "Skill deleted",
   "skill.bulk_deleted": "Skills bulk deleted",
   "skill.restored": "Skill restored",
+  "skill.bulk_restored": "Skills bulk restored",
   "skill.purged": "Skill permanently deleted",
+  "skill.bulk_purged": "Skills bulk permanently deleted",
   "skill.imported": "Skill imported",
   "skillShareLink.created": "Skill snapshot link created",
   "skillShareLink.rotated": "Skill snapshot link refreshed",

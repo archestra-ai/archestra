@@ -43,11 +43,13 @@ import { useStoredFlag } from "./use-stored-flag";
 export function FileWorkspace({
   explorer,
   explorerStorageKey = null,
+  explorerToggle = true,
   activeKey,
   title,
   quickOpenLabel,
   quickOpen,
   shortcutScope = "focus",
+  leading,
   actions,
   download = null,
   notice,
@@ -61,18 +63,35 @@ export function FileWorkspace({
   explorer: ((overlay: boolean) => ReactNode) | null;
   /** Remembers whether the explorer is shown; null remembers nothing. */
   explorerStorageKey?: string | null;
+  /**
+   * Whether the bar can hide the explorer column. Off for a workspace small
+   * enough that the files are always worth their column: the column then
+   * always shows, whatever was remembered. A small screen still opens the
+   * files from the bar, since they cannot sit beside the editor there.
+   */
+  explorerToggle?: boolean;
   /** The open file: the small screen's panel closes when it changes. */
   activeKey: string | null;
-  /** The bar's middle, on the button that opens the palette. */
+  /**
+   * The bar's middle: the open file. With `quickOpen` it sits on the button
+   * that opens the palette; without, it is a plain label.
+   */
   title: ReactNode;
-  quickOpenLabel: string;
-  quickOpen: QuickOpenConfig;
+  quickOpenLabel?: string;
+  /**
+   * The Cmd/Ctrl+P palette that jumps to any file. For a workspace with
+   * enough files to search; leave it out where the file list is short enough
+   * to read (a skill's or a plugin's files), and the bar only names the file.
+   */
+  quickOpen?: QuickOpenConfig;
   /**
    * Where Cmd/Ctrl+P opens the palette: anywhere on the page (`window`, for a
    * page that is the workspace) or while focus is inside it (`focus`, for a
    * workspace that shares its page).
    */
   shortcutScope?: "window" | "focus";
+  /** The bar's start, after the files toggle: what acts on the file set. */
+  leading?: ReactNode;
   /** The bar's end: the open file's actions and the panels' toggles. */
   actions?: ReactNode;
   /** Every file, to save as a .zip from the bar's end; null offers none. */
@@ -82,8 +101,11 @@ export function FileWorkspace({
   className?: string;
   children: ReactNode;
 }) {
-  const [explorerOpen, setExplorerOpen] = useStoredFlag(explorerStorageKey);
+  const [storedExplorerOpen, setExplorerOpen] =
+    useStoredFlag(explorerStorageKey);
+  const explorerOpen = explorerToggle ? storedExplorerOpen : true;
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const hasQuickOpen = quickOpen !== undefined;
   const [filesPanel, setFilesPanel] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: closes when the open file changes
   useEffect(() => setFilesPanel(false), [activeKey]);
@@ -97,7 +119,7 @@ export function FileWorkspace({
   }, [filesPanel]);
   // Capture phase, so the editor does not take the key first.
   useEffect(() => {
-    if (shortcutScope !== "window") return;
+    if (!hasQuickOpen || shortcutScope !== "window") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (isQuickOpenKey(event)) {
         event.preventDefault();
@@ -106,9 +128,9 @@ export function FileWorkspace({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [shortcutScope]);
+  }, [hasQuickOpen, shortcutScope]);
   const onKeyDownCapture =
-    shortcutScope === "focus"
+    hasQuickOpen && shortcutScope === "focus"
       ? (event: ReactKeyboardEvent) => {
           if (isQuickOpenKey(event)) {
             event.preventDefault();
@@ -128,8 +150,13 @@ export function FileWorkspace({
     >
       {/* On a phone the actions take the first row and the file the second. */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b bg-muted/40 p-1 sm:grid sm:h-8 sm:grid-cols-[1fr_minmax(0,30rem)_1fr] sm:py-0">
-        <div className="hidden items-center sm:flex">
-          {explorer && (
+        <div
+          className={cn(
+            "items-center gap-1.5",
+            leading ? "flex" : "hidden sm:flex",
+          )}
+        >
+          {explorer && explorerToggle && (
             <WorkspacePanelToggle
               label={explorerOpen ? "Hide files" : "Show files"}
               pressed={explorerOpen}
@@ -139,23 +166,30 @@ export function FileWorkspace({
               <PanelLeft className="size-3.5" />
             </WorkspacePanelToggle>
           )}
+          {leading}
         </div>
 
-        <UnstyledButton
-          onClick={() => setPaletteOpen(true)}
-          aria-label={quickOpenLabel}
-          className="group order-last flex h-6 w-full min-w-0 items-center gap-2 rounded-md border bg-background px-2 text-xs outline-none transition-colors hover:border-ring/60 hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:order-none sm:w-auto"
-        >
-          <Search
-            className="size-3 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-          {title}
-          <span className="ml-auto hidden shrink-0 items-center gap-0.5 opacity-70 group-hover:opacity-100 sm:flex">
-            <Kbd className="h-4 min-w-4 px-1">{isMac ? "⌘" : "Ctrl"}</Kbd>
-            <Kbd className="h-4 min-w-4 px-1">P</Kbd>
-          </span>
-        </UnstyledButton>
+        {hasQuickOpen ? (
+          <UnstyledButton
+            onClick={() => setPaletteOpen(true)}
+            aria-label={quickOpenLabel}
+            className="group order-last flex h-6 w-full min-w-0 items-center gap-2 rounded-md border bg-background px-2 text-xs outline-none transition-colors hover:border-ring/60 hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:order-none sm:w-auto"
+          >
+            <Search
+              className="size-3 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+            {title}
+            <span className="ml-auto hidden shrink-0 items-center gap-0.5 opacity-70 group-hover:opacity-100 sm:flex">
+              <Kbd className="h-4 min-w-4 px-1">{isMac ? "⌘" : "Ctrl"}</Kbd>
+              <Kbd className="h-4 min-w-4 px-1">P</Kbd>
+            </span>
+          </UnstyledButton>
+        ) : (
+          <div className="order-last flex h-6 w-full min-w-0 items-center justify-center gap-2 px-2 text-xs sm:order-none sm:w-auto">
+            {title}
+          </div>
+        )}
 
         <div className="flex w-full items-center justify-end gap-0.5 sm:w-auto">
           {explorer && (
@@ -196,11 +230,13 @@ export function FileWorkspace({
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
       </div>
-      <FileQuickOpen
-        config={quickOpen}
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-      />
+      {quickOpen && (
+        <FileQuickOpen
+          config={quickOpen}
+          open={paletteOpen}
+          onOpenChange={setPaletteOpen}
+        />
+      )}
     </div>
   );
 }

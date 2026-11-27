@@ -17,16 +17,16 @@ test("plugins navigation and authoring ignore the plugins feature flag", async (
     },
     { method: "get", url: "/api/plugins", body: [] },
   ]);
+  // With no plugins to list, the list opens the page that adds the first one.
   await page.goto("/plugins");
+  await expect(page).toHaveURL(/\/plugins\/new$/);
   await expect(
-    page.getByRole("heading", { name: "Plugins", exact: true }),
+    page.getByRole("heading", { name: "Add a new plugin", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Plugins", exact: true }).first(),
   ).toBeVisible();
-  await page
-    .getByRole("link", { name: "Create a plugin", exact: true })
-    .click();
+  await page.getByRole("button", { name: /Blank template/ }).click();
   await expect(page).toHaveURL(/\/plugins\/new\?source=blank$/);
   await expect(
     page.getByRole("textbox", { name: "Display name", exact: true }),

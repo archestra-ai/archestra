@@ -735,7 +735,7 @@ describe("AgentCreatePage", () => {
       screen.queryByRole("button", { name: /connect via a2a/i }),
     ).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(
       screen.getByRole("button", { name: /connect via a2a/i }),
     ).toBeInTheDocument();
@@ -752,7 +752,7 @@ describe("AgentCreatePage", () => {
     await user.click(screen.getByRole("link", { name: "Agents" }));
     expect(push).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: /discard changes/i }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(push).not.toHaveBeenCalled();
     expect(
       screen.getByRole("button", { name: /connect via a2a/i }),

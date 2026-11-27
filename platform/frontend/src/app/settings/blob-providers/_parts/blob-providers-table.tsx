@@ -84,12 +84,11 @@ export function BlobProvidersTable({
   testingIds: ReadonlySet<string>;
   testResults: Record<string, BlobProviderTestResult | undefined>;
 }) {
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { searchParams, setFilters } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const typeFilter = searchParams.get("type") || ALL;
   const hasActiveFilters = search.trim().length > 0 || typeFilter !== ALL;
-  const clearFilters = () =>
-    updateQueryParams({ search: null, type: null, page: "1" });
+  const clearFilters = () => setFilters({ search: null, type: null });
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -237,9 +236,8 @@ export function BlobProvidersTable({
               <FilterSelect
                 value={typeFilter}
                 onValueChange={(value) =>
-                  updateQueryParams({
+                  setFilters({
                     type: value === ALL ? null : value,
-                    page: "1",
                   })
                 }
                 inactiveValue={ALL}
@@ -302,6 +300,7 @@ export function BlobProvidersTable({
           </PermissionButton>
         </BulkActions>
         <DataTable
+          urlPagination
           columns={columns}
           data={filtered}
           isLoading={isLoading && providers.length === 0}

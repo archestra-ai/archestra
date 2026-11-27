@@ -897,6 +897,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "skill.bulk_deleted",
     resourceIdSource: "organizationContext",
   },
+  // Bulk restore is the same shape as bulk delete above: the handler sets
+  // both snapshots itself.
+  "/api/skills/bulk-restore": {
+    resourceType: "skill",
+    action: "skill.bulk_restored",
+    resourceIdSource: "organizationContext",
+  },
   // Restore is a POST carrying :id; register it directly so the hook captures
   // the target id and the before/after (deletedAt) snapshots. findByIdForAudit
   // returns soft-deleted rows, so the "before" is the still-deleted skill.
@@ -904,6 +911,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     action: "skill.restored",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
+  // The bulk purge is the same shape as the bulk delete above: the handler
+  // sets both snapshots itself. They are ids, names, scopes and a deleted
+  // flag, so they are identity-only like the single purge below.
+  "/api/skills/bulk-permanent-delete": {
+    resourceType: "skill",
+    action: "skill.bulk_purged",
+    resourceIdSource: "organizationContext",
   },
   // Identity-only, like the other purges — see the agent entry above.
   "/api/skills/:id/permanent": {
@@ -1069,6 +1084,19 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
   "/api/plugins/:id": {
     resourceType: "plugin",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  // Restore and purge are verbs on :id, so each is registered with its own
+  // action. `findByIdForAudit` returns deleted rows and file digests, never
+  // file contents, so the purge's record holds no copy of what was destroyed.
+  "/api/plugins/:id/restore": {
+    resourceType: "plugin",
+    action: "plugin.restored",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  "/api/plugins/:id/permanent": {
+    resourceType: "plugin",
+    action: "plugin.purged",
     fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
   },
   "/api/plugins/github/import": {

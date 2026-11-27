@@ -26,8 +26,6 @@ export interface FileExplorerSection<F extends WorkspaceFile> {
   /** Controls beside the header's title, such as "New file". */
   actions?: ReactNode;
   files: F[];
-  /** Folders that hold no file yet. */
-  folders?: string[];
   /** Lists the files by full path, with no folders. */
   flat?: boolean;
   /** Shown in place of the files while there are none. */
@@ -54,6 +52,7 @@ export function FileExplorer<F extends WorkspaceFile>({
   fileTooltip,
   fileActions,
   folderActions,
+  actionsAlwaysShown = false,
   overlay = false,
 }: {
   /** The accessible name of the explorer's navigation landmark. */
@@ -69,6 +68,11 @@ export function FileExplorer<F extends WorkspaceFile>({
   fileActions?: (file: F) => ReactNode;
   /** Buttons revealed on hover beside a folder (its path). */
   folderActions?: (folder: string) => ReactNode;
+  /**
+   * Shows the row buttons at all times, not only on hover: for an explorer
+   * whose rows carry an action people come looking for, such as Delete.
+   */
+  actionsAlwaysShown?: boolean;
   /** Fills a panel laid over the editor on a small screen. */
   overlay?: boolean;
 }) {
@@ -93,7 +97,7 @@ export function FileExplorer<F extends WorkspaceFile>({
                 file,
               }),
             )
-          : buildFileTree(section.files, section.folders),
+          : buildFileTree(section.files),
       ),
     [sections],
   );
@@ -105,6 +109,7 @@ export function FileExplorer<F extends WorkspaceFile>({
     fileTooltip,
     fileActions,
     folderActions,
+    actionsAlwaysShown,
   };
 
   return (
@@ -199,6 +204,7 @@ interface RowRenderers<F extends WorkspaceFile> {
   fileTooltip?: (file: F) => ReactNode;
   fileActions?: (file: F) => ReactNode;
   folderActions?: (folder: string) => ReactNode;
+  actionsAlwaysShown: boolean;
 }
 
 function TreeNodes<F extends WorkspaceFile>({
@@ -229,7 +235,7 @@ function TreeNodes<F extends WorkspaceFile>({
           const actions = row.folderActions?.(node.path);
           return (
             <div key={key}>
-              <RowFrame actions={actions}>
+              <RowFrame actions={actions} alwaysShown={row.actionsAlwaysShown}>
                 <UnstyledButton
                   aria-expanded={open}
                   onClick={() => onToggle(key)}
@@ -296,7 +302,11 @@ function TreeNodes<F extends WorkspaceFile>({
         );
         const tooltip = row.fileTooltip?.(file);
         return (
-          <RowFrame key={file.key} actions={row.fileActions?.(file)}>
+          <RowFrame
+            key={file.key}
+            actions={row.fileActions?.(file)}
+            alwaysShown={row.actionsAlwaysShown}
+          >
             {tooltip ? (
               <Tooltip>
                 <TooltipTrigger asChild>{button}</TooltipTrigger>
@@ -315,16 +325,24 @@ function TreeNodes<F extends WorkspaceFile>({
 /** A row with its hover actions beside it, not inside its button. */
 function RowFrame({
   actions,
+  alwaysShown,
   children,
 }: {
   actions?: ReactNode;
+  alwaysShown: boolean;
   children: ReactNode;
 }) {
   if (!actions) return <>{children}</>;
   return (
     <div className="group/row relative">
       {children}
-      <div className="absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-focus-within/row:opacity-100 md:group-hover/row:opacity-100">
+      <div
+        className={cn(
+          "absolute inset-y-0 right-1 flex items-center gap-0.5",
+          !alwaysShown &&
+            "opacity-100 md:opacity-0 md:group-focus-within/row:opacity-100 md:group-hover/row:opacity-100",
+        )}
+      >
         {actions}
       </div>
     </div>

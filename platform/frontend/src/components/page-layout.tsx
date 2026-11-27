@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useAppName } from "@/lib/hooks/use-app-name";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
 
 // Helper to determine if a tab's href matches the current URL
@@ -153,16 +153,10 @@ export function PageLayout({
   const headerSpacing = compactHeader ? COMPACT_HEADER_SPACING : HEADER_SPACING;
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const appName = useAppName();
 
   // Keep the browser tab title in sync with the page so screen reader and
   // switcher users can tell client-side navigated pages apart (WCAG 2.4.2).
-  useEffect(() => {
-    const pageTitle = documentTitle ?? (typeof title === "string" ? title : "");
-    if (pageTitle && appName) {
-      document.title = `${pageTitle} - ${appName}`;
-    }
-  }, [title, documentTitle, appName]);
+  usePageTitle(documentTitle ?? (typeof title === "string" ? title : null));
   const currentUrl = searchParams.toString()
     ? `${pathname}?${searchParams.toString()}`
     : pathname;

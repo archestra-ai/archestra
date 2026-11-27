@@ -1,11 +1,13 @@
 "use client";
 
 import {
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   DocsPage,
   OPENCODE_PRIMARY_PROVIDERS,
   PROVIDERS_REQUIRING_BASE_URL,
   personalSubscriptionTurnedOffMessage,
   providerRequiresPerUserCredential,
+  RESOURCE_ACCESS_RELATIONS,
   resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -378,20 +380,44 @@ export function ConnectCommandPanel({
     client.id !== "grok-build" &&
     pluginsEnabled &&
     canUseAnyPlugin(scopedGrants ?? []);
-  const { data: allPlugins, isPending: pluginsPending } =
-    usePlugins(pluginsQueryEnabled);
-  const plugins = useMemo(
-    () =>
-      (allPlugins ?? []).filter(
-        (plugin) =>
-          isDeliverablePlugin(plugin, client.id) &&
-          canUsePlugin(scopedGrants ?? [], plugin.id),
-      ),
-    [allPlugins, client.id, scopedGrants],
+  // The plugins the Plugins list shows, as on the Connect page itself.
+  const { data: listedPlugins, isPending: pluginsPending } = usePlugins(
+    pluginsQueryEnabled,
+    { access: DEFAULT_RESOURCE_ACCESS_RELATIONS },
   );
+  // Plugins the installer's request (or the page that opened this panel)
+  // names are asked for by name, so they are looked up among every plugin the
+  // viewer may use: one an admin reaches only through admin access is left
+  // out of what is bundled unasked, not out of what was asked for.
+  const { data: connection } = useClientConnection(connectRequest ?? "");
+  const requestedPluginSlugs = connection?.plugins ?? pluginSlugs ?? null;
+  const namesPlugins = pluginsQueryEnabled && !!requestedPluginSlugs?.length;
+  const { data: everyUsablePlugin, isPending: requestedPluginsPending } =
+    usePlugins(namesPlugins, { access: RESOURCE_ACCESS_RELATIONS });
+  const requestedPluginsKey = requestedPluginSlugs?.join(",");
+  const plugins = useMemo(() => {
+    const listed = listedPlugins ?? [];
+    const listedIds = new Set(listed.map((plugin) => plugin.id));
+    const requested = new Set(requestedPluginsKey?.split(",") ?? []);
+    const named = (everyUsablePlugin ?? []).filter(
+      (plugin) => requested.has(plugin.pluginSlug) && !listedIds.has(plugin.id),
+    );
+    return [...listed, ...named].filter(
+      (plugin) =>
+        isDeliverablePlugin(plugin, client.id) &&
+        canUsePlugin(scopedGrants ?? [], plugin.id),
+    );
+  }, [
+    listedPlugins,
+    everyUsablePlugin,
+    requestedPluginsKey,
+    client.id,
+    scopedGrants,
+  ]);
   const pluginsLoading =
     (pluginsEnabled && pluginsPermissionPending) ||
-    (pluginsQueryEnabled && pluginsPending);
+    (pluginsQueryEnabled && pluginsPending) ||
+    (namesPlugins && requestedPluginsPending);
 
   // Toggle one skill, snapshotting the current selection into an explicit set
   // on first interaction (null → all ids, then add/remove the toggled one).
@@ -466,7 +492,6 @@ export function ConnectCommandPanel({
   const platform = platformChoice ?? detectedPlatform;
   // Exclusions seed the optional choices; they do not restrict customization.
   // Legacy tools exclusions cannot remove the required gateway.
-  const { data: connection } = useClientConnection(connectRequest ?? "");
   const excludeKey = (connection?.exclude ?? exclude ?? []).join(",");
   const excluded = useMemo(
     () => new Set(excludeKey.split(",").filter(Boolean)),
@@ -485,9 +510,7 @@ export function ConnectCommandPanel({
   // A gateway and plugins picked on the Connect page start selected, once
   // each list has loaded; after that the selection is the user's.
   const presetGateway = connection?.gateway ?? null;
-  const presetPluginsKey = (connection?.plugins ?? pluginSlugs ?? null)?.join(
-    ",",
-  );
+  const presetPluginsKey = requestedPluginsKey;
   const appliedPresets = useRef({ gateway: false, plugins: false });
   useEffect(() => {
     // An empty list is one still loading on the approval page.

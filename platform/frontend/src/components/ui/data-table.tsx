@@ -32,6 +32,8 @@ import {
   registerTableRangeSelection,
   useBulkRangeSelectionController,
 } from "@/lib/bulk-range-selection-context";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import { cn } from "@/lib/utils/tailwind";
 import { DATA_TABLE_SELECT_COLUMN_SIZE } from "./data-table.constants";
 import {
@@ -65,6 +67,29 @@ interface DataTableProps<TData, TValue> {
   /** Cursor pagination is intentionally separate from offset pagination. */
   cursorPagination?: CursorPaginationState;
   manualPagination?: boolean;
+  /**
+   * Keep the page of a table that pages its own rows (no `pagination` prop)
+   * in the URL, as `page` and `pageSize`.
+   *
+   * Set it on a page's main table. A reload, the Back button and a shared
+   * link then open the same rows, and the `page=1` that `SearchInput` and
+   * the filter controls write when they narrow the list takes effect.
+   * Without it the page lives in component state: the URL's `page` is
+   * ignored and a search made on page 3 stays on page 3.
+   *
+   * Pass the section's adapter where several tables share one URL. Leave it
+   * off for a table inside a card or a dialog, which has no claim on the URL;
+   * give that one a `resetPageKey` instead.
+   */
+  urlPagination?: boolean | QueryParamsAdapter;
+  /**
+   * For a table that keeps its page in component state: whatever narrows the
+   * rows, as one value (the search text, a filter signature). When it
+   * changes, the table returns to its first page, where the first matches
+   * are. Not needed with `urlPagination`, where the control that narrows the
+   * list writes `page=1` itself.
+   */
+  resetPageKey?: string | number | null;
   onSortingChange?: (sorting: SortingState) => void;
   manualSorting?: boolean;
   sorting?: SortingState;
@@ -147,13 +172,58 @@ interface DataTableProps<TData, TValue> {
   columnDropOrder?: string[];
 }
 
+/**
+ * The app's table. It pages its own rows unless the caller pages them
+ * (`pagination`, `cursorPagination`); see `urlPagination` and `resetPageKey`
+ * for where the page is kept.
+ */
 export function DataTable<TData, TValue>({
+  urlPagination,
+  ...props
+}: DataTableProps<TData, TValue>) {
+  // A caller that pages the rows itself already owns the page.
+  if (!urlPagination || props.pagination || props.cursorPagination) {
+    return <DataTableView {...props} />;
+  }
+  return (
+    <UrlPaginatedDataTable
+      {...props}
+      queryParamsAdapter={urlPagination === true ? undefined : urlPagination}
+    />
+  );
+}
+
+/**
+ * The table with its page read from and written to the URL. A component of
+ * its own because the URL hooks need a router: a table in a dialog, a card
+ * or a unit test has none, and never mounts this.
+ */
+function UrlPaginatedDataTable<TData, TValue>({
+  queryParamsAdapter,
+  ...props
+}: DataTableProps<TData, TValue> & {
+  queryParamsAdapter?: QueryParamsAdapter;
+}) {
+  const { pageIndex, pageSize, setPagination } = useDataTableQueryParams({
+    queryParamsAdapter,
+  });
+  return (
+    <DataTableView
+      {...props}
+      pagination={{ pageIndex, pageSize, total: props.data.length }}
+      onPaginationChange={setPagination}
+    />
+  );
+}
+
+function DataTableView<TData, TValue>({
   columns,
   data,
   pagination,
   onPaginationChange,
   cursorPagination,
   manualPagination = false,
+  resetPageKey,
   onSortingChange,
   manualSorting = false,
   sorting: controlledSorting,
@@ -299,6 +369,8 @@ export function DataTable<TData, TValue>({
   });
   registerTableRangeSelection({ table, controller: rangeSelection });
 
+  const lastResetPageKey = React.useRef(resetPageKey);
+
   // With autoResetPageIndex disabled, a shrinking row count (e.g. a filter
   // applied while on a later page) strands the table on a nonexistent page.
   // Clamp to the last valid page; setPageIndex routes through
@@ -316,13 +388,22 @@ export function DataTable<TData, TValue>({
   const pageCount = table.getPageCount();
   const pageIndex = table.getState().pagination.pageIndex;
   React.useEffect(() => {
+    // A narrowed list starts from its first page: that is where its first
+    // matches are. Decided here, ahead of the clamp below, because both read
+    // the same render: a search that also leaves fewer pages would otherwise
+    // be sent to page one and then, by the clamp, to the last page left.
+    if (lastResetPageKey.current !== resetPageKey) {
+      lastResetPageKey.current = resetPageKey;
+      table.setPageIndex(0);
+      return;
+    }
     // pageCount is -1 when manual pagination has no known page count
     if (isLoading || pageCount < 0) return;
     const maxPageIndex = Math.max(pageCount - 1, 0);
     if (pageIndex > maxPageIndex) {
       table.setPageIndex(maxPageIndex);
     }
-  }, [isLoading, pageCount, pageIndex, table]);
+  }, [resetPageKey, isLoading, pageCount, pageIndex, table]);
 
   // Drop the table's listed columns until the rest fit the container, so a
   // narrow window shows fewer columns instead of a horizontal scroll. Measured

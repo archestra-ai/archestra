@@ -388,6 +388,9 @@ export function ServiceAccountApiKeys({
         )}
 
         <DataTable
+          // The search and filters live in this component, not in the URL.
+
+          resetPageKey={`${search}|${statusFilter}`}
           columns={columns}
           data={filteredTokens}
           getRowId={(row) => row.id}

@@ -347,6 +347,9 @@ export function FederatedCredentialsSection({
         )}
 
         <DataTable
+          // The search and filters live in this component, not in the URL.
+
+          resetPageKey={`${search}|${providerFilter}`}
           columns={columns}
           data={filtered}
           getRowId={(row) => row.id}

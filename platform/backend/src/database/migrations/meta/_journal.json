@@ -4663,6 +4663,13 @@
       "when": 1795687318213,
       "tag": "0665_curious_sersi",
       "breakpoints": true
+    },
+    {
+      "idx": 666,
+      "version": "7",
+      "when": 1795791508074,
+      "tag": "0666_strong_enchantress",
+      "breakpoints": true
     }
   ]
 }

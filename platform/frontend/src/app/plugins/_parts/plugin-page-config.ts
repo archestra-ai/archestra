@@ -21,7 +21,6 @@ export function resolvePluginInstallSelection(
   plugins: readonly {
     clientType: PluginClientType;
     supportedPlatforms: readonly ("posix" | "windows")[];
-    enabled?: boolean;
   }[],
 ): {
   clientType: PluginClientType | null;
@@ -34,13 +33,6 @@ export function resolvePluginInstallSelection(
       clientType: null,
       supportedPlatforms: [],
       error: "Select plugins for one client at a time",
-    };
-  }
-  if (plugins.some((plugin) => plugin.enabled === false)) {
-    return {
-      clientType: [...clientTypes][0] ?? null,
-      supportedPlatforms: [],
-      error: "Disabled plugins cannot be installed",
     };
   }
   const supportedPlatforms = (["posix", "windows"] as const).filter(

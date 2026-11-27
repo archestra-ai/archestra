@@ -138,6 +138,7 @@ export { default as PlaywrightRuntimeModel } from "./playwright-runtime";
 export { default as PluginModel } from "./plugin";
 export { default as PluginSkillUsageEventModel } from "./plugin-skill-usage-event";
 export { default as PluginTeamModel } from "./plugin-team";
+export { default as PluginVersionModel } from "./plugin-version";
 export {
   ConversationNotOwnedError,
   default as ProjectModel,

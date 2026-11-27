@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
+import { Readable } from "node:stream";
 import {
   AGENT_TOOL_PREFIX,
   DEFAULT_APP_NAME,
@@ -28,6 +30,7 @@ import {
   actorFromUserId,
   serviceAccountUserId,
 } from "@/auth/service-account-user-id";
+import { BuiltInFileAnswer } from "@/clients/mcp-files/built-in-files";
 import { getAppAssetBaseOrigin } from "@/config";
 import logger from "@/logging";
 import {
@@ -99,6 +102,7 @@ import { subagentLoadBalancer } from "@/services/agent-runtime/subagent-load-bal
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
 import {
+  RELAYED_UPLOAD_TICKET_TTL_MS,
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
@@ -129,6 +133,7 @@ import {
   type RuntimeLaunchOutcome,
   RuntimeLaunchStateSchema,
 } from "@/types/openappa-runtime-launch";
+import { fileInputArgument } from "./file-argument";
 import {
   agentCredentialSetupUrl,
   catchError,
@@ -1515,6 +1520,7 @@ const registry = defineArchestraTools([
         .string()
         .min(1)
         .max(4096)
+        .optional()
         .describe("Absolute path on this machine, used to build the command."),
       size: z
         .number()
@@ -1527,6 +1533,11 @@ const registry = defineArchestraTools([
         .regex(/^[0-9a-f]{64}$/)
         .optional()
         .describe("Upload only: the local file's sha256, as hex."),
+      file: fileInputArgument()
+        .optional()
+        .describe(
+          "Upload only, in place of local_path, size and sha256: the file itself, sent by this client.",
+        ),
     }),
     handler: async ({ args, context }) => {
       if (context.suppressContentLogging && args.direction === "upload") {
@@ -1544,6 +1555,39 @@ const registry = defineArchestraTools([
         });
         if (access.kind === "error") return access.result;
         direct = access.kind !== "parent";
+        const crossing =
+          access.kind === "parent"
+            ? {
+                parent: access.crossing.source,
+                childSessionId: access.child.session_id,
+                operationId: access.crossing.callId,
+              }
+            : undefined;
+        if (args.file !== undefined) {
+          if (
+            args.direction !== "upload" ||
+            args.local_path !== undefined ||
+            args.size !== undefined ||
+            args.sha256 !== undefined
+          ) {
+            return errorResult(
+              "file is for an upload, in place of local_path, size and sha256. Pass one or the other.",
+            );
+          }
+          return await uploadFileArgument({
+            context,
+            actor,
+            taskId: args.run_id,
+            path: args.path,
+            file: args.file,
+            crossing,
+          });
+        }
+        if (args.local_path === undefined) {
+          return errorResult(
+            "Pass local_path: the absolute path on this machine the command reads or writes.",
+          );
+        }
         if (
           args.direction === "upload" &&
           (args.size === undefined || !args.sha256)
@@ -1571,7 +1615,10 @@ const registry = defineArchestraTools([
               ),
             });
           }
-          return transferResult({ args, minted: crossed.minted });
+          return transferResult({
+            args: { direction: args.direction, local_path: args.local_path },
+            minted: crossed.minted,
+          });
         }
         const minted =
           args.direction === "download"
@@ -1586,18 +1633,16 @@ const registry = defineArchestraTools([
                 path: args.path,
                 size: args.size as number,
                 sha256: args.sha256 as string,
-                ...(access.kind === "parent"
-                  ? {
-                      crossing: {
-                        parent: access.crossing.source,
-                        childSessionId: access.child.session_id,
-                        operationId: access.crossing.callId,
-                      },
-                    }
-                  : {}),
+                ...(crossing ? { crossing } : {}),
               });
-        return transferResult({ args, minted });
+        return transferResult({
+          args: { direction: args.direction, local_path: args.local_path },
+          minted,
+        });
       } catch (error) {
+        // A file call's protocol answer (upload_required, or a missing
+        // capability) is the gateway's to send, not a failed transfer.
+        if (error instanceof BuiltInFileAnswer) throw error;
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
         return workspaceFileError({
@@ -2992,6 +3037,88 @@ async function runtimeCrossingForStart(
     });
   }
   return gate.crossing;
+}
+
+/**
+ * An upload whose bytes come with the call, under the MCP File Uploads
+ * extension: inline, or uploaded to the gateway, which streams them into a
+ * ticket minted here. The ticket is the same authority a command would get,
+ * so the runtime checks, destination guard and crossing all apply.
+ */
+async function uploadFileArgument(params: {
+  context: ArchestraContext;
+  actor: A2AActor;
+  taskId: string;
+  path: string;
+  file: unknown;
+  crossing?: {
+    parent: import("@/openappa/service").OpenAppaSession;
+    childSessionId: string;
+    operationId: string;
+  };
+}): Promise<CallToolResult> {
+  const { context, actor, taskId, path, crossing } = params;
+  if (!context.files) {
+    return errorResult(
+      "This client cannot send files to this tool. Pass local_path, size and sha256 instead, then run the returned command.",
+    );
+  }
+  const taken = await context.files.take({
+    name: "file",
+    value: params.file,
+    descriptor: {},
+  });
+  switch (taken.kind) {
+    case "refused":
+      return errorResult(taken.message);
+    case "uploaded":
+      return structuredSuccessResult({
+        direction: "upload",
+        status: "stored",
+        ...taken.receipt,
+      });
+    case "inline": {
+      const minted = await workspaceTransferTickets.mintUpload({
+        actor,
+        taskId,
+        path,
+        size: taken.bytes.length,
+        sha256: createHash("sha256").update(taken.bytes).digest("hex"),
+        ...(crossing ? { crossing } : {}),
+      });
+      const receipt = await workspaceTransferTickets.receive({
+        ticket: await workspaceTransferTickets.resolve(
+          minted.ticket.id,
+          minted.token,
+        ),
+        body: Readable.from([taken.bytes]),
+      });
+      return structuredSuccessResult({
+        direction: "upload",
+        status: "stored",
+        ...receipt,
+      });
+    }
+    case "pending": {
+      const { input } = taken;
+      const relayed = await workspaceTransferTickets.mintRelayedUpload({
+        actor,
+        taskId,
+        path,
+        size: input.size,
+        ...(input.digest && {
+          sha256: Buffer.from(input.digest.value, "base64url").toString("hex"),
+        }),
+        ttlMs: RELAYED_UPLOAD_TICKET_TTL_MS,
+        ...(crossing ? { crossing } : {}),
+      });
+      return context.files.requireUpload({
+        input,
+        sink: { kind: "workspace-transfer", ticketId: relayed.ticketId },
+        expiresAt: relayed.expiresAt,
+      });
+    }
+  }
 }
 
 /**

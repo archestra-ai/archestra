@@ -616,8 +616,8 @@
     "searchText": "transfer credential to remote agent, share secret API key environment variable, CLI authentication handoff, declare credential get paste link, secure secret entry, ephemeral one-time credential grant TTL, provide token to subagent run, AWS key"
   },
   "transfer_workspace_file": {
-    "definitionHash": "28be30d7a37c7cbcffad10c66770b3fa6f07ce617a38c9d73f2fbcc54ea54931",
-    "searchText": "transfer file upload download remote agent workspace, copy large files binaries archives deliverables, authorize transfer shell command, resumable download, sha256 checksum size, agent run, move file to local machine, retrieve output artifacts"
+    "definitionHash": "192a11942d4b2474394c7ffc3ac02af804b7404fd555f020940ddb705a2825a6",
+    "searchText": "transfer file upload download remote agent workspace, copy large files binaries archives deliverables, authorize transfer shell command, send file directly from client, resumable download, sha256 checksum size, agent run, move file to local machine, retrieve output artifacts"
   },
   "unassign_knowledge_base_from_agent": {
     "definitionHash": "0a11b34b867a73430b76efd5048cd10863cc871210bf4cf37b356ec40b63ba99",

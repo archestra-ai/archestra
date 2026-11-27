@@ -29,6 +29,10 @@ import type {
   TargetInstallCaller,
   TokenAuthContext,
 } from "@/clients/mcp-client";
+import {
+  schemaDeclaresFileInput,
+  withoutFileArguments,
+} from "@/clients/mcp-files/file-input";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -288,6 +292,7 @@ const registry = defineArchestraTools([
         parentLlm: context.parentLlm,
         tokenAuth: context.tokenAuth,
         suppressContentLogging: context.suppressContentLogging,
+        includeFileArguments: context.files?.accepted === true,
       });
 
       let matches: SearchCandidate[];
@@ -485,6 +490,8 @@ async function getSearchableTools(params: {
   parentLlm?: ModelSelection;
   tokenAuth?: TokenAuthContext;
   suppressContentLogging?: boolean;
+  /** Only a caller that can send files is shown a tool's file arguments. */
+  includeFileArguments: boolean;
 }): Promise<SearchCandidate[]> {
   const {
     agentId,
@@ -692,6 +699,16 @@ async function getSearchableTools(params: {
         )
       : null;
     if (isKnowledge && !knowledgeDescription) continue;
+    // A caller that cannot send files is not offered another server's file
+    // tool, as tools/list does not list it; a built-in is shown without its
+    // file argument instead.
+    if (
+      !params.includeFileArguments &&
+      tool.catalogId !== ARCHESTRA_MCP_CATALOG_ID &&
+      schemaDeclaresFileInput(tool.parameters ?? null)
+    ) {
+      continue;
+    }
     candidates.set(
       tool.name,
       toAssignedToolCandidate({
@@ -703,6 +720,7 @@ async function getSearchableTools(params: {
             ? (catalogsById.get(tool.catalogId) ?? null)
             : null,
         catalogsWithInstalls,
+        includeFileArguments: params.includeFileArguments,
       }),
     );
   }
@@ -733,6 +751,7 @@ function toAssignedToolCandidate(params: {
   };
   catalog: SearchCatalogMeta | null;
   catalogsWithInstalls: Set<string>;
+  includeFileArguments: boolean;
 }): SearchCandidate {
   const { catalog, catalogsWithInstalls, tool } = params;
   const source = archestraMcpBranding.isToolName(tool.name)
@@ -749,7 +768,9 @@ function toAssignedToolCandidate(params: {
     source === "mcp"
       ? parseFullToolName(tool.name)
       : { serverName: null, toolName: null };
-  const parameters = tool.parameters ?? {};
+  const parameters = params.includeFileArguments
+    ? (tool.parameters ?? {})
+    : withoutFileArguments(tool.parameters ?? {});
   const inputParameters = summarizeInputParameters(parameters);
   const title =
     source === "archestra" ? formatArchestraToolTitle(tool.name) : null;

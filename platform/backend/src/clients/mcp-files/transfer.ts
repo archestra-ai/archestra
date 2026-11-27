@@ -155,8 +155,6 @@ export function multipartFilename(name: string | undefined): string {
  * the exact length, so without its final bytes it never holds a complete
  * file: a check that fails leaves the target with a short body to discard,
  * never a whole file that merely did not match.
- *
- * @internal exported for tests
  */
 export async function* checkedBytes(
   body: AsyncIterable<Uint8Array>,

@@ -1,6 +1,7 @@
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import type { TokenAuthContext } from "@/clients/mcp-client";
+import type { BuiltInFiles } from "@/clients/mcp-files/built-in-files";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 
@@ -140,6 +141,12 @@ export interface ArchestraContext {
     clientCapabilities?: unknown;
     round?: number;
   };
+  /**
+   * Files sent to a built-in tool under the MCP File Uploads extension. Set
+   * only by the MCP gateway; absent elsewhere (chat, apps), where a tool's
+   * file argument cannot arrive and is refused.
+   */
+  files?: BuiltInFiles;
   /**
    * The host-issued id of the tool call currently executing. Set on the
    * delegation path so the child's surfaced tool calls can be attributed to

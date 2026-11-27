@@ -187,6 +187,54 @@ export function redactFileArguments(
   return redactFileShapedData(copy) as Record<string, unknown>;
 }
 
+/**
+ * Read one file argument outside a schema walk: a built-in tool's own
+ * argument, which its handler reads by name.
+ */
+export function readFileInput(value: unknown, name: string): FileInput {
+  if (!isObject(value)) {
+    throw new FileInputError(
+      `The file argument "${name}" is not a file input object.`,
+    );
+  }
+  return parseFileInput(value, [name]);
+}
+
+/**
+ * The schema with every file argument removed: what a caller that cannot
+ * send files is shown of a tool whose file arguments are optional. A
+ * property marked as a file disappears from `properties` and `required`.
+ */
+export function withoutFileArguments<T>(schema: T): T {
+  if (Array.isArray(schema)) {
+    return schema.map((item) => withoutFileArguments(item)) as T;
+  }
+  if (!isObject(schema)) return schema;
+  const copy: Record<string, unknown> = {};
+  const dropped = new Set<string>();
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "properties" && isObject(value)) {
+      const properties: Record<string, unknown> = {};
+      for (const [name, property] of Object.entries(value)) {
+        if (isObject(property) && MCP_FILE_SCHEMA_KEYWORD in property) {
+          dropped.add(name);
+        } else {
+          properties[name] = withoutFileArguments(property);
+        }
+      }
+      copy[key] = properties;
+    } else {
+      copy[key] = withoutFileArguments(value);
+    }
+  }
+  if (dropped.size > 0 && Array.isArray(copy.required)) {
+    copy.required = copy.required.filter(
+      (name) => typeof name !== "string" || !dropped.has(name),
+    );
+  }
+  return copy as T;
+}
+
 export class FileInputError extends Error {
   constructor(message: string) {
     super(message);

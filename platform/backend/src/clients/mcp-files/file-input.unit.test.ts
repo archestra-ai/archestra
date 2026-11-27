@@ -5,9 +5,11 @@ import {
   decodeInlineFile,
   FileInputError,
   holdsFileShapedUpload,
+  readFileInput,
   redactFileArguments,
   redactFileShapedData,
   schemaDeclaresFileInput,
+  withoutFileArguments,
 } from "./file-input";
 
 const FILE_SCHEMA = {
@@ -224,5 +226,49 @@ describe("holdsFileShapedUpload", () => {
     );
     expect(holdsFileShapedUpload({ a: file({ size: 0 }) })).toBe(false);
     expect(holdsFileShapedUpload({ a: "x" })).toBe(false);
+  });
+});
+
+describe("withoutFileArguments", () => {
+  test("drops marked properties and their required entries, at any depth, and leaves the original intact", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        file: FILE_SCHEMA,
+        nested: {
+          type: "object",
+          properties: { cover: FILE_SCHEMA, title: { type: "string" } },
+          required: ["cover", "title"],
+        },
+      },
+      required: ["path", "file"],
+    };
+    expect(withoutFileArguments(schema)).toEqual({
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        nested: {
+          type: "object",
+          properties: { title: { type: "string" } },
+          required: ["title"],
+        },
+      },
+      required: ["path"],
+    });
+    expect(schema.properties).toHaveProperty("file");
+    expect(schemaDeclaresFileInput(withoutFileArguments(schema))).toBe(false);
+  });
+});
+
+describe("readFileInput", () => {
+  test("validates one file argument by name", () => {
+    expect(readFileInput(file(), "file")).toMatchObject({ id: "f1", size: 5 });
+    expect(() => readFileInput("report.pdf", "file")).toThrow(
+      /"file" is not a file input object/,
+    );
+    expect(() => readFileInput(file({ size: -1 }), "file")).toThrow(
+      FileInputError,
+    );
   });
 });

@@ -74,6 +74,7 @@ export function streamAgentRuntimeCommand(params: {
   // credentials, file contents, or unbounded custom-image diagnostics.
   stderr.resume();
   stderr.on("error", () => {});
+  watchInput(params.stdin, finish);
   // A consumer that stops reading, such as a disconnected download, closes the
   // stream. Settling is idempotent, so a normal end does not report a failure.
   stdout.on("close", () =>
@@ -174,6 +175,7 @@ export function execAgentRuntimeCommand(params: {
     stderr.on("data", (chunk: Buffer) => consume(chunk, false));
     stdout.on("error", finish);
     stderr.on("error", finish);
+    watchInput(params.stdin, finish);
     // Do not include arbitrary runtime stderr in API errors: it can contain
     // credentials, file contents, or unbounded custom-image diagnostics.
     params.exec
@@ -212,6 +214,19 @@ export function execAgentRuntimeCommand(params: {
       })
       .catch((error: unknown) => finish(normalizeConnectionError(error)));
   });
+}
+
+/**
+ * Input that fails mid-stream ends the command with that failure, including
+ * input that failed before the command was started.
+ */
+function watchInput(
+  stdin: Readable | undefined,
+  finish: (error: Error) => void,
+): void {
+  if (!stdin) return;
+  stdin.on("error", finish);
+  if (stdin.errored) finish(stdin.errored);
 }
 
 // The Kubernetes WebSocket client rejects failed handshakes with ErrorEvent,

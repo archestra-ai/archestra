@@ -88,10 +88,12 @@ import mcpClient, {
   McpServerStoppedError,
   type TokenAuthContext,
 } from "@/clients/mcp-client";
+import { BuiltInFileAnswer } from "@/clients/mcp-files/built-in-files";
 import {
   holdsFileShapedUpload,
   redactFileShapedData,
   schemaDeclaresFileInput,
+  withoutFileArguments,
 } from "@/clients/mcp-files/file-input";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
@@ -169,8 +171,14 @@ import { ApiError } from "@/types/api";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
+import {
+  answerBuiltInUploadRequest,
+  createBuiltInFiles,
+  inputResponsesBeforeUpload,
+  redactBuiltInFileArguments,
+} from "./built-in-files";
 import { cursorFormSchema } from "./cursor-forms";
-import { GatewayFileCall, readFilesDeclaration } from "./files";
+import { GatewayFileCall } from "./files";
 import { grokCanonicalToolName, grokToolName } from "./grok-tool-names";
 import {
   buildInputRequiredResult,
@@ -201,6 +209,7 @@ import {
   TASK_TTL_MS,
 } from "./tasks";
 import { refuseUndeclaredMcpToolCall } from "./undeclared-tool-call";
+import { FILE_UPLOAD_STATE_TTL_MS, readFilesDeclaration } from "./upload-store";
 
 export { deriveAuthMethod };
 
@@ -367,9 +376,10 @@ export async function buildAgentMcpToolList(params: {
     >;
   lookups?: RequestLookups;
   /**
-   * Whether tools that take files (`x-mcp-file`) are listed. Only a client of
-   * the File Uploads extension can fill such an argument, so the extension
-   * says to leave them out for any other, which is the default.
+   * Whether tools that take files (`x-mcp-file`) are listed as they are.
+   * Only a client of the File Uploads extension can fill such an argument,
+   * so for any other, which is the default, another server's file tool is
+   * left out and a built-in tool is shown without its file argument.
    */
   includeFileTools?: boolean;
 }): Promise<{
@@ -433,7 +443,12 @@ export async function buildAgentMcpToolList(params: {
           toolName: tool.name,
           inputSchema: tool.parameters,
         }) &&
-        (params.includeFileTools || !schemaDeclaresFileInput(tool.parameters)),
+        // A built-in tool's file argument is optional: it is shown without
+        // it below. Another server's file tool is listed only to file
+        // clients, as that server itself lists it.
+        (params.includeFileTools ||
+          tool.catalogId === ARCHESTRA_MCP_CATALOG_ID ||
+          !schemaDeclaresFileInput(tool.parameters)),
     ),
     agentId,
     tokenAuth,
@@ -752,7 +767,9 @@ export async function buildAgentMcpToolList(params: {
               : (appLaunchDescription(catalogId, name) ??
                 description ??
                 undefined),
-      inputSchema: parameters,
+      inputSchema: params.includeFileTools
+        ? parameters
+        : withoutFileArguments(parameters),
       ...advertisedOutputSchema(meta?.outputSchema),
       annotations: meta?.annotations || {},
       _meta: ALWAYS_LOADED_SHORT_NAMES.has(
@@ -1087,6 +1104,13 @@ export async function createAgentServer(params: {
       },
     };
 
+    // Who this call's requestState is bound to.
+    const callPrincipal = deriveStatePrincipal({
+      userId: tokenAuth?.userId,
+      tokenId: tokenAuth?.tokenId,
+      organizationId: tokenAuth?.organizationId,
+    });
+
     const executeCallToolRequest = async (
       taskAbortSignal: AbortSignal,
     ): Promise<Record<string, unknown>> => {
@@ -1208,7 +1232,7 @@ export async function createAgentServer(params: {
               toolCall: {
                 id: `blocked-${Date.now()}`,
                 name,
-                arguments: args || {},
+                arguments: redactBuiltInFileArguments(name, args ?? {}),
               },
               toolResult: blockedResult,
               userId: tokenAuth?.userId ?? null,
@@ -1246,70 +1270,95 @@ export async function createAgentServer(params: {
               : "Archestra MCP tool call received",
           );
 
-          // Handle Archestra and agent delegation tools directly
-          const response = await startActiveMcpSpan({
-            toolName: name,
-            mcpServerName,
-            agent,
-            teams,
-            userTeams,
-            agentType: agent.agentType,
-            toolCallId: `archestra-${Date.now()}`,
-            toolArgs: args,
-            user: mcpUser,
-            callback: async (span) => {
-              const runArchestraTool = () =>
-                executeArchestraTool(name, args, {
-                  openappaSession: params.openappaSession,
-                  currentToolCallId: params.currentToolCallId,
-                  agent: { id: agent.id, name: agent.name },
-                  agentId: agent.id,
-                  userId: tokenAuth?.serviceAccountId
-                    ? serviceAccountUserId(tokenAuth.serviceAccountId)
-                    : tokenAuth?.userId,
-                  organizationId: tokenAuth?.organizationId,
-                  tokenAuth,
-                  ...(runId ? { runId } : {}),
-                  mrtr: {
-                    enabled: mrtrEnabled,
-                    inputResponses: mrtr?.inputResponses,
-                    clientCapabilities: mrtr?.clientCapabilities,
-                    round: mrtr?.round,
-                  },
-                  inspectableReviewForm: params.cursorForms === true,
-                  elicitation: {
-                    elicit: createGatewayUserElicit({
-                      extra,
-                      mrtr,
-                      mrtrEnabled,
-                      cursorForms: params.cursorForms === true,
-                      agentId,
-                      toolName: name,
-                      requestMeta: request.params._meta as
-                        | Record<string, unknown>
-                        | undefined,
-                    }),
-                  },
-                });
-              // run_tool reaches upstream servers, so its call can fail on an
-              // expired connection just like a direct one.
-              const result = await recoverExpiredAuthWithUrlElicitation({
-                result: await runArchestraTool(),
-                clientCapabilities: mrtr?.clientCapabilities,
-                mrtrEnabled,
-                inputResponses: mrtr?.inputResponses,
-                extra: reauthExtra,
-                rerun: runArchestraTool,
-                agentId,
-                toolName: name,
-              });
-              span.setAttribute(
-                ATTR_MCP_IS_ERROR_RESULT,
-                result.isError ?? false,
-              );
-              return result;
-            },
+          // File Uploads: input the caller gave before an upload request
+          // is kept with the upload, so the retry after it is not asked again.
+          const restoredInput = mrtr?.uploadSessionId
+            ? await inputResponsesBeforeUpload(mrtr.uploadSessionId)
+            : undefined;
+          const builtInMrtr = restoredInput
+            ? {
+                ...mrtr,
+                inputResponses: { ...restoredInput, ...mrtr?.inputResponses },
+              }
+            : mrtr;
+          const recordedArgs = redactBuiltInFileArguments(name, args ?? {});
+          const builtInFiles = createBuiltInFiles({
+            agentId,
+            wireName,
+            principal: callPrincipal,
+            declaration: mrtrEnabled
+              ? readFilesDeclaration(mrtr?.clientCapabilities)
+              : null,
+            uploadSessionId: mrtr?.uploadSessionId,
           });
+
+          // Handle Archestra and agent delegation tools directly
+          const response = await builtInFiles.run(() =>
+            startActiveMcpSpan({
+              toolName: name,
+              mcpServerName,
+              agent,
+              teams,
+              userTeams,
+              agentType: agent.agentType,
+              toolCallId: `archestra-${Date.now()}`,
+              toolArgs: recordedArgs,
+              user: mcpUser,
+              callback: async (span) => {
+                const runArchestraTool = () =>
+                  executeArchestraTool(name, args, {
+                    openappaSession: params.openappaSession,
+                    currentToolCallId: params.currentToolCallId,
+                    agent: { id: agent.id, name: agent.name },
+                    agentId: agent.id,
+                    userId: tokenAuth?.serviceAccountId
+                      ? serviceAccountUserId(tokenAuth.serviceAccountId)
+                      : tokenAuth?.userId,
+                    organizationId: tokenAuth?.organizationId,
+                    tokenAuth,
+                    ...(runId ? { runId } : {}),
+                    mrtr: {
+                      enabled: mrtrEnabled,
+                      inputResponses: builtInMrtr?.inputResponses,
+                      clientCapabilities: mrtr?.clientCapabilities,
+                      round: mrtr?.round,
+                    },
+                    files: builtInFiles,
+                    inspectableReviewForm: params.cursorForms === true,
+                    elicitation: {
+                      elicit: createGatewayUserElicit({
+                        extra,
+                        mrtr: builtInMrtr,
+                        mrtrEnabled,
+                        cursorForms: params.cursorForms === true,
+                        agentId,
+                        toolName: name,
+                        requestMeta: request.params._meta as
+                          | Record<string, unknown>
+                          | undefined,
+                      }),
+                    },
+                  });
+                // run_tool reaches upstream servers, so its call can fail on an
+                // expired connection just like a direct one.
+                const result = await recoverExpiredAuthWithUrlElicitation({
+                  result: await runArchestraTool(),
+                  clientCapabilities: mrtr?.clientCapabilities,
+                  mrtrEnabled,
+                  inputResponses: mrtr?.inputResponses,
+                  extra: reauthExtra,
+                  rerun: runArchestraTool,
+                  agentId,
+                  toolName: name,
+                });
+                span.setAttribute(
+                  ATTR_MCP_IS_ERROR_RESULT,
+                  result.isError ?? false,
+                );
+                return result;
+              },
+            }),
+          );
 
           const durationSeconds = (Date.now() - startTime) / 1000;
           metrics.mcp.reportMcpToolCall({
@@ -1361,7 +1410,7 @@ export async function createAgentServer(params: {
               toolCall: {
                 id: `archestra-${Date.now()}`,
                 name,
-                arguments: args || {},
+                arguments: recordedArgs,
               },
               toolResult: archestraResult,
               userId: tokenAuth?.userId ?? null,
@@ -1562,6 +1611,20 @@ export async function createAgentServer(params: {
           structuredContent: result.structuredContent,
         });
       } catch (error) {
+        // File Uploads: a built-in tool asked for a file, or refused one in a
+        // way that is a protocol error. Neither is a failed tool call.
+        if (error instanceof BuiltInFileAnswer) {
+          if (error.answer.kind === "error") throw error.answer.error;
+          return answerBuiltInUploadRequest({
+            answer: error.answer,
+            agentId,
+            wireName,
+            args: args ?? {},
+            principal: callPrincipal,
+            uploadSessionId: mrtr?.uploadSessionId,
+            inputResponses: mrtr?.inputResponses,
+          });
+        }
         // MRTR: not a failure. The call needs input the gateway does not have,
         // so it answers with an InputRequiredResult and the client retries the
         // whole call with the answer attached. Handled before the metrics below
@@ -1616,6 +1679,11 @@ export async function createAgentServer(params: {
               // that canonical name would reject its unchanged retry.
               requestParams: { name: wireName, arguments: args ?? {} },
               keys: [error.key],
+              // An upload this call already made stays with it.
+              ...(mrtr?.uploadSessionId !== undefined && {
+                uploadSessionId: mrtr.uploadSessionId,
+                ttlMs: FILE_UPLOAD_STATE_TTL_MS,
+              }),
             }),
           });
         }

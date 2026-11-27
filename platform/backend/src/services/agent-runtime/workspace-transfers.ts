@@ -36,6 +36,10 @@ import { authorizeAgentWorkspaceAccess } from "./workspace-files";
  * leaked ticket is not durable authority. */
 export const WORKSPACE_TRANSFER_TICKET_TTL_MS = 15 * 60 * 1000;
 
+/** A ticket the MCP gateway redeems for an upload it takes from its caller:
+ * long enough for a client that asks for upload targets valid 20 minutes. */
+export const RELAYED_UPLOAD_TICKET_TTL_MS = 30 * 60 * 1000;
+
 /** How far a protected export of a pinned snapshot has crossed. JSON-safe. */
 export type ProtectedExportProgress = {
   snapshot: WorkspaceSnapshot;
@@ -354,6 +358,61 @@ class WorkspaceTransferTickets {
       operationId: string;
     };
   }): Promise<{ ticket: WorkspaceTransferTicket; token: string }> {
+    return this.store({
+      ...(await this.uploadFields(params)),
+      sha256: params.sha256,
+    });
+  }
+
+  /**
+   * Authorizes one upload that the MCP gateway takes from its caller under
+   * the File Uploads extension and hands to {@link receive} itself.
+   *
+   * No token leaves: the gateway redeems the ticket by id through
+   * {@link resolveRelayed}, behind its own caller-bound upload target, so the
+   * ticket is never a bearer credential anyone holds. The extension makes a
+   * file's digest optional; without one, the bytes are checked against the
+   * digest the gateway computes while streaming them.
+   */
+  async mintRelayedUpload(params: {
+    actor: A2AActor;
+    taskId: string;
+    path: string;
+    size: number;
+    sha256?: string;
+    ttlMs: number;
+    crossing?: {
+      parent: OpenAppaSession;
+      childSessionId: string;
+      operationId: string;
+    };
+  }): Promise<{ ticketId: string; expiresAt: number }> {
+    const fields = await this.uploadFields(params);
+    // Taken before the write, so the ticket never outlives what it reports.
+    const expiresAt = Date.now() + params.ttlMs;
+    const { stored } = await this.persistNew(
+      {
+        ...fields,
+        ...(params.sha256 !== undefined && { sha256: params.sha256 }),
+        relayed: true,
+      },
+      params.ttlMs,
+    );
+    return { ticketId: stored.id, expiresAt };
+  }
+
+  private async uploadFields(params: {
+    actor: A2AActor;
+    taskId: string;
+    path: string;
+    size: number;
+    location?: "workspace" | "attachments";
+    crossing?: {
+      parent: OpenAppaSession;
+      childSessionId: string;
+      operationId: string;
+    };
+  }) {
     if (
       params.location === "attachments" &&
       params.size > config.chat.attachmentStorageBytesLimit
@@ -385,17 +444,16 @@ class WorkspaceTransferTickets {
         }),
       ),
     );
-    return this.store({
-      direction: "upload",
+    return {
+      direction: "upload" as const,
       ...placement,
       entryId: randomBytes(16).toString("hex"),
       size: params.size,
-      sha256: params.sha256,
       destination,
       actor: params.actor,
       taskId: params.taskId,
       ...(params.crossing ? { crossing: params.crossing } : {}),
-    });
+    };
   }
 
   /** Resolve a presented ticket. Unknown, expired and wrong tokens are
@@ -414,6 +472,24 @@ class WorkspaceTransferTickets {
       stored.tokenHash.length !== presented.length ||
       !timingSafeEqual(stored.tokenHash, presented)
     ) {
+      throw new ApiError(404, "Transfer not found");
+    }
+    return stored;
+  }
+
+  /**
+   * Resolve a ticket from {@link mintRelayedUpload} by id alone. Only the
+   * gateway calls this, after checking its own caller-bound upload target;
+   * no other ticket is redeemable without its token.
+   */
+  async resolveRelayed(id: string): Promise<StoredTicket> {
+    const persisted = TICKET_ID.test(id)
+      ? await cacheManager.get<PersistedTicket>(ticketKey(id), {
+          throwOnError: true,
+        })
+      : undefined;
+    const stored = persisted && revive(persisted);
+    if (!stored?.relayed || stored.direction !== "upload") {
       throw new ApiError(404, "Transfer not found");
     }
     return stored;
@@ -456,8 +532,18 @@ class WorkspaceTransferTickets {
     });
   }
 
-  /** Consume an upload body, then replace the destination atomically. */
-  async receive(params: { ticket: StoredTicket; body: Readable }) {
+  /**
+   * Consume an upload body, then replace the destination atomically.
+   *
+   * A ticket minted without a digest takes `sha256`, read once the body has
+   * ended: the digest its sender computed over the same bytes, so the
+   * runtime's own hash still has something independent to match.
+   */
+  async receive(params: {
+    ticket: StoredTicket;
+    body: Readable;
+    sha256?: () => string;
+  }) {
     const session = await authorizeAgentWorkspaceAccess(params.ticket);
     if (params.ticket.crossing) {
       await addressRuntimeChild({
@@ -467,42 +553,62 @@ class WorkspaceTransferTickets {
       });
     }
     const driver = resolveAgentRuntimeBackendDriver(session.backend);
-    const body = limitBytes(params.body, params.ticket.size);
-    const receipt = WorkspaceUploadReceiptSchema.parse(
-      camelize(
-        await driver.runWorkspaceTransferCommand({
-          session,
-          args: helperArgs(
-            params.ticket.root,
-            "write-stream",
-            params.ticket.entryId,
+    // A relayed ticket takes several attempts, and the helper stages each
+    // entry exclusively: every attempt stages under its own id, so one that
+    // left something behind cannot block the next.
+    const ticket: StoredTicket = params.ticket.relayed
+      ? { ...params.ticket, entryId: randomBytes(16).toString("hex") }
+      : params.ticket;
+    const body = limitBytes(params.body, ticket.size);
+    const written = await driver
+      .runWorkspaceTransferCommand({
+        session,
+        args: helperArgs(ticket.root, "write-stream", ticket.entryId),
+        stdin: body.stream,
+        timeoutMs: TRANSFER_TIMEOUT_MS,
+      })
+      .catch(async (error: unknown) => {
+        // Whatever was staged before the body failed is not an upload. The
+        // failure to report is the upload's, not the cleanup's.
+        await this.discard(ticket).catch((discardError: unknown) =>
+          logger.warn(
+            { err: discardError, ticketId: ticket.id },
+            "Could not discard a failed workspace upload",
           ),
-          stdin: body.stream,
-          timeoutMs: TRANSFER_TIMEOUT_MS,
-        }),
-      ),
-    );
+        );
+        throw error;
+      });
+    const receipt = WorkspaceUploadReceiptSchema.parse(camelize(written));
     if (body.exceeded()) {
-      await this.discard(params.ticket);
+      await this.discard(ticket);
       throw new ApiError(413, "Upload is larger than the size it declared");
     }
-    if (receipt.sha256 !== params.ticket.sha256) {
-      await this.discard(params.ticket);
+    const expectedSha256 = ticket.sha256 ?? params.sha256?.();
+    if (expectedSha256 === undefined) {
+      await this.discard(ticket);
+      throw new Error("An upload ticket without a digest needs one at receipt");
+    }
+    if (receipt.size !== ticket.size) {
+      await this.discard(ticket);
+      throw new ApiError(422, "Uploaded bytes do not match the declared size");
+    }
+    if (receipt.sha256 !== expectedSha256) {
+      await this.discard(ticket);
       throw new ApiError(
         422,
         "Uploaded bytes do not match the expected checksum",
       );
     }
-    const destination = params.ticket.destination;
+    const destination = ticket.destination;
     const result = await driver
       .runWorkspaceTransferCommand({
         session,
         args: helperArgs(
-          params.ticket.root,
+          ticket.root,
           "finalize",
-          params.ticket.entryId,
-          params.ticket.path,
-          params.ticket.sha256,
+          ticket.entryId,
+          ticket.path,
+          expectedSha256,
           destination.present ? destination.ino : "-",
           destination.present ? destination.mtimeNs : "0",
         ),
@@ -519,13 +625,16 @@ class WorkspaceTransferTickets {
         }
         throw error;
       });
-    await this.forget(params.ticket.id);
-    return { ...(camelize(result) as object), path: ticketPath(params.ticket) };
+    await this.forget(ticket.id);
+    return { ...(camelize(result) as object), path: ticketPath(ticket) };
   }
 
   /** Remove a staging entry so an abandoned transfer leaves nothing behind. */
   async discard(ticket: StoredTicket): Promise<void> {
-    await this.forget(ticket.id);
+    // A relayed ticket outlives a failed attempt: the gateway offers its
+    // caller the same upload target again until it succeeds or expires, and
+    // only one attempt holds the target at a time.
+    if (!ticket.relayed) await this.forget(ticket.id);
     const session = await authorizeAgentWorkspaceAccess(ticket);
     await resolveAgentRuntimeBackendDriver(
       session.backend,
@@ -549,6 +658,29 @@ class WorkspaceTransferTickets {
       };
     },
   ): Promise<{ ticket: WorkspaceTransferTicket; token: string }> {
+    const { stored, token } = await this.persistNew(
+      fields,
+      WORKSPACE_TRANSFER_TICKET_TTL_MS,
+    );
+    return {
+      ticket: {
+        id: stored.id,
+        direction: stored.direction,
+        path: stored.path,
+        root: stored.root,
+        entryId: stored.entryId,
+        size: stored.size,
+        sha256: fields.sha256,
+        destination: stored.destination,
+      },
+      token,
+    };
+  }
+
+  private async persistNew(
+    fields: Omit<StoredTicket, "id" | "tokenHash">,
+    ttlMs: number,
+  ): Promise<{ stored: StoredTicket; token: string }> {
     const id = randomBytes(16).toString("hex");
     // The plaintext leaves here once. Only its hash is retained, so a dump of
     // cache state cannot be replayed against a workspace.
@@ -559,24 +691,8 @@ class WorkspaceTransferTickets {
       tokenHash: hashToken(token),
     };
     // A ticket that was not written is not minted: `set` throws on failure.
-    await cacheManager.set(
-      ticketKey(id),
-      persist(stored),
-      WORKSPACE_TRANSFER_TICKET_TTL_MS,
-    );
-    return {
-      ticket: {
-        id,
-        direction: stored.direction,
-        path: stored.path,
-        root: stored.root,
-        entryId: stored.entryId,
-        size: stored.size,
-        sha256: stored.sha256,
-        destination: stored.destination,
-      },
-      token,
-    };
+    await cacheManager.set(ticketKey(id), persist(stored), ttlMs);
+    return { stored, token };
   }
 
   /** A redeemed or abandoned ticket is gone on every replica. Best effort:
@@ -591,7 +707,11 @@ export const workspaceTransferTickets = new WorkspaceTransferTickets();
 
 // === Internal ========================================================
 
-type StoredTicket = WorkspaceTransferTicket & {
+type StoredTicket = Omit<WorkspaceTransferTicket, "sha256"> & {
+  /** Absent only on a relayed upload whose sender declared no digest. */
+  sha256?: string;
+  /** Minted by mintRelayedUpload: redeemed by id, never by a token. */
+  relayed?: true;
   tokenHash: Buffer;
   actor: A2AActor;
   taskId: string;
@@ -1053,6 +1173,15 @@ function limitBytes(
       stream.end();
     },
   });
+  // `pipe` does not carry a failure: a body that breaks off (a caller gone
+  // mid-upload, bytes that fail a check on the way) must end the helper's
+  // input with that failure, not leave it waiting for more.
+  // A body can also have failed already, while the upload was authorized.
+  if (body.errored) stream.destroy(body.errored);
+  else body.once("error", (error) => stream.destroy(error));
+  // The helper's exec may attach to the stream only after the failure: it
+  // reads `stream.errored` then. Until it does, the failure is not unhandled.
+  stream.on("error", () => {});
   body.pipe(stream);
   return { stream, exceeded: () => exceeded };
 }

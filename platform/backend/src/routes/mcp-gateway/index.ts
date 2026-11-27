@@ -62,7 +62,7 @@ import {
   readCapabilitySession,
 } from "./client-capabilities";
 import { isCursorClient } from "./cursor-forms";
-import { FILE_UPLOAD_PATH_SEGMENT, relayFileUpload } from "./files";
+import { relayFileUpload } from "./files";
 import {
   dispatchLegacySseMessage,
   LEGACY_SSE_MESSAGES_SEGMENT,
@@ -104,6 +104,7 @@ import {
   runSubscriptionStream,
 } from "./subscriptions";
 import { handleTaskMethod, isTaskMethod } from "./tasks";
+import { FILE_UPLOAD_PATH_SEGMENT } from "./upload-store";
 import {
   authenticateMCPGatewayRequest,
   createAgentServer,

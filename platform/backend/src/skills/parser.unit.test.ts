@@ -167,6 +167,74 @@ describe("parseSkillManifest", () => {
     const raw = ["---", "name: : :", "  bad", "---", "Body."].join("\n");
     expect(() => parseSkillManifest(raw)).toThrow(SkillParseError);
   });
+
+  const messageFor = (frontmatter: string[]) => {
+    try {
+      parseSkillManifest(["---", ...frontmatter, "---", "Body."].join("\n"));
+    } catch (error) {
+      if (error instanceof SkillParseError) return error.message;
+      throw error;
+    }
+    throw new Error("expected the manifest to be refused");
+  };
+
+  test("invalid YAML is reported as one line that names the remedy, without the parser's code frame", () => {
+    const message = messageFor([
+      "name: release-notes",
+      "description: Use when: the user asks",
+    ]);
+
+    // The line in the file (the block starts on line 2), and what to do.
+    expect(message).toContain("(line 3)");
+    expect(message).toContain("wrap it in quotes");
+    // js-yaml's frame is several lines with the source and a caret.
+    expect(message).not.toContain("\n");
+    expect(message).not.toContain("^");
+    expect(message).not.toContain("bad indentation");
+  });
+
+  test.each([
+    ["a number", "name: 123"],
+    ["a boolean", "name: true"],
+    ["a date", "name: 2026-01-01"],
+    ["a list", "name: [a, b]"],
+  ])("a name that YAML reads as %s is told to be text, not called missing", (_label, nameLine) => {
+    const message = messageFor([nameLine, "description: A skill."]);
+
+    expect(message).toContain("`name` must be text");
+    expect(message).toContain("quotes");
+    expect(message).not.toContain("missing");
+  });
+
+  test("a bare `name:` is called empty, and an absent one missing", () => {
+    expect(messageFor(["name:", "description: A skill."])).toContain(
+      "empty `name`",
+    );
+    expect(messageFor(['name: "  "', "description: A skill."])).toContain(
+      "empty `name`",
+    );
+    expect(messageFor(["description: A skill."])).toContain("missing `name`");
+  });
+
+  test("the description is held to the same rule", () => {
+    expect(messageFor(["name: a-skill", "description: 42"])).toContain(
+      "`description` must be text",
+    );
+  });
+
+  test("a quoted value that looked like a number or a mapping is accepted", () => {
+    const parsed = parseSkillManifest(
+      [
+        "---",
+        'name: "123"',
+        'description: "Use when: the user asks"',
+        "---",
+        "Body.",
+      ].join("\n"),
+    );
+    expect(parsed.name).toBe("123");
+    expect(parsed.description).toBe("Use when: the user asks");
+  });
 });
 
 describe("deriveSkillFileKind", () => {

@@ -1718,11 +1718,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkill]: {},
   [RouteId.DeleteSkill]: {},
   [RouteId.BulkDeleteSkills]: {},
+  [RouteId.BulkRestoreSkills]: {},
   [RouteId.RestoreSkill]: {},
   // Permanent deletion is irreversible, so the handler narrows this further to
   // a built-in admin ROLE — no skill permission, `skill:admin` included, gets
   // you past the trash.
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
+  [RouteId.BulkPermanentlyDeleteSkills]: { skill: ["delete"] },
   [RouteId.ResetSkill]: {},
   // Any member: the Connect page shows whether guardrails apply to their
   // agent. It reveals only the on/off switch and the unrecognized-client
@@ -1805,6 +1807,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetPlugin]: {},
   [RouteId.UpdatePlugin]: {},
   [RouteId.DeletePlugin]: {},
+  // Authorized per plugin by its grants, like the delete it undoes.
+  [RouteId.RestorePlugin]: {},
+  // Irreversible, so the handler narrows this to a built-in admin role, as
+  // the skills purge does.
+  [RouteId.PermanentlyDeletePlugin]: {},
   [RouteId.PreviewGithubPlugin]: { plugin: ["create"] },
   [RouteId.ImportGithubPlugin]: { plugin: ["create"] },
   [RouteId.PreviewGithubPluginUpdate]: {},

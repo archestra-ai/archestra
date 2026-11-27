@@ -169,7 +169,7 @@ export function searchSkillCatalogIndex(
   query: string,
   limit = 100,
 ): SkillCatalogEntry[] {
-  const queryTokens = tokenize(query);
+  const queryTokens = tokenizeQuery(query);
   if (queryTokens.length === 0) return [];
 
   // intersect across query tokens: an entry must match every token, scored by
@@ -268,6 +268,23 @@ function tokenize(value: string): string[] {
   return normalize(value)
     .split(/[^a-z0-9]+/)
     .filter((token) => token.length > 0 && !STOP_WORDS.has(token));
+}
+
+/**
+ * A query's tokens. Stop words are dropped as they are from the index, except
+ * in last place: every query token is matched as a prefix, and the last word
+ * is the one still being typed, so `the` there is the start of `theme` and `a`
+ * the start of `api`. Dropping it left a query of only such a word with no
+ * tokens at all, which answered "no skills match" to someone three letters
+ * into a longer word.
+ */
+function tokenizeQuery(value: string): string[] {
+  const words = normalize(value)
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 0);
+  return words.filter(
+    (word, index) => index === words.length - 1 || !STOP_WORDS.has(word),
+  );
 }
 
 function normalize(value: string): string {

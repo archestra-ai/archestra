@@ -164,6 +164,132 @@ describe("PUT /api/skills/:id", () => {
     expect(renamed.json().error.internal_code).toBeUndefined();
   });
 
+  test("a rename may not differ from another of the author's skills only by letter case", async () => {
+    const created = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: manifestNamed("first-skill") },
+      })
+    ).json();
+    // A new name is lowercase by rule, so the other spelling is a stored one.
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      name: "Second-Skill",
+      sourceRef: "example/skills@main:skills/second",
+    });
+
+    const renamed = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: manifestNamed("second-skill") },
+    });
+    expect(renamed.statusCode).toBe(409);
+    expect(renamed.json().error.message).toContain('"Second-Skill"');
+  });
+
+  test("a rename has to follow the Agent Skills naming rules, like a new skill's name", async () => {
+    const created = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: manifestNamed("first-skill") },
+      })
+    ).json();
+
+    const renamed = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: manifestNamed("First Skill") },
+    });
+    expect(renamed.statusCode).toBe(400);
+    expect(renamed.json().error.message).toBe(
+      "This name can't be used. Skill name can only contain lowercase letters, digits and single hyphens, up to 64 characters.",
+    );
+    expect((await SkillModel.findById(created.id))?.name).toBe("first-skill");
+  });
+
+  test("a description is checked against the specification's limit only when it changes", async () => {
+    const long = "d".repeat(1025);
+    const stored = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      name: "long-description",
+      sourceRef: "example/skills@main:skills/long",
+      description: long,
+    });
+    const put = (description: string, body: string) =>
+      ctx.app.inject({
+        method: "PUT",
+        url: `/api/skills/${stored.id}`,
+        payload: {
+          content: [
+            "---",
+            "name: long-description",
+            `description: ${description}`,
+            "---",
+            "",
+            body,
+          ].join("\n"),
+        },
+      });
+
+    // Stored that long already: its other fields stay saveable.
+    const saved = await put(long, "# Edited body");
+    expect(saved.statusCode, saved.body).toBe(200);
+
+    // A new description is where the limit applies.
+    const refused = await put(`${long}d`, "# Edited body");
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.message).toBe(
+      "This description is too long. Skill description can be up to 1024 characters.",
+    );
+  });
+
+  test("a skill stored under a name the rule refuses keeps saving its other fields", async () => {
+    // Two rows that differ only by case, and a name with a slash: what older
+    // versions and Git imports could store.
+    const stored = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      name: "docs/Release",
+      sourceRef: "example/skills@main:skills/release",
+    });
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      name: "docs/release",
+      sourceRef: "example/skills@main:skills/release-2",
+    });
+
+    const saved = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${stored.id}`,
+      payload: {
+        content: [
+          "---",
+          "name: docs/Release",
+          "description: An edited description.",
+          "---",
+          "",
+          "# docs/Release",
+        ].join("\n"),
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json().description).toBe("An edited description.");
+
+    // Renaming it is where the rule applies.
+    const renamed = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${stored.id}`,
+      payload: { content: manifestNamed("docs/other") },
+    });
+    expect(renamed.statusCode).toBe(400);
+    expect(renamed.json().error.message).toContain("This name can't be used");
+  });
+
   test("omitting baseVersion keeps last-write-wins", async () => {
     const created = (
       await ctx.app.inject({

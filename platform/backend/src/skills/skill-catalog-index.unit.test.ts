@@ -113,7 +113,27 @@ describe("searchSkillCatalogIndex", () => {
     expect(results.map((result) => result.name)).toEqual(["Policy Designer"]);
   });
 
-  it("returns nothing for an all-stop-word query", () => {
+  it("reads a stop word in last place as the start of a longer word", () => {
+    const entries = [
+      skill({ name: "Theme Builder" }),
+      skill({ name: "API Tester" }),
+      skill({ name: "Policy Designer" }),
+    ];
+
+    // The word is still being typed: "the" on its way to "theme".
+    expect(search(entries, "the").map((result) => result.name)).toEqual([
+      "Theme Builder",
+    ]);
+    // A name that starts with the letter outranks the fields around it.
+    expect(search(entries, "a")[0]?.name).toBe("API Tester");
+    // Earlier stop words stay ignored, so the phrase still narrows by the
+    // words that carry meaning.
+    expect(search(entries, "a builder of the").map((r) => r.name)).toEqual([
+      "Theme Builder",
+    ]);
+  });
+
+  it("returns nothing when no indexed word starts with the last stop word", () => {
     const results = search([skill({ name: "Policy Designer" })], "the and of");
 
     expect(results).toEqual([]);

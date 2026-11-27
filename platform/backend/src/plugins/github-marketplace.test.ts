@@ -478,8 +478,66 @@ describe("discoverGithubMarketplace", () => {
     expect(discovered).toMatchObject({
       marketplacePath: null,
       entries: [],
-      reason: expect.stringContaining("plugin folder"),
+      reason: "No plugins found in the repository",
     });
+  });
+
+  test("says a missing repository was not found, without GitHub's own wording", async () => {
+    // No repository is stubbed, so GitHub answers 404 as it does for a
+    // mistyped or private one. Its message ends in a documentation link.
+    const fetchMock = stubGithub([]);
+    const githubStub = fetchMock.getMockImplementation() as (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => Promise<Response>;
+    fetchMock.mockImplementation(async (input, init) => {
+      const response = await githubStub(input, init);
+      if (response.status !== 404) return response;
+      return Response.json(
+        {
+          message: "Not Found",
+          documentation_url:
+            "https://docs.github.com/rest/commits/commits#get-a-commit",
+        },
+        { status: 404 },
+      );
+    });
+
+    const failure = await discoverGithubMarketplace({
+      repoUrl: "nobody/missing",
+    }).catch((error: Error) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(
+      "Repository nobody/missing was not found.",
+    );
+  });
+
+  test("says a missing repository was not found when the quota is used up as well", async () => {
+    // The API refuses for the quota, so the lookup goes over Git, and Git
+    // answers in its own words for a terminal.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { message: "API rate limit exceeded for 203.0.113.7." },
+          { status: 403, headers: { "x-ratelimit-remaining": "0" } },
+        ),
+      ),
+    );
+    gitFallback.resolvePublicGithubCommit.mockRejectedValue(
+      new Error(
+        "Public Git ref lookup failed for nobody/missing@HEAD: remote: Repository not found.\nfatal: repository 'https://github.com/nobody/missing.git/' not found",
+      ),
+    );
+
+    const failure = await discoverGithubMarketplace({
+      repoUrl: "nobody/missing",
+    }).catch((error: Error) => error);
+
+    expect((failure as Error).message).toBe(
+      "Repository nobody/missing was not found.",
+    );
   });
 
   test("falls back to public Git when the anonymous REST quota is exhausted", async () => {

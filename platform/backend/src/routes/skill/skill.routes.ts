@@ -13,6 +13,8 @@ import {
   ResourceSharedWithQuerySchema,
   ResourceVisibilityScopeSchema,
   RouteId,
+  SKILL_MANIFEST_INVALID_CODE,
+  type SkillManifestInvalidDetails,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -74,6 +76,8 @@ import {
 } from "@/skills/parser";
 import { skillCatalog } from "@/skills/skill-catalog";
 import {
+  findNewSkillDescriptionProblem,
+  findNewSkillNameProblem,
   isSkillNameConflict,
   refineUniqueFilePaths,
   SkillFileInputSchema,
@@ -291,6 +295,33 @@ const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
         "owes nothing to a prior read of the skill.",
     ),
 }).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
+
+/**
+ * A skill save's responses. Its 400 can say which line of SKILL.md to fix
+ * (`SKILL_MANIFEST_INVALID_CODE`), which the shared 400 has no field for.
+ */
+const skillSaveResponseSchema = {
+  ...constructResponseSchema(SkillDetailSchema),
+  400: z.object({
+    error: z.object({
+      message: z.string(),
+      type: z.literal("api_validation_error"),
+      internal_code: z.string().optional(),
+      details: z
+        .object({
+          line: z
+            .number()
+            .int()
+            .min(1)
+            .describe(
+              "The line of SKILL.md to fix, counted from 1. Sent with " +
+                "`internal_code` `skill_manifest_invalid`.",
+            ),
+        })
+        .optional(),
+    }),
+  }),
+};
 
 const BulkSkillIdsSchema = z
   .array(UuidIdSchema)
@@ -774,7 +805,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a skill from a raw SKILL.md and resource files",
         tags: ["Skills"],
         body: SkillManifestInputSchema,
-        response: constructResponseSchema(SkillDetailSchema),
+        response: skillSaveResponseSchema,
       },
     },
     async ({ body, organizationId, user }, reply) => {
@@ -789,6 +820,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         environmentIds,
       });
+
+      await assertNewSkillNameUsable({
+        organizationId,
+        ownerKey: await SkillModel.nameOwnerKeyForPrincipal({
+          organizationId,
+          principalId: user.id,
+        }),
+        name: parsed.name,
+      });
+      assertNewSkillDescriptionUsable(parsed.description);
 
       const resourceId = crypto.randomUUID();
       if (body.initialGrants?.length) {
@@ -969,7 +1010,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Skills"],
         params: z.object({ id: UuidIdSchema }),
         body: SkillManifestUpdateSchema,
-        response: constructResponseSchema(SkillDetailSchema),
+        response: skillSaveResponseSchema,
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
@@ -988,6 +1029,21 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // GitHub makes it editable.
       if (existing.githubSyncInterval !== null) {
         assertSyncedSkillContentUnchanged({ existing, parsed, body });
+      }
+
+      // Asked of a rename only: a skill stored under a name the rule would
+      // now refuse keeps saving its other fields.
+      if (parsed.name !== existing.name) {
+        await assertNewSkillNameUsable({
+          organizationId,
+          ownerKey: existing.authorId ?? existing.createdByServiceAccountId,
+          name: parsed.name,
+          excludeSkillId: existing.id,
+        });
+      }
+      // The same for the description: only a new one is asked.
+      if (parsed.description !== existing.description) {
+        assertNewSkillDescriptionUsable(parsed.description);
       }
 
       // Changing a skill's environment assignments is gated like assigning
@@ -1232,6 +1288,81 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    "/api/skills/bulk-restore",
+    {
+      schema: {
+        operationId: RouteId.BulkRestoreSkills,
+        description:
+          "Restore several soft-deleted skills in one request. Each id is " +
+          "authorized exactly as the single-skill restore authorizes its own: " +
+          "an id the caller cannot see or modify is reported in `failed` and " +
+          "the rest of the batch still applies. So is a skill whose name an " +
+          "active skill of the same author has taken since. A skill that is " +
+          "already active counts as restored.",
+        tags: ["Skills"],
+        body: z.object({ skillIds: BulkSkillIdsSchema }),
+        response: constructResponseSchema(BulkSkillOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      const skillIds = dedupe(body.skillIds);
+
+      const context = await loadBulkSkillContext({
+        skillIds,
+        userId: user.id,
+        organizationId,
+        includeDeleted: true,
+      });
+      request.auditBefore = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+
+      const succeeded: BulkSkillOutcomeEntry[] = [];
+      const failed: BulkSkillFailure[] = [];
+
+      // One skill at a time, unlike the bulk delete's single statement: a
+      // restore claims a name, so each one can be refused on its own, by an
+      // active skill or by an earlier skill of this same batch.
+      for (const id of skillIds) {
+        const skill = context.skillsById.get(id);
+        if (
+          !skill ||
+          (!context.isVisible(skill) &&
+            !context.checker.allowsScoped?.(id, "delete"))
+        ) {
+          failed.push({ id, name: null, error: "Skill not found" });
+          continue;
+        }
+        try {
+          requireSkillModifyPermission({
+            checker: context.checker,
+            skillId: id,
+            action: "delete",
+          });
+          // Already active (a repeated request, or someone else restored it
+          // first): nothing to write, and what was asked for is true.
+          if (skill.deletedAt) await restoreDeletedSkill(skill);
+        } catch (error) {
+          if (error instanceof ApiError) {
+            failed.push({ id, name: skill.name, error: error.message });
+            continue;
+          }
+          throw error;
+        }
+        succeeded.push({ id, name: skill.name });
+      }
+
+      request.auditAfter = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+      return reply.send({ succeeded, failed });
+    },
+  );
+
+  fastify.post(
     "/api/skills/:id/restore",
     {
       schema: {
@@ -1242,13 +1373,32 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SkillDetailSchema),
       },
     },
-    async ({ params: { id }, organizationId, user }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        organizationId,
+        user,
+      } = request;
       // The soft-deleted row: findById/findSkillOrThrow filter deleted rows and
       // would 404 every restore. Authorize this object directly — junction
       // rows survive soft-delete, so its scope/team lookups still resolve.
       const skill = await SkillModel.findDeletedById(id, organizationId);
       if (!skill) {
-        throw new ApiError(404, "Skill not found");
+        // Restoring a skill that is already active changes nothing, so a
+        // repeated request (a double click, a retry after a lost response)
+        // gets the skill back instead of a "not found" for a restore that
+        // worked. It is authorized exactly like the restore itself, and an id
+        // the caller cannot see is still a 404.
+        const active = await findSkillOrThrow(id, organizationId);
+        await authorizeSkillModify({
+          skill: active,
+          userId: user.id,
+          organizationId,
+          action: "delete",
+        });
+        // Nothing was restored, so there is nothing to audit.
+        request.auditSkip = true;
+        return reply.send(await loadSkillDetail(active));
       }
 
       await authorizeSkillModify({
@@ -1258,26 +1408,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "delete",
       });
 
-      const conflictMessage = await SkillModel.getRestoreConflictMessage(skill);
-      if (conflictMessage) {
-        throw new ApiError(409, conflictMessage);
-      }
-
-      let success: boolean;
-      try {
-        success = await SkillModel.restore(id);
-      } catch (error) {
-        // The pre-check is advisory; the partial unique index is the real
-        // guard. A create can claim the freed name between the check and this
-        // UPDATE — map that violation to a 409 rather than a 500.
-        if (isUniqueConstraintError(error, "skills_org_author_name_idx")) {
-          throw skillNameConflict(skill.name);
-        }
-        throw error;
-      }
-      if (!success) {
-        throw new ApiError(404, "Skill not found");
-      }
+      await restoreDeletedSkill(skill);
 
       // The row is active again, so the normal detail path is safe.
       const restored = await findSkillOrThrow(id, organizationId);
@@ -1322,43 +1453,84 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
 
-      // A built-in's soft-deleted row IS the opt-out: `SkillModel.findBuiltIn`
-      // includes deleted rows precisely so the startup seeder sees one and
-      // skips it. Destroying the row would hand the skill back on the next
-      // boot, making "permanent" deletion both untrue and silently
-      // opt-out-reverting. 403 rather than 404 — the skill is visibly in the
-      // trash to anyone who can list it, so there is nothing to conceal.
-      if (skill.sourceType === "built_in") {
-        throw new ApiError(
-          403,
-          "Built-in skills cannot be permanently deleted. Deleting one already " +
-            "removes it for good — its retained record is what stops it being " +
-            "recreated on the next restart.",
-        );
-      }
+      await purgeDeletedSkill(skill);
+      return reply.send({ success: true });
+    },
+  );
 
-      if (await SkillVersionModel.hasSandboxMountsForSkill(id)) {
-        throw skillStillMounted();
-      }
-
-      let purged: boolean;
-      try {
-        purged = await SkillModel.purge({ id, organizationId });
-      } catch (error) {
-        // The pre-check above is advisory; the RESTRICT foreign key is the real
-        // guard, and a sandbox can mount the skill between the two. Map that to
-        // the same 409 rather than a 500. Caught HERE, outside the model's
-        // transaction: a foreign-key violation aborts the whole Postgres
-        // transaction, so nothing inside it could have recovered.
-        if (isForeignKeyConstraintError(error)) {
-          throw skillStillMounted();
-        }
-        throw error;
-      }
-      if (!purged) {
+  fastify.post(
+    "/api/skills/bulk-permanent-delete",
+    {
+      schema: {
+        operationId: RouteId.BulkPermanentlyDeleteSkills,
+        description:
+          "Permanently destroy several soft-deleted skills in one request " +
+          "(global admins only). Irreversible, exactly as the single-skill " +
+          "permanent delete is, and refused for the same reasons, per skill: " +
+          "an id that names no soft-deleted skill, a built-in skill, or a " +
+          "skill a sandbox still has mounted is reported in `failed` and the " +
+          "rest of the batch still applies. 404 for a caller who is not a " +
+          "global admin.",
+        tags: ["Skills"],
+        body: z.object({ skillIds: BulkSkillIdsSchema }),
+        response: constructResponseSchema(BulkSkillOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      // Before anything is read, as on the single route: a caller who is not
+      // a global admin learns nothing about which ids exist.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
         throw new ApiError(404, "Skill not found");
       }
-      return reply.send({ success: true });
+      const skillIds = dedupe(body.skillIds);
+      const skills = await SkillModel.findByIds(skillIds, {
+        includeDeleted: true,
+      });
+      // Fenced to the organization, and to the trash: a live skill is not
+      // this route's to destroy.
+      const deletedById = new Map(
+        skills
+          .filter(
+            (skill) =>
+              skill.organizationId === organizationId &&
+              skill.deletedAt !== null,
+          )
+          .map((skill) => [skill.id, skill]),
+      );
+      request.auditBefore = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+
+      const succeeded: BulkSkillOutcomeEntry[] = [];
+      const failed: BulkSkillFailure[] = [];
+
+      // One skill at a time: each purge is its own transaction, so a skill a
+      // sandbox still mounts is refused without undoing the others.
+      for (const id of skillIds) {
+        const skill = deletedById.get(id);
+        if (!skill) {
+          failed.push({ id, name: null, error: "Skill not found" });
+          continue;
+        }
+        try {
+          await purgeDeletedSkill(skill);
+        } catch (error) {
+          if (error instanceof ApiError) {
+            failed.push({ id, name: skill.name, error: error.message });
+            continue;
+          }
+          throw error;
+        }
+        succeeded.push({ id, name: skill.name });
+      }
+
+      request.auditAfter = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+      return reply.send({ succeeded, failed });
     },
   );
 
@@ -2190,6 +2362,8 @@ async function loadBulkSkillContext(params: {
   skillIds: string[];
   userId: string;
   organizationId: string;
+  /** Also load soft-deleted skills: the batch is about to restore them. */
+  includeDeleted?: boolean;
 }): Promise<{
   checker: SkillPermissionChecker;
   userTeamIds: string[];
@@ -2202,7 +2376,7 @@ async function loadBulkSkillContext(params: {
 
   const checker = await getSkillPermissionChecker({ userId, organizationId });
   const [skills, userTeamIds, accessibleIds] = await Promise.all([
-    SkillModel.findByIds(skillIds),
+    SkillModel.findByIds(skillIds, { includeDeleted: params.includeDeleted }),
     checker.isAdmin
       ? Promise.resolve<string[]>([])
       : TeamModel.getUserTeamIds(userId),
@@ -2384,9 +2558,109 @@ function parseManifestOrThrow(raw: string) {
     return parseSkillManifest(raw);
   } catch (error) {
     if (error instanceof SkillParseError) {
-      throw new ApiError(400, error.message);
+      // The line travels with the refusal, so an editor can mark it.
+      const refusal = new ApiError(
+        400,
+        error.message,
+        SKILL_MANIFEST_INVALID_CODE,
+      );
+      refusal.details = {
+        line: error.line,
+      } satisfies SkillManifestInvalidDetails;
+      throw refusal;
     }
     throw error;
+  }
+}
+
+/** Refuse a name a skill is being given for the first time; see the helper. */
+async function assertNewSkillNameUsable(
+  params: Parameters<typeof findNewSkillNameProblem>[0],
+): Promise<void> {
+  const problem = await findNewSkillNameProblem(params);
+  if (problem) throw new ApiError(problem.status, problem.message);
+}
+
+/** Refuse a description a skill is being given for the first time. */
+function assertNewSkillDescriptionUsable(description: string): void {
+  const problem = findNewSkillDescriptionProblem(description);
+  if (problem) throw new ApiError(problem.status, problem.message);
+}
+
+/**
+ * Destroy one soft-deleted skill for good, or throw the reason it cannot be.
+ * The single and the bulk permanent delete both go through here, so a skill
+ * is refused for the same reasons and in the same words either way. The
+ * caller has already checked that the user may purge and that the skill is in
+ * the trash of their organization.
+ */
+async function purgeDeletedSkill(skill: Skill): Promise<void> {
+  // A built-in's soft-deleted row IS the opt-out: `SkillModel.findBuiltIn`
+  // includes deleted rows precisely so the startup seeder sees one and
+  // skips it. Destroying the row would hand the skill back on the next
+  // boot, making "permanent" deletion both untrue and silently
+  // opt-out-reverting. 403 rather than 404 — the skill is visibly in the
+  // trash to anyone who can list it, so there is nothing to conceal.
+  if (skill.sourceType === "built_in") {
+    throw new ApiError(
+      403,
+      "Built-in skills cannot be permanently deleted. Deleting one already " +
+        "removes it for good — its retained record is what stops it being " +
+        "recreated on the next restart.",
+    );
+  }
+
+  if (await SkillVersionModel.hasSandboxMountsForSkill(skill.id)) {
+    throw skillStillMounted();
+  }
+
+  let purged: boolean;
+  try {
+    purged = await SkillModel.purge({
+      id: skill.id,
+      organizationId: skill.organizationId,
+    });
+  } catch (error) {
+    // The pre-check above is advisory; the RESTRICT foreign key is the real
+    // guard, and a sandbox can mount the skill between the two. Map that to
+    // the same 409 rather than a 500. Caught HERE, outside the model's
+    // transaction: a foreign-key violation aborts the whole Postgres
+    // transaction, so nothing inside it could have recovered.
+    if (isForeignKeyConstraintError(error)) {
+      throw skillStillMounted();
+    }
+    throw error;
+  }
+  if (!purged) {
+    throw new ApiError(404, "Skill not found");
+  }
+}
+
+/**
+ * Make one soft-deleted skill active again, or throw the reason it cannot
+ * come back. The single and the bulk restore both write through here, so a
+ * skill is refused for the same reasons and in the same words either way.
+ */
+async function restoreDeletedSkill(skill: Skill): Promise<void> {
+  const conflictMessage = await SkillModel.getRestoreConflictMessage(skill);
+  if (conflictMessage) {
+    throw new ApiError(409, conflictMessage);
+  }
+
+  let success: boolean;
+  try {
+    success = await SkillModel.restore(skill.id);
+  } catch (error) {
+    // The pre-check is advisory; the partial unique index is the real
+    // guard. A create can claim the freed name between the check and this
+    // UPDATE — map that violation to a 409 rather than a 500.
+    if (isUniqueConstraintError(error, "skills_org_author_name_idx")) {
+      throw skillNameConflict(skill.name);
+    }
+    throw error;
+  }
+  if (!success) {
+    throw new ApiError(404, "Skill not found");
   }
 }
 
@@ -2414,7 +2688,10 @@ async function runImport<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof SkillImportError || error instanceof SkillParseError) {
+    if (error instanceof SkillImportError) {
+      throw new ApiError(400, error.message, error.code ?? undefined);
+    }
+    if (error instanceof SkillParseError) {
       throw new ApiError(400, error.message);
     }
     throw error;

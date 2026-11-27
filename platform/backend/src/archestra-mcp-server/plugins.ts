@@ -14,6 +14,7 @@ import { userHasPermission } from "@/auth";
 import { getPluginPermissionChecker } from "@/auth/plugin-permissions";
 import { PluginModel, PluginTeamModel } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
+import { findPluginNameProblem } from "@/plugins/plugin-name";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -134,6 +135,10 @@ const UpdatePluginToolSchema = z
       .min(1)
       .optional()
       .describe("Operating systems the payload supports."),
+    clientType: ClientTypeSchema.optional().describe(
+      "The coding client the plugin is for. Manual plugins only. The files " +
+        "are left as they are, so they have to suit the new client's layout.",
+    ),
     baseContentHash: z
       .string()
       .min(1)
@@ -344,6 +349,14 @@ const registry = defineArchestraTools([
       )
         return errorResult("This tool requires plugin:create permission.");
 
+      const nameProblem = await findPluginNameProblem({
+        organizationId: ctx.organizationId,
+        clientType: args.clientType,
+        displayName: args.displayName,
+        creatorUserId: ctx.userId,
+      });
+      if (nameProblem) return errorResult(nameProblem);
+
       if (args.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -415,6 +428,29 @@ const registry = defineArchestraTools([
       if (!existing) return unknownPluginError(args.id);
       const githubFilesError = checkManualFilesUpdate(existing, args.files);
       if (githubFilesError) return errorResult(githubFilesError);
+      const clientChanged =
+        args.clientType !== undefined &&
+        args.clientType !== existing.clientType;
+      if (clientChanged && existing.sourceKind === "github") {
+        return errorResult(
+          "A Git plugin's client is the one its repository was imported for. Import the repository again for another client.",
+        );
+      }
+      // As on PUT /api/plugins/:id: a rename or a move to another client.
+      const displayName = args.displayName ?? existing.displayName;
+      if (
+        existing.sourceKind !== "github" &&
+        (clientChanged ||
+          displayName.toLowerCase() !== existing.displayName.toLowerCase())
+      ) {
+        const nameProblem = await findPluginNameProblem({
+          organizationId: ctx.organizationId,
+          clientType: args.clientType ?? existing.clientType,
+          displayName,
+          existing,
+        });
+        if (nameProblem) return errorResult(nameProblem);
+      }
 
       const { id, baseContentHash, ...input } = args;
       const plugin = await PluginModel.update({

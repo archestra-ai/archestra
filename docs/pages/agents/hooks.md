@@ -1,6 +1,6 @@
 ---
 title: Hooks
-beta: "Hooks are on whenever the [code sandbox](/docs/agents#code-sandbox) is on, which is the default."
+beta: "We are still polishing the hooks experience, so it may change."
 description: Scripts that run in the sandbox when an agent lifecycle event fires
 order: 6
 ---

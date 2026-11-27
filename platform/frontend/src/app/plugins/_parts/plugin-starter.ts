@@ -249,7 +249,7 @@ const LAYOUTS: Record<PluginClientType, StarterLayout> = {
       const output = JSON.stringify({ additionalContext: message });
       // Inside single quotes, each shell writes a single quote its own way.
       const forBash = output.replaceAll("'", "'\\''");
-      const forPowershell = output.replaceAll("'", "''");
+      const forPowershell = powershellSingleQuoted(output);
       return {
         version: 1,
         hooks: {
@@ -313,7 +313,7 @@ function starterScript(params: { shell: StarterShell; layout: StarterLayout }) {
       file: (message: string) =>
         text(
           path,
-          `# ${comment}\nWrite-Output '${layout.output(message).replaceAll("'", "''")}'\n`,
+          `# ${comment}\nWrite-Output '${powershellSingleQuoted(layout.output(message))}'\n`,
         ),
     };
   }
@@ -365,6 +365,15 @@ function readme(params: {
     );
   }
   return lines.join("\n");
+}
+
+/**
+ * Text for the inside of a PowerShell single-quoted string. PowerShell ends
+ * such a string at the typographic single quotes too (the ones autocorrect
+ * writes for an apostrophe), so each of them is doubled like the plain one.
+ */
+function powershellSingleQuoted(value: string): string {
+  return value.replace(/['\u2018\u2019\u201A\u201B]/g, "$&$&");
 }
 
 /** The manifest's `name`: the display name in lowercase with hyphens. */

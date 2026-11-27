@@ -54,6 +54,27 @@ describe("DataTable page index clamping", () => {
     expect(screen.getByText("row-0")).toBeInTheDocument();
   });
 
+  it("returns to the first page, not the last one left, when the narrowed rows also fill fewer pages", async () => {
+    const { rerender } = render(
+      <DataTable columns={columns} data={makeRows(40)} resetPageKey="" />,
+    );
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Go to last page" })[0],
+    );
+    expect(screen.getAllByText("Page 4 of 4").length).toBeGreaterThan(0);
+
+    // Page 4 is gone and page 3 is the last one left; the search still
+    // starts the reader at its first matches.
+    rerender(
+      <DataTable columns={columns} data={makeRows(25)} resetPageKey="row" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Page 1 of 3").length).toBeGreaterThan(0);
+    });
+    expect(screen.getByText("row-0")).toBeInTheDocument();
+  });
+
   it("stays on its page when the rows are re-read under the same search", async () => {
     const { rerender } = render(
       <DataTable columns={columns} data={makeRows(40)} resetPageKey="row" />,

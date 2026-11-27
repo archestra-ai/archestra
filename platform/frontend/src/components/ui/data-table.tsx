@@ -369,14 +369,7 @@ function DataTableView<TData, TValue>({
   });
   registerTableRangeSelection({ table, controller: rangeSelection });
 
-  // A narrowed list starts from its first page: that is where its first
-  // matches are, and the page the reader was on may not exist any more.
   const lastResetPageKey = React.useRef(resetPageKey);
-  React.useEffect(() => {
-    if (lastResetPageKey.current === resetPageKey) return;
-    lastResetPageKey.current = resetPageKey;
-    table.setPageIndex(0);
-  }, [resetPageKey, table]);
 
   // With autoResetPageIndex disabled, a shrinking row count (e.g. a filter
   // applied while on a later page) strands the table on a nonexistent page.
@@ -395,13 +388,22 @@ function DataTableView<TData, TValue>({
   const pageCount = table.getPageCount();
   const pageIndex = table.getState().pagination.pageIndex;
   React.useEffect(() => {
+    // A narrowed list starts from its first page: that is where its first
+    // matches are. Decided here, ahead of the clamp below, because both read
+    // the same render: a search that also leaves fewer pages would otherwise
+    // be sent to page one and then, by the clamp, to the last page left.
+    if (lastResetPageKey.current !== resetPageKey) {
+      lastResetPageKey.current = resetPageKey;
+      table.setPageIndex(0);
+      return;
+    }
     // pageCount is -1 when manual pagination has no known page count
     if (isLoading || pageCount < 0) return;
     const maxPageIndex = Math.max(pageCount - 1, 0);
     if (pageIndex > maxPageIndex) {
       table.setPageIndex(maxPageIndex);
     }
-  }, [isLoading, pageCount, pageIndex, table]);
+  }, [resetPageKey, isLoading, pageCount, pageIndex, table]);
 
   // Drop the table's listed columns until the rest fit the container, so a
   // narrow window shows fewer columns instead of a horizontal scroll. Measured

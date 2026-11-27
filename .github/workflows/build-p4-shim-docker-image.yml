@@ -87,7 +87,7 @@ jobs:
   validate-p4-shim-image:
     name: Validate p4 Shim Image Build
     if: ${{ inputs.version == '' }}
-    runs-on: ubuntu-24.04-16core
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'pull_request' && 'archestra-gce-16core-spot' || 'archestra-gce-16core') || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch; never for fork PRs.
     permissions:
       contents: read # Required to checkout the repository and build the image.
     steps:

@@ -1514,12 +1514,21 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      id-token: write # Docker Hub OIDC login to pull the Platform's hardened base image.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      # The Platform Dockerfile builds from dhi.io, which refuses anonymous
+      # pulls. Scheduled and manual runs only, so the OIDC login always applies.
+      - name: Log in to Docker Hardened Images
+        uses: $/.github/actions/dhi-login
+        with:
+          dockerfile: ./platform/Dockerfile
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
 
       - name: Build and smoke musl NAPI addons
         uses: $/.github/actions/build-docker-image

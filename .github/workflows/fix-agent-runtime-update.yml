@@ -1,0 +1,39 @@
+name: Fix Agent Runtime Update
+
+# When the agent image validation fails on the daily agent runtime CLI update
+# pull request (update-client-versions.yml, job agent-runtime), hands the
+# failed run to the CI Fixer agent. It commits the fix onto that pull
+# request's branch and comments on it; a person still reviews and merges.
+#
+# workflow_run, because the agent start signs in as start-alert-fix-agent.yml
+# on main: a pull_request job runs on the pull request's ref and would be
+# refused. Nothing here checks out or runs the pull request's code; the called
+# workflow checks out main and reads only the failed run's job names, URLs and
+# failed steps from the GitHub API.
+on: # zizmor: ignore[dangerous-triggers] see above: no pull request code runs, only main's scripts.
+  workflow_run:
+    workflows: [Build Agent Catalog Images]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  start-agent:
+    name: Start the CI Fixer agent
+    # Only the updater's own pushes: a fix pushed by the agent or by a person
+    # starts no further run, so a failed fix cannot loop.
+    if: >-
+      github.repository == 'archestra-ai/archestra' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_branch == 'automation/agent-runtime-clis' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.actor.login == 'archestra-automation-prs[bot]'
+    permissions:
+      contents: read # Check out the scripts.
+      actions: read # List the failed jobs of the validation run.
+      id-token: write # Sign in to Google Cloud (staging tunnel) and to Archestra.
+    uses: $/.github/workflows/start-alert-fix-agent.yml
+    with:
+      kind: agent-runtime-update
+      source_run_id: ${{ github.event.workflow_run.id }}

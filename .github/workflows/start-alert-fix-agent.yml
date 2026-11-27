@@ -45,7 +45,7 @@ on:
       kind:
         description: The alert kind.
         type: choice
-        options: [nightly-e2e, release-image-cves]
+        options: [nightly-e2e, release-image-cves, agent-runtime-update]
       source_run_id:
         description: The failed workflow run ID, from its URL.
         type: string

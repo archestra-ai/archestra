@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Start the CI Fixer agent on staging for one nightly alert.
+"""Start the CI Fixer agent on staging for one CI failure.
 
 start-alert-fix-agent.yml runs this after a nightly workflow posts its failure
-to #alerts. The agent (archestra-ai/infra, archestra/automation/ci-fixer.tf)
-reads the failed jobs' logs, fixes the root cause on
-automation/ci-fixer/<kind>, opens or updates one pull request, and replies in
-the alert's Slack thread. It never merges.
+to #alerts, or after the agent image validation fails on the daily agent
+runtime CLI update. The agent (archestra-ai/infra,
+archestra/automation/ci-fixer.tf) reads the failed jobs' logs, fixes the root
+cause on the kind's branch (automation/ci-fixer/<kind>, or the open pull
+request's own branch for agent-runtime-update), and replies in the alert's
+Slack thread when there is one. It never merges.
 
 Each kind of alert has a fixed task below. The job and step names come from
 the GitHub API for the failed run and are passed as data; nothing else from
@@ -31,7 +33,7 @@ import sys
 from archestra_agent_run import UUID, Failure, start_run
 
 REPOSITORY = "archestra-ai/archestra"
-BRANCH = "automation/ci-fixer/{kind}"
+DEFAULT_BRANCH = "automation/ci-fixer/{kind}"
 MAX_JOBS = 40
 RUN_ID = re.compile(r"[0-9]{1,20}")
 JOB_URL = re.compile(rf"https://github\.com/{re.escape(REPOSITORY)}/actions/runs/[0-9]+/job/(?P<job>[0-9]+)")
@@ -49,6 +51,26 @@ KINDS = {
             "may be a regression on main, a stale test, or a flaky one. Tell them apart from the job's history in "
             "earlier nightly runs before you change anything. Never skip, delete or loosen a test to make the run "
             "pass: fix the code or the test's real cause, or report it."
+        ),
+    },
+    "agent-runtime-update": {
+        "title": "Agent image validation failed on the agent runtime CLI update",
+        "branch": "automation/agent-runtime-clis",
+        "existing_pull_request": True,
+        "task": (
+            "The daily agent runtime CLI update (`.github/workflows/update-client-versions.yml`, job "
+            "`agent-runtime`) raised the CLI pins in `platform/docker_images/agent/` on the branch above, and the "
+            "image validation of its open pull request (`.github/workflows/build-agent-catalog-images.yml`) "
+            "failed. A new CLI release usually breaks a source patch under `platform/docker_images/agent/patches/` "
+            "(its anchor checks exit with \"... changed; review <patch>\"), an in-image test, or a checksum.\n\n"
+            "Fix it on that branch, on top of the update, so every `Validate agent-*` job passes with the new pins. "
+            "For a patch, read the pinned release's code (`npm pack` the pinned version, or clone the pinned tag), "
+            "check that the upstream behavior the patch works around still exists, and re-target the patch to the "
+            "new code; drop a patch only when upstream fixed what it works around, and show where. Run every patch "
+            "of the image against the pinned release's files and check the patched file still parses. Keep the "
+            "new pins: pin a CLI back only when its new release cannot work, and say why. Commit onto the open "
+            "pull request (do not open another one), then comment on it with the root cause and the validation "
+            "you ran."
         ),
     },
     "release-image-cves": {
@@ -91,13 +113,13 @@ def main(env):
         with open(env["GITHUB_OUTPUT"], "a") as output:
             output.write(f"run_url={run_url}\n")
     if env.get("GITHUB_STEP_SUMMARY"):
-        branch = BRANCH.format(kind=kind)
+        target = branch(kind)
         with open(env["GITHUB_STEP_SUMMARY"], "a") as summary:
             summary.write(
                 f"Started the CI Fixer agent for `{kind}` "
                 f"([failed run](https://github.com/{REPOSITORY}/actions/runs/{run_id})): [agent run]({run_url}).\n\n"
-                f"Its pull request appears on the `{branch}` branch "
-                f"([pull requests](https://github.com/{REPOSITORY}/pulls?q=head%3A{branch})).\n"
+                f"Its pull request appears on the `{target}` branch "
+                f"([pull requests](https://github.com/{REPOSITORY}/pulls?q=head%3A{target})).\n"
             )
 
 
@@ -119,6 +141,10 @@ def failed_jobs(path):
     return reduced
 
 
+def branch(kind):
+    return KINDS[kind].get("branch", DEFAULT_BRANCH.format(kind=kind))
+
+
 def plain(value):
     return " ".join(re.sub(r"[`\r\n\t]", " ", str(value or "")).split())[:200]
 
@@ -128,7 +154,9 @@ def message(kind, run_id, jobs, channel, thread_ts):
     lines = [
         f"Repository: {REPOSITORY}",
         f"Alert kind: `{kind}`: {spec['title']}",
-        f"Branch: `{BRANCH.format(kind=kind)}`",
+        f"Branch: `{branch(kind)}`"
+        + (" (the open pull request's own branch: commit onto it, open no other pull request)"
+           if spec.get("existing_pull_request") else ""),
         f"Failed run: https://github.com/{REPOSITORY}/actions/runs/{run_id}",
         (f"Slack alert thread: channel `{channel}`, thread_ts `{thread_ts}`" if channel
          else "Slack alert thread: none (started by hand); report in the run only."),

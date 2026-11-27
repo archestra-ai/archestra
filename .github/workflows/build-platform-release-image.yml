@@ -69,6 +69,6 @@ jobs:
       cache_compression: zstd
       checkout_ref: ${{ inputs.checkout_ref }}
       # Match the 16-core E2E builder; build arm64 natively.
-      amd64_runner: ubuntu-24.04-16core
-      arm64_runner: ubuntu-24.04-arm-32core
+      amd64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core' || 'ubuntu-24.04-16core' }}
+      arm64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-32core-arm' || 'ubuntu-24.04-arm-32core' }}
       previous_image: ${{ inputs.previous_version && format('docker.io/archestra/{0}:{1}', inputs.image_name, inputs.previous_version) || '' }}

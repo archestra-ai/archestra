@@ -99,7 +99,7 @@ jobs:
   validate-agent-catalog-images:
     name: Validate ${{ matrix.image }} (${{ matrix.arch }})
     if: ${{ inputs.version == '' }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm-32core' || 'ubuntu-24.04-16core' }}
+    runs-on: ${{ matrix.arch == 'arm64' && (vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'pull_request' && 'archestra-gce-32core-arm-spot' || 'archestra-gce-32core-arm') || 'ubuntu-24.04-arm-32core') || (vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'pull_request' && 'archestra-gce-16core-spot' || 'archestra-gce-16core') || 'ubuntu-24.04-16core') }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch; never for fork PRs.
     timeout-minutes: 45
     permissions:
       contents: read # Required to checkout the repository and build the image.

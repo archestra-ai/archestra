@@ -15,22 +15,28 @@ import {
  * its place, and when that page introduces skills and has no list to go back
  * to.
  *
- * `isPending` is true until all three answers are in, so a page can hold what
- * depends on it instead of drawing one state and then the other.
+ * `isPending` is true until all three answers are in, and until it is known
+ * whether the viewer may read plugins at all, so a page can hold what depends
+ * on it instead of drawing one state and then the other.
  */
 export function useNoVisibleSkills(): {
   isPending: boolean;
   hasNoSkills: boolean;
 } {
-  const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  const pluginReadPermission = useHasPermissions({ plugin: ["read"] });
   const scopedCapabilities = useScopedCapabilities();
   // The same rule the Skills list uses to show plugin skills.
   const pluginSkillsEnabled =
-    canReadPlugins === true ||
+    pluginReadPermission.data === true ||
     (scopedCapabilities.data?.some(
       (grant) => grant.resource === "plugin" && grant.action === "read",
     ) ??
       false);
+  // Not yet known whether the viewer may read plugins, so not yet known
+  // whether a skill that came with a plugin is theirs to see.
+  const isPluginSkillsUndecided =
+    !pluginSkillsEnabled &&
+    (pluginReadPermission.isPending || scopedCapabilities.isPending);
   // One row is enough: only the total is read. No access filter, unlike the
   // list, which opens on "Mine · Shared with me".
   const standalone = useSkillsPaginated(
@@ -43,6 +49,7 @@ export function useNoVisibleSkills(): {
   const isPending =
     isFirstLoad(standalone) ||
     isFirstLoad(external) ||
+    isPluginSkillsUndecided ||
     (pluginSkillsEnabled && isFirstLoad(plugin));
   return {
     isPending,

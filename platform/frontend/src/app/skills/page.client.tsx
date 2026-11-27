@@ -249,7 +249,8 @@ function SkillsList() {
   const sortDirection =
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
   const scopedCapabilities = useScopedCapabilities();
-  const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  const pluginReadPermission = useHasPermissions({ plugin: ["read"] });
+  const canReadPlugins = pluginReadPermission.data;
   const hasPluginReadGrant =
     scopedCapabilities.data?.some(
       (grant) => grant.resource === "plugin" && grant.action === "read",
@@ -262,6 +263,12 @@ function SkillsList() {
       id: pluginId,
     });
   const pluginSkillsEnabled = canReadPlugins === true || hasPluginReadGrant;
+  // Not yet known whether the viewer may read plugins, so not yet known
+  // whether skills that came with a plugin belong in this list. Until it is,
+  // the list is still loading and is not called empty.
+  const isPluginSkillsUndecided =
+    !pluginSkillsEnabled &&
+    (pluginReadPermission.isPending || scopedCapabilities.isPending);
   const kindParam = searchParams.get("kind");
   const requestedKind: SkillKind = hasImportFilter
     ? "standalone"
@@ -665,6 +672,7 @@ function SkillsList() {
    */
   const isInitialSkillsLoad =
     isDeletedViewUndecided ||
+    isPluginSkillsUndecided ||
     ((usesPaginatedSkills ? isDeletedSkillsPending : isActiveSkillsPending) &&
       isFetching) ||
     (showMcpSkills && isExternalSkillsPending && isExternalSkillsFetching) ||
@@ -673,6 +681,7 @@ function SkillsList() {
     // A list that failed to load is not an empty one.
     !isSkillsLoadError &&
     !isFetching &&
+    !isPluginSkillsUndecided &&
     !(showMcpSkills && isExternalSkillsFetching) &&
     !(showPluginSkills && isPluginSkillsFetching) &&
     !hasVisibleSkills &&

@@ -134,10 +134,6 @@ const UpdatePluginToolSchema = z
       .min(1)
       .optional()
       .describe("Operating systems the payload supports."),
-    clientType: ClientTypeSchema.optional().describe(
-      "The coding client the plugin is for. Manual plugins only. The files " +
-        "are left as they are, so they have to suit the new client's layout.",
-    ),
     baseContentHash: z
       .string()
       .min(1)
@@ -419,14 +415,6 @@ const registry = defineArchestraTools([
       if (!existing) return unknownPluginError(args.id);
       const githubFilesError = checkManualFilesUpdate(existing, args.files);
       if (githubFilesError) return errorResult(githubFilesError);
-      const clientChanged =
-        args.clientType !== undefined &&
-        args.clientType !== existing.clientType;
-      if (clientChanged && existing.sourceKind === "github") {
-        return errorResult(
-          "A Git plugin's client is the one its repository was imported for. Import the repository again for another client.",
-        );
-      }
       const { id, baseContentHash, ...input } = args;
       const plugin = await PluginModel.update({
         id,

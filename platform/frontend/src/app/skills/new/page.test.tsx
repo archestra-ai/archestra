@@ -13,8 +13,20 @@ vi.mock("@/lib/organization.query");
 vi.mock("@/lib/skills/skill.query");
 
 vi.mock("../_parts/import-skills-dialog", () => ({
-  ImportSkillsDialog: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="import-skills-dialog" /> : null,
+  ImportSkillsDialog: ({
+    open,
+    onImported,
+  }: {
+    open: boolean;
+    onImported: (skillIds: string[]) => void;
+  }) =>
+    open ? (
+      <div data-testid="import-skills-dialog">
+        <button type="button" onClick={() => onImported(["skill-imported"])}>
+          Finish import
+        </button>
+      </div>
+    ) : null,
 }));
 // Pulls its options over the network; the wizard only needs it to exist.
 vi.mock("../_parts/skill-access-fields", () => ({
@@ -298,6 +310,34 @@ describe("NewSkillPage unsaved draft", () => {
     await user.click(await screen.findByRole("button", { name: "Discard" }));
     expect(routerPush).toHaveBeenCalledWith("/plugins");
     link.remove();
+  });
+
+  it("asks before a finished import leaves a draft typed earlier behind", async () => {
+    mockOrganization(true);
+    renderPage();
+    const user = userEvent.setup();
+    await fillName(user);
+    // Back to the source step, which keeps the draft, and import from there.
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByText("Git repository"));
+    await user.click(screen.getByRole("button", { name: "Finish import" }));
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Discard unsaved changes?",
+    );
+    expect(routerPush).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(routerPush).toHaveBeenCalledWith("/skills?imported=skill-imported");
+  });
+
+  it("goes straight to the imported skills when there is no draft", async () => {
+    mockOrganization(true);
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Git repository"));
+    await user.click(screen.getByRole("button", { name: "Finish import" }));
+
+    expect(routerPush).toHaveBeenCalledWith("/skills?imported=skill-imported");
   });
 
   it("does not ask when nothing has been typed", async () => {

@@ -255,6 +255,21 @@ describe("NewPluginPage", () => {
     ).toBeVisible();
     expect(screen.queryByText(/Private\?/)).not.toBeInTheDocument();
 
+    // Read fine, with a manifest that is not valid: said as the API says it,
+    // not as an empty repository.
+    discoverMock.mockResolvedValue({
+      data: { entries: [], reason: "Marketplace manifest is not valid JSON" },
+      errorMessage: null,
+      errorCode: null,
+    });
+    await scan();
+    expect(
+      await screen.findByText("Marketplace manifest is not valid JSON."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("No plugins found in the repository."),
+    ).not.toBeInTheDocument();
+
     // Not found: a private repository is the likely reason, and the
     // repository's name is not repeated back.
     discoverMock.mockResolvedValue({

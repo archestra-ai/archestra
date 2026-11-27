@@ -207,9 +207,11 @@ function NewSkillWizard() {
         fileCount: skill.fileCount,
       },
     });
+  // Through the guard, like every other way off the page: an import started
+  // from the source step leaves a draft typed before it behind.
   const goToSkills = (skillIds: string[]) => {
     const params = new URLSearchParams({ imported: skillIds.join(",") });
-    router.push(`/skills?${params.toString()}`);
+    requestNavigate(`/skills?${params.toString()}`);
   };
   const goToConfigureStep = () => setStep("configure");
 

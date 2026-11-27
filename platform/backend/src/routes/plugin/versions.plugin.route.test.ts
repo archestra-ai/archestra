@@ -293,6 +293,47 @@ describe("a plugin's version history", () => {
       ]);
       expect((await version(plugin.id, 1)).json().files).toHaveLength(2);
     });
+
+    test("gets no history from an applied update that changes none of its files", async () => {
+      const plugin = await createWithoutHistory();
+      await db
+        .update(schema.pluginsTable)
+        .set({ pendingSourceSha: "docs-only-commit" })
+        .where(eq(schema.pluginsTable.id, plugin.id));
+
+      const applied = await PluginModel.applyGithubUpdate({
+        id: plugin.id,
+        organizationId,
+        userId: user.id,
+        expectedPendingSha: "docs-only-commit",
+        files: [file("README.md", "one"), file("hooks/hooks.json", "{}")],
+      });
+
+      // Moved to the commit, with nothing pending, and still no version.
+      expect(applied).toMatchObject({
+        sourceSha: "docs-only-commit",
+        pendingSourceSha: null,
+      });
+      expect((await versions(plugin.id)).data).toEqual([]);
+    });
+  });
+
+  test("adds no version when an applied update changes none of the plugin's files", async () => {
+    const plugin = await create([file("README.md", "one")]);
+    await db
+      .update(schema.pluginsTable)
+      .set({ pendingSourceSha: "docs-only-commit" })
+      .where(eq(schema.pluginsTable.id, plugin.id));
+
+    await PluginModel.applyGithubUpdate({
+      id: plugin.id,
+      organizationId,
+      userId: user.id,
+      expectedPendingSha: "docs-only-commit",
+      files: [file("README.md", "one")],
+    });
+
+    expect((await versions(plugin.id)).data.map((v) => v.version)).toEqual([1]);
   });
 
   test("moves a manual plugin to another client, leaving its files and history as they are", async () => {
@@ -361,6 +402,31 @@ describe("a plugin's version history", () => {
     const plugin = await create();
 
     expect((await version(plugin.id, 2)).statusCode).toBe(404);
+  });
+
+  test("is closed while the plugin is deleted, and open again once it is restored", async () => {
+    const plugin = await create();
+    const list = () =>
+      app.inject({ method: "GET", url: `/api/plugins/${plugin.id}/versions` });
+    expect(
+      (await app.inject({ method: "DELETE", url: `/api/plugins/${plugin.id}` }))
+        .statusCode,
+    ).toBe(200);
+
+    // The grants outlive the delete, so the grant alone must not open it.
+    expect((await list()).statusCode).toBe(404);
+    expect((await version(plugin.id, 1)).statusCode).toBe(404);
+
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/plugins/${plugin.id}/restore`,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await list()).statusCode).toBe(200);
+    expect((await version(plugin.id, 1)).statusCode).toBe(200);
   });
 
   test("is closed to someone who cannot read the plugin, and to another organization", async ({

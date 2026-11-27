@@ -1058,6 +1058,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pluginId: params.id,
         action: "read",
       });
+      await requireLivePlugin({ id: params.id, organizationId });
       return reply.send(
         await PluginVersionModel.listForPlugin({
           pluginId: params.id,
@@ -1093,6 +1094,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pluginId: params.id,
         action: "read",
       });
+      await requireLivePlugin({ id: params.id, organizationId });
       const version = await PluginVersionModel.findByPluginAndVersion({
         pluginId: params.id,
         organizationId,
@@ -1144,6 +1146,24 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Nothing was restored, so there is nothing to audit.
         request.auditSkip = true;
         return reply.send(live);
+      }
+
+      // The name may have been taken while the plugin was in the trash: its
+      // owner cannot hold two manual plugins for one client under one name,
+      // and no index says so, so it is asked here as on create and rename.
+      if (deleted.sourceKind !== "github") {
+        const nameProblem = await findPluginNameProblem({
+          organizationId,
+          clientType: deleted.clientType,
+          displayName: deleted.displayName,
+          existing: deleted,
+        });
+        if (nameProblem) {
+          throw new ApiError(
+            409,
+            `Cannot restore: another of the owner's plugins for this client is named "${deleted.displayName}". Rename or delete that one first.`,
+          );
+        }
       }
 
       try {
@@ -1257,6 +1277,22 @@ async function requirePluginAction(params: {
     403,
     `You do not have permission to ${params.action} this plugin`,
   );
+}
+
+/**
+ * Refuse a plugin that is not live, as a plugin that is not there.
+ *
+ * A plugin's grants survive its deletion, so that restoring it brings its
+ * access back. A route that reads the plugin's content therefore cannot rely
+ * on the grant alone: it would keep answering for a plugin in the trash,
+ * which its readers can no longer open anywhere else.
+ */
+async function requireLivePlugin(params: {
+  id: string;
+  organizationId: string;
+}): Promise<void> {
+  const plugin = await PluginModel.findById(params);
+  if (!plugin) throw new ApiError(404, "Plugin not found");
 }
 
 async function runGithubImport<T>(fn: () => Promise<T>): Promise<T> {

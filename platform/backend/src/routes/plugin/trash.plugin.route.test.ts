@@ -169,6 +169,26 @@ describe("the plugin trash", () => {
       ).not.toBeNull();
     });
 
+    test("409 when the owner has given the deleted plugin's name to another one since", async () => {
+      const first = await createPlugin("Tools");
+      expect((await del(first.id)).statusCode).toBe(200);
+      // Deleting freed the name; the same owner used it again, in another
+      // letter case.
+      const second = await createPlugin("tools");
+
+      const response = await restore(first.id);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.message).toContain("Cannot restore");
+      expect(
+        await PluginModel.findDeletedById({ id: first.id, organizationId }),
+      ).not.toBeNull();
+
+      // With the name free again, the restore goes through.
+      expect((await del(second.id)).statusCode).toBe(200);
+      expect((await restore(first.id)).statusCode).toBe(200);
+    });
+
     test("is refused to someone who may not delete the plugin", async ({
       makeUser,
       makeMember,

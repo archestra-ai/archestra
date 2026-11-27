@@ -877,13 +877,17 @@ class PluginModel {
         )
         .returning({ id: schema.pluginsTable.id });
       if (!plugin) return null;
+      // A new commit is offered as an update whatever it changed. One that
+      // touched nothing this plugin imports (a file outside its folder) moves
+      // the plugin to that commit and leaves its files, and its history, as
+      // they are.
+      if (contentHash === existing.contentHash) return plugin;
       await startHistoryIfMissing(tx, existing);
       await tx
         .delete(schema.pluginFilesTable)
         .where(eq(schema.pluginFilesTable.pluginId, params.id));
       const written = await insertFiles(tx, params.id, params.files);
-      // The applied update is a version, with the commit it came from. The
-      // update is only pending when the files differ, so it always adds one.
+      // The applied update is a version, with the commit it came from.
       await PluginVersionModel.append(tx, {
         pluginId: params.id,
         contentHash,

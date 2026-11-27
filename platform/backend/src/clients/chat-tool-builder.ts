@@ -843,10 +843,19 @@ export async function buildArchestraToolOutput(params: {
     )
     .join("\n");
 
+  const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
+
   // Carry self-captured images (e.g. a get_app_diagnostics render screenshot)
   // through so the model can see them — toModelOutput turns them into media
   // parts, bounded by size/count there. Image-free results are unaffected.
-  if (!response.isError && response.content.some((c) => c.type === "image")) {
+  // A run_tool dispatch is not returned here: its result keeps the images in
+  // rawContent below too, and it must still get the target tool's MCP App UI
+  // resource (a tool that returns a picture of what its app shows).
+  if (
+    targetToolName === toolName &&
+    !response.isError &&
+    response.content.some((c) => c.type === "image")
+  ) {
     return {
       content: text,
       // The text summary above ends in a "[image]" marker line, so it is no
@@ -861,8 +870,6 @@ export async function buildArchestraToolOutput(params: {
       rawContent: response.content as ContentBlock[],
     };
   }
-
-  const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
 
   // App-management results identify an owned app via structuredContent.id;
   // the chat frontend mounts the app-bound runtime from it, so keep the rich

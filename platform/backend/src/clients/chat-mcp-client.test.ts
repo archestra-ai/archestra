@@ -2161,6 +2161,50 @@ describe("buildArchestraToolOutput", () => {
     });
   });
 
+  test("attaches the target tool's UI resource when its run_tool result has an image", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "blender__look",
+      catalogId: catalog.id,
+      meta: {
+        _meta: { ui: { resourceUri: "ui://mcp-for-blender/viewport-v2" } },
+      },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    const base64 = "QUJDREVG".repeat(4);
+    const content = [
+      { type: "image" as const, data: base64, mimeType: "image/png" },
+      { type: "text" as const, text: "Through camera 'Camera'." },
+    ];
+
+    const result = await buildArchestraToolOutput({
+      response: { content, isError: false },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "blender__look", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      content: "[image]\nThrough camera 'Camera'.",
+      _meta: { ui: { resourceUri: "ui://mcp-for-blender/viewport-v2" } },
+      rawContent: content,
+    });
+    // The model still gets the image itself.
+    expect(mcpToolToModelOutput({ output: result })).toMatchObject({
+      type: "content",
+      value: [
+        { type: "text", text: "[image]\nThrough camera 'Camera'." },
+        { type: "media", data: base64, mediaType: "image/png" },
+      ],
+    });
+  });
+
   test("keeps the identity a dispatched tool ran as, which chat shows on the card", async ({
     makeAgent,
     makeAgentTool,

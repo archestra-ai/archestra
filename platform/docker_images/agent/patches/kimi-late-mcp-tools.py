@@ -1,6 +1,6 @@
 """Offer the gateway's tools on every request, even when they connect late.
 
-Kimi Code 2.6.3 builds an agent's tool list once, when the agent is created,
+Kimi Code 2.7.1 builds an agent's tool list once, when the agent is created,
 and no longer waits for its MCP servers first. The gateway connects a moment
 later, so its tools are registered but never reach a request: the model sees
 only Kimi's built-in tools. Upstream reaches late tools through `select_tools`,
@@ -28,7 +28,7 @@ patch = anchor + (
 )
 if (
     source.count(anchor) != 1
-    or source.count("const tools = initialTools === void 0 ? this.requestFactory.baselineTools() : [...initialTools];") != 1
+    or source.count("const tools = initialTools === void 0 ? this.toolSelect.initialTools() : [...initialTools];") != 1
     or source.count("\t\tactiveEntries(entries, disclosure) {\n") != 1
     or source.count("\t\tcurrentTools() {\n") != 1
     or source.count("function isMcpToolName(name) {") != 1

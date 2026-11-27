@@ -253,7 +253,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.170.0 \
+RUN pnpm add --global @openai/codex@0.171.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -294,8 +294,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.23.2 \
- && hermes_commit=ae2a81ccc00e9b7c06301523e5bb09608397149c \
+    hermes_version=0.23.3 \
+ && hermes_commit=caafe5389ae585ef77387a962aee05b1bcf17029 \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -413,14 +413,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=4cef43ce2b62cccdb39acb216d8042f91d78d7fb022375b31dd7a3e8d747fc5c ;; \
-      arm64) grok_arch=arm64; checksum=c5139d8fb6fe050e5519cd1abc41e957366cf31a24983537627849c34f2bf5cd ;; \
+      amd64) grok_arch=x64; checksum=a48046c1f40190d31ae0dfd0fc90d2bea2174d06962f732c6b333584c5b1134c ;; \
+      arm64) grok_arch=arm64; checksum=85a35cecea774d2d1c4d09553eee02f9c16e3cfdf0ad31e65ee29b1e9d438861 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.90" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.90.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.92" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.92.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -448,8 +448,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.6.3)" kimi-code.tgz \
- && echo "403ad8e450362d05d09b785c045edeb9efc02cc7adeca1aadb9bb0cab800214969e6ebe7e21e75e35c58d9449efa6f767ffaabe64ed3e37c07c5f19274b07693  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.7.1)" kimi-code.tgz \
+ && echo "0492b83030550fa31af30f132b829349c3bbd688f66a97f1a3f359d30dea46aa24a185d2056635dee5973071e9760f2f34ca22852b308c651253817143aebc4e  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \

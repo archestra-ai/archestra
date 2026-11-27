@@ -19,8 +19,8 @@ importers:
   .:
     dependencies:
       openclaw:
-        specifier: 2026.11.5
-        version: 2026.11.5(@opentelemetry/api@1.10.0)
+        specifier: 2026.11.6
+        version: 2026.11.6(@opentelemetry/api@1.10.0)
 
 packages:
 
@@ -57,11 +57,6 @@ packages:
   '@babel/helper-validator-identifier@8.0.6':
     resolution: {integrity: sha512-HYx0YmuchRxRSpnjvcNffnPS8DCauKNmnumIuHG3jnQAVewRA7kfJGwF13ayEpSZs7s4R/oBH4eppuXcAQd5JQ==}
     engines: {node: ^22.18.0 || >=24.11.0}
-
-  '@babel/parser@8.0.6':
-    resolution: {integrity: sha512-LpGDIYJAzc3Y3PT9x+FxBrGYu2PlWxLmyN7SwPTzaX0LSwEmFJBsRnPBqmaXF2r1v+Zhz6lNiEJ+7yKtM5+Ugg==}
-    engines: {node: ^22.18.0 || >=24.11.0}
-    hasBin: true
 
   '@babel/parser@8.0.7':
     resolution: {integrity: sha512-UkDwEbPO1px2JQSrdh4qIgaH1JgG7GO/pFeJkpxhDxIETkT/QvGpnigXIw75ViHYPtIgKITmVUJqLjiO+JuWjA==}
@@ -367,8 +362,8 @@ packages:
     resolution: {integrity: sha512-juG5VWh4qAivzTAeMzvY9xs9HY5rAcr2E4I7tiSSCokRFi7XIZCAu92ZkSTsIj1OPceCifL3cpfteP3pDT9/QQ==}
     engines: {node: '>=14.0.0'}
 
-  '@openclaw/ai@2026.11.5':
-    resolution: {integrity: sha512-UvnztajHjwxyE8d9CeqBuWntIbnKrC6FD47IfEc20uzM5G82N0Qs1bLKHYSYFSeq3FxxoNXbOn0sOVGpPDwwmA==}
+  '@openclaw/ai@2026.11.6':
+    resolution: {integrity: sha512-KyGHq8U9YC38KAyT9obzovtD84lc7fjVY+0ptcGviqA/wAzBOn8X6xkU7AgowmdItgmpFmmEDH9zwHWL/bERZA==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
@@ -876,10 +871,6 @@ packages:
     resolution: {integrity: sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg==}
     engines: {node: '>=22.12.0'}
 
-  content-disposition@1.1.0:
-    resolution: {integrity: sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==}
-    engines: {node: '>=18'}
-
   content-disposition@2.0.1:
     resolution: {integrity: sha512-e+H0ZXHSWYrENhQzw1LPuP4oF5MzVKmDU6d3hxlvaPEYLLg62MxtQNPRx4SYSuYJSBUgnQIG4HIN2tEtNv7Dog==}
     engines: {node: '>=18'}
@@ -1066,10 +1057,6 @@ packages:
     engines: {node: '>= 16'}
     peerDependencies:
       express: '>= 4.11'
-
-  express@5.2.1:
-    resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
-    engines: {node: '>= 18'}
 
   express@5.3.0:
     resolution: {integrity: sha512-qCqy1xSoaugxOD4IVHb1ZWdkvCF2W3aE2okKouWj8VwJ+ztskSiXoBnCSJqfKT+cVPJhuJqe9YLbY425+Zh00g==}
@@ -1543,8 +1530,8 @@ packages:
       zod:
         optional: true
 
-  openclaw@2026.11.5:
-    resolution: {integrity: sha512-mqPlsGLOe8NS85BfP1vWW9YVwFXchsV75QTkEbyR4csylORxts+fmfZp9+qbD7aPbXQIctyjRk+CPL91fDvxBA==}
+  openclaw@2026.11.6:
+    resolution: {integrity: sha512-4MGjAMv8QlVrul3ZbCu8KjM7GhXfLdLzf0IrsO5QZ8LC3oYkduqs2rZiZpPDmTRpT6kXYke/OVaWrB+YmhBHLw==}
     engines: {node: '>=24.16.0 <25 || >=26.1.0'}
     hasBin: true
     bundledDependencies:
@@ -1844,10 +1831,6 @@ packages:
     resolution: {integrity: sha512-aulFJcD6YK8V1G7iRB5tigAP4TsHBZZrOV8pjV++zdUwmeV8uzbY7yn6h9MswN62adStNZFuCIx4haBnRuMDaw==}
     engines: {node: '>=18'}
 
-  strtok3@10.5.0:
-    resolution: {integrity: sha512-PgAsgIuizbZN/r4+g4UNvbVCTpJWdoIdI71kIWwKmdIH0vJ0q7ylMVGU8PWj2s9O98y4MtFWiDTIrtNukZMMgQ==}
-    engines: {node: '>=18'}
-
   strtok3@10.8.0:
     resolution: {integrity: sha512-e6bW3fD6V01DPmcbLfNtn0cjsiHvTKS/hivgbzqYMfHb/nLes4QQ0H5QBxlkPQayF4xv08AvlSgptGwN86Eemw==}
     engines: {node: '>=18'}
@@ -2041,7 +2024,7 @@ snapshots:
 
   '@babel/generator@8.0.6':
     dependencies:
-      '@babel/parser': 8.0.6
+      '@babel/parser': 8.0.7
       '@babel/types': 8.0.6
       '@jridgewell/gen-mapping': 0.4.0-beta.0
       '@jridgewell/trace-mapping': 0.3.31
@@ -2054,10 +2037,6 @@ snapshots:
 
   '@babel/helper-validator-identifier@8.0.6': {}
 
-  '@babel/parser@8.0.6':
-    dependencies:
-      '@babel/types': 8.0.6
-
   '@babel/parser@8.0.7':
     dependencies:
       '@babel/types': 8.0.6
@@ -2067,7 +2046,7 @@ snapshots:
   '@babel/template@8.0.0':
     dependencies:
       '@babel/code-frame': 8.0.6
-      '@babel/parser': 8.0.6
+      '@babel/parser': 8.0.7
       '@babel/types': 8.0.6
 
   '@babel/traverse@8.0.7':
@@ -2285,8 +2264,8 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
-      express: 5.2.1
-      express-rate-limit: 8.7.1(express@5.2.1)
+      express: 5.3.0
+      express-rate-limit: 8.7.1(express@5.3.0)
       hono: 4.13.13
       jose: 6.2.12
       json-schema-typed: 8.0.2
@@ -2304,7 +2283,7 @@ snapshots:
 
   '@mozilla/readability@0.6.0': {}
 
-  '@openclaw/ai@2026.11.5(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(@opentelemetry/api@1.10.0)(undici@8.12.3)(ws@8.22.0)':
+  '@openclaw/ai@2026.11.6(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(@opentelemetry/api@1.10.0)(undici@8.12.3)(ws@8.22.0)':
     dependencies:
       '@anthropic-ai/sdk': 0.135.0(zod@4.6.7)
       '@google/genai': 2.30.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
@@ -2702,8 +2681,6 @@ snapshots:
 
   commander@15.0.0: {}
 
-  content-disposition@1.1.0: {}
-
   content-disposition@2.0.1: {}
 
   content-type@1.0.5: {}
@@ -2881,44 +2858,11 @@ snapshots:
       which-command: 0.1.0
       yoctocolors: 2.2.0
 
-  express-rate-limit@8.7.1(express@5.2.1):
+  express-rate-limit@8.7.1(express@5.3.0):
     dependencies:
       debug: 4.4.3
-      express: 5.2.1
+      express: 5.3.0
       ip-address: 10.7.4
-    transitivePeerDependencies:
-      - supports-color
-
-  express@5.2.1:
-    dependencies:
-      accepts: 2.0.0
-      body-parser: 2.4.0
-      content-disposition: 1.1.0
-      content-type: 1.0.5
-      cookie: 0.7.2
-      cookie-signature: 1.2.2
-      debug: 4.4.3
-      depd: 2.0.0
-      encodeurl: 2.0.0
-      escape-html: 1.0.3
-      etag: 1.8.1
-      finalhandler: 2.1.1
-      fresh: 2.0.0
-      http-errors: 2.0.1
-      merge-descriptors: 2.0.0
-      mime-types: 3.0.2
-      on-finished: 2.4.1
-      once: 1.4.0
-      parseurl: 1.3.3
-      proxy-addr: 2.0.8
-      qs: 6.16.1
-      range-parser: 1.3.0
-      router: 2.2.0
-      send: 1.2.1
-      serve-static: 2.2.1
-      statuses: 2.0.2
-      type-is: 2.1.0
-      vary: 1.1.2
     transitivePeerDependencies:
       - supports-color
 
@@ -2987,7 +2931,7 @@ snapshots:
   file-type@22.2.0:
     dependencies:
       '@tokenizer/inflate': 0.5.2
-      strtok3: 10.5.0
+      strtok3: 10.8.0
       token-types: 6.1.2
       uint8array-extras: 1.6.0
     transitivePeerDependencies:
@@ -3318,7 +3262,7 @@ snapshots:
       ws: 8.22.0
       zod: 4.6.7
 
-  openclaw@2026.11.5(@opentelemetry/api@1.10.0):
+  openclaw@2026.11.6(@opentelemetry/api@1.10.0):
     dependencies:
       '@agentclientprotocol/sdk': 1.9.0(zod@4.6.7)
       '@anthropic-ai/sdk': 0.135.0(zod@4.6.7)
@@ -3337,7 +3281,7 @@ snapshots:
       '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.7)
       '@modelcontextprotocol/server': 2.3.1
       '@mozilla/readability': 0.6.0
-      '@openclaw/ai': 2026.11.5(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(@opentelemetry/api@1.10.0)(undici@8.12.3)(ws@8.22.0)
+      '@openclaw/ai': 2026.11.6(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(@opentelemetry/api@1.10.0)(undici@8.12.3)(ws@8.22.0)
       '@openclaw/fs-safe': 0.26.13
       '@openclaw/proc-safe': 0.4.2
       '@openclaw/proxyline': 0.4.0(undici@8.12.3)
@@ -3789,10 +3733,6 @@ snapshots:
       ansi-regex: 5.0.1
 
   strip-final-newline@4.0.0: {}
-
-  strtok3@10.5.0:
-    dependencies:
-      '@tokenizer/token': 0.3.0
 
   strtok3@10.8.0:
     dependencies:

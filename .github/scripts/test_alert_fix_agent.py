@@ -54,7 +54,9 @@ class AlertFixAgentTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual([r["path"] for r in requests], ["/oidc", "/api/workload-identity/token", f"/api/agents/{AGENT}/runs"])
         message = self.message(requests)
-        self.assertTrue(message.startswith("Repository: archestra-ai/archestra\n"))
+        # Not first: the Lobster bootstrap would read it as a managed checkout.
+        self.assertFalse(message.startswith("Repository:"))
+        self.assertIn("\nRepository: archestra-ai/archestra\n", message)
         self.assertIn("Branch: `automation/ci-fixer/release-image-cves`", message)
         self.assertIn("https://github.com/archestra-ai/archestra/actions/runs/45941461441", message)
         self.assertIn("channel `C099P68DZ43`, thread_ts `1795755341.294619`", message)

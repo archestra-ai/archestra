@@ -230,6 +230,50 @@ describe("PluginDetailPage", () => {
     );
   });
 
+  it("saves against the files it loaded, so files written since are not replaced unseen", async () => {
+    const user = userEvent.setup();
+    const view = renderPage(BASE_PLUGIN);
+    const rerenderWith = (plugin: PluginDetail) => {
+      vi.mocked(usePlugin).mockReturnValue({
+        data: plugin,
+        isPending: false,
+      } as unknown as ReturnType<typeof usePlugin>);
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <PluginDetailPage id={plugin.id} />
+        </QueryClientProvider>,
+      );
+    };
+    const save = () => user.click(screen.getByRole("button", { name: "Save" }));
+    const lastSave = () => updateMutateAsync.mock.calls.at(-1)?.[0];
+
+    // Refused: someone else wrote the files first.
+    updateMutateAsync.mockRejectedValueOnce(new Error("409"));
+    await user.type(screen.getByLabelText("Description"), " More.");
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "abc123" });
+
+    // The other write arrives under the unsaved draft. The draft still holds
+    // the files it was taken from, so a retry is still held against them.
+    rerenderWith({ ...BASE_PLUGIN, contentHash: "moved" });
+    updateMutateAsync.mockRejectedValueOnce(new Error("409"));
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "abc123" });
+
+    // Discarding takes the plugin as it is now, and its hash with it.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.type(screen.getByLabelText("Description"), " Again.");
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "moved" });
+
+    // A save puts the saved plugin in the cache, and the draft moves on to
+    // the files it wrote.
+    rerenderWith({ ...BASE_PLUGIN, contentHash: "saved" });
+    await user.type(screen.getByLabelText("Description"), " Once more.");
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "saved" });
+  });
+
   it("has no switch to turn one plugin off, and always offers Install", () => {
     renderPage(BASE_PLUGIN);
 

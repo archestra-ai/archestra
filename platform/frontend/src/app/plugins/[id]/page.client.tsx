@@ -200,6 +200,11 @@ function PluginDetailView({
   );
   const [draft, setDraft] = useState<PluginDraft>(seed);
   const [base, setBase] = useState<PluginDraft>(seed);
+  // The hash of the files the draft was taken from. A save sends it, so files
+  // written since (in another tab, by a restore) are not replaced unseen. It
+  // moves with the draft: a save puts the saved plugin in the cache, and the
+  // clean draft is then taken from that.
+  const [baseContentHash, setBaseContentHash] = useState(plugin.contentHash);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = isPluginDraftDirty(draft, base);
 
@@ -207,7 +212,8 @@ function PluginDetailView({
     if (isDirty) return;
     setDraft(seed);
     setBase(seed);
-  }, [isDirty, seed]);
+    setBaseContentHash(plugin.contentHash);
+  }, [isDirty, seed, plugin.contentHash]);
 
   const patchDraft = (patch: Partial<PluginDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -251,6 +257,7 @@ function PluginDetailView({
               supportedPlatforms: submitted.supportedPlatforms,
               clientType: submitted.clientType,
               files: submitted.files,
+              baseContentHash,
             }),
         labels: submitted.labels,
         icon: submitted.icon,

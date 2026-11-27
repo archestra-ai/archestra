@@ -368,6 +368,9 @@ export function useUpdatePlugin(id: string) {
       });
       if (error) {
         handleApiError(error);
+        // A save refused because the files changed elsewhere: read the plugin
+        // again, so that discarding the draft shows what is saved now.
+        queryClient.invalidateQueries({ queryKey: ["plugins", id] });
         return null;
       }
       return data;

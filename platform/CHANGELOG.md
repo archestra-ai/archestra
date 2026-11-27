@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.41](https://github.com/archestra-ai/archestra/compare/platform-v1.4.40...platform-v1.4.41) (2026-11-27)
+
+
+### Bug Fixes
+
+* **plugins,skills:** Plugins and Skills fixes (backport release/1.4) ([#11326](https://github.com/archestra-ai/archestra/issues/11326)) ([f11404d](https://github.com/archestra-ai/archestra/commit/f11404d0e9d46a88db3f5c4c2d6788ffee460abd))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump PAM packages to 1.5.2-6+deb12u3 in release/1.4 images ([#11322](https://github.com/archestra-ai/archestra/issues/11322)) ([d37f864](https://github.com/archestra-ai/archestra/commit/d37f864871402d7f1ebc8c0ff58e154b23696fb6))
+
 ## [1.4.40](https://github.com/archestra-ai/archestra/compare/platform-v1.4.39...platform-v1.4.40) (2026-11-26)
 
 

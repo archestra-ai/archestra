@@ -150,7 +150,6 @@ export async function loadMarketplaceSkills(
     agentName: skill.agentName ?? null,
     templated: skill.templated ?? false,
     metadata: (skill.metadata ?? {}) as Record<string, string>,
-    frontmatterSource: skill.frontmatterSource ?? null,
     updatedAt: skill.updatedAt,
     files: filesBySkill.get(skill.id) ?? [],
   }));

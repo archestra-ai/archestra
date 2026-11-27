@@ -1,5 +1,5 @@
 {
-  "id": "4db9433f-cce6-4186-b579-6f251e90d190",
+  "id": "76f349ab-b3a3-481f-89bf-88814f4a3fb7",
   "prevId": "4635ed94-716f-4b2e-993e-8cd46bc212b2",
   "version": "7",
   "dialect": "postgresql",
@@ -32231,12 +32231,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::jsonb"
-        },
-        "frontmatter_source": {
-          "name": "frontmatter_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "source_type": {
           "name": "source_type",

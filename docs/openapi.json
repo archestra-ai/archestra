@@ -574941,10 +574941,6 @@
                               "type": "string"
                             }
                           },
-                          "frontmatterSource": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "sourceType": {
                             "type": "string",
                             "enum": [
@@ -575215,7 +575211,6 @@
                           "agentName",
                           "templated",
                           "metadata",
-                          "frontmatterSource",
                           "sourceType",
                           "sourceRef",
                           "sourceOrigin",
@@ -575878,10 +575873,6 @@
                         "type": "string"
                       }
                     },
-                    "frontmatterSource": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "sourceType": {
                       "type": "string",
                       "enum": [
@@ -576197,7 +576188,6 @@
                     "agentName",
                     "templated",
                     "metadata",
-                    "frontmatterSource",
                     "sourceType",
                     "sourceRef",
                     "sourceOrigin",
@@ -576578,10 +576568,6 @@
                         "type": "string"
                       }
                     },
-                    "frontmatterSource": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "sourceType": {
                       "type": "string",
                       "enum": [
@@ -576897,7 +576883,6 @@
                     "agentName",
                     "templated",
                     "metadata",
-                    "frontmatterSource",
                     "sourceType",
                     "sourceRef",
                     "sourceOrigin",
@@ -577370,10 +577355,6 @@
                         "type": "string"
                       }
                     },
-                    "frontmatterSource": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "sourceType": {
                       "type": "string",
                       "enum": [
@@ -577689,7 +577670,6 @@
                     "agentName",
                     "templated",
                     "metadata",
-                    "frontmatterSource",
                     "sourceType",
                     "sourceRef",
                     "sourceOrigin",
@@ -580687,10 +580667,6 @@
                         "type": "string"
                       }
                     },
-                    "frontmatterSource": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "sourceType": {
                       "type": "string",
                       "enum": [
@@ -581006,7 +580982,6 @@
                     "agentName",
                     "templated",
                     "metadata",
-                    "frontmatterSource",
                     "sourceType",
                     "sourceRef",
                     "sourceOrigin",
@@ -581985,10 +581960,6 @@
                         "type": "string"
                       }
                     },
-                    "frontmatterSource": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "sourceType": {
                       "type": "string",
                       "enum": [
@@ -582304,7 +582275,6 @@
                     "agentName",
                     "templated",
                     "metadata",
-                    "frontmatterSource",
                     "sourceType",
                     "sourceRef",
                     "sourceOrigin",
@@ -582752,10 +582722,6 @@
                         "type": "string"
                       }
                     },
-                    "frontmatterSource": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "sourceType": {
                       "type": "string",
                       "enum": [
@@ -583071,7 +583037,6 @@
                     "agentName",
                     "templated",
                     "metadata",
-                    "frontmatterSource",
                     "sourceType",
                     "sourceRef",
                     "sourceOrigin",
@@ -585044,10 +585009,6 @@
                               "type": "string"
                             }
                           },
-                          "frontmatterSource": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "sourceType": {
                             "type": "string",
                             "enum": [
@@ -585183,7 +585144,6 @@
                           "agentName",
                           "templated",
                           "metadata",
-                          "frontmatterSource",
                           "sourceType",
                           "sourceRef",
                           "sourceOrigin",

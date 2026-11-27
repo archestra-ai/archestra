@@ -2,40 +2,12 @@
 import { describe, expect, it } from "vitest";
 import {
   composeManifest,
+  findFrontmatterNotKept,
   parseManifestFields,
   setManifestFrontmatterField,
 } from "./manifest-compose";
 
 describe("composeManifest", () => {
-  it("gives back the frontmatter as it was written when the skill kept it", () => {
-    const frontmatterSource = [
-      "name: release-notes",
-      "description: Draft release notes.",
-      "# Which model the client runs it on",
-      "model: fast",
-      "argument-hint: <version>",
-      "metadata:",
-      "  review:",
-      "    owner: docs",
-    ].join("\n");
-
-    const manifest = composeManifest({
-      name: "release-notes",
-      description: "Draft release notes.",
-      license: null,
-      compatibility: null,
-      allowedTools: null,
-      agentName: null,
-      templated: false,
-      // The column's flat copy of the nested value.
-      metadata: { review: '{"owner":"docs"}' },
-      frontmatterSource,
-      content: "# Release notes",
-    });
-
-    expect(manifest).toBe(`---\n${frontmatterSource}\n---\n\n# Release notes`);
-  });
-
   it("quotes frontmatter values containing YAML special characters", () => {
     const manifest = composeManifest({
       name: "postgres-warehouse",
@@ -232,5 +204,61 @@ describe("setManifestFrontmatterField", () => {
     });
     // The body's own `name:` line is prose, not configuration.
     expect(next).toContain("name: not-frontmatter");
+  });
+});
+
+describe("findFrontmatterNotKept", () => {
+  it("names the keys a save has no column for and the nested metadata it would flatten", () => {
+    const manifest = [
+      "---",
+      "name: release-notes",
+      "description: Draft release notes.",
+      "# A comment between fields.",
+      "model: fast",
+      "argument-hint: <version>",
+      "allowed-tools: Read Grep",
+      "metadata:",
+      "  owner: docs",
+      "  review:",
+      "    cadence: weekly",
+      "  tags: [a, b]",
+      "---",
+      "",
+      "Body with model: in it.",
+    ].join("\n");
+
+    expect(findFrontmatterNotKept(manifest)).toEqual({
+      keys: ["model", "argument-hint"],
+      nestedMetadataKeys: ["review", "tags"],
+    });
+  });
+
+  it("finds nothing to warn about in a manifest of stored fields", () => {
+    const manifest = composeManifest({
+      name: "pdf-tools",
+      description: "Work with PDFs.",
+      license: "MIT",
+      compatibility: "Needs poppler.",
+      allowedTools: "Read",
+      agentName: "researcher",
+      templated: true,
+      metadata: { owner: "docs", version: "2" },
+      content: "Body.",
+    });
+
+    expect(findFrontmatterNotKept(manifest)).toEqual({
+      keys: [],
+      nestedMetadataKeys: [],
+    });
+  });
+
+  it("stays quiet about frontmatter that is missing or not valid YAML", () => {
+    const nothing = { keys: [], nestedMetadataKeys: [] };
+    expect(findFrontmatterNotKept("# No frontmatter")).toEqual(nothing);
+    expect(
+      findFrontmatterNotKept(
+        "---\nname: a\ndescription: Use when: asked\nmodel: fast\n---\n",
+      ),
+    ).toEqual(nothing);
   });
 });

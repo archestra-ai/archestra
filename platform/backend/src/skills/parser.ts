@@ -1,4 +1,4 @@
-import { CORE_SCHEMA, load as parseYaml, YAMLException } from "js-yaml";
+import { load as parseYaml, YAMLException } from "js-yaml";
 import type { SkillFileKind } from "@/types";
 
 /**
@@ -28,13 +28,6 @@ export interface ParsedSkill {
   /** When true, the body is rendered through Handlebars at activation. */
   templated: boolean;
   metadata: Record<string, string>;
-  /**
-   * The frontmatter block as written, without its `---` fences. Null for a
-   * skill that was not parsed from a manifest (a draft converted from an
-   * agent). Stored beside the columns so the keys, nesting and comments the
-   * columns do not hold survive an edit; see `skills.frontmatter_source`.
-   */
-  frontmatterSource: string | null;
 }
 
 /** Raised when a `SKILL.md` file cannot be parsed into a valid skill. */
@@ -105,85 +98,12 @@ export function parseSkillManifest(raw: string): ParsedSkill {
     name,
     description,
     content: text.slice(match[0].length).trim(),
-    ...readOptionalFields(fields),
-    frontmatterSource: match[1],
-  };
-}
-
-/**
- * Whether a stored frontmatter block still says what a skill's columns say.
- *
- * The block is kept so an edit gives back what was written, but the columns
- * are what Archestra acts on. A writer can move a column without rewriting
- * the block (an explicit `allowedTools` in a request body wins over the
- * manifest's). From then on the block would show the editor a value the skill
- * no longer has, and the next save would put the old value back. The model
- * asks this on every write and drops a block that has drifted.
- */
-export function frontmatterSourceMatches(
-  source: string,
-  skill: FrontmatterColumns,
-): boolean {
-  let frontmatter: unknown;
-  try {
-    frontmatter = parseYaml(source);
-  } catch {
-    return false;
-  }
-  if (!isPlainMap(frontmatter)) return false;
-  const written = readOptionalFields(frontmatter);
-  return (
-    readString(frontmatter.name) === skill.name &&
-    readString(frontmatter.description) === skill.description &&
-    written.license === (skill.license ?? null) &&
-    written.compatibility === (skill.compatibility ?? null) &&
-    written.allowedTools === (skill.allowedTools ?? null) &&
-    written.agentName === (skill.agentName ?? null) &&
-    written.templated === (skill.templated ?? false) &&
-    sameStringMap(written.metadata, skill.metadata ?? {})
-  );
-}
-
-/**
- * What a stored frontmatter block holds beyond the columns, for a writer that
- * builds a `SKILL.md` from the columns and must not lose the rest (the
- * marketplace copy a client installs).
- *
- * `fields` are the top-level keys no column stores, in the author's order.
- * `metadata` are the `metadata` entries whose value is a map or a list: the
- * `metadata` column keeps those as one line of JSON text, which is what the
- * Agent Skills format asks of a published skill, and this is the structured
- * form the author wrote.
- *
- * Read with YAML's core types only, so a date stays the text that was typed
- * instead of becoming a timestamp. Empty for a block that cannot be read.
- */
-export function extraFrontmatter(source: string | null | undefined): {
-  fields: Record<string, unknown>;
-  metadata: Record<string, unknown>;
-} {
-  const nothing = { fields: {}, metadata: {} };
-  if (!source) return nothing;
-  let frontmatter: unknown;
-  try {
-    frontmatter = parseYaml(source, { schema: CORE_SCHEMA });
-  } catch {
-    return nothing;
-  }
-  if (!isPlainMap(frontmatter)) return nothing;
-  return {
-    fields: Object.fromEntries(
-      Object.entries(frontmatter).filter(
-        ([key, value]) => !STORED_FRONTMATTER_KEYS.has(key) && value != null,
-      ),
-    ),
-    metadata: isPlainMap(frontmatter.metadata)
-      ? Object.fromEntries(
-          Object.entries(frontmatter.metadata).filter(
-            ([, value]) => typeof value === "object" && value !== null,
-          ),
-        )
-      : {},
+    license: readString(fields.license) || null,
+    compatibility: readString(fields.compatibility) || null,
+    allowedTools: readAllowedTools(fields["allowed-tools"]),
+    agentName: readString(fields.agent) || null,
+    templated: readBoolean(fields.templated),
+    metadata: readStringMap(fields.metadata),
   };
 }
 
@@ -214,57 +134,6 @@ export function deriveSkillFileKind(path: string): SkillFileKind {
 }
 
 // ===== Internal helpers =====
-
-/** The frontmatter keys a skill's columns store. */
-const STORED_FRONTMATTER_KEYS = new Set([
-  "name",
-  "description",
-  "license",
-  "compatibility",
-  "allowed-tools",
-  "agent",
-  "templated",
-  "metadata",
-]);
-
-/** The skill columns a frontmatter block is compared against. */
-interface FrontmatterColumns {
-  name: string;
-  description: string;
-  license?: string | null;
-  compatibility?: string | null;
-  allowedTools?: string | null;
-  agentName?: string | null;
-  templated?: boolean | null;
-  metadata?: Record<string, string> | null;
-}
-
-/** The optional frontmatter fields, read the one way every caller needs. */
-function readOptionalFields(fields: Record<string, unknown>) {
-  return {
-    license: readString(fields.license) || null,
-    compatibility: readString(fields.compatibility) || null,
-    allowedTools: readAllowedTools(fields["allowed-tools"]),
-    agentName: readString(fields.agent) || null,
-    templated: readBoolean(fields.templated),
-    metadata: readStringMap(fields.metadata),
-  };
-}
-
-function isPlainMap(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function sameStringMap(
-  left: Record<string, string>,
-  right: Record<string, string>,
-): boolean {
-  const keys = Object.keys(left);
-  return (
-    keys.length === Object.keys(right).length &&
-    keys.every((key) => left[key] === right[key])
-  );
-}
 
 /**
  * A required frontmatter field as trimmed text, or a `SkillParseError` that

@@ -36,7 +36,9 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule'
-    runs-on: ubuntu-24.04-16core
+    # Standard GCE VMs, never Spot: a preemption would cut a run short, and
+    # every run gets the same CPU (AMD Turin), unlike GitHub's pool.
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core' || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch; never for fork PRs.
     permissions:
       contents: read # checkout
       packages: write # Publish the benchmark image and cache to the CI registry.

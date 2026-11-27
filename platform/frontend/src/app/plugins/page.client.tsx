@@ -164,9 +164,16 @@ function PluginsList() {
     refetch,
   } = usePlugins(!isDeletedViewUndecided, {
     labels: labelsFilter,
-    access: scopeFilter.access,
-    sharedWith: scopeFilter.sharedWith,
-    owner: scopeFilter.owner,
+    // The trash is every deleted plugin, for the reader who manages every
+    // plugin: the live list's "Mine · Shared with me" would leave out the
+    // ones other people deleted, which are the ones an admin comes here for.
+    ...(isDeletedView
+      ? {}
+      : {
+          access: scopeFilter.access,
+          sharedWith: scopeFilter.sharedWith,
+          owner: scopeFilter.owner,
+        }),
     status: isDeletedView ? "deleted" : undefined,
   });
 
@@ -713,7 +720,9 @@ function PluginsList() {
                     />
                   }
                 >
-                  <ResourceAccessFilter resource="plugin" noun="plugins" />
+                  {!isDeletedView && (
+                    <ResourceAccessFilter resource="plugin" noun="plugins" />
+                  )}
                   <FacetSelect
                     label="Filter by client"
                     value={client}

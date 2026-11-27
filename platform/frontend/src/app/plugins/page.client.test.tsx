@@ -700,6 +700,9 @@ describe("PluginsPage", () => {
       render(<PluginsPage />);
 
       expect(access.listFilters).toMatchObject({ status: "deleted" });
+      // Every deleted plugin, not only the reader's own and shared ones.
+      expect(access.listFilters).not.toHaveProperty("access");
+      expect(access.listFilters).not.toHaveProperty("owner");
       // A deleted plugin has nothing to install or edit, and no page to open.
       expect(
         within(row()).queryByRole("button", { name: /^Install/ }),

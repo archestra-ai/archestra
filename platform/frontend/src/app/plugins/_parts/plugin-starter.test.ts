@@ -140,6 +140,24 @@ describe("pluginStarterFiles", () => {
     );
   });
 
+  it("doubles a typographic apostrophe in the PowerShell hook, which would end its string", () => {
+    const starter = (clientType: PluginClientType) =>
+      pluginStarterFiles({
+        clientType,
+        supportedPlatforms: ["windows"],
+        displayName: "Sam\u2019s tools",
+        description: "",
+      });
+
+    expect(read(starter("claude-code"), "scripts/session-start.ps1")).toContain(
+      "Write-Output 'Sam\u2019\u2019s tools is installed.'",
+    );
+    expect(
+      JSON.parse(read(starter("copilot-cli"), "hooks.json")).hooks
+        .sessionStart[0].powershell,
+    ).toContain("Sam\u2019\u2019s tools is installed.");
+  });
+
   it("stands in for a name and a description that are not written yet", () => {
     const files = pluginStarterFiles({
       clientType: "claude-code",

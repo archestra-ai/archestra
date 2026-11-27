@@ -64,7 +64,16 @@ pub(crate) fn set_id(message: &mut Value, id: Value) {
     }
 }
 
+/// The MCP Apps extension, and the one content type that Archestra shows.
+const MCP_APPS_EXTENSION: &str = "io.modelcontextprotocol/ui";
+const MCP_APP_MIME_TYPE: &str = "text/html;profile=mcp-app";
+
 /// The `initialize` request that the client sends to each MCP server.
+///
+/// The MCP server gets only this `initialize`: the one from Archestra is
+/// answered from the kept result. So this one says for Archestra that it
+/// shows MCP Apps. An MCP server that does not hear it can leave out the
+/// tools that only its app calls.
 pub(crate) fn initialize_request(id: u64) -> Value {
     json!({
         "jsonrpc": "2.0",
@@ -72,7 +81,11 @@ pub(crate) fn initialize_request(id: u64) -> Value {
         "method": INITIALIZE,
         "params": {
             "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {},
+            "capabilities": {
+                "extensions": {
+                    MCP_APPS_EXTENSION: { "mimeTypes": [MCP_APP_MIME_TYPE] },
+                },
+            },
             "clientInfo": {
                 "name": "archestra-mcp-bridge",
                 "version": env!("CARGO_PKG_VERSION"),
@@ -268,6 +281,15 @@ mod tests {
         assert_eq!(
             request["params"]["clientInfo"]["name"],
             json!("archestra-mcp-bridge")
+        );
+    }
+
+    #[test]
+    fn initialize_request_says_that_archestra_shows_mcp_apps() {
+        let request = initialize_request(1);
+        assert_eq!(
+            request["params"]["capabilities"]["extensions"]["io.modelcontextprotocol/ui"],
+            json!({ "mimeTypes": ["text/html;profile=mcp-app"] })
         );
     }
 }

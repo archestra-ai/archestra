@@ -572,8 +572,13 @@ function PluginsList() {
    *
    * `isPending` is paired with `isFetching` so a disabled query, which stays
    * pending indefinitely, cannot hold this true.
+   *
+   * While it is not yet known whether this reader gets the Deleted view, no
+   * list is asked for at all. A table drawn over that gap would be empty,
+   * and an empty table sends the page in the URL back to one.
    */
-  const isInitialPluginsLoad = isPending && isFetching;
+  const isInitialPluginsLoad =
+    isDeletedViewUndecided || (isPending && isFetching);
 
   return (
     <>

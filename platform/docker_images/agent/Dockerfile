@@ -22,7 +22,7 @@ RUN apt-get update -qq \
 # Rebuild the existing CLI release with the fixed module until upstream ships it.
 # Docker's hardened Go image has no curl or gzip: BuildKit fetches and checks the
 # source, and apt adds gzip to unpack it.
-FROM dhi.io/golang:1.27.4-debian13-dev@sha256:a56385e6b77b61ccaf807d5ea72d8593ad7a390fdd1c6552c4e127a90730b05f AS gh-build
+FROM dhi.io/golang:1.27.4-debian13-dev@sha256:121afb8b390b1d6babba8cd0a93eaf2ffa3735f835d388b9d79c2be38b41ee4f AS gh-build
 WORKDIR /src
 ADD --checksum=sha256:0eda9a553f1e191d7d63214dd1373f184a8f922b221387af510e63252c1d5419 \
     https://codeload.github.com/cli/cli/tar.gz/4f2cfe92e3499f8581bf39db77e0a1431fa7b55c \
@@ -42,7 +42,7 @@ RUN apt-get update \
  && /out/gh api --help >/dev/null \
  && /out/gh auth git-credential --help >/dev/null
 
-FROM dhi.io/node:24.22.3-debian13-dev@sha256:814292ce93474f3f95274f5b444cbc49af8c8d6b241340047749c1b3930083ed AS agent-base
+FROM dhi.io/node:24.22.3-debian13-dev@sha256:50fc8dd8255049096c6e23aada41ef8e7ffc0e1a7ba067a8c2300389e8e5c527 AS agent-base
 ARG TARGETARCH
 # DHI's apt mirror can serve a stale archive after its signed index changes.
 # Request fresh packages while retaining apt's index and archive verification.

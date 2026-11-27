@@ -258,6 +258,8 @@ export { default as pluginLabelsTable } from "./plugin-label";
 export { default as pluginSkillUsageEventsTable } from "./plugin-skill-usage-event";
 export { default as pluginTeamsTable } from "./plugin-team";
 export { default as pluginUsersTable } from "./plugin-user";
+export { default as pluginVersionsTable } from "./plugin-version";
+export { default as pluginVersionFilesTable } from "./plugin-version-file";
 export { default as processedEmailsTable } from "./processed-email";
 export {
   default as projectsTable,

@@ -37,6 +37,7 @@ import CreatedByModel, { lookupCreator } from "./created-by";
 import { PluginLabelModel } from "./entity-labels";
 import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
+import PluginVersionModel from "./plugin-version";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import type { ResourceAccessFilter } from "./resource-permission-subject";
 
@@ -432,6 +433,13 @@ class PluginModel {
       // SPDX-SnippetEnd
 
       const files = await insertFiles(tx, plugin.id, params.input.files);
+      // Where the plugin's history starts.
+      await PluginVersionModel.append(tx, {
+        pluginId: plugin.id,
+        contentHash,
+        files,
+        sourceCommit: params.source?.sha,
+      });
       return { ...plugin, files };
     });
     if (!created) return null;
@@ -590,7 +598,17 @@ class PluginModel {
         await tx
           .delete(schema.pluginFilesTable)
           .where(eq(schema.pluginFilesTable.pluginId, plugin.id));
-        await insertFiles(tx, plugin.id, fileUpdate);
+        const written = await insertFiles(tx, plugin.id, fileUpdate);
+        // A version per change to the files. A save that sends the same
+        // files again (a settings-only edit resends them) adds none.
+        if (contentHash !== existing.contentHash) {
+          await PluginVersionModel.append(tx, {
+            pluginId: plugin.id,
+            contentHash,
+            files: written,
+            sourceCommit: params.source?.sha ?? params.sourceSha,
+          });
+        }
       }
       const files = await findFilesWithTransaction(tx, plugin.id);
       return { ...plugin, files };
@@ -815,7 +833,15 @@ class PluginModel {
       await tx
         .delete(schema.pluginFilesTable)
         .where(eq(schema.pluginFilesTable.pluginId, params.id));
-      await insertFiles(tx, params.id, params.files);
+      const written = await insertFiles(tx, params.id, params.files);
+      // The applied update is a version, with the commit it came from. The
+      // update is only pending when the files differ, so it always adds one.
+      await PluginVersionModel.append(tx, {
+        pluginId: params.id,
+        contentHash,
+        files: written,
+        sourceCommit: params.expectedPendingSha,
+      });
       return plugin;
     });
     if (!applied) return null;

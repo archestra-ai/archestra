@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
+  createPaginatedResponseSchema,
   type GitProvider,
   gitHostFromUrl,
+  PaginationQuerySchema,
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
   parseLabelsParam,
   ResourceAccessQuerySchema,
@@ -19,6 +21,7 @@ import {
   PluginLabelModel,
   PluginModel,
   PluginTeamModel,
+  PluginVersionModel,
   TaskModel,
 } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
@@ -58,7 +61,9 @@ import {
   PluginGithubSyncIntervalSchema,
   PluginListItemSchema,
   PluginPlatformSchema,
+  PluginVersionDetailSchema,
   PluginWithFilesSchema,
+  SelectPluginVersionSchema,
   UpdatePluginSchema,
   UuidIdSchema,
 } from "@/types";
@@ -998,6 +1003,73 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (!plugin) throw new ApiError(404, "Plugin not found");
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.get(
+    "/api/plugins/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetPluginVersions,
+        description:
+          "List a plugin's version history, newest first, without the " +
+          "files. Every write that changes the files adds a version; " +
+          "version numbers are contiguous from 1. Paginated.",
+        tags: ["Plugins"],
+        params: PluginParamsSchema,
+        querystring: PaginationQuerySchema,
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectPluginVersionSchema),
+        ),
+      },
+    },
+    async ({ organizationId, user, params, query }, reply) => {
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "read",
+      });
+      return reply.send(
+        await PluginVersionModel.listForPlugin({
+          pluginId: params.id,
+          organizationId,
+          pagination: query,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/plugins/:id/versions/:version",
+    {
+      schema: {
+        operationId: RouteId.GetPluginVersion,
+        description:
+          "Get one immutable version of a plugin with the files it holds. " +
+          "To restore it, save those files to the plugin: that adds a new " +
+          "version and leaves the history as it is.",
+        tags: ["Plugins"],
+        params: PluginParamsSchema.extend({
+          version: z.coerce.number().int().min(1),
+        }),
+        response: constructResponseSchema(PluginVersionDetailSchema),
+      },
+    },
+    async ({ organizationId, user, params }, reply) => {
+      await requirePluginAction({
+        organizationId,
+        userId: user.id,
+        pluginId: params.id,
+        action: "read",
+      });
+      const version = await PluginVersionModel.findByPluginAndVersion({
+        pluginId: params.id,
+        organizationId,
+        version: params.version,
+      });
+      if (!version) throw new ApiError(404, "Plugin version not found");
+      return reply.send(version);
     },
   );
 

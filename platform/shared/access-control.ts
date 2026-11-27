@@ -2018,6 +2018,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetPlugin]: {},
   [RouteId.UpdatePlugin]: {},
   [RouteId.DeletePlugin]: {},
+  // Reading a plugin's history takes what reading the plugin takes.
+  [RouteId.GetPluginVersions]: {},
+  [RouteId.GetPluginVersion]: {},
   // Authorized per plugin by its grants, like the delete it undoes.
   [RouteId.RestorePlugin]: {},
   // Irreversible, so the handler narrows this to a built-in admin role, as

@@ -699,6 +699,14 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of plugin; parent (plugin) audited",
   },
+  pluginVersionsTable: {
+    audited: false,
+    reason: "child of plugin; immutable version snapshot, parent audited",
+  },
+  pluginVersionFilesTable: {
+    audited: false,
+    reason: "child of plugin version; immutable file snapshot",
+  },
   pluginTeamsTable: {
     audited: false,
     reason: "join: plugin × team; parent (plugin) audited",

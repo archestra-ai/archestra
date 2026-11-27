@@ -140200,6 +140200,215 @@ export type UpdatePluginResponses = {
 
 export type UpdatePluginResponse = UpdatePluginResponses[keyof UpdatePluginResponses];
 
+export type GetPluginVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/plugins/{id}/versions';
+};
+
+export type GetPluginVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPluginVersionsError = GetPluginVersionsErrors[keyof GetPluginVersionsErrors];
+
+export type GetPluginVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            pluginId: string;
+            version: number;
+            contentHash: string;
+            sourceCommit: string | null;
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetPluginVersionsResponse = GetPluginVersionsResponses[keyof GetPluginVersionsResponses];
+
+export type GetPluginVersionData = {
+    body?: never;
+    path: {
+        id: string;
+        version: number;
+    };
+    query?: never;
+    url: '/api/plugins/{id}/versions/{version}';
+};
+
+export type GetPluginVersionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPluginVersionError = GetPluginVersionErrors[keyof GetPluginVersionErrors];
+
+export type GetPluginVersionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        pluginId: string;
+        version: number;
+        contentHash: string;
+        sourceCommit: string | null;
+        createdAt: string;
+        files: Array<{
+            id: string;
+            versionId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            mode: '100644' | '100755';
+            digest: string;
+        }>;
+    };
+};
+
+export type GetPluginVersionResponse = GetPluginVersionResponses[keyof GetPluginVersionResponses];
+
 export type RestorePluginData = {
     body?: never;
     path: {

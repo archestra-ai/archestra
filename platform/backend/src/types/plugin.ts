@@ -184,6 +184,19 @@ export const PluginWithVisibilitySchema = PublicPluginSchema.extend({
   createdBy: CreatedByNullableSchema,
 });
 
+/** One version of a plugin's files, as the history lists it. */
+export const SelectPluginVersionSchema = createSelectSchema(
+  schema.pluginVersionsTable,
+);
+export const SelectPluginVersionFileSchema = createSelectSchema(
+  schema.pluginVersionFilesTable,
+  { encoding: PluginFileEncodingSchema, mode: PluginFileModeSchema },
+);
+/** A version with the files it holds. */
+export const PluginVersionDetailSchema = SelectPluginVersionSchema.extend({
+  files: z.array(SelectPluginVersionFileSchema),
+});
+
 export const PluginWithFilesSchema = PluginWithVisibilitySchema.extend({
   files: z.array(SelectPluginFileSchema),
 });
@@ -204,6 +217,8 @@ export const PluginListItemSchema = PluginWithVisibilitySchema.omit({
 
 export type Plugin = z.infer<typeof SelectPluginSchema>;
 export type PluginFile = z.infer<typeof SelectPluginFileSchema>;
+export type PluginVersion = z.infer<typeof SelectPluginVersionSchema>;
+export type PluginVersionFile = z.infer<typeof SelectPluginVersionFileSchema>;
 export type PluginFileInput = z.infer<typeof PluginFileInputSchema>;
 export type CreatePlugin = z.infer<typeof CreatePluginSchema>;
 export type UpdatePlugin = z.infer<typeof UpdatePluginSchema>;

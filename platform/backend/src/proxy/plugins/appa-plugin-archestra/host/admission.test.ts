@@ -68,6 +68,7 @@ async function admission(params: {
   };
 }
 
+/** The soft-block setting that used to waive client refusals. */
 function waiveClientRefusals() {
   config.openappa.breakTheGlassOverrides = { unapprovableBlockMode: "allow" };
 }
@@ -84,26 +85,35 @@ function sessionOf(
   };
 }
 
-test("a client-side refusal proceeds ungoverned only when blocked calls are allowed", async ({
+test("an unrecognized client is blocked whatever the soft-block setting says, and bypassed without a session when allowed", async ({
   makeAgent,
   makeUser,
 }) => {
   const agent = await makeAgent();
   const user = await makeUser();
-  const unrecognizedClient = () =>
-    admission({ agent, principal: { authenticatedUserId: user.id } });
-  config.openappa.breakTheGlassOverrides = { unapprovableBlockMode: "refuse" };
-  await expect(
-    admitOpenappaRequest(await unrecognizedClient()),
-  ).rejects.toMatchObject({ statusCode: 400 });
+  const unrecognizedClient = (
+    unsupportedClientAction: AdmissionParams["deployment"]["unsupportedClientAction"],
+  ) =>
+    admission({
+      agent,
+      principal: { authenticatedUserId: user.id },
+      overrides: {
+        deployment: { active: true, observing: false, unsupportedClientAction },
+      },
+    });
+  const session = sessionOf(agent, `user:${user.id}`);
+  for (const mode of ["refuse", "allow"] as const) {
+    config.openappa.breakTheGlassOverrides = { unapprovableBlockMode: mode };
+    await expect(
+      admitOpenappaRequest(await unrecognizedClient("block")),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(await isUnenforcedSession(session), mode).toBe(false);
+  }
 
-  waiveClientRefusals();
-  expect(await admitOpenappaRequest(await unrecognizedClient())).toEqual({
-    kind: "ungoverned",
-  });
-  expect(await isUnenforcedSession(sessionOf(agent, `user:${user.id}`))).toBe(
-    true,
-  );
+  expect(
+    await admitOpenappaRequest(await unrecognizedClient("bypass")),
+  ).toEqual({ kind: "ungoverned" });
+  expect(await isUnenforcedSession(session)).toBe(false);
 });
 
 test("a server or storage failure during admission propagates and the session stays enforced", async ({
@@ -328,6 +338,7 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
         organization_id: agent.organizationId,
         caller_id: `user:${user.id}`,
         session_id: `user:${user.id}|${workloadName}`,
+        presenter: "runtime",
       },
       identity: {
         sessionId: workloadName,
@@ -336,6 +347,44 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
       facts: {
         agentRuntimeRun: true,
         runtimeSessionId: `user:${user.id}|${workloadName}`,
+      },
+    });
+
+    // The same user naming the runtime's session without its binding reaches
+    // the same scoped id, which only the run's binding may open.
+    await expect(
+      admitOpenappaRequest(
+        await admission({
+          agent,
+          principal: { authenticatedUserId: user.id },
+          headers: {
+            ...grokHeaders,
+            "x-grok-session-id": workloadName,
+            "x-appa-session-id": workloadName,
+          },
+          overrides: { body: grokBody, originalRequest: grokBody },
+        }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    // A session of the same user that names no workspace is attended.
+    const attended = await admitOpenappaRequest(
+      await admission({
+        agent,
+        principal: { authenticatedUserId: user.id },
+        headers: {
+          ...grokHeaders,
+          "x-grok-session-id": "foreground",
+          "x-appa-session-id": "foreground",
+        },
+        overrides: { body: grokBody, originalRequest: grokBody },
+      }),
+    );
+    expect(attended).toMatchObject({
+      kind: "governed",
+      session: {
+        session_id: `user:${user.id}|foreground`,
+        presenter: "attended",
       },
     });
 
@@ -367,6 +416,30 @@ test("admits and observes Grok Agent Runtime sessions under the bound workspace 
         agentRuntimeRun: true,
       },
     });
+
+    // Off, an unbound request naming the run's workspace is not recorded
+    // under it: the run did not start while Guardrails were off.
+    const unboundObserved = await admitOpenappaRequest(
+      await admission({
+        agent,
+        principal: { authenticatedUserId: user.id },
+        headers: {
+          ...grokHeaders,
+          "x-grok-session-id": workloadName,
+          "x-appa-session-id": workloadName,
+        },
+        overrides: {
+          body: grokBody,
+          originalRequest: grokBody,
+          deployment: {
+            active: false,
+            observing: true,
+            unsupportedClientAction: "bypass",
+          },
+        },
+      }),
+    );
+    expect(unboundObserved.kind).toBe("ungoverned");
   } finally {
     config.openappa.offerSigningSecret = priorSecret;
   }

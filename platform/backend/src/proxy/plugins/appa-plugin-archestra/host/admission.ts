@@ -17,7 +17,6 @@ import {
   type OpenAppaSession,
   sessionFromHeaders,
 } from "@/openappa/service";
-import { waiveSoftBlock } from "@/openappa/soft-block";
 import {
   APPA_SUBAGENT_BINDING_HEADER,
   verifySubagentBinding,
@@ -41,13 +40,11 @@ import {
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
-import type {
-  AppaClientAdapter,
-  AppaTrustedContext,
-} from "@/proxy/plugins/appa-plugin-archestra/types";
+import type { AppaTrustedContext } from "@/proxy/plugins/appa-plugin-archestra/types";
 import { withCallerScope } from "@/proxy/plugins/appa-plugin-archestra/utils";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import {
+  isRuntimeWorkspaceSession,
   RUNTIME_BINDING_HEADER,
   resolveRuntimeIdentityByVirtualKeys,
   resolveRuntimeSessionForWorkspace,
@@ -178,53 +175,7 @@ export async function resolveDisconnectBypass(params: {
  * enforced deployment. Fills the APPA session headers in `request.headers`
  * that the plugin and the provider-bound request read.
  */
-export async function admitOpenappaRequest(
-  params: Parameters<typeof governedAdmission>[0],
-): Promise<OpenappaAdmission> {
-  try {
-    return await governedAdmission(params);
-  } catch (error) {
-    const principal = params.principal;
-    // The proxy's platform credential and Chat ownership checks remain mandatory.
-    // Expired/missing APPA lineage is an integration refusal, not platform auth.
-    // A server or storage failure says nothing about the session, so only a
-    // client-side (4xx) refusal can be waived.
-    if (
-      !(error instanceof ApiError) ||
-      error.statusCode < 400 ||
-      error.statusCode >= 500 ||
-      error.statusCode === 401 ||
-      error.message.startsWith("OpenAPPA Chat session") ||
-      !params.deployment.active
-    )
-      throw error;
-    const caller = principal.authenticatedUserId
-      ? `user:${principal.authenticatedUserId}`
-      : principal.authenticatedApp
-        ? `app:${principal.authenticatedApp.id}`
-        : principal.virtualKeyId
-          ? `virtual-key:${principal.virtualKeyId}`
-          : params.inProcessRequest && principal.userId
-            ? `user:${principal.userId}`
-            : undefined;
-    if (!caller) throw error;
-    const raw = params.request.headers[APPA_SESSION_HEADER.toLowerCase()];
-    const id =
-      typeof raw === "string" && isWellFormedAppaId(raw)
-        ? raw
-        : params.agent.id;
-    const session = {
-      organization_id: params.agent.organizationId,
-      caller_id: caller,
-      session_id: scopedSessionId(caller, id),
-    };
-    if (!(await waiveSoftBlock(session, "session_admission", error.message)))
-      throw error;
-    return { kind: "ungoverned" };
-  }
-}
-
-async function governedAdmission(params: {
+export async function admitOpenappaRequest(params: {
   request: FastifyRequest;
   body: unknown;
   /** The request body the plugin reads, as the request adapter holds it. */
@@ -400,15 +351,16 @@ async function governedAdmission(params: {
         : "OpenAPPA runtime binding does not match this run",
     );
   }
-  const runtimeSession =
+  const runtimeWorkspace =
     runtimeIdentity && runtimeBindingMatches
-      ? (
-          await resolveRuntimeSessionForWorkspace({
-            organizationId: runtimeIdentity.organizationId,
-            workspaceId: runtimeIdentity.workspaceId,
-          })
-        )?.session
+      ? await resolveRuntimeSessionForWorkspace({
+          organizationId: runtimeIdentity.organizationId,
+          workspaceId: runtimeIdentity.workspaceId,
+        })
       : undefined;
+  const runtimeSession: OpenAppaSession | undefined = runtimeWorkspace
+    ? { ...runtimeWorkspace.session, presenter: "runtime" }
+    : undefined;
   // A bound subagent ends its turns the way a runtime workspace does: its
   // return is keyed by the spawn call that opened it.
   const runtimeSessionId =
@@ -607,6 +559,21 @@ async function governedAdmission(params: {
       }
       // The launcher stored the authenticated parent before giving the pod data.
       session = runtimeSession;
+    } else if (session && !subagentBinding) {
+      // No binding vouches for this request: it may neither continue a family
+      // an Agent Runtime run opened nor open the one a run's workspace owns.
+      if (
+        await isRuntimeWorkspaceSession({
+          organizationId: agent.organizationId,
+          sessionId: session.session_id,
+        })
+      ) {
+        throw new ApiError(
+          409,
+          "This OpenAPPA session belongs to an Agent Runtime run; only a request carrying that run's binding opens it",
+        );
+      }
+      session = { ...session, presenter: "attended" };
     }
     if (!session)
       throw new ApiError(
@@ -652,35 +619,16 @@ async function governedAdmission(params: {
       session = { ...session, fork_of: scopedSessionId(callerId, forkOf) };
       trajectory.session = session;
     }
-    const unenforcedReason = await unenforcedSessionReason(trajectory.session);
-    if (unenforcedReason) {
-      // The session started while enforcement was off, or a person
-      // superyelled it. OpenAPPA never governs it: the request goes on as
-      // if enforcement were off.
+    if (await unenforcedSessionReason(trajectory.session)) {
+      // The session started while enforcement was off. OpenAPPA never
+      // governs it: the request goes on as if enforcement were off.
       logger.info(
         { sessionId: session.session_id },
-        "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
+        "OpenAPPA ignores a session that started while Guardrails enforcement was off",
       );
-      const withdrawnChildReturn =
-        trajectory.session.parent_id && !ingress.clientCompaction
-          ? { withdrawnChildReturn: true as const }
-          : {};
-      // A child that inherited its waiver never had a governed shape to keep.
-      const ranGoverned =
-        unenforcedReason === "superyell" &&
-        (await OpenAppaSessionModel.find({
-          organizationId: trajectory.session.organization_id,
-          sessionId: trajectory.session.session_id,
-        })) !== null;
-      return ranGoverned
-        ? {
-            kind: "waived",
-            identity,
-            adapter: trajectory.adapter,
-            facts,
-            ...withdrawnChildReturn,
-          }
-        : { kind: "ungoverned", ...withdrawnChildReturn };
+      return trajectory.session.parent_id && !ingress.clientCompaction
+        ? { kind: "ungoverned", withdrawnChildReturn: true }
+        : { kind: "ungoverned" };
     }
     // A side review, such as a Codex auto-review, copies the history of the
     // session it reviews into a thread of its own. When that session is out
@@ -699,7 +647,7 @@ async function governedAdmission(params: {
           sessionId: session.session_id,
           reviewedSessionId: reviewed.session_id,
         },
-        "OpenAPPA ignores a side review of a session that started while Guardrails enforcement was off or was superyelled",
+        "OpenAPPA ignores a side review of a session that started while Guardrails enforcement was off",
       );
       return { kind: "ungoverned" };
     }
@@ -761,7 +709,23 @@ async function governedAdmission(params: {
       platformLoopback,
       agentRuntimeRun: boundRuntimeIdentity !== null,
     });
-    if (observedSession)
+    // A run's workspace session is recorded only for the run itself: an
+    // unbound request recorded under it would mark the run started while off.
+    if (
+      observedSession &&
+      (boundRuntimeIdentity !== null ||
+        !(await isRuntimeWorkspaceSession({
+          organizationId: agent.organizationId,
+          sessionId: observedSession.session_id,
+        }).catch((error) => {
+          // Off, nothing governs the turn: an unknown owner only goes unrecorded.
+          logger.warn(
+            { err: error, sessionId: observedSession.session_id },
+            "OpenAPPA could not check the observed session against Agent Runtime workspaces",
+          );
+          return true;
+        })))
+    )
       return {
         kind: "observed",
         trustedContext: {
@@ -783,16 +747,7 @@ async function governedAdmission(params: {
 export type OpenappaAdmission =
   | {
       kind: "ungoverned";
-      /** Verified waived child, whose earlier return instructions no longer apply. */
-      withdrawnChildReturn?: true;
-    }
-  /** Out of OpenAPPA for good, and keeps the request shape it had while governed. */
-  | {
-      kind: "waived";
-      identity: AppaSessionIdentity;
-      adapter: AppaClientAdapter | undefined;
-      facts: AdmissionFacts;
-      /** Earlier return instructions must be withdrawn even without a binding. */
+      /** A child out of OpenAPPA, whose earlier return instructions no longer apply. */
       withdrawnChildReturn?: true;
     }
   /** Enforcement is off; OpenAPPA records the session for when it turns on. */
@@ -987,6 +942,7 @@ async function recordedReviewedSession(
   const scope = {
     organization_id: session.organization_id,
     ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+    ...(session.presenter ? { presenter: session.presenter } : {}),
   };
   const requester = withCallerScope(session, reviewed.requesterId);
   if (requester === reviewed.rootSessionId)

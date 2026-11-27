@@ -4,6 +4,7 @@ import type {
   ComposedPolicy,
   DispatchPolicy,
   HelperBindingInput,
+  LineRefusal,
   BatteryPackage as NativeBatteryPackage,
   PolicyDeclarations,
   TokenEnvReader,
@@ -12,6 +13,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import { OpenappaCredentialError } from "@/openappa/failure";
@@ -550,6 +552,42 @@ class OpenAppaDeclarations {
   }
 
   /**
+   * What a save says about the lines a composed document serves besides
+   * Enforce: a line that cannot carry its approvers serves the document alone,
+   * and sessions meant for it follow Enforce. Composed under `settings`, or
+   * under the stored enforced marks for every line, as a dispatch composes it.
+   */
+  async lineWarnings(
+    content: string,
+    settings?: {
+      enforcedMarks: string[];
+      lines: ReadonlySet<LineRefusal["variant"]>;
+    },
+  ): Promise<string[]> {
+    const native = await loadNative();
+    const enforcedMarks =
+      settings?.enforcedMarks ??
+      (await GuardrailsDeploymentModel.get()).enforcedMarks ??
+      [];
+    const { refusals, withheld } = await native.checkOpenappaLines(
+      content,
+      enforcedMarks,
+      settings && [...settings.lines],
+    );
+    return [
+      ...refusals.map(({ variant, error }) =>
+        variant === "observe"
+          ? `Observe can't run with this policy, so new sessions follow Enforce: ${error}`
+          : `Automatic approval for requests a person would answer can't run with this policy, so those requests still ask a person: ${error}`,
+      ),
+      ...withheld.map(
+        ({ mark, enforcedTools, otherTools }) =>
+          `Mark ${JSON.stringify(mark)} is withheld because ${toolList("the enforced", enforcedTools)} may require it, so the approvers Observe and automatic approval add skip it for every tool, including ${toolList("untagged", otherTools)}.`,
+      ),
+    ];
+  }
+
+  /**
    * The document with the values of the credentials the runtime reads itself:
    * the `[credentials]` variables an external or profile names as its
    * `token_env`, resolved for the organization now, so a value set, rotated or
@@ -787,5 +825,11 @@ export function grantKey(grant: Pick<Grant, "battery" | "variable">): string {
 }
 
 const loadNative = () => import("@archestra/openappa-rs");
+
+/** `the enforced tool "a"`, or `untagged tools "a", "b"`. */
+function toolList(qualifier: string, tools: string[]): string {
+  const names = tools.map((tool) => JSON.stringify(tool)).join(", ");
+  return `${qualifier} ${tools.length === 1 ? "tool" : "tools"} ${names}`;
+}
 
 const RESOLVE_CONCURRENCY = 4;

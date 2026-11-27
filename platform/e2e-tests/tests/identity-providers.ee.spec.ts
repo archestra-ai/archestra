@@ -757,6 +757,18 @@ test.describe("Identity Provider Team Sync E2E", () => {
       .click();
 
     await teamDialog.getByRole("button", { name: /Link a group/ }).click();
+    // A link is scoped to one identity provider and defaults to the first
+    // one listed. Other specs create providers too, so pick ours explicitly.
+    const providerSelect = teamDialog.getByRole("combobox", {
+      name: "Identity provider",
+    });
+    if (await providerSelect.isVisible()) {
+      await providerSelect.click();
+      await page
+        .getByRole("option", { name: providerName, exact: true })
+        .click();
+      await expect(providerSelect).toHaveText(providerName);
+    }
     await teamDialog
       .getByRole("textbox", { name: "Group identifier" })
       .fill(externalGroup);
@@ -1258,6 +1270,8 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
     // Configure attribute mapping to match Keycloak's SAML attribute names
     // These match the simple attribute names configured in helm/e2e-tests/values.yaml
     // Keycloak sends: email, firstName, lastName, name
+    // The mapping fields live on their own tab of the provider dialog.
+    await openIdentityProviderDialogSection(page, "attribute-mapping");
     await page.getByLabel("Email Attribute").fill("email");
     await page.getByLabel("Display Name Attribute").fill("name");
     await page.getByLabel("First Name Attribute (Optional)").fill("firstName");

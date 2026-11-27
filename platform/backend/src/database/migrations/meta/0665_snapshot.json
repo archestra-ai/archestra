@@ -1,5 +1,5 @@
 {
-  "id": "90c00b45-392c-42e0-8d3b-4bbf02007b06",
+  "id": "4635ed94-716f-4b2e-993e-8cd46bc212b2",
   "prevId": "b0b12169-769b-45c3-818c-35529fbbef15",
   "version": "7",
   "dialect": "postgresql",
@@ -12345,6 +12345,24 @@
           "type": "text",
           "primaryKey": true,
           "notNull": true
+        },
+        "mode": {
+          "name": "mode",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "person_approval": {
+          "name": "person_approval",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enforced_marks": {
+          "name": "enforced_marks",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
         },
         "enabled": {
           "name": "enabled",
@@ -32004,12 +32022,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::jsonb"
-        },
-        "frontmatter_source": {
-          "name": "frontmatter_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "source_type": {
           "name": "source_type",

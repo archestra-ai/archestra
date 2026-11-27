@@ -77,8 +77,43 @@ describe("buildGuardrails", () => {
         "/openappa/policy?line=4",
       ],
     ]);
-    expect(guardrails?.labelAt(BASE + 6_000)?.trust).toBe("trusted");
-    expect(guardrails?.labelAt(BASE + 8_000)?.trust).toBe("suspicious");
+    // The session_start record is the baseline, so it is recorded, not inferred.
+    expect(guardrails?.labelAt(BASE + 6_000)).toEqual({
+      trust: "trusted",
+      audience: expect.any(String),
+      inferred: false,
+    });
+    expect(guardrails?.labelAt(BASE + 8_000)).toEqual({
+      trust: "suspicious",
+      audience: expect.any(String),
+      inferred: false,
+    });
+  });
+
+  it("infers the baseline only for rows before the first label record", () => {
+    const guardrails = buildGuardrails({
+      timeline: timeline(),
+      consults: [],
+      labelChanges: [
+        change({
+          event: "tool_result",
+          at: 7_000,
+          callId: "call:toolu_read",
+          trustAfter: "suspicious",
+        }),
+      ],
+    });
+
+    expect(guardrails?.labelAt(BASE + 6_000)).toEqual({
+      trust: "trusted",
+      audience: expect.any(String),
+      inferred: true,
+    });
+    expect(guardrails?.labelAt(BASE + 8_000)).toEqual({
+      trust: "suspicious",
+      audience: expect.any(String),
+      inferred: false,
+    });
   });
 
   it("blames the request that asked for a client-run tool when no tool call was logged", () => {
@@ -174,7 +209,7 @@ describe("buildGuardrails", () => {
     expect(labelChange?.target).toEqual({ type: "request", key: "asks" });
   });
 
-  it("places yells on their calls and turns guardrails off at the first superyell", () => {
+  it("places yells on their calls, superyells among them", () => {
     const guardrails = buildGuardrails({
       timeline: timeline(),
       consults: [],
@@ -200,7 +235,6 @@ describe("buildGuardrails", () => {
       ["yell:off", "tool:write", true],
       ["yell:late", null, true],
     ]);
-    expect(guardrails?.guardrailsOffAt).toBe(BASE + 12_000);
   });
 
   it("has nothing to show without checks or a label history", () => {

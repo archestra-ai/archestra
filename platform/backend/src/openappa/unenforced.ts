@@ -1,7 +1,5 @@
 import { TimeInMs } from "@archestra/shared/consts";
 import { LRUCacheManager } from "@/cache-manager";
-import type db from "@/database";
-import type { Transaction } from "@/database";
 import logger from "@/logging";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
@@ -10,14 +8,9 @@ import type { OpenAppaSession } from "@/openappa/service";
 import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
-  UnenforcedCallReason,
+  ExemptCallReason,
   UnenforcedSessionReason,
 } from "@/types/openappa-unenforced";
-import {
-  rememberSoftBlockWaiver,
-  softBlocksAllowed,
-  softBlockWaivedLocally,
-} from "./soft-block";
 
 /**
  * What OpenAPPA did not see while Guardrails enforcement was off.
@@ -62,7 +55,7 @@ export async function observeUnenforcedSession(
 
 /**
  * Whether the session, or the parent that started it, started while
- * enforcement was off, or was superyelled. A record counts only for the same parent, so a root
+ * enforcement was off. A record counts only for the same parent, so a root
  * whose id spells a recorded child's id is not that child. A child of such a
  * parent is recorded too, so its own children follow it. A session the
  * runtime already governs is not: its record lost a race with the session's
@@ -75,34 +68,16 @@ export async function startedUnenforced(
   return (await unenforcedSessionReason(session)) !== null;
 }
 
-/**
- * Why `startedUnenforced` would say yes, or null. A `superyell` session may
- * have run governed before, so its requests keep the shape they had then.
- */
+/** Why `startedUnenforced` would say yes, or null. */
 export async function unenforcedSessionReason(
   session: OpenAppaSession,
 ): Promise<UnenforcedSessionReason | null> {
-  if (await softBlockWaivedLocally(session)) {
-    // An inherited waiver must become this session's own waiver so its
-    // children and forks can discover it without walking arbitrary ancestry.
-    rememberSoftBlockWaiver(session);
-    try {
-      await superyellSession(session);
-    } catch (error) {
-      logger.warn(
-        { err: error },
-        "Could not persist the inherited soft-block waiver; the local session remains waived",
-      );
-    }
-    return "superyell";
-  }
   const decision = await decideUnenforced(session);
   if (decision.unenforced && decision.record) {
     await OpenAppaUnenforcedModel.recordSession({
       organizationId: session.organization_id,
       sessionId: session.session_id,
       parentId: session.parent_id,
-      ...(decision.record === "superyell" ? { reason: "superyell" } : {}),
     });
   }
   return decision.unenforced ? decision.reason : null;
@@ -117,32 +92,7 @@ export async function unenforcedSessionReason(
 export async function isUnenforcedSession(
   session: OpenAppaSession,
 ): Promise<boolean> {
-  return (
-    (await softBlockWaivedLocally(session)) ||
-    (await decideUnenforced(session)).unenforced
-  );
-}
-
-/**
- * Takes a governed session out of OpenAPPA after a person approved a
- * `superyell` in it. From its next request on, the proxy treats it like a
- * session that started while enforcement was off: OpenAPPA no longer checks
- * its calls, its label no longer applies, and the children it starts are out
- * too. Unlike a record of enforcement being off, this one is never deleted.
- */
-export async function superyellSession(
-  session: OpenAppaSession,
-  executor?: typeof db | Transaction,
-): Promise<void> {
-  await OpenAppaUnenforcedModel.recordSession(
-    {
-      organizationId: session.organization_id,
-      sessionId: session.session_id,
-      parentId: session.parent_id,
-      reason: "superyell",
-    },
-    executor,
-  );
+  return (await decideUnenforced(session)).unenforced;
 }
 
 /**
@@ -153,7 +103,7 @@ export async function recordUnenforcedCalls(params: {
   organizationId: string;
   sessionId: string;
   toolCallIds: readonly string[];
-  reason: UnenforcedCallReason;
+  reason: ExemptCallReason;
   childNativeId?: string;
 }): Promise<void> {
   const fresh = unrecordedCallIds(params);
@@ -166,34 +116,6 @@ export async function recordUnenforcedCalls(params: {
     ...(params.childNativeId ? { childNativeId: params.childNativeId } : {}),
   });
   rememberRecordedCalls({ ...params, toolCallIds: fresh });
-}
-
-/**
- * The ids among `toolCallIds` (without their trajectory stamps) that this
- * process has not recorded for the session yet.
- */
-export function unrecordedCallIds(params: {
-  organizationId: string;
-  sessionId: string;
-  toolCallIds: readonly string[];
-}): string[] {
-  return [...new Set(params.toolCallIds.map(withoutTrajectoryStamp))].filter(
-    (id) => !recordedCalls.get(recordedCallKey(params, id)),
-  );
-}
-
-/**
- * Notes that the records of these ids are committed. Only a committed record
- * is remembered: a record that failed to write keeps the fail-closed
- * behavior, and the next request tries again.
- */
-export function rememberRecordedCalls(params: {
-  organizationId: string;
-  sessionId: string;
-  toolCallIds: readonly string[];
-}): void {
-  for (const id of params.toolCallIds)
-    recordedCalls.set(recordedCallKey(params, id), true);
 }
 
 /**
@@ -240,7 +162,7 @@ export async function findUnenforcedCalls(params: {
 /** What a session's records say about the calls of one request. */
 export type UnenforcedCalls = {
   /** Why the runtime did not see each recorded call, by call id. */
-  reasons: ReadonlyMap<string, UnenforcedCallReason>;
+  reasons: ReadonlyMap<string, ExemptCallReason>;
   /**
    * The children that ran while enforcement was off: of a recorded spawn, or
    * started then.
@@ -267,52 +189,57 @@ export async function deleteExpiredUnenforcedRecords(
 // ===
 
 /**
+ * The ids among `toolCallIds` (without their trajectory stamps) that this
+ * process has not recorded for the session yet.
+ */
+function unrecordedCallIds(params: {
+  organizationId: string;
+  sessionId: string;
+  toolCallIds: readonly string[];
+}): string[] {
+  return [...new Set(params.toolCallIds.map(withoutTrajectoryStamp))].filter(
+    (id) => !recordedCalls.get(recordedCallKey(params, id)),
+  );
+}
+
+/**
+ * Notes that the records of these ids are committed. Only a committed record
+ * is remembered: a record that failed to write keeps the fail-closed
+ * behavior, and the next request tries again.
+ */
+function rememberRecordedCalls(params: {
+  organizationId: string;
+  sessionId: string;
+  toolCallIds: readonly string[];
+}): void {
+  for (const id of params.toolCallIds)
+    recordedCalls.set(recordedCallKey(params, id), true);
+}
+
+/**
  * The decision behind `startedUnenforced`, and the record it would write so
  * the session's own children follow it.
  */
-async function decideUnenforced(session: OpenAppaSession): Promise<
+async function decideUnenforced(
+  session: OpenAppaSession,
+): Promise<
   | { unenforced: false }
-  | {
-      unenforced: true;
-      reason: UnenforcedSessionReason;
-      record?: UnenforcedSessionReason;
-    }
+  | { unenforced: true; reason: UnenforcedSessionReason; record?: true }
 > {
   const recorded = await OpenAppaUnenforcedModel.findSessions({
     organizationId: session.organization_id,
     sessionIds: [
       session.session_id,
       ...(session.parent_id ? [session.parent_id] : []),
-      ...((await softBlocksAllowed()) && session.fork_of
-        ? [session.fork_of]
-        : []),
     ],
   });
-  if (
-    (await softBlocksAllowed()) &&
-    session.fork_of &&
-    recorded.some(
-      (row) => row.sessionId === session.fork_of && row.reason === "superyell",
-    )
-  ) {
-    return { unenforced: true, reason: "superyell", record: "superyell" };
-  }
-  const ownRow = recorded.find(
+  const own = recorded.some(
     (row) =>
       row.sessionId === session.session_id &&
       (row.parentId ?? undefined) === session.parent_id,
   );
-  const parentRow = recorded.find((row) => row.sessionId === session.parent_id);
-  const own = ownRow !== undefined;
-  const parent = parentRow !== undefined;
+  const parent = recorded.some((row) => row.sessionId === session.parent_id);
   if (!own && !parent) return { unenforced: false };
-  // A person superyelled the session or its parent: it stays out of OpenAPPA
-  // although the runtime governed it before.
-  if (ownRow?.reason === "superyell")
-    return { unenforced: true, reason: "superyell" };
-  if (!own && parentRow?.reason === "superyell") {
-    return { unenforced: true, reason: "superyell", record: "superyell" };
-  }
   // One lookup for the session and its parent in the runtime's own rows.
   const governed = await OpenAppaSessionModel.startedSessionIds({
     organizationId: session.organization_id,
@@ -328,11 +255,7 @@ async function decideUnenforced(session: OpenAppaSession): Promise<
     if (session.parent_id && governed.has(session.parent_id)) {
       return { unenforced: false };
     }
-    return {
-      unenforced: true,
-      reason: "enforcement_off",
-      record: "enforcement_off",
-    };
+    return { unenforced: true, reason: "enforcement_off", record: true };
   }
   return { unenforced: true, reason: "enforcement_off" };
 }

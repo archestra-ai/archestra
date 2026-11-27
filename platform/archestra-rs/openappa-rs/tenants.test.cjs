@@ -38,7 +38,7 @@ async function endpoint(t, body) {
   return { url: `http://127.0.0.1:${server.address().port}`, authorizations };
 }
 
-const scope = (organization_id) => ({ organization_id, caller_id: 'user:test', session_id: randomUUID() });
+const scope = (organization_id) => ({ organization_id, presenter: 'attended', caller_id: 'user:test', session_id: randomUUID() });
 const hook = async (session, event, policy) =>
   JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
 const call = (session, id, tool, policy) =>
@@ -199,7 +199,7 @@ test('two organizations concurrently start sessions under one client session id,
   const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
   const session_id = randomUUID();
-  const orgA = { organization_id: `shared-id-a-${randomUUID()}`, caller_id: 'user:test', session_id };
+  const orgA = { organization_id: `shared-id-a-${randomUUID()}`, presenter: 'attended', caller_id: 'user:test', session_id };
   const orgB = { ...orgA, organization_id: `shared-id-b-${randomUUID()}` };
   const started = await Promise.all([orgA, orgB].map((session) => hook(session, { event: 'session_start' }, policy)));
   assert.deepEqual(started.map(({ decision }) => decision), ['ack', 'ack']);

@@ -9,25 +9,21 @@
 //! sanitizer returns the body unchanged, so a step that expects `hitl` takes the offer and
 //! its file goes on. Only allowlisted authority and sanitizer bindings can be replayed.
 use appa_runtime::{
-    api::{
-        ConsultRecord, ConsultTranscriber, ExternalOutcome, ExternalRole, OfferKind, Remedies,
-        Runtime,
-    },
+    api::{ExternalRole, Remedies, Runtime},
     config::{Config, HostDefaults, Implementation},
-    replay::{self, Got, StepOutcome, Taken, Trace, TraceReport, Verdict},
+    replay::{self, Got, StepOutcome, Trace, TraceReport, Verdict},
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashSet},
     path::Path,
-    sync::{Arc, Mutex, MutexGuard, PoisonError},
     time::Instant,
 };
 
 use crate::deployments::HostCredentials;
 
 pub(crate) const ENGINE_VERSION: &str =
-    "d3e63d121917c5c029ab569b5f73a6de44350cbb:archestra-live-v3";
+    "061900a84cb3913419e703730f729199115f22c9:archestra-live-v3";
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 /// A root policy can be 1 MiB, and composition adds its batteries' contracts to it.
@@ -215,9 +211,15 @@ struct StepResult {
     /// Why a blocked call was blocked: the reasons its feedback lists under `Why:`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     reasons: Vec<String>,
-    /// The call ran as proposed, or once the model accepted the narrowing it makes.
-    #[serde(skip)]
-    released: bool,
+    /// For a step that could not run, the externals its consults asked without an answer.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    unanswered: Vec<UnansweredExternal>,
+}
+
+#[derive(Serialize)]
+struct UnansweredExternal {
+    role: ExternalRole,
+    name: String,
 }
 
 fn cannot_run(path: String, assertion_count: usize, error: String) -> FileResult {
@@ -233,7 +235,7 @@ fn cannot_run(path: String, assertion_count: usize, error: String) -> FileResult
 
 /// The runtime a replay runs on: the effective policy compiled as a dispatch compiles it,
 /// over a log that lives in memory for the run.
-fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying, String> {
+fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Runtime, String> {
     let credentials = HostCredentials::new(request.credentials.clone());
     let config = Config::hosted(&request.content, defaults, |var| credentials.lookup(var))
         .map_err(|error| format!("The effective policy cannot load: {error}"))?;
@@ -253,7 +255,6 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
     {
         return Err("Validation supports only built-in authorities and sanitizers.".into());
     }
-    let unanswered = Arc::new(Unanswered::default());
     // The deployment `appa replay` runs, under the Archestra adapter: no person is asked,
     // since every authority and sanitizer is answered in process.
     let runtime = Runtime::open_in_memory_as(
@@ -262,75 +263,20 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
         crate::adapter::adapter(),
         Remedies::StandIn,
     )
-    .map_err(|error| error.to_string())?
-    .transcribing(unanswered.clone());
-    let runtime = match &request.annotator_context {
+    .map_err(|error| error.to_string())?;
+    Ok(match &request.annotator_context {
         Some(context) => runtime.with_archestra_context(context.clone()),
         None => runtime,
-    };
-    Ok(Replaying {
-        runtime,
-        unanswered,
     })
 }
 
-struct Replaying {
-    runtime: Runtime,
-    unanswered: Arc<Unanswered>,
-}
-
-/// The audience sources that gave no answer, in order. An unanswered annotator refuses
-/// its call, which the runner already reports as `cannot_run`; an unanswered context
-/// provider leaves the annotator asked without its context. An unanswered
-/// audience source instead denies the call, which a `deny` expectation would take as a pass.
-#[derive(Default)]
-struct Unanswered(Mutex<Vec<String>>);
-
-impl ConsultTranscriber for Unanswered {
-    fn record(&self, record: ConsultRecord) {
-        if let (ExternalRole::AudienceSource, ExternalOutcome::NoAnswer(_)) =
-            (record.role, record.outcome)
-        {
-            self.entries().push(record.external_name);
-        }
-    }
-}
-
-impl Unanswered {
-    fn entries(&self) -> MutexGuard<'_, Vec<String>> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-}
-
-/// Replay one trace. A call needing an answer that did not come is not released, so after
-/// an unanswered audience source the first step whose call was not released as proposed
-/// cannot run and ends the file. Steps before it were released without one.
-async fn replay_trace(replaying: &Replaying, trace: &Trace) -> Vec<FileResult> {
-    let mark = replaying.unanswered.entries().len();
-    let mut results: Vec<FileResult> = replay::run(&replaying.runtime, std::slice::from_ref(trace))
+/// Replay one trace.
+async fn replay_trace(runtime: &Runtime, trace: &Trace) -> Vec<FileResult> {
+    replay::run(runtime, std::slice::from_ref(trace))
         .await
         .into_iter()
         .map(|report| result(trace, report))
-        .collect();
-    let Some(source) = replaying.unanswered.entries().get(mark).cloned() else {
-        return results;
-    };
-    for file in &mut results {
-        let Some(at) = file.steps.iter().position(|step| !step.released) else {
-            continue;
-        };
-        file.steps.truncate(at + 1);
-        let step = &mut file.steps[at];
-        if step.status != Status::CannotRun {
-            step.status = Status::CannotRun;
-            step.actual = None;
-            step.error = Some(format!(
-                "audience source {source:?} gave no answer at or before this call, so replay cannot decide it"
-            ));
-        }
-        file.status = Status::CannotRun;
-    }
-    results
+        .collect()
 }
 
 fn result(trace: &Trace, report: TraceReport) -> FileResult {
@@ -344,20 +290,6 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
         .into_iter()
         .map(|step| {
             let expected = step.check.to_string();
-            let released = match &step.outcome {
-                StepOutcome::Passed { got, taken } | StepOutcome::Observed { got, taken } => {
-                    *got == Got::Allowed
-                        || matches!(
-                            taken,
-                            Some(Taken {
-                                offer: OfferKind::Accept,
-                                ..
-                            })
-                        )
-                }
-                StepOutcome::Mismatch { got, .. } => *got == Got::Allowed,
-                StepOutcome::CannotRun(_) => false,
-            };
             let (status, actual, error) = match step.outcome {
                 StepOutcome::Passed { got, taken } | StepOutcome::Observed { got, taken } => {
                     let actual = match taken {
@@ -381,7 +313,14 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
                 status,
                 reasons: error.as_deref().map(block_reasons).unwrap_or_default(),
                 error,
-                released,
+                unanswered: step
+                    .unanswered
+                    .into_iter()
+                    .map(|external| UnansweredExternal {
+                        role: external.role,
+                        name: external.name,
+                    })
+                    .collect(),
             }
         })
         .collect();
@@ -441,7 +380,7 @@ async fn run_with(
 
 /// One file of a run. `assertions` counts the run's assertions so far, against its cap.
 async fn replay_file(
-    replaying: &Result<Replaying, String>,
+    replaying: &Result<Runtime, String>,
     file: File,
     assertions: &mut usize,
 ) -> Vec<FileResult> {
@@ -475,6 +414,7 @@ async fn replay_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
 
     async fn run(request: Request) -> Response {
         super::run(request, |_| {}).await
@@ -1048,6 +988,19 @@ mod tests {
                 .map(|step| (step.line, step.status))
                 .collect::<Vec<_>>()
         };
+        let unanswered = |response: &Response| {
+            response.files[0]
+                .steps
+                .iter()
+                .map(|step| {
+                    step.unanswered
+                        .iter()
+                        .map(|external| (external.role, external.name.clone()))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        };
+        let org = || vec![(ExternalRole::AudienceSource, "org".to_owned())];
         for expect in ["allow", "deny"] {
             let response = run_with(
                 live_request(
@@ -1070,8 +1023,10 @@ mod tests {
                     (5, Status::CannotRun)
                 ]
             );
+            assert_eq!(unanswered(&response), [vec![], vec![], org()]);
         }
-        // A denial earlier in the file may be the unanswered one: replay stops there.
+        // A denial earlier in the file on trust alone is decided: replay stops at the call
+        // whose audience went unanswered.
         let response = run_with(
             live_request(
                 &annotated_policy(&consults.noop_url()),
@@ -1086,8 +1041,14 @@ mod tests {
         .await;
         assert_eq!(
             statuses(&response),
-            [(1, Status::Passed), (3, Status::CannotRun)]
+            [
+                (1, Status::Passed),
+                (3, Status::Passed),
+                (5, Status::Passed),
+                (7, Status::CannotRun)
+            ]
         );
+        assert_eq!(unanswered(&response), [vec![], vec![], vec![], org()]);
     }
 
     #[tokio::test]

@@ -1262,7 +1262,9 @@ export class OpenAIStreamAdapter
       this.state.text += delta.content;
     }
     if (delta.content || hasReasoning) {
-      const outbound = delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk;
+      const outbound = delta.tool_calls
+        ? withoutToolCallDeltas(chunk)
+        : withoutFinishReason(chunk);
       let prefixSse = "";
       if (delta.content && !this.textPrefixIssued && this.getTextSuffix) {
         const prefix = this.resolveTextPrefix(delta.content);
@@ -1285,7 +1287,7 @@ export class OpenAIStreamAdapter
       !delta.tool_calls &&
       !audio
     ) {
-      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+      sseData = `data: ${JSON.stringify(withoutFinishReason(chunk))}\n\n`;
       isResponsePreamble = true;
     }
 
@@ -1293,7 +1295,9 @@ export class OpenAIStreamAdapter
     // arrives, like text. Tool calls riding the same chunk wait for policy
     // evaluation, as they do beside text.
     if (audio && sseData === null) {
-      const outbound = delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk;
+      const outbound = delta.tool_calls
+        ? withoutToolCallDeltas(chunk)
+        : withoutFinishReason(chunk);
       sseData = `data: ${JSON.stringify(outbound)}\n\n`;
     }
 
@@ -2013,8 +2017,25 @@ export const openAiEmbeddingsAdapterFactory: OpenAiEmbeddingsProvider =
 function withoutToolCallDeltas(chunk: OpenAiStreamChunk): OpenAiStreamChunk {
   const [choice] = chunk.choices;
   const { tool_calls: _toolCalls, ...delta } = choice.delta;
-  // The turn is not over while its calls are held: formatEndSSE finishes it.
-  return { ...chunk, choices: [{ ...choice, delta, finish_reason: null }] };
+  return withoutFinishReason({ ...chunk, choices: [{ ...choice, delta }] });
+}
+
+/**
+ * An upstream chunk relayed as it arrives, minus its finish_reason. Tool calls
+ * are held for policy evaluation and released after the stream drains, so an
+ * upstream finish relayed early would end the turn before them (Copilot's
+ * Gemini models put `role` on the finish chunk, which reads as a preamble).
+ * formatEndSSE always sends the one terminal finish_reason.
+ */
+function withoutFinishReason(chunk: OpenAiStreamChunk): OpenAiStreamChunk {
+  if (!chunk.choices.some((choice) => choice.finish_reason)) return chunk;
+  return {
+    ...chunk,
+    choices: chunk.choices.map((choice) => ({
+      ...choice,
+      finish_reason: null,
+    })),
+  };
 }
 
 /** The tool call portion of a combined chunk waiting for policy evaluation. */

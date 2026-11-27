@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@archestra/shared";
 import { makeAgent } from "../src/mocks/data/agents";
 import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
@@ -130,7 +131,21 @@ for (const viewport of [
       await mswControl.use({
         method: "get",
         url: "/api/guardrails-deployment",
-        body: { enabled: false, featureEnabled: true, active: false },
+        body: {
+          mode: "off",
+          personApproval: "ask",
+          enforcedMarks: [],
+          enabled: false,
+          featureEnabled: true,
+          active: false,
+          unsupportedClientAction: "bypass",
+          breakTheGlassEnabled: true,
+          humanApprovalMode: "block",
+          unapprovableBlockMode: "refuse",
+          environmentOverrides: [],
+          annotatorModelId: null,
+          annotatorLlmApiKeyId: null,
+        } satisfies archestraApiTypes.GetGuardrailsDeploymentResponses[200],
       });
       await mswControl.use({
         method: "get",
@@ -225,7 +240,7 @@ for (const viewport of [
       // Git sync and enforcement live in Settings → Guardrails.
       await page.goto("/settings/guardrails");
       await expect(
-        page.getByRole("switch", { name: "Enforce the policy" }),
+        page.getByRole("combobox", { name: "Guardrails mode" }),
       ).toBeVisible();
       await page.getByRole("button", { name: "Set up Git sync" }).click();
       // The title follows the step, so hold the dialog by its role.

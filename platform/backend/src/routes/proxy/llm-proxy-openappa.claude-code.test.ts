@@ -26,7 +26,6 @@ import {
   parseTrajectoryStamp,
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
-import { superyellSession } from "@/openappa/unenforced";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
@@ -3104,9 +3103,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     if (!binding) throw new Error("The fixture has no signed binding");
     // Another session in the workspace's scope, out of OpenAPPA.
-    await superyellSession({
-      organization_id: h.agent.organizationId,
-      session_id: `agent-workspace:${workspace.id}|elsewhere`,
+    await OpenAppaUnenforcedModel.recordSession({
+      organizationId: h.agent.organizationId,
+      sessionId: `agent-workspace:${workspace.id}|elsewhere`,
+      parentId: undefined,
     });
 
     const response = await h.app.inject({

@@ -19,7 +19,7 @@ permissions: {}
 jobs:
   warm-rust-check-caches:
     name: Warm ${{ matrix.cache-key }}
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-8core-spot' || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.
     timeout-minutes: 25
     permissions:
       contents: read

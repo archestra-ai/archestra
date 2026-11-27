@@ -98,13 +98,23 @@ async function deploymentRefusal(params: {
   organizationId: string;
   content: string;
   previous: string;
-}): Promise<{ errors: string[]; warnings: string[] }> {
+}): Promise<{
+  errors: string[];
+  warnings: string[];
+  /**
+   * What the deployment would serve: the document's composition, or the one
+   * it retains under an accepted refusal, read only when asked.
+   */
+  composed: () => Promise<string | null>;
+}> {
   const { organizationId, content, previous } = params;
   const submitted = await openappaBatteriesService.composeInDeployment({
     organizationId,
     content,
   });
-  if (submitted.refusal.length === 0) return { errors: [], warnings: [] };
+  const composed = async () => submitted.composed;
+  if (submitted.refusal.length === 0)
+    return { errors: [], warnings: [], composed };
   const kept = new Set(
     previous === content
       ? submitted.refusal
@@ -123,14 +133,40 @@ async function deploymentRefusal(params: {
     return {
       errors: [...introduced, ...submitted.heldBack].map(inDeployment),
       warnings: [],
+      composed,
     };
   return {
     errors: [],
     warnings: [...submitted.refusal, ...submitted.heldBack].map(
       (line) => inDeployment(line) + keptNote,
     ),
+    // The deployment keeps serving the composition it retained.
+    composed: async () =>
+      submitted.composed ??
+      (await openappaBatteriesService.servedComposition(organizationId)),
   };
 }
+
+/**
+ * The lines' fallback warnings for a valid document. They advise and decide
+ * nothing, so a check that fails says so and leaves the save to go ahead.
+ */
+async function advisoryLineWarnings(
+  composedOf: () => Promise<string | null>,
+): Promise<string[]> {
+  try {
+    const composed = await composedOf();
+    return composed === null
+      ? []
+      : await openappaDeclarations.lineWarnings(composed);
+  } catch (error) {
+    logger.error({ err: error }, "Guardrails line check failed");
+    return [LINE_CHECK_FAILED];
+  }
+}
+
+const LINE_CHECK_FAILED =
+  "Whether Observe and automatic approval can run with this policy could not be checked. See the backend log.";
 
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
 export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
@@ -194,6 +230,8 @@ export const guardrailsPolicyService = {
       resolved?: { submitted: PolicyResolution; previous: PolicyResolution };
       /** Repository files the text includes, read from elsewhere than the accepted commit. */
       files?: ReadonlyMap<string, string>;
+      /** False skips the lines' fallback warnings, for a caller that reads only errors. */
+      lineWarnings?: false;
     },
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
@@ -254,6 +292,8 @@ export const guardrailsPolicyService = {
         });
         errors.push(...deployed.errors);
         warnings.push(...deployed.warnings);
+        if (params.lineWarnings !== false)
+          warnings.push(...(await advisoryLineWarnings(deployed.composed)));
       }
     }
     if (errors.length === 0 && params.userId)

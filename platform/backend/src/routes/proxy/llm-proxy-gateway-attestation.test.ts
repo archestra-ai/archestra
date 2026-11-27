@@ -191,6 +191,7 @@ describe("Gateway tool attestation on the LLM proxy", () => {
             ? {
                 decision: "deny_call",
                 feedback: "[appa] NATIVE REFUSAL",
+                offers: [{ offer_id: "test-offer" }],
               }
             : { decision: "allow_call" },
         );

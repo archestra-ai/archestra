@@ -15,7 +15,7 @@ describe("OpenAppaUnenforcedModel.deleteOlderThan", () => {
       { organizationId: org.id, sessionId: "old-2", createdAt: old },
       { organizationId: org.id, sessionId: "old-3", createdAt: old },
       { organizationId: org.id, sessionId: "new" },
-      // A superyelled session stays out of OpenAPPA for good.
+      // A superyell record from an earlier release expires like any other.
       {
         organizationId: org.id,
         sessionId: "superyelled",
@@ -45,18 +45,15 @@ describe("OpenAppaUnenforcedModel.deleteOlderThan", () => {
       2,
     );
 
-    expect(deleted).toEqual({ sessions: 3, calls: 1 });
+    expect(deleted).toEqual({ sessions: 4, calls: 1 });
     expect(
       await OpenAppaUnenforcedModel.findSessions({
         organizationId: org.id,
         sessionIds: ["old-1", "old-2", "old-3", "new", "superyelled"],
       }),
-    ).toEqual(
-      expect.arrayContaining([
-        { sessionId: "new", parentId: null, reason: "enforcement_off" },
-        { sessionId: "superyelled", parentId: null, reason: "superyell" },
-      ]),
-    );
+    ).toEqual([
+      { sessionId: "new", parentId: null, reason: "enforcement_off" },
+    ]);
     expect(
       await OpenAppaUnenforcedModel.findCalls({
         organizationId: org.id,
@@ -113,6 +110,158 @@ describe("OpenAppaUnenforcedModel.findCalls", () => {
       expect.arrayContaining([
         { toolCallId: "bash-1", reason: "made", childNativeId: null },
         { toolCallId: "spawn-1", reason: "child", childNativeId: "worker" },
+      ]),
+    );
+  });
+});
+
+describe("legacy records exempt nothing", () => {
+  test("no read returns a superyell session or a waived call", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await db.insert(schema.openappaUnenforcedSessionsTable).values([
+      { organizationId: org.id, sessionId: "root:off", parentId: "root" },
+      {
+        organizationId: org.id,
+        sessionId: "root:off:worker",
+        parentId: "root:off",
+        reason: "superyell",
+      },
+      {
+        organizationId: org.id,
+        sessionId: "root:worker",
+        parentId: "root",
+      },
+    ]);
+    await db.insert(schema.openappaUnenforcedCallsTable).values([
+      {
+        organizationId: org.id,
+        sessionId: "root",
+        toolCallId: "denied-run",
+        reason: "waived",
+      },
+      {
+        organizationId: org.id,
+        sessionId: "root",
+        toolCallId: "spawn",
+        reason: "waived",
+        childNativeId: "waived-child",
+      },
+    ]);
+
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: org.id,
+        sessionIds: ["root:off:worker"],
+      }),
+    ).toEqual([]);
+    // The legacy sibling at another depth does not make the id ambiguous.
+    expect(
+      await OpenAppaUnenforcedModel.findFamilyMembers({
+        organizationId: org.id,
+        rootSessionId: "root",
+        nativeId: "worker",
+      }),
+    ).toEqual([
+      { sessionId: "root:worker", parentId: "root", reason: "enforcement_off" },
+    ]);
+    expect(
+      await OpenAppaUnenforcedModel.findCalls({
+        organizationId: org.id,
+        sessionIds: ["root"],
+        toolCallIds: ["denied-run", "spawn"],
+        childNativeIds: ["waived-child"],
+      }),
+    ).toEqual([]);
+  });
+
+  test("an enforcement-off observation replaces a superyell row, and nothing replaces an observation", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const old = new Date(Date.now() - 40 * DAY_MS);
+    await db.insert(schema.openappaUnenforcedSessionsTable).values({
+      organizationId: org.id,
+      sessionId: "root:child",
+      reason: "superyell",
+      createdAt: old,
+    });
+
+    await OpenAppaUnenforcedModel.recordSession({
+      organizationId: org.id,
+      sessionId: "root:child",
+      parentId: "root",
+    });
+    await OpenAppaUnenforcedModel.recordSession({
+      organizationId: org.id,
+      sessionId: "root:child",
+      parentId: "elsewhere",
+    });
+
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: org.id,
+        sessionIds: ["root:child"],
+      }),
+    ).toEqual([
+      { sessionId: "root:child", parentId: "root", reason: "enforcement_off" },
+    ]);
+    // The observation is fresh, so the retention sweep keeps it.
+    expect(
+      await OpenAppaUnenforcedModel.deleteOlderThan(
+        new Date(Date.now() - 30 * DAY_MS),
+      ),
+    ).toEqual({ sessions: 0, calls: 0 });
+  });
+});
+
+describe("OpenAppaUnenforcedModel.recordCalls", () => {
+  test("replaces a colliding waived row and leaves an observed call as it is", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await db.insert(schema.openappaUnenforcedCallsTable).values([
+      {
+        organizationId: org.id,
+        sessionId: "lead",
+        toolCallId: "waived-call",
+        reason: "waived",
+      },
+      {
+        organizationId: org.id,
+        sessionId: "lead",
+        toolCallId: "spawn",
+        reason: "child",
+        childNativeId: "worker",
+      },
+    ]);
+    await OpenAppaUnenforcedModel.recordCalls({
+      organizationId: org.id,
+      sessionId: "lead",
+      toolCallIds: ["made-call"],
+      reason: "made",
+    });
+
+    const recorded = await OpenAppaUnenforcedModel.recordCalls({
+      organizationId: org.id,
+      sessionId: "lead",
+      toolCallIds: ["waived-call", "spawn", "made-call"],
+      reason: "made",
+    });
+
+    expect(recorded).toEqual(["waived-call"]);
+    const found = await OpenAppaUnenforcedModel.findCalls({
+      organizationId: org.id,
+      sessionIds: ["lead"],
+      toolCallIds: ["waived-call", "spawn", "made-call"],
+    });
+    expect(found).toHaveLength(3);
+    expect(found).toEqual(
+      expect.arrayContaining([
+        { toolCallId: "waived-call", reason: "made", childNativeId: null },
+        { toolCallId: "spawn", reason: "child", childNativeId: "worker" },
+        { toolCallId: "made-call", reason: "made", childNativeId: null },
       ]),
     );
   });

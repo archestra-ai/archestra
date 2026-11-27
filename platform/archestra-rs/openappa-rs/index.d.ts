@@ -50,6 +50,15 @@ export interface BatteryTargetView {
   setup?: string
 }
 
+/**
+ * Composes the named variant lines (absent: each one) over a document already composed
+ * by the host, as a dispatch would, and says why any of them cannot carry its
+ * approvers. Such a line serves the document alone, and sessions meant for it open on
+ * the Enforce line. A line that adds approvers also reports the marks they withhold
+ * from tools without the `enforced` tag.
+ */
+export declare function checkOpenappaLines(content: string, enforcedMarks: Array<string>, variants?: Array<'observe' | 'enforce-approved'>): Promise<LineCheck>
+
 export interface ChildAddressRecord {
   /** Fully scoped session id of the parent that addressed the child. */
   parentSessionId: string
@@ -167,6 +176,8 @@ export interface DeferredReturnLookup {
   controlTool: string
   supportsDelegation: boolean
   yellTool?: string
+  /** Who presents the lookup, as the host authenticated the request. */
+  presenter: 'runtime' | 'attended' | 'delegated' | 'unknown'
 }
 
 export declare function dispatchHook(input: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<string>
@@ -185,6 +196,8 @@ export interface DispatchPolicy {
    * and is refused as retryable; absent, nothing is checked.
    */
   compositionHash?: string
+  /** Absent, every new session opens on the Enforce line. */
+  guardrails?: GuardrailsSettings
 }
 
 export interface EditedPolicy {
@@ -217,7 +230,14 @@ export declare function getOpenappaReplayEngineVersion(): string
  * None before the session started, and for a family opened under the earlier
  * policy model, whose next event is refused instead.
  */
-export declare function getOpenappaStatus(organizationId: string, sessionId: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
+export declare function getOpenappaStatus(organizationId: string, sessionId: string, presenter: 'runtime' | 'attended' | 'delegated' | 'unknown', policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
+
+/** The deployment's Guardrails settings, as the host resolved them. */
+export interface GuardrailsSettings {
+  mode: 'observe' | 'enforce'
+  personApproval: 'ask' | 'auto_unattended' | 'auto_everywhere'
+  enforcedMarks: Array<string>
+}
 
 export interface HelperBindingInput {
   /**
@@ -248,6 +268,21 @@ export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): 
  * or evaluating any call.
  */
 export declare function inspectOpenappaPolicyTests(input: string): Promise<string>
+
+/**
+ * What a line check found: the lines that cannot carry their approvers, and the marks
+ * the approvers of the lines that do skip beyond the tools that caused it.
+ */
+export interface LineCheck {
+  refusals: Array<LineRefusal>
+  withheld: Array<WithheldMark>
+}
+
+/** A line that cannot carry its approvers over a composed document. */
+export interface LineRefusal {
+  variant: 'observe' | 'enforce-approved'
+  error: string
+}
 
 /**
  * The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,
@@ -289,7 +324,7 @@ export declare function loadDeferredReturn(lookup: DeferredReturnLookup, policy:
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the proxy-stamped current trajectory; no offer-owner lookup.
  */
-export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string, encryption?: ContentEncryption | undefined | null): Promise<OfferReviewOutput | null>
+export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string, presenter: 'runtime' | 'attended' | 'delegated' | 'unknown' | 'reviewer', encryption?: ContentEncryption | undefined | null): Promise<OfferReviewOutput | null>
 
 export interface OfferReviewOutput {
   offerId: string
@@ -311,6 +346,11 @@ export interface OfferReviewOutput {
   scope?: string
   /** The ruling authority's own hint to the reviewer, when it declares one. */
   hint?: string
+  /**
+   * The deployment line the session's family follows, whose head moving retires
+   * the offer.
+   */
+  deployment: string
 }
 
 /**
@@ -422,3 +462,13 @@ export interface TokenEnvReader {
  * Validation defers secret lookup and opens no store or network connection.
  */
 export declare function validateHostedOpenappaPolicy(content: string): Promise<Array<string>>
+
+/**
+ * A mark the approvers a line adds skip for every tool, because an `enforced` tool may
+ * require it, that tools without the tag require too.
+ */
+export interface WithheldMark {
+  mark: string
+  enforcedTools: Array<string>
+  otherTools: Array<string>
+}

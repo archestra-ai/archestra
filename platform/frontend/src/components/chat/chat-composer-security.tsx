@@ -148,7 +148,11 @@ function GuardrailPeek({ conversationId }: { conversationId?: string }) {
   if (!mood) return null;
 
   const Icon = MOOD_ICON[mood];
-  const copy = MOOD_COPY[mood];
+  // Under Observe a checked chat is recorded, not enforced: say so.
+  const copy =
+    deployment?.mode === "observe" && (mood === "calm" || mood === "suspicious")
+      ? OBSERVE_COPY
+      : MOOD_COPY[mood];
   const label = status
     ? `Guardrails: trust ${status.trust}, audience ${status.audience}`
     : copy.title;
@@ -340,7 +344,14 @@ const MOOD_ICON = {
   shades: OpenAppaShadesIcon,
 } as const;
 
-const MOOD_COPY: Record<Mood, { title: string; body?: string }> = {
+type MoodCopy = { title: string; body?: string };
+
+const OBSERVE_COPY: MoodCopy = {
+  title: "Guardrails observe this chat",
+  body: "Every tool call is checked and recorded, but calls your policy would block still run.",
+};
+
+const MOOD_COPY: Record<Mood, MoodCopy> = {
   calm: { title: "Guardrails are enabled" },
   suspicious: { title: "Guardrails are enabled" },
   off: { title: "Guardrails enforcement is off" },

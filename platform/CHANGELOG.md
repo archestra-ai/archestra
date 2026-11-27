@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.5.0-rc.46](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.45...platform-v1.5.0-rc.46) (2026-11-26)
+
+
+### Features
+
+* **auto-routing:** warm start every router from past sessions ([#11251](https://github.com/archestra-ai/archestra/issues/11251)) ([f19694b](https://github.com/archestra-ai/archestra/commit/f19694bd952ae25d5cbf4489ce0c94613bbd1599))
+* **guardrails:** choose the mode, approvals and enforced marks in settings ([#11298](https://github.com/archestra-ai/archestra/issues/11298)) ([e17f59c](https://github.com/archestra-ai/archestra/commit/e17f59c59d239c153d96b6de727606d8142ebbe4))
+* **guardrails:** replace escape hatches with Off, Observe and Enforce ([#11233](https://github.com/archestra-ai/archestra/issues/11233)) ([c37ee54](https://github.com/archestra-ai/archestra/commit/c37ee54040a77e198be955ad35570757b026f681))
+
+
+### Bug Fixes
+
+* **auth:** restore SAML sign-in and repair stale nightly e2e tests ([#11299](https://github.com/archestra-ai/archestra/issues/11299)) ([9d5844e](https://github.com/archestra-ai/archestra/commit/9d5844efd1dc37bc97588c223346068858412d2f))
+* **build:** upload debug files from image builds and tag frontend releases ([#11283](https://github.com/archestra-ai/archestra/issues/11283)) ([8ce537d](https://github.com/archestra-ai/archestra/commit/8ce537dd6f33bd3bccf73e83b33103f285d34e6c))
+* **chat:** show each Guardrails call as its own circle, and a blocked call as that call ([#11269](https://github.com/archestra-ai/archestra/issues/11269)) ([43d177e](https://github.com/archestra-ai/archestra/commit/43d177e40efad93707c939944cd1f35a4cacf977))
+* **guardrails:** read conversations stored before the Off, Observe and Enforce release ([#11297](https://github.com/archestra-ai/archestra/issues/11297)) ([71936ea](https://github.com/archestra-ai/archestra/commit/71936ea685d9fbd80a94bef18a5f9308e9110d08))
+* **llm-proxy:** keep streamed finish_reason after held tool calls ([#11302](https://github.com/archestra-ai/archestra/issues/11302)) ([bce7233](https://github.com/archestra-ai/archestra/commit/bce72337018bfd4c9ff5ad401f9ae26ed9f50629))
+* **llm-proxy:** match OAuth example card typography ([#11293](https://github.com/archestra-ai/archestra/issues/11293)) ([8a9f3e1](https://github.com/archestra-ai/archestra/commit/8a9f3e15a7d45eed097ec13a8ec1195bbd9abd2e))
+* **model-pools:** use the edit sidebar when creating a pool ([#11257](https://github.com/archestra-ai/archestra/issues/11257)) ([3d55b29](https://github.com/archestra-ai/archestra/commit/3d55b29de046a11805558e5ce1ca4a5912363319))
+* **users:** keep failed member removals retryable without unhandled rejections ([#11282](https://github.com/archestra-ai/archestra/issues/11282)) ([dfd11f8](https://github.com/archestra-ai/archestra/commit/dfd11f8a58eb6c3ad15adf080d702b566970b5b9))
+
+
+### Performance Improvements
+
+* **auth:** read built-in catalog grants once per check ([#11286](https://github.com/archestra-ai/archestra/issues/11286)) ([02c6cf1](https://github.com/archestra-ai/archestra/commit/02c6cf18656669a846e84b912912488b9b5ba5be))
+* **auto-routing:** skip discarded past-session reads and lighter completion checks ([#11296](https://github.com/archestra-ai/archestra/issues/11296)) ([88c7bc4](https://github.com/archestra-ai/archestra/commit/88c7bc414804ca17003ed41e0c408a002af1a964))
+* **mcp-gateway:** share caller lookups across resource and prompt listings ([#11284](https://github.com/archestra-ai/archestra/issues/11284)) ([4a6fed5](https://github.com/archestra-ai/archestra/commit/4a6fed55dc9711025e460fd2a37694af2d542d71))
+
+
+### Miscellaneous Chores
+
+* update agent runtime CLIs ([#11292](https://github.com/archestra-ai/archestra/issues/11292)) ([b5eb07a](https://github.com/archestra-ai/archestra/commit/b5eb07a7048f2a72d9c2986894d52541f11e2f58))
+* update upstream Playwright MCP ([#11291](https://github.com/archestra-ai/archestra/issues/11291)) ([c196afd](https://github.com/archestra-ai/archestra/commit/c196afdc44fbdb2d8045cb02bf3218d27c84e7be))
+
 ## [1.5.0-rc.45](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.44...platform-v1.5.0-rc.45) (2026-11-26)
 
 

@@ -236,7 +236,10 @@ class AzureStreamAdapter
       const { tool_calls: _toolCalls, ...safeDelta } = delta;
       result.sseData = `data: ${JSON.stringify({
         ...chunk,
-        choices: [{ ...chunk.choices[0], delta: safeDelta }],
+        // formatEndSSE sends the terminal finish after any held tool calls.
+        choices: [
+          { ...chunk.choices[0], delta: safeDelta, finish_reason: null },
+        ],
       })}\n\n`;
     }
     result.isResponsePreamble = false;

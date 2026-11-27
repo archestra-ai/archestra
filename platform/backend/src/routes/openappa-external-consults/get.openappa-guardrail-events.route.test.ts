@@ -258,7 +258,6 @@ async function seedYell(params: {
     toolCallId: `toolu_${randomUUID()}`,
     message: params.message ?? "Blocked and could not tell why",
     withTrajectory: false,
-    superyell: false,
   });
   const createdAt = new Date(Date.now() - params.secondsAgo * 1000);
   await db

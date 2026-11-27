@@ -10,9 +10,12 @@ const revisions = schema.openappaPolicyRevisionsTable;
  * the head when it publishes; the host only reads it.
  */
 class OpenAppaDeploymentModel {
-  /** The organization's current revision and when it was published, if any. */
+  /**
+   * A deployment line's current revision and when it was published, if any.
+   * The organization's Enforce line is named by its id.
+   */
   static async head(
-    organizationId: string,
+    line: string,
   ): Promise<{ revision: number; publishedAt: Date } | null> {
     const [row] = await db
       .select({
@@ -27,7 +30,7 @@ class OpenAppaDeploymentModel {
           eq(revisions.revision, deployments.head),
         ),
       )
-      .where(eq(deployments.name, organizationId));
+      .where(eq(deployments.name, line));
     return row ?? null;
   }
 }

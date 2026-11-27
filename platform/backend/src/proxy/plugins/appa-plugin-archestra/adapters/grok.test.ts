@@ -898,16 +898,6 @@ describe("Grok protected child binding", () => {
 });
 
 describe("observed Grok question protocol", () => {
-  test.each([
-    ["headless", true],
-    ["interactive", false],
-    ["unknown", false],
-    [undefined, false],
-  ])("classifies native mode %s as unattended=%s", (mode, expected) => {
-    expect(
-      adapter.isUnattended({ ...headers, "x-grok-client-mode": mode }),
-    ).toBe(expected);
-  });
   const question: AskUserArguments = {
     question: "Approve the synthetic call?",
     options: [

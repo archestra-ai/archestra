@@ -150,7 +150,7 @@ url = "http://127.0.0.1:${redirect.server.address().port}/"
     return { child, done };
   };
   const run = (request) => pod(request).done;
-  const scope = () => ({ organization_id: `lease-${randomUUID()}`, caller_id: 'user:owner', session_id: randomUUID() });
+  const scope = () => ({ organization_id: `lease-${randomUUID()}`, presenter: 'attended', caller_id: 'user:owner', session_id: randomUUID() });
   const toolCall = (session, id, tool) => ({
     ...session, event: 'tool_call', operation_id: `call:${id}`, tool, arguments: { a: 1 },
   });
@@ -159,6 +159,7 @@ url = "http://127.0.0.1:${redirect.server.address().port}/"
   });
   const offerInput = (session, event) => ({
     organization_id: session.organization_id,
+    presenter: 'attended',
     caller_id: session.caller_id,
     trajectory: { v: 1, session_id: session.session_id, ...(session.parent_id ? { parent_id: session.parent_id } : {}) },
     execution_mode: 'tracked',
@@ -654,12 +655,58 @@ url = "http://127.0.0.1:${redirect.server.address().port}/"
     } finally {
       annotator.gate.fail = false;
     }
-    assert.match(failed.error, /processing interrupted|annotator/, JSON.stringify(failed));
+    assert.equal(failed.decision, 'deny_call', JSON.stringify(failed));
+    assert.deepEqual(failed.outcomes, ['missing_fact'], JSON.stringify(failed));
+    assert.equal(failed.retry, 'later', JSON.stringify(failed));
     assert.deepEqual(await receipts(session), [], 'an operational fault did not complete a verdict');
     const recovered = await run(request);
     assert.equal(recovered.decision, 'allow_call', JSON.stringify(recovered));
     assert.deepEqual(await receipts(session), ['call:one=complete']);
     assert.deepEqual(await run(request), recovered);
+  });
+
+  await t.test('a result reported for a call the runtime could not judge is answered again once it is judged', async () => {
+    const session = scope();
+    const request = toolCall(session, 'one', 'annotated_read');
+    annotator.gate.fail = true;
+    let failed;
+    try {
+      failed = await run(request);
+    } finally {
+      annotator.gate.fail = false;
+    }
+    assert.deepEqual(failed.outcomes, ['missing_fact'], JSON.stringify(failed));
+    const early = await run(toolResult(session, 'one', 'early output'));
+    assert.equal(early.code, 'unreleased_call', JSON.stringify(early));
+    assert.deepEqual(await resultReceipts(session), [], 'an unknown call keeps no result receipt');
+
+    assert.equal((await run(request)).decision, 'allow_call');
+    const result = await run(toolResult(session, 'one', 'annotated output'));
+    assert.equal(result.decision, 'ack', JSON.stringify(result));
+    assert.equal(result.approved_output, 'annotated output', JSON.stringify(result));
+    assert.deepEqual(await resultReceipts(session), ['one=complete']);
+  });
+
+  await t.test('a replayed result of a call nobody recorded is answered without a write', async () => {
+    const session = scope();
+    const writer = new Client({ connectionString: databaseUrl });
+    await writer.connect();
+    try {
+      await writer.query('BEGIN');
+      // Reads pass this lock; a receipt claim would wait on it.
+      await writer.query('LOCK TABLE openappa_processed_results IN EXCLUSIVE MODE');
+      for (let replay = 0; replay < 2; replay += 1) {
+        const answered = await Promise.race([
+          run(toolResult(session, 'ghost', 'replayed output')),
+          new Promise((resolve) => setTimeout(() => resolve({ waited: true }), 10000)),
+        ]);
+        assert.equal(answered.code, 'unreleased_call', JSON.stringify(answered));
+      }
+    } finally {
+      await writer.query('ROLLBACK');
+      await writer.end();
+    }
+    assert.deepEqual(await resultReceipts(session), []);
   });
 
   await t.test('a tracked remedy whose annotator gave no answer completes with an error result', async () => {

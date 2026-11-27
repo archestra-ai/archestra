@@ -600,7 +600,7 @@ jobs:
     # In the queue it follows the backend inputs (which include the Rust
     # crates and migrations), running whenever the classification failed.
     if: ${{ !cancelled() && ((github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.backend != 'false')) || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))) }}
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'merge_group' && 'archestra-gce-8core' || 'archestra-gce-8core-spot') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch.
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
     timeout-minutes: 20
@@ -721,7 +721,7 @@ jobs:
       # credentials unpersisted and scope the read-only job token to this
       # pinned action via Git's runtime configuration.
       - name: Check new Cargo dependency release ages
-        uses: archestra-ai/.github/actions/cargo-release-age@v1.31.1
+        uses: archestra-ai/.github/actions/cargo-release-age@v1.32.0
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -826,7 +826,7 @@ jobs:
 
       - name: Check new Cargo dependency release ages
         if: runner.os == 'Linux' && steps.base-lockfile.outputs.present == 'true'
-        uses: archestra-ai/.github/actions/cargo-release-age@v1.31.1
+        uses: archestra-ai/.github/actions/cargo-release-age@v1.32.0
         env:
           GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "2"
@@ -1352,7 +1352,7 @@ jobs:
       # variable (it has actions_variables:write).
       - name: Generate token for the kill switch
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@v1.31.1
+        uses: archestra-ai/.github/actions/github-app-token@v1.32.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}

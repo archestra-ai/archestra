@@ -191,11 +191,19 @@ class AutoRouterModel {
    */
   static async bumpGenerationIf(
     routerId: string,
-    eligible: (router: AutoRouter) => boolean,
+    eligible: (
+      router: Pick<AutoRouter, "learnFromPastSessions" | "scorerModel">,
+    ) => boolean,
     tx: Transaction,
   ): Promise<number | null> {
     await lockRoutingPlan(tx, routerId);
-    const router = await AutoRouterModel.find(routerId, tx);
+    const [router] = await tx
+      .select({
+        learnFromPastSessions: routers.learnFromPastSessions,
+        scorerModel: routers.scorerModel,
+      })
+      .from(routers)
+      .where(eq(routers.id, routerId));
     if (!router || !eligible(router)) return null;
     const [row] = await tx
       .update(routers)

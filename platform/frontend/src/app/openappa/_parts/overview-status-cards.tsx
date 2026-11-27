@@ -9,7 +9,6 @@ import {
   Github,
   LoaderCircle,
   MessageCircle,
-  ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
@@ -27,7 +26,6 @@ import {
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
@@ -36,7 +34,6 @@ import {
 } from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { breakTheGlassSummary } from "./break-the-glass-summary";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import {
@@ -268,7 +265,6 @@ function ValidationCard() {
 
 function YellsCard() {
   const summary = useOpenAppaYellsSummary();
-  const deployment = useGuardrailsDeployment({ poll: true });
   return (
     <StatusCard
       icon={
@@ -283,11 +279,6 @@ function YellsCard() {
           <Button size="sm" variant="outline" asChild>
             <Link href="/consults/logs?type=yell&yellStatus=unresolved">
               Review yells <ArrowRight />
-            </Link>
-          </Button>
-          <Button size="sm" variant="ghost" asChild>
-            <Link href="/settings/guardrails#break-the-glass">
-              Break the glass settings
             </Link>
           </Button>
         </div>
@@ -305,43 +296,9 @@ function YellsCard() {
             </span>
             <span className="text-sm text-muted-foreground">unresolved</span>
           </p>
-          {deployment.data && (
-            <BreakTheGlassLines lines={breakTheGlassSummary(deployment.data)} />
-          )}
         </div>
       )}
     </StatusCard>
-  );
-}
-
-/** What Break the glass lets through, one line per setting that is on. */
-function BreakTheGlassLines({
-  lines,
-}: {
-  lines: ReturnType<typeof breakTheGlassSummary>;
-}) {
-  return (
-    <div className="space-y-1 pt-2 text-sm">
-      <p className="flex items-center gap-1.5">
-        <ShieldAlert
-          className={
-            lines.length
-              ? "size-3.5 text-amber-600 dark:text-amber-400"
-              : "size-3.5 text-muted-foreground"
-          }
-        />
-        <span className="font-medium">Break the glass</span>
-        {lines.length === 0 && (
-          <span className="text-muted-foreground">off</span>
-        )}
-      </p>
-      {lines.map((line) => (
-        <p key={line.label} className="pl-5">
-          {line.label}{" "}
-          <span className="text-muted-foreground">{line.value}</span>
-        </p>
-      ))}
-    </div>
   );
 }
 

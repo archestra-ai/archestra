@@ -819,6 +819,144 @@ describe("GitHub Copilot overlapping Responses items", () => {
   });
 });
 
+describe("GitHub Copilot streamed finish ordering", () => {
+  // Copilot's Gemini models put `role` on the finish chunk that follows the
+  // tool call. The tool call is held for policy evaluation, so relaying that
+  // finish chunk as it arrives ends the turn before the call is released.
+  test("no tool call or content follows a finish_reason when the finish chunk carries a role", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "Copilot finish ordering" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    stubTokenExchange();
+    const envelope = { id: "gemini-stream", model: "gemini-4-neon" };
+    const upstream = [
+      {
+        ...envelope,
+        created: 1,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              content: null,
+              role: "assistant",
+              tool_calls: [
+                {
+                  function: {
+                    arguments: '{"city":"Berlin"}',
+                    name: "get_time",
+                  },
+                  id: "call_time",
+                  index: 0,
+                  type: "function",
+                },
+              ],
+              reasoning_opaque: "opaque",
+            },
+          },
+        ],
+        usage: { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0 },
+      },
+      {
+        ...envelope,
+        created: 2,
+        choices: [
+          {
+            finish_reason: "tool_calls",
+            index: 0,
+            delta: { content: null, role: "assistant" },
+          },
+        ],
+        usage: {
+          completion_tokens: 59,
+          prompt_tokens: 100,
+          total_tokens: 159,
+          reasoning_tokens: 40,
+        },
+      },
+    ];
+    server.use(
+      http.post(
+        COPILOT_CHAT_COMPLETIONS_URL,
+        () =>
+          new HttpResponse(
+            `${upstream.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`,
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    );
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/chat/completions`,
+        headers: {
+          authorization: `Bearer ${uniqueGithubToken()}`,
+          "x-archestra-virtual-key": passthroughKey,
+        },
+        payload: {
+          model: "gemini-4-neon",
+          messages: [{ role: "user", content: "What time is it in Berlin?" }],
+          stream: true,
+          stream_options: { include_usage: true },
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "get_time",
+                parameters: {
+                  type: "object",
+                  properties: { city: { type: "string" } },
+                  required: ["city"],
+                },
+              },
+            },
+          ],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const frames = response.body
+        .split("\n\n")
+        .map((frame) => frame.trim())
+        .filter((frame) => frame.startsWith("data: {"))
+        .map(
+          (frame) =>
+            JSON.parse(frame.slice(6)) as {
+              choices: Array<{
+                finish_reason?: string | null;
+                delta?: { content?: string | null; tool_calls?: unknown[] };
+              }>;
+            },
+        );
+      const finishes = frames.flatMap((frame, position) =>
+        frame.choices[0]?.finish_reason ? [position] : [],
+      );
+      expect(finishes).toHaveLength(1);
+      const [finish] = finishes;
+      expect(frames[finish].choices[0].finish_reason).toBe("tool_calls");
+      const toolCallFrames = frames.flatMap((frame, position) =>
+        frame.choices[0]?.delta?.tool_calls ? [position] : [],
+      );
+      expect(toolCallFrames.length).toBeGreaterThan(0);
+      expect(toolCallFrames.every((position) => position < finish)).toBe(true);
+      for (const frame of frames.slice(finish + 1)) {
+        expect(frame.choices[0]?.delta?.content ?? null).toBeNull();
+        expect(frame.choices[0]?.delta?.tool_calls).toBeUndefined();
+      }
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe("GitHub Copilot long-context accounting", () => {
   // Real Fastify, SDK, catalog sync, migrated PGlite, receipts and limit settlement.
   // Only provider HTTP is controlled: these are accounting proofs, not GitHub invoices.

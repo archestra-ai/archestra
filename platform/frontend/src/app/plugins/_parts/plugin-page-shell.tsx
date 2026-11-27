@@ -37,7 +37,6 @@ export function PluginPageLoading() {
       title="Plugin"
       description=""
       backLink={<PluginBackLink href="/plugins" label="Plugins" />}
-      maxWidth="wizard"
     >
       {null}
     </PageLayout>
@@ -51,7 +50,6 @@ export function PluginNotFound() {
       title="Plugin"
       description=""
       backLink={<PluginBackLink href="/plugins" label="Plugins" />}
-      maxWidth="wizard"
     >
       <Empty className="border">
         <EmptyHeader>

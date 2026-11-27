@@ -1,4 +1,4 @@
-import { load as parseYaml } from "js-yaml";
+import { load as parseYaml, YAMLException } from "js-yaml";
 import type { SkillFileKind } from "@/types";
 
 /**
@@ -32,9 +32,17 @@ export interface ParsedSkill {
 
 /** Raised when a `SKILL.md` file cannot be parsed into a valid skill. */
 export class SkillParseError extends Error {
-  constructor(message: string) {
+  /**
+   * The line of the file to fix, counted from 1, for an editor to mark.
+   * Line 1 (the opening `---`) when the problem is something the frontmatter
+   * lacks, which no line of its own holds.
+   */
+  readonly line: number;
+
+  constructor(message: string, line = 1) {
     super(message);
     this.name = "SkillParseError";
+    this.line = line;
   }
 }
 
@@ -45,7 +53,9 @@ export const SKILL_MANIFEST_FILENAME = "SKILL.md";
  * Parse a raw `SKILL.md` file into frontmatter metadata and a markdown body.
  *
  * @throws {SkillParseError} when frontmatter is missing, malformed, or lacks
- * the required `name`/`description` fields.
+ * the required `name`/`description` fields. Its message is shown as it is to
+ * the author (a toast, an import row) and to a model (a tool result), so it is
+ * one plain sentence that says what to change.
  */
 export function parseSkillManifest(raw: string): ParsedSkill {
   // A SKILL.md authored on Windows can carry a leading UTF-8 BOM, which
@@ -64,26 +74,25 @@ export function parseSkillManifest(raw: string): ParsedSkill {
     frontmatter = parseYaml(match[1]);
   } catch (error) {
     throw new SkillParseError(
-      `SKILL.md frontmatter is not valid YAML: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      describeInvalidFrontmatter(error),
+      invalidFrontmatterLine(error) ?? FRONTMATTER_FIRST_LINE,
     );
   }
 
-  if (frontmatter === null || typeof frontmatter !== "object") {
-    throw new SkillParseError("SKILL.md frontmatter must be a YAML mapping");
+  if (
+    frontmatter === null ||
+    typeof frontmatter !== "object" ||
+    Array.isArray(frontmatter)
+  ) {
+    throw new SkillParseError(
+      "SKILL.md frontmatter must be a list of `key: value` lines, starting with `name` and `description`.",
+      FRONTMATTER_FIRST_LINE,
+    );
   }
 
   const fields = frontmatter as Record<string, unknown>;
-  const name = readString(fields.name);
-  const description = readString(fields.description);
-
-  if (!name) {
-    throw new SkillParseError("SKILL.md frontmatter is missing `name`");
-  }
-  if (!description) {
-    throw new SkillParseError("SKILL.md frontmatter is missing `description`");
-  }
+  const name = readRequiredText(fields, "name", match[1]);
+  const description = readRequiredText(fields, "description", match[1]);
 
   return {
     name,
@@ -125,6 +134,86 @@ export function deriveSkillFileKind(path: string): SkillFileKind {
 }
 
 // ===== Internal helpers =====
+
+/**
+ * A required frontmatter field as trimmed text, or a `SkillParseError` that
+ * says what to change.
+ *
+ * YAML types a bare value: `name: 123` is a number, `name: true` a boolean,
+ * `name: 2026-01-01` a date and a bare `name:` nothing at all. None of those is
+ * a missing field to the person who typed one, so each gets its own sentence
+ * instead of "missing `name`".
+ */
+function readRequiredText(
+  fields: Record<string, unknown>,
+  key: "name" | "description",
+  /** The frontmatter block as written, to say which line holds the key. */
+  block: string,
+): string {
+  const value = fields[key];
+  const line = frontmatterKeyLine(block, key);
+  if (typeof value === "string") {
+    if (value.trim()) return value.trim();
+    throw new SkillParseError(
+      `SKILL.md frontmatter has an empty \`${key}\`. Add text after \`${key}:\`.`,
+      line,
+    );
+  }
+  if (!(key in fields)) {
+    // No line holds a key that is not there.
+    throw new SkillParseError(`SKILL.md frontmatter is missing \`${key}\``);
+  }
+  if (value === null || value === undefined) {
+    throw new SkillParseError(
+      `SKILL.md frontmatter has an empty \`${key}\`. Add text after \`${key}:\`.`,
+      line,
+    );
+  }
+  throw new SkillParseError(
+    `SKILL.md frontmatter \`${key}\` must be text. Wrap the value in quotes, for example \`${key}: "123"\`.`,
+    line,
+  );
+}
+
+/**
+ * The file line a top-level frontmatter key is written on, or line 1 when the
+ * block has no such line (a key written in flow style, say).
+ */
+function frontmatterKeyLine(block: string, key: string): number {
+  const index = block
+    .split(/\r?\n/)
+    .findIndex((line) => line.startsWith(`${key}:`));
+  return index === -1 ? 1 : index + FRONTMATTER_FIRST_LINE;
+}
+
+/** The block starts on line 2 of the file, under the opening `---`. */
+const FRONTMATTER_FIRST_LINE = 2;
+
+/**
+ * One plain sentence for frontmatter YAML cannot read.
+ *
+ * js-yaml's own message carries a code frame (several lines, a caret) written
+ * for a terminal, and this text is shown to the author in a toast and to a
+ * model in a tool result. The line is kept, since it is what the author needs
+ * to find the place; the frame and the parser's wording are not. By far the
+ * most common cause is an unquoted value holding `: ` (`description: Use
+ * when: ...`), so the remedy names it.
+ */
+function describeInvalidFrontmatter(error: unknown): string {
+  const line = invalidFrontmatterLine(error);
+  return (
+    `SKILL.md frontmatter is not valid YAML${line === null ? "" : ` (line ${line})`}. ` +
+    'If a value contains a colon or starts with a special character, wrap it in quotes, for example `description: "Use when: the user asks"`.'
+  );
+}
+
+/** The file line YAML stopped on, or null when the parser gave none. */
+function invalidFrontmatterLine(error: unknown): number | null {
+  return error instanceof YAMLException && typeof error.mark?.line === "number"
+    ? // `mark.line` counts from 0 inside the block.
+      error.mark.line + FRONTMATTER_FIRST_LINE
+    : null;
+}
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";

@@ -41,3 +41,17 @@ export function isSpecCompliantSkillCompatibility(
 ): boolean {
   return [...(compatibility ?? "")].length <= MAX_SKILL_COMPATIBILITY_LENGTH;
 }
+
+/**
+ * `internal_code` of a save refused because SKILL.md cannot be read as a
+ * skill. Its `details` say where, so an editor can mark the line.
+ */
+export const SKILL_MANIFEST_INVALID_CODE = "skill_manifest_invalid";
+
+export interface SkillManifestInvalidDetails {
+  /**
+   * The line of SKILL.md to fix, counted from 1. Line 1, the opening `---`,
+   * when the problem is something the frontmatter lacks.
+   */
+  line: number;
+}

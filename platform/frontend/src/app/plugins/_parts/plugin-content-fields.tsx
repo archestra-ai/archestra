@@ -1,7 +1,8 @@
 "use client";
 
-import { Info } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import { IdentityFields } from "@/components/identity-fields";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
@@ -32,9 +33,9 @@ export type PluginClientType =
 
 /**
  * The wizard's Content step, shared by the create and edit wizards: the
- * plugin's metadata beside its payload files. Client type is create-only
- * (it is part of the plugin's identity), and the slug, shown as a hint on the
- * name, is edit-only.
+ * plugin's metadata beside its payload files. The client is shown wherever it
+ * can be chosen: on create, and on a plugin that is not from Git. The slug,
+ * shown as a hint on the name, is edit-only.
  */
 export function PluginContentFields({
   displayName,
@@ -52,6 +53,7 @@ export function PluginContentFields({
   onFilesChange,
   readOnly = false,
   locked = false,
+  nameTaken = null,
 }: {
   displayName: string;
   onDisplayNameChange: (value: string) => void;
@@ -73,6 +75,8 @@ export function PluginContentFields({
    * reads as locked rather than as fields that ignore typing.
    */
   locked?: boolean;
+  /** Whose visible plugin for the same client carries this name, if any. */
+  nameTaken?: "own" | "other" | null;
 }) {
   return (
     <div className="space-y-6">
@@ -97,11 +101,24 @@ export function PluginContentFields({
             readOnly={readOnly}
             disabled={locked}
             onChange={(event) => onDisplayNameChange(event.target.value)}
-            placeholder="Session attribution"
+            placeholder="e.g. Session attribution"
             maxLength={120}
             required
+            aria-describedby={
+              nameTaken ? "plugin-display-name-taken" : undefined
+            }
           />
         </IdentityFields>
+        {nameTaken === "other" && (
+          <InlineNotice id="plugin-display-name-taken" size="xs">
+            <AlertTriangle aria-hidden />
+            <span className="font-medium">Name already in use</span>
+            <InlineNoticeText>
+              Another plugin for this client has this name. People will not be
+              able to tell the two apart in the list.
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
         <div className="space-y-2">
           <Label htmlFor="plugin-description">Description</Label>
           <Textarea
@@ -158,7 +175,8 @@ export function PluginContentFields({
           );
         }}
         readOnly={readOnly || locked}
-        downloadName={pluginSlug || displayName}
+        // The page header offers the plugin as a .zip.
+        showDownload={false}
         className="h-[calc(100vh-26rem)] min-h-[28rem]"
       />
     </div>

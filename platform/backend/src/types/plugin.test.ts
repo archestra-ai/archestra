@@ -37,3 +37,28 @@ describe("plugin byte limits", () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe("plugin content", () => {
+  const file = (path: string, content: string) => ({
+    path,
+    content,
+    encoding: "utf8" as const,
+    mode: "100644" as const,
+  });
+
+  test("accepts a plugin whose files are all blank, as this release line always has", () => {
+    const result = CreatePluginSchema.safeParse({
+      ...base,
+      files: [file("hooks/hooks.json", ""), file("README.md", "  \n")],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts a blank file beside one that has content", () => {
+    const result = CreatePluginSchema.safeParse({
+      ...base,
+      files: [file("hooks/hooks.json", "{}"), file("notes/.keep", "")],
+    });
+    expect(result.success).toBe(true);
+  });
+});

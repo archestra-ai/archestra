@@ -1,16 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sdk = vi.hoisted(() => ({
   createPlugin: vi.fn(),
   deletePlugin: vi.fn(),
+  getPlugin: vi.fn(),
   importGithubPlugin: vi.fn(),
   importGithubPluginMarketplace: vi.fn(),
+  restorePlugin: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", () => ({ archestraApiSdk: sdk }));
+vi.mock("@archestra/shared", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared")>()),
+  archestraApiSdk: sdk,
+}));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }));
@@ -21,11 +26,12 @@ import {
   type CreatePluginBody,
   type ImportGithubPluginBody,
   type ImportGithubPluginMarketplaceBody,
-  useBulkDeletePlugins,
   useCreatePlugin,
-  useDeletePlugin,
+  useDeletePlugins,
   useImportGithubPlugin,
   useImportGithubPluginMarketplace,
+  usePlugin,
+  useRestorePlugins,
 } from "./plugin.query";
 
 function createTestClient() {
@@ -55,7 +61,7 @@ describe("Plugin bulk mutations", () => {
     sdk.deletePlugin
       .mockResolvedValueOnce({ data: { success: true }, error: undefined })
       .mockResolvedValueOnce({ data: undefined, error: { message: "failed" } });
-    const { result } = renderHook(() => useBulkDeletePlugins(), { wrapper });
+    const { result } = renderHook(() => useDeletePlugins(), { wrapper });
 
     const outcome = await act(() =>
       result.current.mutateAsync([
@@ -66,6 +72,76 @@ describe("Plugin bulk mutations", () => {
 
     expect(outcome.succeeded).toEqual([{ id: "p1", name: "One" }]);
     expect(outcome.failed).toHaveLength(1);
+  });
+
+  it("restores several plugins one after the other, so a name two of them share is refused for the second", async () => {
+    let answerFirst: (value: unknown) => void = () => {};
+    sdk.restorePlugin
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          answerFirst = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: { message: "Cannot restore" },
+      });
+    const { result } = renderHook(() => useRestorePlugins(), { wrapper });
+
+    let outcome: Awaited<ReturnType<typeof result.current.mutateAsync>>;
+    const restoring = act(async () => {
+      outcome = await result.current.mutateAsync([
+        { id: "p1", name: "Tools" },
+        { id: "p2", name: "Tools" },
+      ]);
+    });
+    // The second is not sent while the first is unanswered.
+    await waitFor(() => expect(sdk.restorePlugin).toHaveBeenCalledTimes(1));
+    answerFirst({ data: { id: "p1" }, error: undefined });
+    await restoring;
+
+    expect(sdk.restorePlugin).toHaveBeenCalledTimes(2);
+    // biome-ignore lint/style/noNonNullAssertion: assigned inside act above
+    expect(outcome!.succeeded).toEqual([{ id: "p1", name: "Tools" }]);
+    // biome-ignore lint/style/noNonNullAssertion: assigned inside act above
+    expect(outcome!.failed).toHaveLength(1);
+  });
+
+  it("reports one deleted plugin and several in the same words from every caller", async () => {
+    sdk.deletePlugin.mockResolvedValue({
+      data: { success: true },
+      error: undefined,
+    });
+    const { result } = renderHook(() => useDeletePlugins(), { wrapper });
+
+    await act(() => result.current.mutateAsync([{ id: "p1", name: "One" }]));
+    expect(toast.success).toHaveBeenLastCalledWith("Plugin deleted");
+
+    await act(() =>
+      result.current.mutateAsync([
+        { id: "p1", name: "One" },
+        { id: "p2", name: "Two" },
+      ]),
+    );
+    expect(toast.success).toHaveBeenLastCalledWith("Deleted 2 plugins");
+  });
+
+  it("says how many of several could not be deleted", async () => {
+    sdk.deletePlugin
+      .mockResolvedValueOnce({ data: { success: true }, error: undefined })
+      .mockResolvedValueOnce({ data: undefined, error: { message: "failed" } });
+    const { result } = renderHook(() => useDeletePlugins(), { wrapper });
+
+    await act(() =>
+      result.current.mutateAsync([
+        { id: "p1", name: "One" },
+        { id: "p2", name: "Two" },
+      ]),
+    );
+
+    expect(toast.warning).toHaveBeenLastCalledWith(
+      "Deleted 1 of 2 plugins; 1 could not be deleted",
+    );
   });
 
   it("names the failed plugins and their reasons in the import toast", async () => {
@@ -152,20 +228,7 @@ describe("Plugin bulk mutations", () => {
           data: { success: true },
           error: undefined,
         });
-        const { result } = renderHook(() => useDeletePlugin("p-1"), {
-          wrapper: makeWrapper(client),
-        });
-        await act(() => result.current.mutateAsync());
-      },
-    },
-    {
-      name: "bulk delete",
-      run: async (client: QueryClient) => {
-        sdk.deletePlugin.mockResolvedValue({
-          data: { success: true },
-          error: undefined,
-        });
-        const { result } = renderHook(() => useBulkDeletePlugins(), {
+        const { result } = renderHook(() => useDeletePlugins(), {
           wrapper: makeWrapper(client),
         });
         await act(() =>
@@ -182,5 +245,19 @@ describe("Plugin bulk mutations", () => {
     expect(
       client.getQueryState(authQueryKeys.scopedCapabilities())?.isInvalidated,
     ).toBe(true);
+  });
+});
+
+describe("usePlugin", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("treats a malformed id as a plugin that does not exist, without asking the API", async () => {
+    const { result } = renderHook(() => usePlugin("not-a-uuid"), { wrapper });
+
+    // Null is what the page reads as "not found"; a request would have come
+    // back as a validation error and read as a failed load.
+    await waitFor(() => expect(result.current.data).toBeNull());
+    expect(result.current.isError).toBe(false);
+    expect(sdk.getPlugin).not.toHaveBeenCalled();
   });
 });

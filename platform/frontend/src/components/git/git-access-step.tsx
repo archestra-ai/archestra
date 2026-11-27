@@ -17,7 +17,11 @@ import { SettingsLink } from "@/components/settings-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -89,12 +93,12 @@ export function GitAccessStep({
   return (
     <div className="space-y-3">
       {credentials.isError ? (
-        <InlineNotice variant="error">
-          <AlertTriangle aria-hidden />
-          <span className="font-medium">Couldn't load credentials</span>
-          <InlineNoticeText className="flex-1">
-            {credentials.error.message}
-          </InlineNoticeText>
+        <InlineNotice variant="error" className="items-start">
+          <AlertTriangle aria-hidden className="mt-0.5" />
+          <InlineNoticeBody>
+            <span className="font-medium">Couldn't load credentials</span>
+            <InlineNoticeText>{credentials.error.message}</InlineNoticeText>
+          </InlineNoticeBody>
         </InlineNotice>
       ) : null}
       <RadioGroup

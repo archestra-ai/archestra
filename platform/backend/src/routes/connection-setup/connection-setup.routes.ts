@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   isIntegrationHidden,
   legacyMcpClientServerNames,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
@@ -48,6 +49,7 @@ import {
   CONNECTION_SETUP_SHARE_LINK_NAME_PREFIX,
   CONNECTION_SETUP_TOKEN_TTL_MS,
 } from "@/models/connection-setup";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { openappaEnabled } from "@/openappa/service";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
@@ -767,7 +769,11 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !isOpenCodeFamilyClient(clientId) &&
         organization.connectionPluginsEnabled
       ) {
-        // Every deliverable plugin the user may use, and no other: the
+        // Every deliverable plugin the user may use among those the Plugins
+        // list shows them: their own, those shared with them, and those
+        // shared with the organization. A plugin an admin reaches only
+        // through organization-wide authority (someone's unshared draft) is
+        // not installed unasked; it can still be named explicitly above. The
         // budget applies to what this user installs, not the whole catalog.
         const canUse = await pluginUseChecker({
           userId: user.id,
@@ -777,6 +783,11 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           clientType: clientId,
           platform: resolvePluginPlatform(platform),
+          access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+            userId: user.id,
+            organizationId,
+            relations: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+          }),
         });
         const ids = deliverable
           .map((plugin) => plugin.id)

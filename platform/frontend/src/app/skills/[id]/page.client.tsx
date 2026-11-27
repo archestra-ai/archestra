@@ -13,6 +13,7 @@ import {
 } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { ResourcePermissions } from "@/components/resource-permissions";
@@ -41,6 +42,7 @@ import {
 } from "@/lib/design/resource-lexicon";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
+import type { SkillManifestProblem } from "@/lib/skills/manifest-problem";
 import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
 import { repositoryLabel } from "@/lib/skills/skill-source";
 import { useSkillAccess } from "@/lib/skills/use-skill-access";
@@ -60,7 +62,9 @@ import {
   isSkillDraftDirty,
   isSyncedGithubSkill,
   type SkillDraft,
+  skillArchiveFiles,
   skillDraftFromSkill,
+  skillDraftGap,
 } from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
 import {
@@ -74,12 +78,14 @@ import {
 } from "../_parts/skill-page-config";
 import {
   SkillBackLink,
+  SkillLoadError,
   SkillNotFound,
   SkillPageLoading,
 } from "../_parts/skill-page-shell";
 import { SkillSourceGlyph } from "../_parts/skill-source-glyph";
 import { SkillUsagePanel } from "../_parts/skill-usage-panel";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
+import { useSkillNameProblem } from "../_parts/use-skill-name-problem";
 
 const SECTION_DESCRIPTIONS: Record<SkillDetailSection, string> = {
   // Settings is the page's default and shows the skill's own description
@@ -96,7 +102,13 @@ const SECTION_DESCRIPTIONS: Record<SkillDetailSection, string> = {
  */
 export function SkillDetailPage({ id }: { id: string }) {
   const router = useRouter();
-  const { data: skill, isPending } = useSkill(id);
+  const {
+    data: skill,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useSkill(id, { toastOnError: false });
 
   // Hold the last skill this mount saw. Deleting it in another tab (or any
   // background refetch that answers 404) turns `data` into null, and dropping
@@ -128,6 +140,10 @@ export function SkillDetailPage({ id }: { id: string }) {
   }
 
   if (isPending || isLeavingAfterDelete) return <SkillPageLoading />;
+  // A request that failed is not a skill that does not exist.
+  if (isError) {
+    return <SkillLoadError error={error} onRetry={() => void refetch()} />;
+  }
   return <SkillNotFound />;
 }
 
@@ -158,7 +174,13 @@ function SkillDetailView({
   // Undecided is not refused. Reading the permissions as "no" while they load
   // would flash the read-only notice at the author of the skill.
   const isReadOnly = !isAccessPending && !canEdit;
-  const updateSkill = useUpdateSkill();
+  // A save refused for a line of SKILL.md marks that line in the editor,
+  // until the manifest is edited.
+  const [refusedManifest, setRefusedManifest] =
+    useState<SkillManifestProblem | null>(null);
+  const updateSkill = useUpdateSkill({
+    onManifestProblem: setRefusedManifest,
+  });
 
   const actionModel = getSkillActionModel(skill.id);
   const historyAction = skillAction(actionModel, "history");
@@ -201,6 +223,8 @@ function SkillDetailView({
   // save to a head the author never saw.
   const seed = useMemo(() => skillDraftFromSkill(skill), [skill]);
   const [draft, setDraft] = useState<SkillDraft>(seed);
+  const manifestProblem =
+    refusedManifest?.manifest === draft.manifest ? refusedManifest : null;
   const [base, setBase] = useState<{ draft: SkillDraft; version: number }>({
     draft: seed,
     version: skill.latestVersion,
@@ -230,10 +254,14 @@ function SkillDetailView({
 
   // Discard is also the way out of a version conflict: the failed save has
   // already invalidated the skill, so this picks up the latest content.
-  const discardChanges = () => {
+  const discardChanges = useCallback(() => {
     setDraft(seed);
     setBase({ draft: seed, version: skill.latestVersion });
-  };
+    // The permissions editor reports its own edits and is unmounted by the
+    // section change that follows a discard, which drops them without a
+    // report; without this the page would stay "dirty" over nothing.
+    setPermissionsDirty(false);
+  }, [seed, skill.latestVersion]);
 
   const isSynced = isSyncedGithubSkill(skill);
   const isGithubSkill = skill.sourceType === "github";
@@ -244,7 +272,13 @@ function SkillDetailView({
     () => parseManifestFields(draft.manifest),
     [draft.manifest],
   );
-  const contentComplete = parsed.hasName && parsed.hasDescription;
+  const nameProblem = useSkillNameProblem({
+    name: parsed.name,
+    originalName: skill.name,
+    ownerId: skill.authorId,
+    skillId: skill.id,
+  });
+  const saveGap = skillDraftGap(parsed) ?? nameProblem?.message ?? null;
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -279,6 +313,13 @@ function SkillDetailView({
       if (open) return;
       const href = pendingHrefRef.current;
       pendingHrefRef.current = null;
+      // The guard lets go of a dirty page only when the reader chose to
+      // discard, so that is what happens to the draft. Leaving for another
+      // page unmounts it anyway, but a section change keeps this component,
+      // and the draft with it: "Discard changes" used to switch section with
+      // every edit still in place, so the same warning came back on the way
+      // out of the next section.
+      if (isDirty) discardChanges();
       // A section change is the same page with another query, so it replaces
       // rather than stacking a history entry per section.
       if (href) {
@@ -339,7 +380,6 @@ function SkillDetailView({
       backLink={
         <SkillBackLink href="/skills" label={backToListLabel("skill")} />
       }
-      maxWidth="wizard"
       contentOverflowX="clip"
       minWidth="phone"
       tabs={visibleSections.map((entry) => ({
@@ -368,6 +408,10 @@ function SkillDetailView({
               <CreatedByCell createdBy={skill.createdBy} />
             </p>
           )}
+          <DownloadFilesButton
+            name={parsed.name || skill.name}
+            files={skillArchiveFiles(draft)}
+          />
           <ChatWithSkillButton skillId={skill.id} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -432,7 +476,13 @@ function SkillDetailView({
           onDirtyChange={setPermissionsDirty}
         />
       ) : section === "usage" ? (
-        <SkillUsagePanel skillRef={{ kind: "standalone", skillId: skill.id }} />
+        <SkillUsagePanel
+          skillRef={{ kind: "standalone", skillId: skill.id }}
+          allTime={{
+            usageCount: skill.usageCount,
+            lastUsedAt: skill.lastUsedAt,
+          }}
+        />
       ) : (
         <div className="flex flex-col gap-4">
           {/* Where the content comes from comes first: it is why the fields
@@ -476,6 +526,8 @@ function SkillDetailView({
             // A synced skill's manifest and files belong to the repository;
             // who may use it is still this organization's to decide.
             contentReadOnly={isSynced}
+            nameProblem={nameProblem}
+            manifestProblem={manifestProblem}
           />
 
           {!isReadOnly && (
@@ -495,7 +547,9 @@ function SkillDetailView({
                 <PermissionButton
                   permissions={{ skill: ["update"] }}
                   permissionScope={skill.id}
-                  disabled={!isDirty || !contentComplete || isGone || isSaving}
+                  disabled={!isDirty || saveGap !== null || isGone || isSaving}
+                  // Says what is missing, once there is a change to save.
+                  tooltip={isDirty ? (saveGap ?? undefined) : undefined}
                   onClick={handleSave}
                 >
                   {isSaving ? (

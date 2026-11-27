@@ -97,23 +97,57 @@ describe("POST /api/skills/:id/restore", () => {
     expect(auditRows[0].after).toMatchObject({ deletedAt: null });
   });
 
-  test("404 for a skill that was never deleted or does not exist", async () => {
-    const active = await createSkill();
-    // active rows are invisible to the restore lookup (findDeletedById)
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: `/api/skills/${active.id}/restore`,
-        })
-      ).statusCode,
-    ).toBe(404);
+  test("a repeated restore returns the active skill instead of a 404", async () => {
+    const created = await createSkill();
+    expect((await del(created.id)).statusCode).toBe(200);
+    const restore = () =>
+      app.inject({ method: "POST", url: `/api/skills/${created.id}/restore` });
+    expect((await restore()).statusCode).toBe(200);
 
+    // The second click of a double click, or a retry after a lost response.
+    const repeated = await restore();
+    expect(repeated.statusCode).toBe(200);
+    expect(repeated.json()).toMatchObject({ id: created.id, deletedAt: null });
+
+    // Nothing changed the second time, so nothing more is audited.
+    const auditRows = await db
+      .select({ id: schema.auditLogsTable.id })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "skill.restored"),
+          eq(schema.auditLogsTable.resourceId, created.id),
+        ),
+      );
+    expect(auditRows).toHaveLength(1);
+  });
+
+  test("404 for an id that names no skill", async () => {
     expect(
       (
         await app.inject({
           method: "POST",
           url: `/api/skills/${crypto.randomUUID()}/restore`,
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+
+  test("a repeated restore is authorized like the restore itself", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await createSkill();
+    // Another member cannot see the admin's personal skill, so the id is a
+    // 404 for them whether it is deleted or active.
+    const outsider = await makeUser();
+    await makeMember(outsider.id, organizationId, { role: "member" });
+    user = outsider;
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/skills/${created.id}/restore`,
         })
       ).statusCode,
     ).toBe(404);

@@ -210,9 +210,7 @@ for (const viewport of [
     await capture(page, `role-edit-${viewport.width}`);
     // Leaving a dirty form asks first.
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Discard changes", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Discard", exact: true }).click();
     await expect(page).toHaveURL(
       new RegExp(`/settings/roles/${customRole.id}$`),
     );

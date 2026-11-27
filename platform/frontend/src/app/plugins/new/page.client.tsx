@@ -9,10 +9,11 @@ import {
   Github,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { FilterBar } from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
@@ -23,17 +24,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
-import { useCreatePlugin } from "@/lib/plugins/plugin.query";
+import { useSession } from "@/lib/auth/auth.query";
+import { useCreatePlugin, usePlugins } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
 import {
   blankPluginDraft,
-  isPluginDraftComplete,
+  isPluginDraftDirty,
   type PluginDraft,
+  patchNewPluginDraft,
+  pluginDraftGap,
+  pluginNameTwin,
 } from "../_parts/plugin-draft";
 import { PluginForm } from "../_parts/plugin-form";
 import { PluginBackLink } from "../_parts/plugin-page-shell";
+
+const NEW_PLUGIN_PATH = "/plugins/new";
 
 type CreateStep = "source" | "configure";
 
@@ -76,21 +89,81 @@ function NewPluginWizard() {
   );
   const [search, setSearch] = useState("");
 
-  const [step, setStep] = useState<CreateStep>(
+  // The step lives in the URL together with the tab. Kept in state beside a
+  // tab in the URL, the two drifted: going back to Source left
+  // `tab=permissions` behind, and the next visit to Configure opened on it.
+  const step: CreateStep =
     initialSource === "blank" || searchParams.has("tab")
       ? "configure"
-      : "source",
-  );
+      : "source";
   const stepIndex = CREATE_STEPS.findIndex((s) => s.id === step);
+  const goToSource = () => router.push(NEW_PLUGIN_PATH);
+  const goToConfigure = () => router.push(`${NEW_PLUGIN_PATH}?source=blank`);
 
-  const [draft, setDraft] = useState<PluginDraft>(blankPluginDraft);
+  const [blankDraft] = useState<PluginDraft>(blankPluginDraft);
+  const [draft, setDraft] = useState<PluginDraft>(blankDraft);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const patchDraft = (patch: Partial<PluginDraft>) =>
-    setDraft((prev) => ({ ...prev, ...patch }));
-
-  const isComplete = isPluginDraftComplete({ draft, isGithubPlugin: false });
+    setDraft((prev) => patchNewPluginDraft(prev, patch));
 
   const createPlugin = useCreatePlugin();
+  const {
+    data: plugins,
+    isPending: isPluginsPending,
+    isFetching: isPluginsFetching,
+  } = usePlugins();
+  // With no plugin to list, this page is where Plugins opens. It then says
+  // what a plugin is, and has no list to go back to.
+  const isFirstPlugin = plugins?.length === 0;
+  // Held until that is known, so the source cards do not jump down when the
+  // explanation arrives above them.
+  const isFirstPluginUnknown = isPluginsPending && isPluginsFetching;
+  const { data: session } = useSession();
+  const nameTwin = pluginNameTwin({
+    displayName: draft.displayName,
+    clientType: draft.clientType,
+    ownerId: session?.user?.id,
+    // A successful create refreshes the list while this page is still up, on
+    // its way to the new plugin. The list then holds the plugin just created,
+    // which carries the draft's name and owner: without leaving it out, the
+    // draft was told its own name was taken.
+    pluginId: createPlugin.data?.id,
+    plugins: plugins ?? [],
+  });
+  // A note, not a refusal: the API takes the name, and the form says the two
+  // plugins cannot be told apart in the list.
+  const nameTaken = nameTwin ? "other" : null;
+  const draftGap = pluginDraftGap({ draft, isGithubPlugin: false });
+
+  // The draft exists only on this page, so every way off it asks first. The
+  // wizard's own steps and tabs keep the draft and pass straight through.
+  const [isLeavingAfterCreate, setIsLeavingAfterCreate] = useState(false);
+  const isDirty =
+    !isLeavingAfterCreate && isPluginDraftDirty(draft, blankDraft);
+  useBeforeUnloadWhileDirty(isDirty);
+  const pendingHrefRef = useRef<string | null>(null);
+  const guard = useUnsavedChangesGuard({
+    isDirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      if (href) router.push(href);
+    },
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      if (href.split(/[?#]/)[0] === NEW_PLUGIN_PATH) {
+        router.push(href, { scroll: false });
+        return;
+      }
+      pendingHrefRef.current = href;
+      guard.requestClose();
+    },
+    [guard, router],
+  );
+  useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
+
   const handleCreate = async () => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     // A handled failure resolves to null and a rejection is reported by the
@@ -111,13 +184,17 @@ function NewPluginWizard() {
         labels: finalLabels,
       })
       .catch(() => null);
-    if (created) router.push(`/plugins/${created.id}`);
+    if (!created) return;
+    setIsLeavingAfterCreate(true);
+    router.push(`/plugins/${created.id}`);
   };
 
   const openImport = () => setImportState({ repoUrl: "", autoDiscover: false });
   const importPopular = (repoUrl: string) =>
     setImportState({ repoUrl, autoDiscover: true });
-  const goToPlugins = () => router.push("/plugins");
+  // Through the guard, like every other way off the page: an import started
+  // from the source step leaves a draft typed before it behind.
+  const goToPlugins = () => requestNavigate("/plugins");
 
   const filteredMarketplaces = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -136,7 +213,11 @@ function NewPluginWizard() {
       <PageLayout
         title="Add a new plugin"
         description={STEP_DESCRIPTIONS[step]}
-        backLink={<PluginBackLink href="/plugins" label="Plugins" />}
+        backLink={
+          isFirstPlugin && step === "source" ? undefined : (
+            <PluginBackLink href="/plugins" label="Plugins" />
+          )
+        }
         tabs={
           step === "configure"
             ? [
@@ -155,24 +236,47 @@ function NewPluginWizard() {
         }
         mobileVisibleCount={2}
         actionButton={
-          <WizardStepper
-            compact
-            steps={CREATE_STEPS}
-            activeStep={step}
-            onStepClick={(target) => {
-              const targetIndex = CREATE_STEPS.findIndex(
-                (candidate) => candidate.id === target,
-              );
-              if (targetIndex < stepIndex) setStep(target);
-            }}
-          />
+          <div className="flex items-center gap-3">
+            {step === "configure" && (
+              <DownloadFilesButton
+                name={draft.displayName || "plugin"}
+                files={draft.files}
+              />
+            )}
+            <WizardStepper
+              compact
+              steps={CREATE_STEPS}
+              activeStep={step}
+              onStepClick={(target) => {
+                const targetIndex = CREATE_STEPS.findIndex(
+                  (candidate) => candidate.id === target,
+                );
+                if (targetIndex < stepIndex) goToSource();
+              }}
+            />
+          </div>
         }
-        maxWidth="wizard"
+        // The Plugins list's column (the layout's default), so the header,
+        // its actions and the content keep their edges on the way in.
         contentOverflowX="clip"
       >
         <div className="space-y-6">
-          {step === "source" && (
-            <div className="mx-auto max-w-3xl space-y-8">
+          {step === "source" && !isFirstPluginUnknown && (
+            <div className="space-y-8">
+              {isFirstPlugin && (
+                <div className="max-w-2xl space-y-2">
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    Extend your agent
+                  </h2>
+                  <p className="leading-relaxed text-pretty text-muted-foreground">
+                    A plugin can bundle reusable instructions in form of skills,
+                    executable scripts, and hooks in any combination to extend
+                    functionality of your agent. Add ready plugins from
+                    marketplaces or create your own. Then install with a single
+                    command.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <CatalogSourceCard
                   icon={<GitBranch className="size-5" />}
@@ -184,7 +288,7 @@ function NewPluginWizard() {
                   icon={<FileText className="size-5" />}
                   title="Blank template"
                   description="Write the plugin files here."
-                  onClick={() => setStep("configure")}
+                  onClick={goToConfigure}
                 />
               </div>
 
@@ -265,17 +369,18 @@ function NewPluginWizard() {
                 draft={draft}
                 onChange={patchDraft}
                 labelsRef={labelsRef}
-                isCreate
                 activeSection={activeSection}
+                nameTaken={nameTaken}
               />
               <WizardFooter>
-                <Button variant="outline" onClick={() => setStep("source")}>
+                <Button variant="outline" onClick={goToSource}>
                   <ArrowLeft className="h-4 w-4" />
                   Back
                 </Button>
                 <PermissionButton
                   permissions={{ plugin: ["create"] }}
-                  disabled={!isComplete || createPlugin.isPending}
+                  disabled={draftGap !== null || createPlugin.isPending}
+                  tooltip={draftGap ?? undefined}
                   onClick={handleCreate}
                 >
                   {createPlugin.isPending ? "Creating..." : "Create plugin"}
@@ -286,6 +391,14 @@ function NewPluginWizard() {
         </div>
       </PageLayout>
 
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={() => {
+          pendingHrefRef.current = null;
+          guard.keepEditing();
+        }}
+        onDiscard={guard.discardChanges}
+      />
       <ImportMarketplaceDialog
         open={importState !== null}
         initialRepoUrl={importState?.repoUrl ?? ""}

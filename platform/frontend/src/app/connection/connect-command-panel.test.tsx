@@ -52,12 +52,16 @@ const {
   setupHookOptions,
   skillNamesMock,
   pluginsMock,
+  everyUsablePluginMock,
   skillsMarketplaceVisibleMock,
 } = vi.hoisted(() => ({
   createSetupMock: vi.fn(),
   setupHookOptions: {} as { onRefused?: (message: string) => void },
   skillNamesMock: vi.fn(),
   pluginsMock: vi.fn(),
+  // The same list asked without the default audience: every plugin the
+  // viewer may use, where a plugin named in a request is looked up.
+  everyUsablePluginMock: vi.fn(),
   skillsMarketplaceVisibleMock: vi.fn(() => true),
 }));
 
@@ -93,7 +97,10 @@ vi.mock("@/lib/plugins/plugin.query", async (importOriginal) => ({
   isDeliverablePlugin: (
     await importOriginal<typeof import("@/lib/plugins/plugin.query")>()
   ).isDeliverablePlugin,
-  usePlugins: (enabled?: boolean) => pluginsMock(enabled),
+  usePlugins: (enabled?: boolean, filters?: { access?: string[] }) =>
+    filters?.access?.includes("others")
+      ? everyUsablePluginMock(enabled)
+      : pluginsMock(enabled),
 }));
 
 // The per-gateway server list fetches its own data; its behavior is pinned in
@@ -281,6 +288,7 @@ beforeEach(() => {
       : undefined,
     isPending: false,
   }));
+  everyUsablePluginMock.mockReturnValue({ data: [], isPending: false });
   createSetupMock.mockResolvedValue({
     id: "setup-1",
     command: COMMAND,
@@ -1084,6 +1092,52 @@ describe("ConnectCommandPanel", () => {
       screen.getByRole("link", { name: "1 plugin" }).closest("li"),
     ).toHaveTextContent("Install 1 plugin");
     expect(screen.getByTestId("connect-change-plugins")).toBeVisible();
+  });
+
+  it("installs a plugin the request names even when the default list leaves it out, and bundles none unasked", async () => {
+    const plugin = (id: string) => ({
+      id,
+      pluginSlug: id,
+      displayName: id,
+      clientType: "claude-code",
+      enabled: true,
+      contentHash: `hash-${id}`,
+      approvedContentHash: `hash-${id}`,
+      supportedPlatforms: ["posix"],
+    });
+    skillNamesMock.mockReturnValue(skillNames([]));
+    // The viewer's own and shared plugins, and one reached only through
+    // admin access.
+    pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+      data: enabled ? [plugin("shared-plugin")] : undefined,
+      isPending: false,
+    }));
+    everyUsablePluginMock.mockImplementation(
+      (enabled: boolean | undefined) => ({
+        data: enabled
+          ? [plugin("shared-plugin"), plugin("unshared-plugin")]
+          : undefined,
+        isPending: false,
+      }),
+    );
+    const noGateway = { mcpGateways: [], mcpGatewayId: null, llmProxyId: null };
+
+    const unasked = renderPanel(noGateway);
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pluginIds: ["shared-plugin"] }),
+      ),
+    );
+    // Nothing was named, so every usable plugin was not asked for.
+    expect(everyUsablePluginMock).not.toHaveBeenCalledWith(true);
+    unasked.unmount();
+
+    renderPanel({ ...noGateway, pluginSlugs: ["unshared-plugin"] });
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pluginIds: ["unshared-plugin"] }),
+      ),
+    );
   });
 
   it("changes the exact plugin snapshot from the review row", async () => {

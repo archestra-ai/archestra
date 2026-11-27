@@ -415,7 +415,6 @@ const registry = defineArchestraTools([
       if (!existing) return unknownPluginError(args.id);
       const githubFilesError = checkManualFilesUpdate(existing, args.files);
       if (githubFilesError) return errorResult(githubFilesError);
-
       const { id, baseContentHash, ...input } = args;
       const plugin = await PluginModel.update({
         id,

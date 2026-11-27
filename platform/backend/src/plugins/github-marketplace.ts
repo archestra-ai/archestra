@@ -1,10 +1,12 @@
 import {
   GIT_PROVIDER_LABELS,
   type GitHost,
+  type GitReadFailureCode,
   gitHostFromUrl,
   PLUGIN_MARKETPLACE_DISCOVERY_LIMIT,
 } from "@archestra/shared";
 import type { GitAccess } from "@/git-hosts/git-access";
+import { gitReadFailureCode } from "@/git-hosts/git-host-client";
 import type {
   ClientType,
   PluginMarketplaceDiscovery,
@@ -35,7 +37,11 @@ const MAX_MARKETPLACE_SIZE_PROBES = 5_000;
 const MARKETPLACE_DISCOVERY_DEADLINE_MS = 5 * 60_000;
 
 export class MarketplaceDiscoveryError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** Why the repository could not be read, when the cause is a known one. */
+    readonly code: GitReadFailureCode | null = null,
+  ) {
     super(message);
     this.name = "MarketplaceDiscoveryError";
   }
@@ -92,7 +98,10 @@ export async function discoverGithubMarketplace(params: {
         signal: deadlineSignal,
       })
       .catch((error) => {
-        throw new MarketplaceDiscoveryError(errorMessage(error));
+        throw new MarketplaceDiscoveryError(
+          errorMessage(error),
+          gitReadFailureCode(error),
+        );
       })
       .finally(() => pendingCommits.delete(key));
     pendingCommits.set(key, resolution);
@@ -109,7 +118,10 @@ export async function discoverGithubMarketplace(params: {
         : MARKETPLACE_PATHS,
     })
     .catch((error) => {
-      throw new MarketplaceDiscoveryError(errorMessage(error));
+      throw new MarketplaceDiscoveryError(
+        errorMessage(error),
+        gitReadFailureCode(error),
+      );
     });
 
   if (!marketplacePath) {
@@ -137,8 +149,9 @@ export async function discoverGithubMarketplace(params: {
         commitSha,
         marketplacePath: null,
         entries: [],
-        reason:
-          "No supported marketplace manifest or plugin folder (plugin.json) was found",
+        // Said to the person importing; which files make a plugin is in the
+        // docs, not in this sentence.
+        reason: "No plugins found in the repository",
       };
     }
     const entries = await attachFileCounts({
@@ -393,6 +406,7 @@ async function discoverPluginFolders(params: {
   } catch (error) {
     throw new MarketplaceDiscoveryError(
       `Could not read repository tree: ${errorMessage(error)}`,
+      gitReadFailureCode(error),
     );
   }
   const manifests = new Map<string, string>();

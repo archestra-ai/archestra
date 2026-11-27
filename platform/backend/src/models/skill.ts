@@ -58,6 +58,7 @@ import type {
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { chunkForBulkStatement } from "@/utils/db";
+import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel, {
   type ObjectPolicy,
@@ -514,7 +515,13 @@ class SkillModel {
     return result ?? null;
   }
 
-  static async findByIds(ids: string[]): Promise<Skill[]> {
+  static async findByIds(
+    ids: string[],
+    options?: {
+      /** Also return soft-deleted skills, for the routes that restore them. */
+      includeDeleted?: boolean;
+    },
+  ): Promise<Skill[]> {
     if (ids.length === 0) return [];
     return await db
       .select()
@@ -522,7 +529,7 @@ class SkillModel {
       .where(
         and(
           inArray(schema.skillsTable.id, ids),
-          notDeleted(schema.skillsTable),
+          options?.includeDeleted ? undefined : notDeleted(schema.skillsTable),
           enabledSkillPredicate(),
         ),
       );
@@ -1827,6 +1834,12 @@ function buildOrgFilters(params: {
   access?: ResourceAccessFilter;
 }) {
   const normalizedSearch = params.search?.trim();
+  // The search text and the repository are matched literally: `_` and `%` in
+  // them are characters a name, a description or a repository can hold, not
+  // wildcards that would widen the match to every skill.
+  const searchPattern = normalizedSearch
+    ? `%${escapeLikePattern(normalizedSearch)}%`
+    : undefined;
   const normalizedSourceRepo = params.sourceRepo?.trim();
   const sourceRepo = parseSourceRepoFilter(normalizedSourceRepo);
   return [
@@ -1928,17 +1941,20 @@ function buildOrgFilters(params: {
           ),
         ]
       : []),
-    ...(normalizedSearch
+    ...(searchPattern
       ? [
           or(
-            ilike(schema.skillsTable.name, `%${normalizedSearch}%`),
-            ilike(schema.skillsTable.description, `%${normalizedSearch}%`),
+            ilike(schema.skillsTable.name, searchPattern),
+            ilike(schema.skillsTable.description, searchPattern),
           ),
         ]
       : []),
     ...(normalizedSourceRepo
       ? [
-          like(schema.skillsTable.sourceRef, `${sourceRepo.repo}@%`),
+          like(
+            schema.skillsTable.sourceRef,
+            `${escapeLikePattern(sourceRepo.repo)}@%`,
+          ),
           sourceRepo.origin
             ? eq(schema.skillsTable.sourceOrigin, sourceRepo.origin)
             : isNull(schema.skillsTable.sourceOrigin),

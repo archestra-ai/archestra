@@ -1,0 +1,10 @@
+/* A line a save was refused for. Monaco draws these classes on its own
+   elements, so they cannot be utility classes on a component. */
+.invalidLine {
+  background-color: color-mix(in oklab, var(--destructive) 16%, transparent);
+}
+
+.invalidLineEdge {
+  border-left: 2px solid var(--destructive);
+  margin-left: 3px;
+}

@@ -4,6 +4,7 @@ import { FileX } from "lucide-react";
 import type { MouseEvent } from "react";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import {
   Empty,
   EmptyDescription,
@@ -37,7 +38,6 @@ export function SkillPageLoading() {
       title="Skill"
       description=""
       backLink={<SkillBackLink href="/skills" label="Skills" />}
-      maxWidth="wizard"
     >
       {null}
     </PageLayout>
@@ -51,7 +51,6 @@ export function SkillNotFound() {
       title="Skill"
       description=""
       backLink={<SkillBackLink href="/skills" label="Skills" />}
-      maxWidth="wizard"
     >
       <Empty className="border">
         <EmptyHeader>
@@ -64,6 +63,34 @@ export function SkillNotFound() {
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
+    </PageLayout>
+  );
+}
+
+/**
+ * A skill whose request failed, which is not a skill that does not exist: the
+ * reader gets the reason (a lost connection, a refusal) and a retry, with the
+ * same way back to the list.
+ */
+export function SkillLoadError({
+  error,
+  onRetry,
+}: {
+  error: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <PageLayout
+      title="Skill"
+      description=""
+      backLink={<SkillBackLink href="/skills" label="Skills" />}
+    >
+      <QueryLoadError
+        title="Couldn't load this skill"
+        error={error}
+        onRetry={onRetry}
+        className="border"
+      />
     </PageLayout>
   );
 }

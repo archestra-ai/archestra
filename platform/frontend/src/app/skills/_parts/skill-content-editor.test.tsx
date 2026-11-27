@@ -16,10 +16,11 @@ function Harness({
   onFiles,
 }: {
   files: ResourceFile[];
-  manifest?: string;
+  /** Null lists only the files, as a plugin's payload does. */
+  manifest?: string | null;
   onFiles?: (files: ResourceFile[]) => void;
 }) {
-  const [manifest, setManifest] = useState(initialManifest);
+  const [manifest, setManifest] = useState<string | null>(initialManifest);
   const [files, setFiles] = useState(initial);
   return (
     <SkillContentEditor
@@ -82,14 +83,82 @@ describe("SkillContentEditor", () => {
     );
   });
 
-  it("names a new folder's first file and opens it", async () => {
+  it("opens the manifest and marks the line a save was refused for, until the problem is gone", async () => {
+    const user = userEvent.setup();
+    const files: ResourceFile[] = [
+      { path: "run.py", content: "print(1)", encoding: "utf8" },
+    ];
+    const props = {
+      manifest: MANIFEST,
+      files,
+      onManifestChange: vi.fn(),
+      onFilesChange: vi.fn(),
+    };
+    const { rerender } = render(<SkillContentEditor {...props} />);
+    // Another file is open when the save is refused.
+    await user.click(
+      within(explorer()).getByRole("button", { name: "run.py" }),
+    );
+    expect(editor()).toHaveValue("print(1)");
+
+    rerender(
+      <SkillContentEditor
+        {...props}
+        manifestProblem={{ line: 3, message: "Wrap the value in quotes." }}
+      />,
+    );
+
+    // The line is in SKILL.md, so that is the file shown.
+    expect(editor()).toHaveValue(MANIFEST);
+    expect(JSON.parse(editor().dataset.markers ?? "[]")).toEqual([
+      expect.objectContaining({
+        startLineNumber: 3,
+        endLineNumber: 3,
+        startColumn: 1,
+        // To the end of `description: Ship it.`
+        endColumn: 22,
+        message: "Wrap the value in quotes.",
+      }),
+    ]);
+
+    // The page drops the problem once the manifest is edited.
+    rerender(<SkillContentEditor {...props} manifestProblem={null} />);
+    expect(editor().dataset.markers).toBeUndefined();
+  });
+
+  it("marks the last line for a problem past the end of the manifest", () => {
+    render(
+      <SkillContentEditor
+        manifest={"---\nname: x\n---"}
+        files={[]}
+        onManifestChange={vi.fn()}
+        onFilesChange={vi.fn()}
+        manifestProblem={{ line: 9, message: "Too far." }}
+      />,
+    );
+
+    expect(JSON.parse(editor().dataset.markers ?? "[]")).toEqual([
+      expect.objectContaining({ startLineNumber: 3, endLineNumber: 3 }),
+    ]);
+  });
+
+  it("names a new file in a new folder and opens it", async () => {
     const user = userEvent.setup();
     const onFiles = vi.fn();
     render(<Harness files={[]} onFiles={onFiles} />);
 
-    await user.click(screen.getByRole("button", { name: "New folder" }));
+    // One button for both: a folder is made on the way to its first file.
+    await user.click(
+      screen.getByRole("button", { name: "New file or folder" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "New folder" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "New folder at top level" }),
+    );
     await user.type(
-      screen.getByRole("textbox", { name: "Folder name" }),
+      screen.getByRole("textbox", { name: "New folder name" }),
       "references{Enter}",
     );
     await user.type(
@@ -106,6 +175,74 @@ describe("SkillContentEditor", () => {
     expect(editor()).toHaveValue("");
   });
 
+  it("refuses a name the server would not store, and keeps it open to correct", async () => {
+    const user = userEvent.setup();
+    const onFiles = vi.fn();
+    render(
+      <Harness
+        files={[{ path: "notes.md", content: "", encoding: "utf8" }]}
+        onFiles={onFiles}
+      />,
+    );
+    const name = () => screen.getByRole("textbox", { name: "File name" });
+
+    await user.click(
+      screen.getByRole("button", { name: "New file or folder" }),
+    );
+    // The folder is picked in the tree, so the field takes a name, never a
+    // path, in either separator.
+    const onlyAName =
+      "Enter a name only, without / or \\. Pick the folder above.";
+    for (const path of ["../up.txt", "docs/guide.md", "docs\\guide.md"]) {
+      await user.clear(name());
+      await user.type(name(), `${path}{Enter}`);
+      expect(screen.getByText(onlyAName)).toBeVisible();
+    }
+    await user.clear(name());
+    await user.type(name(), "..{Enter}");
+    expect(screen.getByText("A name cannot be . or ..")).toBeVisible();
+
+    // A second manifest, in any letter case.
+    await user.clear(name());
+    await user.type(name(), "skill.md{Enter}");
+    expect(screen.getByText("SKILL.md is already in the list.")).toBeVisible();
+
+    // A name that is taken says so; it used to do nothing at all.
+    await user.clear(name());
+    await user.type(name(), "Notes.md{Enter}");
+    expect(
+      screen.getByText("A file with this name already exists."),
+    ).toBeVisible();
+    expect(onFiles).not.toHaveBeenCalled();
+
+    // Corrected in place: the message goes with the next keystroke.
+    await user.clear(name());
+    await user.type(name(), "more-notes.md{Enter}");
+    expect(screen.queryByText(/already exists/)).not.toBeInTheDocument();
+    expect(onFiles).toHaveBeenLastCalledWith([
+      { path: "notes.md", content: "", encoding: "utf8" },
+      { path: "more-notes.md", content: "", encoding: "utf8" },
+    ]);
+  });
+
+  it("opens another file when the open one goes to the trash", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        manifest={null}
+        files={[
+          { path: "a.md", content: "first", encoding: "utf8" },
+          { path: "b.md", content: "second", encoding: "utf8" },
+        ]}
+      />,
+    );
+    expect(editor()).toHaveValue("first");
+
+    await user.click(screen.getByRole("button", { name: "Delete a.md" }));
+
+    expect(editor()).toHaveValue("second");
+  });
+
   it("moves a file to the trash and restores it", async () => {
     const user = userEvent.setup();
     const onFiles = vi.fn();
@@ -116,9 +253,7 @@ describe("SkillContentEditor", () => {
     };
     render(<Harness files={[file]} onFiles={onFiles} />);
 
-    await user.click(
-      screen.getByRole("button", { name: "Move notes.md to trash" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Delete notes.md" }));
     expect(onFiles).toHaveBeenLastCalledWith([]);
     expect(screen.getByRole("button", { name: /^Trash\s*1$/ })).toBeVisible();
 
@@ -129,7 +264,7 @@ describe("SkillContentEditor", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("jumps to a file from the palette that Cmd+P opens", async () => {
+  it("names the open file on its bar, with no quick-open palette to learn", async () => {
     const user = userEvent.setup();
     render(
       <Harness
@@ -141,10 +276,105 @@ describe("SkillContentEditor", () => {
 
     await user.click(editor());
     await user.keyboard("{Meta>}p{/Meta}");
-    const palette = screen.getByRole("dialog", { name: "Open a file" });
-    await user.type(within(palette).getByRole("combobox"), "config");
-    await user.click(within(palette).getByRole("option", { name: /config/ }));
 
-    expect(editor()).toHaveValue("{}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open a file" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("names a new file in a dialog, in a folder picked from the tree", async () => {
+    const user = userEvent.setup();
+    const onFiles = vi.fn();
+    const existing: ResourceFile = {
+      path: "docs/api/intro.md",
+      content: "",
+      encoding: "utf8",
+    };
+    render(<Harness files={[existing]} onFiles={onFiles} />);
+
+    await user.click(
+      screen.getByRole("button", { name: "New file or folder" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "New file or folder" });
+    // It opens on the top level, with every folder there to pick.
+    expect(
+      within(dialog).getByRole("radio", { name: "Top level" }),
+    ).toBeChecked();
+    // Nothing to create yet.
+    expect(
+      within(dialog).getByRole("button", { name: "Create file" }),
+    ).toBeDisabled();
+
+    await user.click(within(dialog).getByRole("radio", { name: "api" }));
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "File name" }),
+      "guide.md",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create file" }),
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onFiles).toHaveBeenLastCalledWith([
+      existing,
+      { path: "docs/api/guide.md", content: "", encoding: "utf8" },
+    ]);
+  });
+
+  it("adds the folders a new file needs from inside its dialog", async () => {
+    const user = userEvent.setup();
+    const onFiles = vi.fn();
+    render(<Harness files={[]} onFiles={onFiles} />);
+
+    await user.click(
+      screen.getByRole("button", { name: "New file or folder" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "New file or folder" });
+    const addFolder = async (button: string, name: string) => {
+      await user.click(within(dialog).getByRole("button", { name: button }));
+      // Enter adds the folder; it does not create the file.
+      await user.type(
+        within(dialog).getByRole("textbox", { name: "New folder name" }),
+        `${name}{Enter}`,
+      );
+    };
+    await addFolder("New folder at top level", "references");
+    // The new folder is picked, so the next one goes inside it.
+    expect(
+      within(dialog).getByRole("radio", { name: "references" }),
+    ).toBeChecked();
+    await addFolder("New folder in references", "eu");
+    expect(onFiles).not.toHaveBeenCalled();
+
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "File name" }),
+      "terms.md{Enter}",
+    );
+
+    expect(onFiles).toHaveBeenLastCalledWith([
+      { path: "references/eu/terms.md", content: "", encoding: "utf8" },
+    ]);
+  });
+
+  it("offers the files as a .zip unless the host does", () => {
+    const { unmount } = render(<Harness files={[]} />);
+    expect(
+      screen.getByRole("button", { name: "Download as .zip" }),
+    ).toBeVisible();
+
+    unmount();
+    render(
+      <SkillContentEditor
+        manifest={null}
+        files={[{ path: "a.md", content: "x", encoding: "utf8" }]}
+        onManifestChange={() => {}}
+        onFilesChange={() => {}}
+        showDownload={false}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Download as .zip" }),
+    ).not.toBeInTheDocument();
   });
 });

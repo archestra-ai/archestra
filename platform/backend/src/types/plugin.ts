@@ -118,6 +118,11 @@ export const UpdatePluginSchema = z
       .describe("Emoji or base64 image data URL shown with the name."),
     enabled: z.boolean().optional(),
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
+    clientType: ClientTypeSchema.optional().describe(
+      "The client the plugin is for. Manual plugins only: a Git plugin's " +
+        "client is the one its repository was imported for. The files are " +
+        "left as they are, so they have to suit the new client's layout.",
+    ),
     labels: z.array(LabelWithDetailsSchema).optional(),
     githubSource: z
       .object({
@@ -147,6 +152,15 @@ export const UpdatePluginSchema = z
       .min(1)
       .max(PLUGIN_MAX_FILES)
       .optional(),
+    baseContentHash: z
+      .string()
+      .optional()
+      .describe(
+        "The plugin's `contentHash` when `files` was composed. When sent, " +
+          "the files are replaced only while the plugin still has that " +
+          "hash; otherwise the save is refused with 409. Omit to replace " +
+          "the files whatever they are now.",
+      ),
   })
   // Strict: the retired scope/teamIds/userIds fields are refused, not
   // silently dropped. Access is edited through the resource permissions API.

@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  isUuid,
+} from "@archestra/shared";
 import {
   type QueryClient,
   useMutation,
@@ -9,6 +13,7 @@ import { toast } from "sonner";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { pluginsQueryKey } from "@/lib/connection-approval-query-keys";
 import {
+  getApiErrorInternalCode,
   getApiErrorMessage,
   handleApiError,
   throwOnApiError,
@@ -18,6 +23,8 @@ const {
   applyGithubPluginUpdate,
   createPlugin,
   deletePlugin,
+  permanentlyDeletePlugin,
+  restorePlugin,
   discoverGithubPluginMarketplace,
   getPlugin,
   getPlugins,
@@ -52,7 +59,7 @@ export function usePlugins(
   enabled = true,
   filters?: Pick<
     NonNullable<archestraApiTypes.GetPluginsData["query"]>,
-    "labels" | "access" | "sharedWith" | "owner"
+    "labels" | "access" | "sharedWith" | "owner" | "status"
   >,
 ) {
   // Label and access filtering are resolved server-side (the junction table
@@ -62,12 +69,14 @@ export function usePlugins(
   const access = filters?.access;
   const sharedWith = filters?.sharedWith;
   const owner = filters?.owner;
+  // `deleted` asks for the trash instead of the live plugins.
+  const status = filters?.status;
   return useQuery({
-    queryKey: pluginsQueryKey({ labels, access, sharedWith, owner }),
+    queryKey: pluginsQueryKey({ labels, access, sharedWith, owner, status }),
     enabled,
     queryFn: async () => {
       const { data, error } = await getPlugins({
-        query: { labels, access, sharedWith, owner },
+        query: { labels, access, sharedWith, owner, status },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
@@ -80,6 +89,9 @@ export function usePlugin(id: string | null) {
     queryKey: ["plugins", id],
     enabled: !!id,
     queryFn: async () => {
+      // A malformed id names no plugin. Asking the API would only come back
+      // as a validation error, which reads as a failed load, not "not found".
+      if (!isUuid(id as string)) return null;
       const { data, error } = await getPlugin({
         path: { id: id as string },
       });
@@ -186,9 +198,13 @@ export function useDiscoverGithubPluginMarketplace() {
     mutationFn: async (body: DiscoverGithubPluginMarketplaceBody) => {
       const { data, error } = await discoverGithubPluginMarketplace({ body });
       if (error) {
-        return { data: null, errorMessage: getApiErrorMessage(error) };
+        return {
+          data: null,
+          errorMessage: getApiErrorMessage(error),
+          errorCode: getApiErrorInternalCode(error) ?? null,
+        };
       }
-      return { data, errorMessage: null };
+      return { data, errorMessage: null, errorCode: null };
     },
   });
 }
@@ -245,6 +261,9 @@ export function useUpdatePlugin(id: string) {
       });
       if (error) {
         handleApiError(error);
+        // A save refused because the files changed elsewhere: read the plugin
+        // again, so that discarding the draft shows what is saved now.
+        queryClient.invalidateQueries({ queryKey: ["plugins", id] });
         return null;
       }
       return data;
@@ -311,56 +330,39 @@ export function useTriggerPluginGithubSync(id: string) {
   });
 }
 
-export function useDeletePlugin(id: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await deletePlugin({ path: { id } });
-      if (error) {
-        handleApiError(error);
-        return false;
-      }
-      return data?.success ?? false;
-    },
-    onSuccess: (deleted) => {
-      if (!deleted) return;
-      queryClient.removeQueries({ queryKey: ["plugins", id] });
-      queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      toast.success("Plugin deleted");
-      return invalidatePluginCapabilities(queryClient);
-    },
+/**
+ * Deletes one plugin or several. Every place that deletes plugins goes
+ * through this one mutation, so the outcome is reported the same way from a
+ * row, the bulk bar and the plugin's page.
+ */
+export function useDeletePlugins() {
+  return usePluginsMutation({
+    request: (id) => deletePlugin({ path: { id } }),
+    words: { done: "deleted", doing: "delete" },
   });
 }
 
-export function useBulkDeletePlugins() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (plugins: Array<{ id: string; name: string }>) => {
-      const outcomes = await Promise.all(
-        plugins.map(async (plugin) => {
-          const { error } = await deletePlugin({ path: { id: plugin.id } });
-          return { plugin, error };
-        }),
-      );
-      return {
-        succeeded: outcomes
-          .filter(({ error }) => !error)
-          .map(({ plugin }) => plugin),
-        failed: outcomes.filter(({ error }) => !!error),
-      };
-    },
-    onSuccess: ({ succeeded, failed }) => {
-      queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      if (failed.length === 0)
-        toast.success(`Deleted ${succeeded.length} plugins`);
-      else
-        toast.warning(
-          `Deleted ${succeeded.length} plugins; ${failed.length} failed`,
-        );
-      if (succeeded.length > 0) {
-        return invalidatePluginCapabilities(queryClient);
-      }
-    },
+/** Restores one deleted plugin or several, reported like the delete. */
+export function useRestorePlugins() {
+  return usePluginsMutation({
+    request: (id) => restorePlugin({ path: { id } }),
+    words: { done: "restored", doing: "restore" },
+    // A restore is refused when its owner's name for that client is taken,
+    // and two deleted plugins can share a name. Sent together, both would be
+    // checked before either came back; one after the other, the second is
+    // refused.
+    oneAtATime: true,
+  });
+}
+
+/**
+ * Destroys one deleted plugin or several for good, reported like the delete.
+ * The API answers "not found" to anyone but a global admin.
+ */
+export function usePermanentlyDeletePlugins() {
+  return usePluginsMutation({
+    request: (id) => permanentlyDeletePlugin({ path: { id } }),
+    words: { done: "permanently deleted", doing: "permanently delete" },
   });
 }
 
@@ -374,6 +376,66 @@ export { isDeliverablePlugin } from "./plugin-eligibility";
  * predates. Edit, install, delete, and permissions controls read that list, so
  * refetch it before the create or import flow navigates to the new plugin.
  */
+/**
+ * One request per plugin for a batch of them, with one report for the batch:
+ * the shape every plugin action that works on a row and on a selection takes.
+ */
+function usePluginsMutation(params: {
+  request: (id: string) => Promise<{ error?: unknown }>;
+  /** The action as a past participle and as a verb: "deleted", "delete". */
+  words: { done: string; doing: string };
+  /** Wait for each request's answer before sending the next. */
+  oneAtATime?: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { request, words, oneAtATime } = params;
+  return useMutation({
+    mutationFn: async (plugins: Array<{ id: string; name: string }>) => {
+      const send = async (plugin: { id: string; name: string }) => {
+        const { error } = await request(plugin.id);
+        return { plugin, error };
+      };
+      const outcomes: Awaited<ReturnType<typeof send>>[] = [];
+      if (oneAtATime) {
+        for (const plugin of plugins) outcomes.push(await send(plugin));
+      } else {
+        outcomes.push(...(await Promise.all(plugins.map(send))));
+      }
+      return {
+        succeeded: outcomes
+          .filter(({ error }) => !error)
+          .map(({ plugin }) => plugin),
+        failed: outcomes.filter(({ error }) => !!error),
+      };
+    },
+    onSuccess: ({ succeeded, failed }) => {
+      for (const plugin of succeeded) {
+        queryClient.removeQueries({ queryKey: ["plugins", plugin.id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["plugins"] });
+      const total = succeeded.length + failed.length;
+      const Done = words.done.charAt(0).toUpperCase() + words.done.slice(1);
+      if (total === 1 && failed.length === 1) {
+        // One plugin, one reason: say the reason itself.
+        handleApiError(failed[0].error);
+      } else if (failed.length === 0) {
+        toast.success(
+          total === 1 ? `Plugin ${words.done}` : `${Done} ${total} plugins`,
+        );
+      } else if (succeeded.length === 0) {
+        toast.error(`Couldn't ${words.doing} ${failed.length} plugins`);
+      } else {
+        toast.warning(
+          `${Done} ${succeeded.length} of ${total} plugins; ${failed.length} could not be ${words.done}`,
+        );
+      }
+      if (succeeded.length > 0) {
+        return invalidatePluginCapabilities(queryClient);
+      }
+    },
+  });
+}
+
 function invalidatePluginCapabilities(queryClient: QueryClient) {
   return queryClient.invalidateQueries({
     queryKey: authQueryKeys.scopedCapabilities(),

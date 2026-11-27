@@ -1,4 +1,5 @@
 import { z } from "zod";
+import SkillModel from "@/models/skill";
 import {
   MAX_SKILL_FILE_BYTES,
   MAX_SKILL_FILE_CONTENT_CHARS,

@@ -1,16 +1,19 @@
 "use client";
 
-import { type Ref, useMemo } from "react";
+import { AlertTriangle } from "lucide-react";
+import { type Ref, useMemo, useState } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { IdentityFields } from "@/components/identity-fields";
 import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  findFrontmatterNotKept,
   parseManifestFields,
   setManifestFrontmatterField,
 } from "@/lib/skills/manifest-compose";
@@ -20,6 +23,7 @@ import {
   SkillContentEditor,
 } from "./skill-content-editor";
 import type { SkillDraft } from "./skill-draft";
+import type { SkillNameProblem } from "./use-skill-name-problem";
 
 /**
  * Everything a skill is, on one page: what it is called and does, the
@@ -39,6 +43,8 @@ export function SkillForm({
   labelsRef,
   readOnly = false,
   contentReadOnly = false,
+  nameProblem = null,
+  manifestProblem = null,
 }: {
   draft: SkillDraft;
   creating?: boolean;
@@ -54,12 +60,35 @@ export function SkillForm({
    * a GitHub-synced skill, whose content is owned by the repository.
    */
   contentReadOnly?: boolean;
+  /** Why the typed name cannot be saved; shown under the field. */
+  nameProblem?: SkillNameProblem | null;
+  /** The line of SKILL.md a save was refused for; marked in the editor. */
+  manifestProblem?: { line: number; message: string } | null;
 }) {
   // Read back out of the manifest rather than kept beside it, so an edit made
   // in the editor shows up in the fields and vice versa.
   const parsed = useMemo(
     () => parseManifestFields(draft.manifest),
     [draft.manifest],
+  );
+  // Both fields are required. A field left empty says so once the reader has
+  // been in it and moved on, not while the form is still untouched.
+  const namesEditable = !readOnly && !contentReadOnly;
+  const [visited, setVisited] = useState({ name: false, description: false });
+  const nameMissing = namesEditable && visited.name && !parsed.hasName;
+  const descriptionMissing =
+    namesEditable && visited.description && !parsed.hasDescription;
+  const nameInvalid = nameProblem !== null || nameMissing;
+  const descriptionInvalid = descriptionMissing;
+
+  // What the save would drop, said while the author can still move it: a
+  // repository-owned or read-only manifest is not this reader's to change.
+  const notKept = useMemo(
+    () =>
+      readOnly || contentReadOnly
+        ? null
+        : findFrontmatterNotKept(draft.manifest),
+    [draft.manifest, readOnly, contentReadOnly],
   );
 
   return (
@@ -78,7 +107,11 @@ export function SkillForm({
             onIconChange={(icon) => onChange({ icon })}
             fallbackType="skill"
             disabled={readOnly}
-            label={<Label htmlFor="skill-name">Skill name</Label>}
+            label={
+              <FieldLabel htmlFor="skill-name" required={namesEditable}>
+                Skill name
+              </FieldLabel>
+            }
           >
             <Input
               id="skill-name"
@@ -92,16 +125,26 @@ export function SkillForm({
                   }),
                 })
               }
-              placeholder="release-checklist"
+              placeholder="e.g. release-checklist"
               readOnly={readOnly}
               // Repository-owned content is disabled, not just read-only, so it
               // reads as locked rather than as a field that ignores typing.
               disabled={contentReadOnly}
               required
+              onBlur={() => setVisited((fields) => ({ ...fields, name: true }))}
+              aria-invalid={nameInvalid ? true : undefined}
+              aria-describedby={nameInvalid ? "skill-name-problem" : undefined}
             />
+            {nameInvalid && (
+              <FieldProblem id="skill-name-problem">
+                <span>{nameProblem?.message ?? "Enter a skill name."}</span>
+              </FieldProblem>
+            )}
           </IdentityFields>
           <div className="space-y-2">
-            <Label htmlFor="skill-description">Description</Label>
+            <FieldLabel htmlFor="skill-description" required={namesEditable}>
+              Description
+            </FieldLabel>
             <Textarea
               id="skill-description"
               value={parsed.description ?? ""}
@@ -121,15 +164,54 @@ export function SkillForm({
               // reads as locked rather than as a field that ignores typing.
               disabled={contentReadOnly}
               required
+              onBlur={() =>
+                setVisited((fields) => ({ ...fields, description: true }))
+              }
+              aria-invalid={descriptionInvalid ? true : undefined}
+              aria-describedby={
+                descriptionInvalid ? "skill-description-problem" : undefined
+              }
             />
+            {descriptionInvalid && (
+              <FieldProblem id="skill-description-problem">
+                <span>Enter a description.</span>
+              </FieldProblem>
+            )}
           </div>
         </div>
+        {notKept &&
+          (notKept.keys.length > 0 ||
+            notKept.nestedMetadataKeys.length > 0) && (
+            <InlineNotice id="skill-frontmatter-not-kept">
+              <AlertTriangle aria-hidden />
+              <span className="font-medium">
+                Some frontmatter will not be saved
+              </span>
+              <InlineNoticeText>
+                {notKept.keys.length > 0 && (
+                  <span>
+                    {`Only name, description, license, compatibility, allowed-tools, agent, templated and metadata are kept. Saving removes: ${notKept.keys.join(", ")}. `}
+                  </span>
+                )}
+                {notKept.nestedMetadataKeys.length > 0 && (
+                  <span>
+                    {`Metadata values are saved as text, so these nested values become one line of JSON: ${notKept.nestedMetadataKeys.join(", ")}.`}
+                  </span>
+                )}
+              </InlineNoticeText>
+            </InlineNotice>
+          )}
         <SkillContentEditor
           manifest={draft.manifest}
           files={draft.files}
           onManifestChange={(manifest) => onChange({ manifest })}
           onFilesChange={onFilesChange}
           readOnly={readOnly || contentReadOnly}
+          // The page header offers the skill as a .zip.
+          showDownload={false}
+          // Said under the name field above, next to what it is about.
+          nameNotice={false}
+          manifestProblem={manifestProblem}
           className={SKILL_WIZARD_EDITOR_CLASS}
         />
       </SettingsSection>
@@ -146,5 +228,52 @@ export function SkillForm({
         </fieldset>
       </SettingsSection>
     </SettingsSectionGroup>
+  );
+}
+
+/**
+ * A field's label, with the mark the app's forms give a required field. The
+ * mark sits beside the label, not inside it, so the label's text stays the
+ * field's name.
+ */
+function FieldLabel({
+  htmlFor,
+  required,
+  children,
+}: {
+  htmlFor: string;
+  required: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <Label htmlFor={htmlFor}>{children}</Label>
+      {required && (
+        // The label's own colour: the mark says "required", not "wrong".
+        <span className="text-sm font-medium leading-none" aria-hidden="true">
+          *
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Why a field's value cannot be saved, under the field: one line of small
+ * red text, as the app's other forms write a field's error. The field's own
+ * red outline already marks it, so a boxed notice here would be a second
+ * red frame for the same thing.
+ */
+function FieldProblem({
+  id,
+  children,
+}: {
+  id: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <p id={id} className="text-xs text-destructive">
+      {children}
+    </p>
   );
 }

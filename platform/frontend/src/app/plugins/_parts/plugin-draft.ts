@@ -6,6 +6,7 @@ import type {
   PluginFileDraft,
 } from "./plugin-content-fields";
 import type { PluginPlatform } from "./plugin-platforms";
+import { pluginStarterFiles, samePluginFiles } from "./plugin-starter";
 
 /**
  * A plugin as it sits in the form before a write: what it is and what it
@@ -35,6 +36,26 @@ export interface PluginDraft {
   gitCredential: string;
 }
 
+/**
+ * A change to a new plugin's draft. The starter files follow the client, the
+ * platforms, the name and the description for as long as nobody has touched
+ * them: another client reads another layout, and another platform runs
+ * another shell. Files that were edited are the author's, and stay.
+ */
+export function patchNewPluginDraft(
+  draft: PluginDraft,
+  patch: Partial<PluginDraft>,
+): PluginDraft {
+  const next = { ...draft, ...patch };
+  if (
+    patch.files === undefined &&
+    samePluginFiles(draft.files, pluginStarterFiles(draft))
+  ) {
+    next.files = pluginStarterFiles(next);
+  }
+  return next;
+}
+
 /** The credential columns a plugin's Git source saves. */
 export function pluginGitAuthentication(gitCredential: string): {
   githubAppConfigId: string | null;
@@ -49,23 +70,22 @@ export function pluginGitAuthentication(gitCredential: string): {
   };
 }
 
-/** A blank plugin, as the create page starts it. */
+/**
+ * A blank plugin, as the create page starts it: no name yet, and the starter
+ * files of its client and platforms to edit from.
+ */
 export function blankPluginDraft(): PluginDraft {
-  return {
+  const start = {
     displayName: "",
-    icon: null,
     description: "",
-    clientType: "claude-code",
+    clientType: "claude-code" as const,
+    supportedPlatforms: ["posix", "windows"] as PluginPlatform[],
+  };
+  return {
+    ...start,
+    icon: null,
     enabled: true,
-    supportedPlatforms: ["posix", "windows"],
-    files: [
-      {
-        path: "hooks/hooks.json",
-        content: "",
-        encoding: "utf8",
-        mode: "100644",
-      },
-    ],
+    files: pluginStarterFiles(start),
     initialGrants: [],
     labels: [],
     githubRepoUrl: "",
@@ -109,15 +129,60 @@ export function isPluginDraftDirty(draft: PluginDraft, seed: PluginDraft) {
   return JSON.stringify(draft) !== JSON.stringify(seed);
 }
 
-/** A plugin can be saved once it is named and installs something. */
-export function isPluginDraftComplete(params: {
+/**
+ * What still stops the draft from being saved, as a sentence for the person
+ * filling it in; null once it can be saved.
+ *
+ * A plugin needs a name and at least one file; a Git plugin needs its
+ * repository.
+ */
+export function pluginDraftGap(params: {
   draft: PluginDraft;
   isGithubPlugin: boolean;
-}): boolean {
+}): string | null {
   const { draft, isGithubPlugin } = params;
-  if (draft.displayName.trim().length === 0 || draft.files.length === 0) {
-    return false;
+  if (draft.displayName.trim().length === 0) return "Enter a display name.";
+  if (draft.files.length === 0) return "Add at least one file.";
+  if (isGithubPlugin) {
+    // A public repository needs no credential.
+    return draft.githubRepoUrl.trim().length > 0
+      ? null
+      : "Enter the repository URL.";
   }
-  // A public repository needs no credential.
-  return !isGithubPlugin || draft.githubRepoUrl.trim().length > 0;
+  return null;
+}
+
+/**
+ * Whether another plugin the viewer can see already carries this name for the
+ * same client, and whose it is: the plugin's owner (`own`) or someone else
+ * (`other`). Either is allowed, but the two rows cannot be told apart in the
+ * list, so the form says so.
+ */
+export function pluginNameTwin(params: {
+  displayName: string;
+  clientType: string;
+  /** Who the plugin belongs to: the viewer on create, its author on edit. */
+  ownerId: string | null | undefined;
+  /** The plugin being edited, left out of the comparison. */
+  pluginId?: string;
+  plugins: ReadonlyArray<{
+    id: string;
+    displayName: string;
+    clientType: string;
+    authorId?: string | null;
+  }>;
+}): "own" | "other" | null {
+  const name = params.displayName.trim().toLowerCase();
+  if (!name) return null;
+  const twins = params.plugins.filter(
+    (plugin) =>
+      plugin.id !== params.pluginId &&
+      plugin.clientType === params.clientType &&
+      plugin.displayName.trim().toLowerCase() === name,
+  );
+  if (twins.length === 0) return null;
+  return params.ownerId &&
+    twins.some((plugin) => plugin.authorId === params.ownerId)
+    ? "own"
+    : "other";
 }

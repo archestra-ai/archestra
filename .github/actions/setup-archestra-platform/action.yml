@@ -136,7 +136,7 @@ runs:
     - name: Restore MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-oauth-image
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@v6.1.0
       with:
         path: /tmp/mcp-oauth-server.tar
         key: mcp-oauth-server-ghcr-0.0.1-${{ runner.arch }}
@@ -144,7 +144,7 @@ runs:
     - name: Restore MCP JWKS server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-jwks-image
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@v6.1.0
       with:
         path: /tmp/mcp-jwks-server.tar
         key: mcp-jwks-server-ghcr-0.0.3-${{ runner.arch }}
@@ -152,7 +152,7 @@ runs:
     - name: Restore MCP ID-JAG server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-id-jag-image
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@v6.1.0
       with:
         path: /tmp/mcp-id-jag-server.tar
         key: mcp-id-jag-server-ghcr-0.0.4-${{ runner.arch }}

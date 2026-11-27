@@ -9,25 +9,25 @@ workflows:
     '.github/workflows/benchmark.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.32.0'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
-        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
+        - 'docker/login-action@v4.8.0'
+        - 'docker/setup-buildx-action@v4.4.1'
         - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
     '.github/workflows/build-agent-catalog-images.yml':
         - 'actions/checkout@v7.0.1'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
-        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
+        - 'docker/login-action@v4.8.0'
+        - 'docker/setup-buildx-action@v4.4.1'
     '.github/workflows/build-archestra-cli.yml':
         - 'actions/attest-build-provenance@v4.2.2'
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
-        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+        - 'actions/download-artifact@v8.0.2'
+        - 'actions/upload-artifact@v7.0.2'
         - 'archestra-ai/.github@v1.32.0'
         - 'azure/artifact-signing-action@v2.0.0'
         - 'azure/login@v3.1.0'
-        - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+        - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/build-base-mcp-server-docker-image.yml':
         - 'actions/checkout@v7.0.1'
-        - 'astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d'
+        - 'astral-sh/setup-uv@v10.4.0'
     '.github/workflows/build-m-files-vaf-add-on.yml':
         - 'actions/attest-build-provenance@v4.2.2'
         - 'actions/checkout@v7.0.1'
@@ -36,19 +36,19 @@ workflows:
     '.github/workflows/build-native-multi-arch-image.yml':
         - 'actions/attest-build-provenance@v4.2.2'
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
-        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+        - 'actions/download-artifact@v8.0.2'
+        - 'actions/upload-artifact@v7.0.2'
         - 'archestra-ai/.github@v1.45.0'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
-        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
+        - 'docker/login-action@v4.8.0'
+        - 'docker/setup-buildx-action@v4.4.1'
     '.github/workflows/build-p4-shim-docker-image.yml':
         - 'actions/checkout@v7.0.1'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
-        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
+        - 'docker/login-action@v4.8.0'
+        - 'docker/setup-buildx-action@v4.4.1'
     '.github/workflows/build-platform-release-image.yml': []
     '.github/workflows/build-sandbox-base-docker-image.yml':
         - 'actions/checkout@v7.0.1'
-        - 'astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d'
+        - 'astral-sh/setup-uv@v10.4.0'
     '.github/workflows/bump-dockerfile-go-pins.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.32.0'
@@ -67,22 +67,22 @@ workflows:
         - 'archestra-ai/.github@v1.32.0'
     '.github/workflows/docker-image-scanning.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
-        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
-        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
+        - 'actions/download-artifact@v8.0.2'
+        - 'actions/upload-artifact@v7.0.2'
+        - 'docker/login-action@v4.8.0'
+        - 'docker/setup-buildx-action@v4.4.1'
     '.github/workflows/docs.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/github-script@v9.0.0'
-        - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
-        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+        - 'actions/setup-node@v7.1.0'
+        - 'actions/upload-artifact@v7.0.2'
         - 'archestra-ai/.github@v1.32.0'
-        - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
+        - 'pnpm/action-setup@v6.1.1'
     '.github/workflows/frontend-dev-cache.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
-        - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
+        - 'actions/setup-node@v7.1.0'
+        - 'docker/login-action@v4.8.0'
+        - 'pnpm/action-setup@v6.1.1'
     '.github/workflows/llm-proxy-benchmark.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.2'
@@ -90,58 +90,58 @@ workflows:
         - 'actions/setup-node@v7.1.0'
         - 'actions/upload-artifact@v7.0.2'
         - 'pnpm/action-setup@v6.1.1'
-        - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+        - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/move-release-line.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.32.0'
     '.github/workflows/napi-dev-cache.yml':
         - 'actions/checkout@v7.0.1'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
+        - 'docker/login-action@v4.8.0'
     '.github/workflows/nightly-platform-image-byte-scan.yml':
         - 'actions/checkout@v7.0.1'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
+        - 'docker/login-action@v4.8.0'
     '.github/workflows/nightly-release-image-scan.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.32.0'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
-        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
+        - 'docker/login-action@v4.8.0'
+        - 'docker/setup-buildx-action@v4.4.1'
         - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
     '.github/workflows/on-commits-to-main.yml':
-        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
-        - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
-        - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+        - 'actions/setup-node@v7.1.0'
+        - 'docker/login-action@v4.8.0'
+        - 'pnpm/action-setup@v6.1.1'
+        - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/on-pull-requests-dagger-sdk.yml':
         - 'actions/checkout@v7.0.1'
-        - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+        - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/on-pull-requests.yml':
-        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
         - 'actions/dependency-review-action@v5.0.1'
-        - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
-        - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
-        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+        - 'actions/download-artifact@v8.0.2'
+        - 'actions/setup-node@v7.1.0'
+        - 'actions/upload-artifact@v7.0.2'
         - 'archestra-ai/.github@v1.32.0'
         - 'archestra-ai/.github@v1.33.0'
-        - 'astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d'
-        - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
-        - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+        - 'astral-sh/setup-uv@v10.4.0'
+        - 'pnpm/action-setup@v6.1.1'
+        - 'swatinem/rust-cache@v2.9.3'
         - 'taiki-e/install-action@v2.90.6'
     '.github/workflows/platform-e2e-tests.yml':
-        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
-        - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
-        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
-        - 'archestra-ai/.github@7cf2603035c4049f674ce8b63bbf9a275c3dfde2'
+        - 'actions/download-artifact@v8.0.2'
+        - 'actions/setup-node@v7.1.0'
+        - 'actions/upload-artifact@v7.0.2'
+        - 'archestra-ai/.github@v1.32.0'
         - 'daun/playwright-report-summary@v4.1.1'
-        - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
-        - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
-        - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
-        - 'helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376'
-        - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
+        - 'docker/login-action@v4.8.0'
+        - 'docker/setup-buildx-action@v4.4.1'
+        - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
+        - 'helm/kind-action@v1.15.2'
+        - 'pnpm/action-setup@v6.1.1'
     '.github/workflows/pr-title-linter.yml':
         - 'archestra-ai/.github@v1.32.0'
     '.github/workflows/previous-release-published.yml':
@@ -149,8 +149,8 @@ workflows:
     '.github/workflows/publish-docs-on-main.yml': []
     '.github/workflows/publish-platform-helm-chart.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
-        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+        - 'actions/download-artifact@v8.0.2'
+        - 'actions/upload-artifact@v7.0.2'
     '.github/workflows/random-issue-pr-assignee.yml':
         - 'actions/github-script@v9.0.0'
     '.github/workflows/release-finalize.yml':
@@ -158,58 +158,56 @@ workflows:
         - 'archestra-ai/.github@v1.32.0'
     '.github/workflows/release-please.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
-        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+        - 'actions/download-artifact@v8.0.2'
+        - 'actions/upload-artifact@v7.0.2'
         - 'archestra-ai/.github@v1.32.0'
         - 'archestra-ai/.github@v1.45.0'
     '.github/workflows/release-pr-generation.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.2'
         - 'actions/github-script@v9.0.0'
-        - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
-        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+        - 'actions/setup-node@v7.1.0'
+        - 'actions/upload-artifact@v7.0.2'
         - 'archestra-ai/.github@v1.32.0'
-        - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
-        - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+        - 'pnpm/action-setup@v6.1.1'
+        - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/stale-dependabot-prs.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@7cf2603035c4049f674ce8b63bbf9a275c3dfde2'
-        - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
+        - 'archestra-ai/.github@v1.32.0'
+        - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
     '.github/workflows/sync-terraform-provider.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@7cf2603035c4049f674ce8b63bbf9a275c3dfde2'
         - 'archestra-ai/.github@v1.32.0'
-        - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
-        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
+        - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
+        - 'google-github-actions/setup-gcloud@v3.0.1'
     '.github/workflows/toggle-release-freeze.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@7cf2603035c4049f674ce8b63bbf9a275c3dfde2'
+        - 'archestra-ai/.github@v1.32.0'
     '.github/workflows/trigger-website-deploy.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@v1.32.0'
     '.github/workflows/update-client-versions.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
+        - 'actions/setup-node@v7.1.0'
         - 'archestra-ai/.github@v1.32.0'
         - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
-        - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
+        - 'pnpm/action-setup@v6.1.1'
     '.github/workflows/update-openappa-template.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
+        - 'actions/setup-node@v7.1.0'
         - 'archestra-ai/.github@v1.32.0'
-        - 'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115'
+        - 'pnpm/action-setup@v6.1.1'
     '.github/workflows/vex-triage.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@7cf2603035c4049f674ce8b63bbf9a275c3dfde2'
         - 'archestra-ai/.github@v1.32.0'
-        - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
-        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
+        - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
+        - 'google-github-actions/setup-gcloud@v3.0.1'
     '.github/workflows/warm-e2e-image-caches.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
     '.github/workflows/warm-rust-check-caches.yml':
         - 'actions/checkout@v7.0.1'
-        - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+        - 'swatinem/rust-cache@v2.9.3'
 dependencies:
     'actions/attest-build-provenance@v4.2.2':
         ref: 'v4.2.2'
@@ -223,11 +221,6 @@ dependencies:
         commit: 'sha1-508db95dd578ae2727ebd6217d5ba78e4fbda05d'
         owner_id: 44036562
         repo_id: 760701061
-    'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9':
-        ref: 'v6.1.0'
-        commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
-        owner_id: 44036562
-        repo_id: 215566462
     'actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7':
         ref: 'v5.0.4'
         commit: 'sha1-668228422ae6a00e4ad889ee87cd7109ec5666a7'
@@ -258,11 +251,6 @@ dependencies:
         commit: 'sha1-bbc44d14a204704ccc493733616cd1e93a0321ec'
         owner_id: 44036562
         repo_id: 476372928
-    'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333':
-        ref: 'v8.0.2'
-        commit: 'sha1-9000827ccba6bdab643e8b6fd33ac0654aef8333'
-        owner_id: 44036562
-        repo_id: 192626254
     'actions/download-artifact@v8.0.2':
         ref: 'v8.0.2'
         commit: 'sha1-9000827ccba6bdab643e8b6fd33ac0654aef8333'
@@ -278,35 +266,16 @@ dependencies:
         commit: 'sha1-b7ad1dad31e06c5925ef5d2fc7ad053ef454303e'
         owner_id: 44036562
         repo_id: 192624594
-    'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1':
-        ref: 'v7.1.0'
-        commit: 'sha1-949feb2413d6458794dcd2491c4babbbce0c15c1'
-        owner_id: 44036562
-        repo_id: 189476904
     'actions/setup-node@v7.1.0':
         ref: 'v7.1.0'
         commit: 'sha1-949feb2413d6458794dcd2491c4babbbce0c15c1'
         owner_id: 44036562
         repo_id: 189476904
-    'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9':
-        ref: 'v7.0.2'
-        commit: 'sha1-cf430e030ddbb5b0abf93d22962f4752f3646cd9'
-        owner_id: 44036562
-        repo_id: 192625955
     'actions/upload-artifact@v7.0.2':
         ref: 'v7.0.2'
         commit: 'sha1-cf430e030ddbb5b0abf93d22962f4752f3646cd9'
         owner_id: 44036562
         repo_id: 192625955
-    'archestra-ai/.github@7cf2603035c4049f674ce8b63bbf9a275c3dfde2':
-        ref: 'v1.32.0'
-        commit: 'sha1-7cf2603035c4049f674ce8b63bbf9a275c3dfde2'
-        owner_id: 216022683
-        repo_id: 1192166927
-        uses:
-            - 'actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510'
-            - 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
-            - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     'archestra-ai/.github@v1.32.0':
         ref: 'v1.32.0'
         commit: 'sha1-7cf2603035c4049f674ce8b63bbf9a275c3dfde2'
@@ -329,7 +298,7 @@ dependencies:
         repo_id: 1192166927
         uses:
             - 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e'
-    'astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d':
+    'astral-sh/setup-uv@v10.4.0':
         ref: 'v10.4.0'
         commit: 'sha1-1db35dd8eee11c5894872e0b383ae6c406cf738d'
         owner_id: 115962839
@@ -351,12 +320,12 @@ dependencies:
         commit: 'sha1-5359ae22f265fd2dfdb7744a0cc6614c5c3abde6'
         owner_id: 22225348
         repo_id: 688555811
-    'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550':
+    'docker/login-action@v4.8.0':
         ref: 'v4.8.0'
         commit: 'sha1-8aa5831fb8d48d8f76594c7ddde61ae58019f550'
         owner_id: 5429470
         repo_id: 287743349
-    'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069':
+    'docker/setup-buildx-action@v4.4.1':
         ref: 'v4.4.1'
         commit: 'sha1-f87e5991a6d7451dcb8d9637bfbc97413f497069'
         owner_id: 5429470
@@ -366,17 +335,17 @@ dependencies:
         commit: 'sha1-7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
         owner_id: 71461757
         repo_id: 407242578
-    'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262':
-        ref: 'v3.0.0'
-        commit: 'sha1-bc9c54b29fdffb8a47776820a7d26e77b379d262'
-        owner_id: 71461757
-        repo_id: 308778069
     'google-github-actions/get-secretmanager-secrets@v3.0.0':
         ref: 'v3.0.0'
         commit: 'sha1-bc9c54b29fdffb8a47776820a7d26e77b379d262'
         owner_id: 71461757
         repo_id: 308778069
     'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db':
+        ref: 'v3.0.1'
+        commit: 'sha1-aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
+        owner_id: 71461757
+        repo_id: 219865964
+    'google-github-actions/setup-gcloud@v3.0.1':
         ref: 'v3.0.1'
         commit: 'sha1-aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
         owner_id: 71461757
@@ -388,7 +357,7 @@ dependencies:
         repo_id: 682297649
         uses:
             - 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
-    'helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376':
+    'helm/kind-action@v1.15.2':
         ref: 'v1.15.2'
         commit: 'sha1-ea822c7bf1874f08e5a491df991c228edffc3376'
         owner_id: 15859888
@@ -398,17 +367,12 @@ dependencies:
         commit: 'sha1-0c5077e51419868618aeaa5fe8019c62421857d6'
         owner_id: 108928776
         repo_id: 512644635
-    'pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115':
-        ref: 'v6.1.1'
-        commit: 'sha1-73e46992e05b19abd31f2f3c20e0e7370d762115'
-        owner_id: 21320719
-        repo_id: 262289747
     'pnpm/action-setup@v6.1.1':
         ref: 'v6.1.1'
         commit: 'sha1-73e46992e05b19abd31f2f3c20e0e7370d762115'
         owner_id: 21320719
         repo_id: 262289747
-    'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0':
+    'swatinem/rust-cache@v2.9.3':
         ref: 'v2.9.3'
         commit: 'sha1-d1527c8f67ef9af357290475d4af4b0fab8f12e0'
         owner_id: 580492

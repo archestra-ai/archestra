@@ -110,52 +110,60 @@ jobs:
     timeout-minutes: 3
     permissions:
       actions: read # List the failed scan jobs of this run.
-      id-token: write # Workload Identity Federation to read the webhook from Secret Manager.
+      id-token: write # Workload Identity Federation to read the webhook or bot token from Secret Manager.
+    outputs:
+      channel: ${{ steps.alert.outputs.channel }}
+      ts: ${{ steps.alert.outputs.ts }}
     steps:
-      # The webhook lives in GCP Secret Manager. A dedicated service account
-      # reads only the alerting secrets, so no repository secret holds it.
-      # This one posts to #alerts; ci-alerts-slack-webhook-url posts to #approvals.
-      - name: Authenticate to read the alerting webhook
-        uses: archestra-ai/.github/actions/google-auth@v1.32.0
-        with:
-          service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
-      - name: Read the alerting webhook
-        id: alerting
-        uses: google-github-actions/get-secretmanager-secrets@v3.0.0
-        with:
-          secrets: |-
-            slack_webhook_url:friendly-path-465518-r6/ci-release-image-scan-slack-webhook-url
-
-      - name: Post failures to alerting
+      # One line per failed job: a failed "Scan image" step is a finding (or
+      # a Scout outage that outlasted its retries); any other step is a build failure.
+      - name: List the failed jobs
+        id: failures
         env:
           GH_TOKEN: ${{ github.token }}
-          SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
-          TEST_ALERT: ${{ inputs.test-alert }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           JOBS_URL: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
         run: |
           set -euo pipefail
-          if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
-            echo "::warning::The alerting webhook secret is empty; skipping Slack notification."
-            exit 0
-          fi
-
-          # One line per failed job: a failed "Scan image" step is a finding (or
-          # a Scout outage that outlasted its retries); any other step is a build failure.
           failures="$(gh api --paginate "$JOBS_URL?per_page=100" --jq '
             .jobs[] | select(.conclusion == "failure") |
             ([.steps[] | select(.conclusion == "failure") | .name][0] // "setup") as $step |
             "• <\(.html_url)|\(.name)>: " + (if $step == "Scan image" then "fixable critical/high CVEs" else "failed at \($step)" end)')"
+          {
+            echo "details<<EOF_FAILURES"
+            echo "${failures:-• No failed job was listed; check the run.}"
+            echo "EOF_FAILURES"
+          } >> "$GITHUB_OUTPUT"
 
-          if [[ "$TEST_ALERT" == "true" ]]; then
-            message=":test_tube: Test of the Nightly Release Image Scan alert; no images were scanned, nothing to do. <$RUN_URL|View workflow run>"
-            jq -n --arg text "$message" '{text: $text}' |
-              curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"
-            exit 0
-          fi
+      # The webhook (or, with CI_ALERTS_SLACK_CHANNEL_ID set, the bot token)
+      # lives in GCP Secret Manager. A dedicated service account reads only the
+      # alerting secrets, so no repository secret holds it.
+      - name: Post failures to #alerts
+        id: alert
+        uses: $/.github/actions/post-failure-alert
+        with:
+          summary: 'Nightly release image scan found images a release would be held on. Fix them before cutting a release (see platform/dev/RELEASE.md, "Image CVE Gate").'
+          details: ${{ steps.failures.outputs.details }}
+          test: ${{ inputs.test-alert || 'false' }}
+          slack-channel: ${{ vars.CI_ALERTS_SLACK_CHANNEL_ID }}
+          service-account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          github-token: ${{ github.token }}
 
-          message=":rotating_light: Nightly release image scan found images a release would be held on. Fix them before cutting a release (see platform/dev/RELEASE.md, \"Image CVE Gate\"). <$RUN_URL|View workflow run>"$'\n'"${failures:-• No failed job was listed; check the run.}"
-          jq -n --arg text "$message" '{text: $text}' |
-            curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+  # Hands the findings to the CI Fixer agent, which upgrades the flagged
+  # images and replies in the alert's thread with its pull request. Its pull
+  # requests read as routine dependency bumps: no advisory details in GitHub.
+  # Not for a test alert, and not for a webhook post, which has no thread.
+  fix:
+    name: Start the CI Fixer agent
+    needs: notify
+    if: ${{ always() && needs.notify.result == 'success' && needs.notify.outputs.ts != '' && !inputs.test-alert }}
+    permissions:
+      contents: read # Check out the scripts.
+      actions: read # List the failed scan jobs of this run.
+      id-token: write # Sign in to Google Cloud (staging tunnel), Archestra and Secret Manager.
+    uses: $/.github/workflows/start-alert-fix-agent.yml
+    with:
+      kind: release-image-cves
+      source_run_id: ${{ github.run_id }}
+      slack_channel: ${{ needs.notify.outputs.channel }}
+      slack_thread_ts: ${{ needs.notify.outputs.ts }}

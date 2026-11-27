@@ -1706,12 +1706,35 @@ jobs:
     timeout-minutes: 3
     permissions:
       actions: read # List the failed jobs of this run.
-      id-token: write # Read the #alerts webhook from Secret Manager.
+      id-token: write # Read the #alerts webhook or bot token from Secret Manager.
+    outputs:
+      channel: ${{ steps.alert.outputs.channel }}
+      ts: ${{ steps.alert.outputs.ts }}
     steps:
       - name: Post to #alerts
+        id: alert
         uses: $/.github/actions/post-failure-alert
         with:
           summary: "The nightly Platform E2E run on main failed. These suites run only nightly, so nothing else catches these failures."
+          slack-channel: ${{ vars.CI_ALERTS_SLACK_CHANNEL_ID }}
           service-account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
           workload-identity-provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
           github-token: ${{ github.token }}
+
+  # Hands the alert to the CI Fixer agent, which replies in the alert's thread
+  # with its pull request. Only when the alert went out as a bot post: a
+  # webhook post has no thread to reply in.
+  fix:
+    name: Start the CI Fixer agent
+    needs: notify
+    if: ${{ always() && needs.notify.result == 'success' && needs.notify.outputs.ts != '' }}
+    permissions:
+      contents: read # Check out the scripts.
+      actions: read # List the failed jobs of this run.
+      id-token: write # Sign in to Google Cloud (staging tunnel), Archestra and Secret Manager.
+    uses: $/.github/workflows/start-alert-fix-agent.yml
+    with:
+      kind: nightly-e2e
+      source_run_id: ${{ github.run_id }}
+      slack_channel: ${{ needs.notify.outputs.channel }}
+      slack_thread_ts: ${{ needs.notify.outputs.ts }}

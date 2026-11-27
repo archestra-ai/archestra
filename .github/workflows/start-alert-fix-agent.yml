@@ -1,0 +1,176 @@
+name: Start Alert Fix Agent
+run-name: Start the CI Fixer agent for ${{ inputs.kind }} (run ${{ inputs.source_run_id }})
+
+# Starts the CI Fixer agent on staging for a nightly alert, and replies in the
+# alert's #alerts thread with the run's link. A nightly workflow calls this
+# right after it posts its failure (post-failure-alert with slack-channel set
+# returns the message's channel and ts). The agent (archestra-ai/infra,
+# archestra/automation/ci-fixer.tf) reads the failed jobs' logs, fixes the root
+# cause on automation/ci-fixer/<kind>, opens or updates one pull request, and
+# replies in the same thread. It never merges: a person reviews every change.
+#
+# Reusable on purpose. For a job in a called workflow GitHub's
+# job_workflow_ref names this file, so one federated credential (and one
+# Google account) trusts every caller on main and nothing else. To fix a new
+# kind of alert, add its task to .github/scripts/alert-fix-agent.py and to the
+# dispatch choices below, and call this workflow from the alerting workflow.
+#
+# The job holds no Archestra API key and no GitHub credential beyond reading
+# this repository and its runs. It trades its GitHub OIDC token for a one-hour
+# token of an Archestra service account that can only run that agent
+# (workload identity federation). The agent's own GitHub App token never
+# leaves Archestra.
+
+on:
+  workflow_call:
+    inputs:
+      kind:
+        description: The alert kind, a key of KINDS in .github/scripts/alert-fix-agent.py.
+        type: string
+        required: true
+      source_run_id:
+        description: The failed workflow run whose jobs the agent fixes.
+        type: string
+        required: true
+      slack_channel:
+        description: The alert's Slack channel ID. Empty posts no reply.
+        type: string
+        default: ""
+      slack_thread_ts:
+        description: The alert's Slack message timestamp, whose thread the replies go to.
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: The alert kind.
+        type: choice
+        options: [nightly-e2e, release-image-cves]
+      source_run_id:
+        description: The failed workflow run ID, from its URL.
+        type: string
+        required: true
+      slack_channel:
+        description: "The alert's Slack channel ID (#alerts: C099P68DZ43). Empty: no Slack reply."
+        type: string
+        default: ""
+      slack_thread_ts:
+        description: The alert message's timestamp (from its link, p1795755341294619 is 1795755341.294619).
+        type: string
+        default: ""
+
+permissions: {}
+
+jobs:
+  start:
+    name: Start the CI Fixer agent
+    # The Archestra service account and the Google account trust this file on
+    # main only; any other ref would be refused at sign-in. Until the agent's
+    # repository variable is set, callers skip quietly.
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && vars.CI_FIXER_AGENT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # Check out the scripts.
+      actions: read # List the failed jobs of the alerting run.
+      id-token: write # Sign in to Google Cloud (staging tunnel) and to Archestra.
+    # One start per kind at a time; a second waits instead of cancelling the first.
+    concurrency:
+      group: start-alert-fix-agent-${{ inputs.kind }}
+      cancel-in-progress: false
+    outputs:
+      run_url: ${{ steps.start.outputs.run_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # From the GitHub API, not from the caller: the agent gets the job names,
+      # their URLs and the first failed step, and nothing else of the run.
+      - name: List the failed jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::$SOURCE_RUN_ID is not a workflow run ID."; exit 1; }
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/jobs?per_page=100" --jq '
+            .jobs[] | select(.conclusion == "failure") |
+            {name, url: .html_url, step: ([.steps[] | select(.conclusion == "failure") | .name][0] // "setup")}' |
+            jq -cs . > "$RUNNER_TEMP/failed-jobs.json"
+
+      # The staging API is private. This account can open the IAP tunnel to
+      # its TLS forwarder and nothing else.
+      - name: Authenticate to Google Cloud
+        uses: archestra-ai/.github/actions/google-auth@v1.32.0
+        with:
+          service_account: ${{ vars.CI_FIXER_GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Open the staging API tunnel
+        run: .github/scripts/staging-api-tunnel.sh
+
+      - name: Start the agent run
+        id: start
+        env:
+          KIND: ${{ inputs.kind }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SLACK_CHANNEL: ${{ inputs.slack_channel }}
+          SLACK_THREAD_TS: ${{ inputs.slack_thread_ts }}
+          FAILED_JOBS_FILE: ${{ runner.temp }}/failed-jobs.json
+          BASE_URL: https://backend.archestra.dev
+          PUBLIC_URL: https://frontend.archestra.dev
+          SERVICE_ACCOUNT_ID: ${{ vars.CI_FIXER_SERVICE_ACCOUNT_ID }}
+          AGENT_ID: ${{ vars.CI_FIXER_AGENT_ID }}
+        run: python3 .github/scripts/alert-fix-agent.py
+
+  # Says in the alert's thread that the agent took it, or that it did not
+  # start, so nobody waits for a pull request that is not coming. The agent's
+  # own reply (its pull request or blocker) follows in the same thread.
+  announce:
+    name: Reply in the alert's thread
+    needs: start
+    if: ${{ always() && inputs.slack_thread_ts != '' && needs.start.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      id-token: write # Read the #alerts bot token from Secret Manager.
+    steps:
+      - name: Authenticate to read the bot token
+        uses: archestra-ai/.github/actions/google-auth@v1.32.0
+        with:
+          service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Read the bot token
+        id: slack
+        uses: google-github-actions/get-secretmanager-secrets@v3.0.0
+        with:
+          secrets: |-
+            bot_token:friendly-path-465518-r6/ci-alerts-slack-bot-token
+
+      - name: Reply in the thread
+        env:
+          SLACK_BOT_TOKEN: ${{ steps.slack.outputs.bot_token }}
+          SLACK_CHANNEL: ${{ inputs.slack_channel }}
+          SLACK_THREAD_TS: ${{ inputs.slack_thread_ts }}
+          START_RESULT: ${{ needs.start.result }}
+          AGENT_RUN_URL: ${{ needs.start.outputs.run_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ "$START_RESULT" == "success" && -n "$AGENT_RUN_URL" ]]; then
+            text=":robot_face: The CI Fixer agent is on it: <$AGENT_RUN_URL|agent run>. It replies here with its pull request or blocker; nothing merges without review."
+          else
+            text=":warning: The CI Fixer agent did not start for this alert. <$RUN_URL|View workflow run>"
+          fi
+          response="$(jq -n --arg channel "$SLACK_CHANNEL" --arg thread_ts "$SLACK_THREAD_TS" --arg text "$text" \
+              '{channel: $channel, thread_ts: $thread_ts, text: $text, unfurl_links: false}' |
+            curl --fail-with-body -sS --max-time 15 -X POST https://slack.com/api/chat.postMessage \
+              -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H 'Content-type: application/json; charset=utf-8' --data @-)"
+          jq -e '.ok' <<<"$response" > /dev/null || { echo "::error::Slack refused the reply: $(jq -r '.error // "no error given"' <<<"$response")"; exit 1; }

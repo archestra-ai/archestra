@@ -102,10 +102,10 @@ workflows:
         - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
     '.github/workflows/nightly-release-image-scan.yml':
         - 'actions/checkout@v7.0.1'
-        - 'archestra-ai/.github@v1.32.0'
+        - 'archestra-ai/.github@7cf2603035c4049f674ce8b63bbf9a275c3dfde2'
         - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
         - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
-        - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
+        - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
     '.github/workflows/on-commits-to-main.yml':
         - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         - 'actions/checkout@v7.0.1'
@@ -175,6 +175,11 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@7cf2603035c4049f674ce8b63bbf9a275c3dfde2'
         - 'google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262'
+    '.github/workflows/start-alert-fix-agent.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'archestra-ai/.github@v1.32.0'
+        - 'google-github-actions/get-secretmanager-secrets@v3.0.0'
+        - 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db'
     '.github/workflows/sync-terraform-provider.yml':
         - 'actions/checkout@v7.0.1'
         - 'archestra-ai/.github@7cf2603035c4049f674ce8b63bbf9a275c3dfde2'

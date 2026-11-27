@@ -303,12 +303,17 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (query.status === "deleted" && !checker.canUpdateAll) {
         throw new ApiError(403, "Forbidden");
       }
-      const accessiblePluginIds = checker.canReadAll
-        ? undefined
-        : await PluginTeamModel.getUserAccessiblePluginIds({
-            organizationId,
-            userId: user.id,
-          });
+      // The trash is not narrowed to the plugins the caller can read. That
+      // lookup knows live plugins only, so it would empty the trash for a
+      // caller who manages every plugin without a read grant on every one.
+      // Managing every plugin is what opened the trash, as it is for skills.
+      const accessiblePluginIds =
+        checker.canReadAll || query.status === "deleted"
+          ? undefined
+          : await PluginTeamModel.getUserAccessiblePluginIds({
+              organizationId,
+              userId: user.id,
+            });
       const plugins = await PluginModel.findByOrganization({
         organizationId,
         accessiblePluginIds,

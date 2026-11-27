@@ -113,6 +113,55 @@ describe("the plugin trash", () => {
     });
   });
 
+  describe("GET /api/plugins?status=deleted for a manager without a read grant on every plugin", () => {
+    test("still lists the deleted plugins", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const deleted = await createPlugin("Deleted by an admin");
+      expect((await del(deleted.id)).statusCode).toBe(200);
+      // An update grant on every plugin with no read grant beside it: not a
+      // level the permissions editor writes today, but one older data can
+      // hold, so it is written straight to the table here.
+      const manager = await makeUser();
+      await makeMember(manager.id, organizationId, { role: EDITOR_ROLE_NAME });
+      await db
+        .insert(schema.resourcePermissionPoliciesTable)
+        .values({
+          organizationId,
+          resource: "plugin",
+          scope: "*",
+          grants: [
+            { subject: { type: "user", id: manager.id }, actions: ["update"] },
+          ],
+          legacySharingMigrated: true,
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.resourcePermissionPoliciesTable.organizationId,
+            schema.resourcePermissionPoliciesTable.resource,
+            schema.resourcePermissionPoliciesTable.scope,
+          ],
+          set: {
+            grants: [
+              {
+                subject: { type: "user", id: manager.id },
+                actions: ["update"],
+              },
+            ],
+          },
+        });
+      user = manager;
+
+      const response = await list(
+        "?status=deleted&access=mine,shared,org,others",
+      );
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(names(response)).toEqual(["Deleted by an admin"]);
+    });
+  });
+
   describe("POST /api/plugins/:id/restore", () => {
     test("brings a deleted plugin back with its files, and audits it", async () => {
       const plugin = await createPlugin("Comes back");

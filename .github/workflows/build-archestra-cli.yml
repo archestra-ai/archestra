@@ -142,7 +142,7 @@ jobs:
             runner: windows-latest
             file: archestra-windows-arm64.exe
             runs-here: false
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner == 'ubuntu-24.04-arm-32core' && (vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'pull_request' && 'archestra-gce-32core-arm-spot' || 'archestra-gce-32core-arm') || matrix.runner) || matrix.runner }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch; never for fork PRs.
     timeout-minutes: 30
     permissions:
       contents: read # Check out the source.

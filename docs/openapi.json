@@ -546960,7 +546960,7 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 9007199254740991
+              "maximum": 2147483647
             },
             "in": "path",
             "name": "version",

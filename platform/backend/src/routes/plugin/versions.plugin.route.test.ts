@@ -202,6 +202,15 @@ describe("a plugin's version history", () => {
     expect(current.statusCode, current.body).toBe(200);
   });
 
+  test("answers 400, not a database error, for a version number no plugin can have", async () => {
+    const plugin = await create();
+
+    expect((await version(plugin.id, 2_147_483_648)).statusCode).toBe(400);
+    expect((await version(plugin.id, 0)).statusCode).toBe(400);
+    // A number the column holds, with no such version: not found.
+    expect((await version(plugin.id, 2_147_483_647)).statusCode).toBe(404);
+  });
+
   describe("a plugin from before versions were kept", () => {
     /** As an upgrade leaves it: the plugin and its files, and no version. */
     const createWithoutHistory = async () => {

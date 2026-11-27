@@ -1079,7 +1079,9 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "version and leaves the history as it is.",
         tags: ["Plugins"],
         params: PluginParamsSchema.extend({
-          version: z.coerce.number().int().min(1),
+          // Capped at what the integer column holds, so a number past it is a
+          // bad request and not a database error.
+          version: z.coerce.number().int().min(1).max(2_147_483_647),
         }),
         response: constructResponseSchema(PluginVersionDetailSchema),
       },

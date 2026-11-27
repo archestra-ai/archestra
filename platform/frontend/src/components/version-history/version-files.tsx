@@ -18,6 +18,8 @@ import type { SkillFileChange } from "@/lib/skills/skill-version-diff";
 interface VersionFileSide {
   content: string;
   encoding: "utf8" | "base64";
+  /** The file's Git mode, where the version keeps one (a plugin's files). */
+  mode?: string;
 }
 
 /**
@@ -145,6 +147,21 @@ function renderedSide(file: VersionFile): VersionFileSide | null {
   return file.current ?? file.previous;
 }
 
+/**
+ * The two modes of a file whose content is the same in both versions, or null
+ * when the content changed too or the mode did not.
+ */
+function modeOnlyChange(
+  file: VersionFile,
+): { from: string; to: string } | null {
+  const { current, previous } = file;
+  if (!current?.mode || !previous?.mode) return null;
+  if (current.mode === previous.mode) return null;
+  if (current.content !== previous.content) return null;
+  if (current.encoding !== previous.encoding) return null;
+  return { from: previous.mode, to: current.mode };
+}
+
 function isBinary(file: VersionFile): boolean {
   return renderedSide(file)?.encoding === "base64";
 }
@@ -168,6 +185,9 @@ function FileStat({
   mode: VersionViewMode;
 }) {
   if (isBinary(file)) return <HunkStat summary="binary" />;
+  if (mode === "changes" && modeOnlyChange(file)) {
+    return <HunkStat summary="mode" />;
+  }
   if (mode === "changes") return <HunkStat {...fileDelta(file)} />;
   const lines = lineCount(file.current?.content ?? null);
   return <HunkStat summary={`${lines} ${lines === 1 ? "line" : "lines"}`} />;
@@ -189,6 +209,14 @@ function FileBody({
         This file is binary, so there is nothing to show here.
       </HunkNote>
     );
+  }
+  // Nothing to read as a diff: the bytes are the same.
+  const modes = mode === "changes" ? modeOnlyChange(file) : null;
+  if (modes) {
+    const executable =
+      modes.to === "100755" ? ", which makes it executable" : "";
+    const sentence = `The file's mode changed from ${modes.from} to ${modes.to}${executable}. Its content is the same.`;
+    return <HunkNote>{sentence}</HunkNote>;
   }
   // A diff needs two readable sides. When only the older copy is binary — a
   // file re-saved as text — the newer one still reads, so it is shown whole

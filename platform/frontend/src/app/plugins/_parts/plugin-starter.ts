@@ -57,7 +57,9 @@ export function pluginStarterFiles(params: {
       [
         "---",
         "name: hello",
-        `description: "An example skill of ${name}. Use when the user asks what this plugin can do."`,
+        // A JSON string is a YAML double-quoted scalar, so a quote or a
+        // backslash in the plugin's name cannot end the value early.
+        `description: ${JSON.stringify(`An example skill of ${name}. Use when the user asks what this plugin can do.`)}`,
         "---",
         "",
         "# Hello",

@@ -29,6 +29,22 @@ describe("compareSkillVersionFiles", () => {
     });
   });
 
+  it("counts a file whose bytes are the same but whose mode differs as changed", () => {
+    const script = (mode: string) => ({
+      path: "scripts/run.sh",
+      content: "echo hi\n",
+      encoding: "utf8",
+      mode,
+    });
+
+    expect(
+      compareSkillVersionFiles([script("100755")], [script("100644")]),
+    ).toEqual([expect.objectContaining({ change: "changed" })]);
+    expect(
+      compareSkillVersionFiles([script("100755")], [script("100755")]),
+    ).toEqual([expect.objectContaining({ change: "unchanged" })]);
+  });
+
   it("carries both sides so a changed file can be diffed", () => {
     const [entry] = compareSkillVersionFiles(
       [file("a.md", "after")],

@@ -660,8 +660,8 @@
     "searchText": "update edit existing usage limit quota, change limit value, rate limit requests tokens token cost budget, MCP server calls, tool calls, per model, reset cleanup interval hourly daily weekly monthly, hard block or soft enforcement, reason note, per-user spending cap"
   },
   "update_plugin": {
-    "definitionHash": "c2db355e34cc906205ae1db184a768c9c8568df89b899ee23ab743d7996d7f93",
-    "searchText": "update plugin metadata, rename display name, edit description, enable or disable plugin, set supported platforms posix windows, replace entire plugin file set, upload plugin files content base64, executable file mode, content hash concurrency check, manual plugin management"
+    "definitionHash": "1b11e1835852b1a3db0979d956b8b34e636d31f40fff0dd2b5a29240bbf92c9e",
+    "searchText": "update plugin metadata, rename display name, edit description, set supported platforms posix windows, change target client claude code codex cursor copilot, replace entire plugin file set, upload plugin files content base64, executable file mode, content hash concurrency check, manual plugin management"
   },
   "update_runtime_credential": {
     "definitionHash": "c8d7e00a34d44684361bb724e998eaa3f3df4862a117be2b4a49dbb5ac997fc8",

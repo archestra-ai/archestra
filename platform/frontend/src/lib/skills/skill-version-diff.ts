@@ -7,10 +7,16 @@
 
 export type SkillFileChange = "added" | "removed" | "changed" | "unchanged";
 
-/** The minimum a compared file needs; the real snapshot files satisfy it. */
+/**
+ * The minimum a compared file needs; the real snapshot files satisfy it.
+ * `mode` and `encoding` are part of a file where its version keeps them (a
+ * plugin file's executable bit): a file that differs only there has changed.
+ */
 interface ComparableFile {
   path: string;
   content: string;
+  mode?: string;
+  encoding?: string;
 }
 
 export interface ComparedSkillFile<T extends ComparableFile> {
@@ -42,7 +48,9 @@ export function compareSkillVersionFiles<T extends ComparableFile>(
       path: file.path,
       change: !before
         ? "added"
-        : before.content === file.content
+        : before.content === file.content &&
+            before.mode === file.mode &&
+            before.encoding === file.encoding
           ? "unchanged"
           : "changed",
       current: file,

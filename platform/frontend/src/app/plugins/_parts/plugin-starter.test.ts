@@ -122,6 +122,24 @@ describe("pluginStarterFiles", () => {
     expect(copilotHook(["windows"]).bash).toBeUndefined();
   });
 
+  it("keeps the starter skill's frontmatter one valid value when the name has quotes or a backslash", () => {
+    const files = pluginStarterFiles({
+      clientType: "claude-code",
+      supportedPlatforms: ["posix"],
+      displayName: 'ACME "Security" \\ tools',
+      description: "",
+    });
+
+    const frontmatter = read(files, "skills/hello/SKILL.md").split("---")[1];
+    const description = frontmatter
+      .split("\n")
+      .find((line) => line.startsWith("description: "));
+    // One double-quoted scalar from the colon to the end of the line.
+    expect(JSON.parse(description?.slice("description: ".length) ?? "")).toBe(
+      'An example skill of ACME "Security" \\ tools. Use when the user asks what this plugin can do.',
+    );
+  });
+
   it("stands in for a name and a description that are not written yet", () => {
     const files = pluginStarterFiles({
       clientType: "claude-code",

@@ -28,6 +28,25 @@ What to know:
 - Automated runs, with no signed-in person, use only the agents you selected.
 - For long coding tasks, pick a subagent with a [dedicated runtime](/docs/agents/runtime).
 
+## Agent Runtime Delegation
+
+When a parent agent delegates to several subagents with [dedicated runtimes](/docs/agents/runtime), you can spread runs across them instead of leaving the choice to the model on every call.
+
+1. Open the parent agent and go to **Tools, Skills & Knowledge → Subagents**.
+2. Assign two or more subagents that run in an Agent Runtime (each shows its runtime icon on the badge).
+3. Under **Agent Runtime Delegation**, pick a routing mode:
+   - **Direct:** the model picks which subagent to call.
+   - **Round robin:** rotates runs through assigned Agent Runtime subagents in turn.
+   - **Weighted round robin:** splits runs by custom weights (`1` to `1000`). Available in **Manual** mode; click an assigned runtime subagent badge to set its **Load balancing weight** and see the share of runs it will receive. Each assigned runtime badge shows a thin progress bar along its top edge for its live share.
+   - **Random:** picks an assigned Agent Runtime subagent at random.
+4. Save your changes.
+
+What to know:
+
+- Subagents without a dedicated runtime are never load-balanced; they are always selected by the model.
+- When load balancing is on (**Round robin**, **Weighted round robin**, or **Random**), retriable failures automatically retry twice on the same subagent and then fail over to the remaining assigned runtime subagents.
+- **MCP Gateways** expose the same **Agent Runtime Delegation** setting under **Settings → Agents**. See [MCP Gateway](/docs/mcp/gateway#subagents).
+
 ## Fork the Agent
 
 Keep long searches and noisy tool output out of the conversation. Every agent can hand a task to a fresh copy of itself, and only the copy's answer comes back. You don't need to set this up.

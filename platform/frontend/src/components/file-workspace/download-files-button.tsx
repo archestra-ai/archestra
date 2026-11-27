@@ -40,7 +40,10 @@ export function DownloadFilesButton({
       ) : (
         <Download className="h-4 w-4" aria-hidden />
       )}
-      <span>Download</span>
+      {/* Icon only on a phone: the header there has room for the page's
+          title or for this word, not both. The name stays for a screen
+          reader. */}
+      <span className="sr-only sm:not-sr-only">Download</span>
     </Button>
   );
 }

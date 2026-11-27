@@ -500,9 +500,13 @@ class PluginModel {
     expectedContentHash?: string;
   }): Promise<PluginWithFiles | null> {
     const updated = await withDbTransaction(async (tx) => {
+      // Locked for the transaction: whether this write changes the files, and
+      // so adds a version, is decided against the hash read here, and a
+      // concurrent write must not move it in between.
       const existing = await findRowWithTransaction(tx, {
         id: params.id,
         organizationId: params.organizationId,
+        forUpdate: true,
       });
       if (!existing) return null;
 
@@ -795,26 +799,38 @@ class PluginModel {
   }
 
   /**
-   * Destroy a deleted plugin for good: the row, and by cascade its files,
-   * versions, grants, labels, usage events and share links. False when it is
-   * not in the trash, which is also how a restore that won the race reports
-   * itself.
+   * Destroy a deleted plugin for good: the row, by cascade its files,
+   * versions, labels, usage events and share links, and its permission
+   * policy, which no foreign key ties to the plugin. False when it is not in
+   * the trash, which is also how a restore that won the race reports itself.
    */
   static async purge(params: {
     id: string;
     organizationId: string;
   }): Promise<boolean> {
-    const purged = await db
-      .delete(schema.pluginsTable)
-      .where(
-        and(
-          eq(schema.pluginsTable.id, params.id),
-          eq(schema.pluginsTable.organizationId, params.organizationId),
-          isNotNull(schema.pluginsTable.deletedAt),
-        ),
-      )
-      .returning({ id: schema.pluginsTable.id });
-    return purged.length > 0;
+    return await withDbTransaction(async (tx) => {
+      const purged = await tx
+        .delete(schema.pluginsTable)
+        .where(
+          and(
+            eq(schema.pluginsTable.id, params.id),
+            eq(schema.pluginsTable.organizationId, params.organizationId),
+            isNotNull(schema.pluginsTable.deletedAt),
+          ),
+        )
+        .returning({ id: schema.pluginsTable.id });
+      if (purged.length === 0) return false;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["plugin"],
+        scope: params.id,
+      });
+      // SPDX-SnippetEnd
+      return true;
+    });
   }
 
   static async applyGithubUpdate(params: {
@@ -826,8 +842,13 @@ class PluginModel {
   }): Promise<PluginWithFiles | null> {
     const applied = await withDbTransaction(async (tx) => {
       const contentHash = computeContentHash(params.files);
-      // As it is before the update, for a history that starts here.
-      const existing = await findRowWithTransaction(tx, params);
+      // As it is before the update, for a history that starts here. Locked,
+      // so the files it describes are the ones still there below.
+      const existing = await findRowWithTransaction(tx, {
+        id: params.id,
+        organizationId: params.organizationId,
+        forUpdate: true,
+      });
       if (!existing) return null;
       const [plugin] = await tx
         .update(schema.pluginsTable)
@@ -1275,9 +1296,14 @@ async function startHistoryIfMissing(
 
 async function findRowWithTransaction(
   tx: Pick<typeof db, "select">,
-  params: { id: string; organizationId: string },
+  params: {
+    id: string;
+    organizationId: string;
+    /** Hold the row's lock until the transaction ends. */
+    forUpdate?: boolean;
+  },
 ): Promise<Plugin | null> {
-  const [plugin] = await tx
+  const query = tx
     .select()
     .from(schema.pluginsTable)
     .where(
@@ -1288,6 +1314,7 @@ async function findRowWithTransaction(
       ),
     )
     .limit(1);
+  const [plugin] = await (params.forUpdate ? query.for("update") : query);
   return plugin ?? null;
 }
 

@@ -216,6 +216,29 @@ describe("the plugin trash", () => {
       expect(JSON.stringify(rows[0].before)).not.toContain("Instructions");
     });
 
+    test("removes the plugin's permission policy with it", async () => {
+      const policies = (pluginId: string) =>
+        db
+          .select({ scope: schema.resourcePermissionPoliciesTable.scope })
+          .from(schema.resourcePermissionPoliciesTable)
+          .where(
+            and(
+              eq(schema.resourcePermissionPoliciesTable.resource, "plugin"),
+              eq(schema.resourcePermissionPoliciesTable.scope, pluginId),
+            ),
+          );
+      const plugin = await createPlugin("Shared, then gone");
+      // Nothing ties the policy to the plugin's row, so no cascade reaches it.
+      expect(await policies(plugin.id)).toHaveLength(1);
+      expect((await del(plugin.id)).statusCode).toBe(200);
+      // In the trash the policy is kept: a restore brings the access back.
+      expect(await policies(plugin.id)).toHaveLength(1);
+
+      expect((await purge(plugin.id)).statusCode).toBe(200);
+
+      expect(await policies(plugin.id)).toEqual([]);
+    });
+
     test("404s for a plugin that is still live", async () => {
       const plugin = await createPlugin("Still here");
 

@@ -2161,6 +2161,98 @@ describe("buildArchestraToolOutput", () => {
     });
   });
 
+  test("attaches the target tool's UI resource when its run_tool result has an image", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "blender__look",
+      catalogId: catalog.id,
+      meta: {
+        _meta: { ui: { resourceUri: "ui://mcp-for-blender/viewport-v2" } },
+      },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    const base64 = "QUJDREVG".repeat(4);
+    const content = [
+      { type: "image" as const, data: base64, mimeType: "image/png" },
+      { type: "text" as const, text: "Through camera 'Camera'." },
+    ];
+
+    const result = await buildArchestraToolOutput({
+      response: { content, isError: false },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "blender__look", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      content: "[image]\nThrough camera 'Camera'.",
+      _meta: { ui: { resourceUri: "ui://mcp-for-blender/viewport-v2" } },
+      rawContent: content,
+    });
+    // The model still gets the image itself.
+    expect(mcpToolToModelOutput({ output: result })).toMatchObject({
+      type: "content",
+      value: [
+        { type: "text", text: "[image]\nThrough camera 'Camera'." },
+        { type: "media", data: base64, mediaType: "image/png" },
+      ],
+    });
+  });
+
+  test.for([
+    ["the prefixed name", "archestra__get_app_diagnostics"],
+    ["the bare short name", "get_app_diagnostics"],
+  ])("gives a run_tool result with an image and no MCP App the same output as a direct call (%s)", async ([
+    _case,
+    targetToolName,
+  ], { makeAgent }) => {
+    const agent = await makeAgent();
+    const base64 = "QUJDREVG".repeat(4);
+    const response = {
+      content: [
+        { type: "text" as const, text: "App rendered clean." },
+        { type: "image" as const, data: base64, mimeType: "image/jpeg" },
+      ],
+      structuredContent: { status: "clean", screenshot: true },
+      _meta: { extra: true },
+      isError: false,
+    };
+
+    const direct = await buildArchestraToolOutput({
+      response,
+      toolName: "archestra__get_app_diagnostics",
+      toolArguments: {},
+      agentId: agent.id,
+    });
+    const dispatched = await buildArchestraToolOutput({
+      response,
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: targetToolName, tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(dispatched).toEqual(direct);
+    expect(dispatched).toMatchObject({
+      content: "App rendered clean.\n[image]",
+      structuredContent: { status: "clean", screenshot: true },
+      rawContent: response.content,
+    });
+    expect(dispatched).not.toHaveProperty("_meta.ui");
+    expect(mcpToolToModelOutput({ output: dispatched })).toEqual({
+      type: "content",
+      value: [
+        { type: "text", text: "App rendered clean.\n[image]" },
+        { type: "media", data: base64, mediaType: "image/jpeg" },
+      ],
+    });
+  });
+
   test("keeps the identity a dispatched tool ran as, which chat shows on the card", async ({
     makeAgent,
     makeAgentTool,

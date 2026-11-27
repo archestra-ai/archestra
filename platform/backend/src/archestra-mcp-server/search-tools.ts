@@ -63,7 +63,7 @@ import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getAgentTools } from "./delegation";
-import { getUnassignedDiscoverableTools } from "./dynamic-tools";
+import { getUnassignedDiscoverableTools, isAppOnlyTool } from "./dynamic-tools";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -505,25 +505,32 @@ async function getSearchableTools(params: {
       agent ?? undefined,
     );
   // An assigned tool is searchable only when the user can see its MCP server.
-  const assignedTools = await filterToolsByCallerCatalogAccess(agentTools, {
-    userId,
-    organizationId,
-  });
-  const assignedNames = new Set(assignedTools.map((tool) => tool.name));
+  const assignedToolsOfCaller = await filterToolsByCallerCatalogAccess(
+    agentTools,
+    { userId, organizationId },
+  );
+  // A tool that only its MCP App calls is not for the model to find. Its name
+  // stays in assignedNames, so the discoverable tools below do not add it back.
+  const assignedTools = assignedToolsOfCaller.filter(
+    (tool) => !isAppOnlyTool(tool),
+  );
+  const assignedNames = new Set(assignedToolsOfCaller.map((tool) => tool.name));
   // Dynamic tool access: when the agent's "access all tools" setting is on,
   // discovery also spans third-party tools from every catalog the user can
   // access, the sandbox built-ins when the feature is on, and
   // query_knowledge_sources when the user can access a knowledge connector.
   // run_tool executes such a tool directly without assigning it; the MCP
   // server's connection policy decides which credential the call uses.
-  const discoverableTools = await getUnassignedDiscoverableTools({
-    assignedToolNames: assignedNames,
-    agentId,
-    userId,
-    oauthClientId: params.tokenAuth?.oauthClientId,
-    organizationId,
-    exclusionSets,
-  });
+  const discoverableTools = (
+    await getUnassignedDiscoverableTools({
+      assignedToolNames: assignedNames,
+      agentId,
+      userId,
+      oauthClientId: params.tokenAuth?.oauthClientId,
+      organizationId,
+      exclusionSets,
+    })
+  ).filter((tool) => !isAppOnlyTool(tool));
   // Describe each third-party tool the way the installation its run_tool call
   // would use describes it, before ranking reads the descriptions.
   const describedTools = await describeToolsForCaller({

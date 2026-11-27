@@ -21,6 +21,7 @@ import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import {
   getUnassignedDiscoverableTools,
+  isAppOnlyTool,
   resolveDynamicTool,
 } from "./dynamic-tools";
 import {
@@ -501,6 +502,20 @@ async function dispatchTool({
     // The tool is assigned — enforce the per-conversation selection.
     const gateError = await checkConversationGate(resolvedName);
     if (gateError) return gateError;
+  }
+
+  // A tool that only its MCP App calls is not for the model: search_tools does
+  // not return it, and a call by its name gets the answer of a tool that is
+  // not there. The app calls such a tool through its own endpoint.
+  const targetRows = availableTool
+    ? [availableTool]
+    : assignedTools.filter((tool) => tool.name === resolvedName);
+  if (targetRows.length > 0 && targetRows.every(isAppOnlyTool)) {
+    return dispatchRefusalResult({
+      code: "unknown_tool",
+      message: unavailableThirdPartyToolMessage(resolvedName),
+      toolName: resolvedName,
+    });
   }
 
   // The target's stored input schema, resolved before the envelope repair so

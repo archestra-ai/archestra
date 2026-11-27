@@ -385,6 +385,70 @@ describe("run_tool", () => {
     ]);
   });
 
+  test("does not run an assigned tool that only its MCP App calls", async ({
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
+    const tool = await makeTool({
+      name: "blender__viewport_latest",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { visibility: ["app"] } } },
+    });
+    await makeAgentTool(testAgent.id, tool.id);
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: "blender__viewport_latest", tool_args: {} },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      'No tool named "blender__viewport_latest"',
+    );
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+  });
+
+  test("runs an assigned tool that the model and its MCP App both call", async ({
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
+    const tool = await makeTool({
+      name: "blender__look",
+      catalogId: catalog.id,
+      meta: {
+        _meta: {
+          ui: {
+            resourceUri: "ui://mcp-for-blender/viewport-v2",
+            visibility: ["model", "app"],
+          },
+        },
+      },
+    });
+    await makeAgentTool(testAgent.id, tool.id);
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+      content: [{ type: "text", text: "Through camera 'Camera'." }],
+      isError: false,
+    } as any);
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: "blender__look", tool_args: {} },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+  });
+
   test("lets the dispatched upstream tool elicit from the chat viewer", async ({
     makeAgentTool,
     makeInternalMcpCatalog,
@@ -782,6 +846,34 @@ describe("run_tool", () => {
         dynamicAgent.id,
       );
       expect(assignedNames.has("github__search_repositories")).toBe(false);
+    });
+
+    test("does not run an unassigned tool that only its MCP App calls", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: "blender__viewport_latest",
+        catalogId: catalog.id,
+        meta: { _meta: { ui: { visibility: ["app"] } } },
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "blender__viewport_latest", tool_args: {} },
+        dynamicContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "blender__viewport_latest"',
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
     test("executes for a user who cannot modify the agent (no agent mutation involved)", async ({

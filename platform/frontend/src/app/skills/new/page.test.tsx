@@ -204,7 +204,12 @@ describe("NewSkillPage wizard", () => {
     expect(createMutateAsync).toHaveBeenCalledTimes(1);
     const body = createMutateAsync.mock.calls[0][0];
     expect(body).not.toHaveProperty("baseVersion");
-    expect(body).toMatchObject({ files: [] });
+    // The starter files go with it: a script and a reference to edit from.
+    expect(body.files.map((file: { path: string }) => file.path)).toEqual([
+      "references/example.md",
+      "scripts/example.sh",
+    ]);
+    expect(body.content).toContain("## When to use");
     // Access is the initial grants alone; the retired scope is not sent.
     expect(body).not.toHaveProperty("scope");
     expect(body.content).toContain('name: "release-checklist"');

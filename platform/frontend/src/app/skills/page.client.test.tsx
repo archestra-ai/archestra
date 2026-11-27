@@ -994,7 +994,7 @@ describe("SkillsPage rows", () => {
     expect(permanentDeleteMutateAsync).not.toHaveBeenCalled();
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("Delete skill permanently");
-    expect(dialog).toHaveTextContent("This destroys pdf-tools along with");
+    expect(dialog).toHaveTextContent("Permanent deletion can not be undone.");
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Delete permanently" }),
     );
@@ -1006,6 +1006,52 @@ describe("SkillsPage rows", () => {
     expect(
       screen.getByRole("checkbox", { name: "Select pdf-tools" }),
     ).not.toBeChecked();
+  });
+
+  it("refuses bulk permanent delete while a built-in skill is ticked, as its own row does", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockPermissions({ skillAdmin: true });
+    vi.mocked(useIsGlobalAdmin).mockReturnValue({
+      isGlobalAdmin: true,
+      isLoading: false,
+    });
+    mockSkills([
+      { ...MINE, deletedAt: "2026-08-19T00:00:00.000Z" },
+      {
+        ...MINE,
+        id: "built-in-1",
+        name: "build-app",
+        sourceType: "built_in",
+        deletedAt: "2026-08-19T00:00:00.000Z",
+      },
+    ]);
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select build-app" }),
+    );
+    const purge = screen.getByRole("button", { name: "Delete permanently" });
+    expect(purge).toHaveAttribute("aria-disabled", "true");
+    expect(purge).toHaveAccessibleDescription(
+      /already gone for good.*Untick the built-in skill to delete the rest\./,
+    );
+    await userEvent.click(purge);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // Without the built-in, the rest can go.
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select build-app" }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select pdf-tools" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Delete permanently" }),
+    ).not.toHaveAttribute("aria-disabled");
   });
 
   it("offers bulk permanent delete only to the admins who can do it", async () => {

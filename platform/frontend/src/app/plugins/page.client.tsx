@@ -1,5 +1,6 @@
 "use client";
 
+import { RESOURCE_ACCESS_RELATIONS } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArchiveRestore,
@@ -46,6 +47,7 @@ import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
 } from "@/components/resource-access-filter";
+import { RESOURCE_ACCESS_PARAM } from "@/components/resource-access-params";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -495,6 +497,37 @@ function PluginsList() {
   const isCheckingForAnyPlugin =
     listIsEmpty && everyPlugin.isPending && everyPlugin.isFetching;
   const hasNoPlugins = listIsEmpty && everyPlugin.data?.length === 0;
+  // Plugins the viewer reaches only through admin access: nobody shared them
+  // with the viewer, so the default view leaves them out. An empty list then
+  // says they exist and offers them, where it used to say "No plugins yet"
+  // beside a Connect page that counted them.
+  const adminOnlyCount = listIsEmpty ? (everyPlugin.data?.length ?? 0) : 0;
+  const showAdminAccess = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set(RESOURCE_ACCESS_PARAM, RESOURCE_ACCESS_RELATIONS.join(","));
+    params.delete("page");
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+  const emptyList =
+    adminOnlyCount > 0
+      ? {
+          emptyMessage: "No plugins are yours or shared with you.",
+          emptyDescription:
+            adminOnlyCount === 1
+              ? "1 plugin is visible to you with Admin access."
+              : `${adminOnlyCount} plugins are visible to you with Admin access.`,
+          emptyAction: (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={showAdminAccess}
+            >
+              Show with Admin access
+            </Button>
+          ),
+        }
+      : { emptyMessage: "No plugins yet." };
   const createPermission = useHasPermissions({ plugin: ["create"] });
   // Undefined while the permissions are still loading: nobody is sent on, and
   // nobody is told they cannot add a plugin, before that is known.
@@ -813,7 +846,7 @@ function PluginsList() {
                     itemCount={filteredPlugins.length}
                     isLoading={isFetching}
                     emptyIcon={Braces}
-                    emptyMessage="No plugins yet."
+                    {...emptyList}
                     hasActiveFilters={hasActiveFilters}
                     filteredEmptyMessage="No plugins match the current filters."
                     onClearFilters={clearFilters}
@@ -883,7 +916,7 @@ function PluginsList() {
                     urlPagination
                     getRowId={(row) => row.id}
                     emptyIcon={Braces}
-                    emptyMessage="No plugins yet."
+                    {...emptyList}
                     hasActiveFilters={hasActiveFilters}
                     filteredEmptyMessage={
                       isDeletedView
@@ -993,14 +1026,7 @@ function PermanentlyDeletePluginsDialog({
   return (
     <PermanentDeleteDialog
       noun="plugin"
-      items={plugins.map((plugin) => ({
-        id: plugin.id,
-        name: plugin.displayName,
-      }))}
-      lost={{
-        one: "its files and versions, its grants and labels, and any share link for it. Copies already installed on developer machines stay until they are uninstalled",
-        many: "their files and versions, their grants and labels, and any share links for them. Copies already installed on developer machines stay until they are uninstalled",
-      }}
+      count={plugins.length}
       open
       onOpenChange={(open) => !open && onClose()}
       isPending={permanentlyDelete.isPending}

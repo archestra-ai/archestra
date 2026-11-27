@@ -2,7 +2,6 @@
 
 import { Trash2 } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ItemNames } from "@/components/item-names";
 import type { TableRowAction } from "@/components/table-row-actions";
 
 /**
@@ -57,11 +56,13 @@ export function permanentDeleteRowAction({
  * that offers "Delete permanently" asks through it, from a row and from the
  * bulk bar alike, so the question and the words are the same for one item
  * and for several, and for one kind of item and the next.
+ *
+ * The title says what and how many; the text says the one thing that sets
+ * this apart from a delete.
  */
 export function PermanentDeleteDialog({
   noun,
-  items,
-  lost,
+  count,
   open,
   onOpenChange,
   isPending,
@@ -69,39 +70,23 @@ export function PermanentDeleteDialog({
 }: {
   /** What is being destroyed, in the singular: "skill", "plugin". */
   noun: string;
-  /** The items, named in the question. */
-  items: ReadonlyArray<{ id: string; name: string }>;
-  /**
-   * What goes with them, after "along with": for one item and for several,
-   * since the pronouns differ.
-   */
-  lost: { one: string; many: string };
+  /** How many of them. */
+  count: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isPending: boolean;
   onConfirm: () => void;
 }) {
-  const one = items.length === 1;
   return (
     <DeleteConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
       title={
-        one
+        count === 1
           ? `Delete ${noun} permanently`
-          : `Delete ${items.length} ${noun}s permanently`
+          : `Delete ${count} ${noun}s permanently`
       }
-      description={
-        <>
-          <span>This destroys </span>
-          <ItemNames items={items} />
-          <span>
-            {one
-              ? ` along with ${lost.one}. Nothing recovers it.`
-              : ` along with ${lost.many}. Nothing recovers them.`}
-          </span>
-        </>
-      }
+      description="Permanent deletion can not be undone."
       isPending={isPending}
       onConfirm={onConfirm}
       confirmLabel={PERMANENT_DELETE_LABEL}

@@ -1,4 +1,7 @@
-import type { ResourcePermissionAction } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  type ResourcePermissionAction,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -243,6 +246,69 @@ describe("POST /api/connection-setups with plugins", () => {
         .plugins.map((plugin: { id: string }) => plugin.id)
         .sort(),
     ).toEqual([own.id, shared.id].sort());
+  });
+
+  test("a setup that names no plugins leaves out a plugin an admin reaches only through admin access", async ({
+    makeUser,
+    makeAdmin,
+    makeMember,
+  }) => {
+    // An admin may use every plugin, including ones nobody shared with them.
+    user = await makeAdmin();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const author = await makeUser();
+    await makeMember(author.id, organizationId);
+    const own = await seedPlugin("claude-code");
+    const unshared = await seedPlugin("claude-code", ["posix"], {
+      authorId: author.id,
+    });
+    const orgWide = await PluginModel.create({
+      organizationId,
+      userId: author.id,
+      publishToOrganization: true,
+      input: {
+        displayName: "Shared with everyone",
+        description: "Connection setup test",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        files: [
+          {
+            path: "hooks/hooks.json",
+            content: "{}\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!orgWide) throw new Error("failed to seed plugin");
+    const setup = (pluginIds?: string[]) =>
+      app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId: "claude-code",
+          platform: "macos",
+          baseUrl: "http://localhost:9000/v1",
+          ...(pluginIds ? { pluginIds } : {}),
+        },
+      });
+    const ids = (response: { json: () => { plugins: { id: string }[] } }) =>
+      response
+        .json()
+        .plugins.map((plugin) => plugin.id)
+        .sort();
+
+    // Unasked, the setup installs what the Plugins list shows: the admin's
+    // own plugins and those shared with them, not someone's unshared one.
+    const implicit = await setup();
+    expect(implicit.statusCode, implicit.body).toBe(200);
+    expect(ids(implicit)).toEqual([own.id, orgWide.id].sort());
+
+    // Named, it is still theirs to install: admin access is a choice.
+    const explicit = await setup([unshared.id]);
+    expect(explicit.statusCode, explicit.body).toBe(200);
+    expect(ids(explicit)).toEqual([unshared.id]);
   });
 
   test("rejects explicit plugins and omits implicit plugins when Connect delivery is disabled", async ({

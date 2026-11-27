@@ -17,6 +17,8 @@ const access = vi.hoisted(() => ({
   isGlobalAdmin: false,
   /** The filters the list was last asked with. */
   listFilters: undefined as { status?: string } | undefined,
+  /** What the filtered list returns, when it differs from every plugin. */
+  listPlugins: null as unknown[] | null,
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
@@ -81,7 +83,11 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
     // The first call on the page is the list itself.
     if (filters) access.listFilters = filters;
     return {
-      data: access.plugins ?? [PLUGIN],
+      // The list with its filters, and the same question asked without them.
+      data:
+        filters && access.listPlugins
+          ? access.listPlugins
+          : (access.plugins ?? [PLUGIN]),
       isPending: false,
       isFetching: false,
       isLoadingError: false,
@@ -165,6 +171,7 @@ describe("PluginsPage", () => {
     access.isPending = false;
     access.isGlobalAdmin = false;
     access.listFilters = undefined;
+    access.listPlugins = null;
     vi.clearAllMocks();
   });
 
@@ -456,11 +463,63 @@ describe("PluginsPage", () => {
     expect(dialog).toHaveTextContent(
       "Installed copies of Policy Runtime stay on developer machines until you uninstall them.",
     );
-    // Named as a link to the plugin's own page.
+    // Named in plain text, as the skills delete dialog names a skill.
     expect(
-      within(dialog).getByRole("link", { name: "Policy Runtime" }),
-    ).toHaveAttribute("href", "/plugins/plugin-1");
+      within(dialog).queryByRole("link", { name: "Policy Runtime" }),
+    ).toBeNull();
+    // Someone who does not manage every plugin has no Deleted view to open.
+    expect(dialog).toHaveTextContent("An admin can restore deleted plugins.");
+    expect(within(dialog).queryByRole("link", { name: "Deleted" })).toBeNull();
     expect(dialog).not.toHaveTextContent('Delete "Policy Runtime"?');
+  });
+
+  it("tells a reader who manages every plugin where a deleted plugin comes back from", async () => {
+    access.grants.push(
+      { resource: "plugin", action: "delete", scope: "*" },
+      { resource: "plugin", action: "update", scope: "*" },
+    );
+    render(<PluginsPage />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete Policy Runtime" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Delete plugin?" });
+    expect(dialog).toHaveTextContent(
+      "You can restore deleted plugins from the Deleted filter on this page.",
+    );
+    // The plain deleted view: the list's filters are left behind.
+    expect(
+      within(dialog).getByRole("link", { name: "Deleted" }),
+    ).toHaveAttribute("href", "/plugins?page=1&status=deleted");
+  });
+
+  it("says when plugins exist that only admin access shows, and offers them, instead of calling the list empty", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    // Nothing is the viewer's own or shared with them; one plugin is
+    // readable through admin access alone.
+    access.listPlugins = [];
+    render(<PluginsPage />);
+
+    expect(
+      screen.getByText("No plugins are yours or shared with you."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("1 plugin is visible to you with Admin access."),
+    ).toBeVisible();
+    expect(screen.queryByText("No plugins yet.")).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show with Admin access" }),
+    );
+    expect(push).toHaveBeenCalledWith(
+      "/plugins?access=mine%2Cshared%2Corg%2Cothers",
+      { scroll: false },
+    );
   });
 
   it("opens the same confirmation from the bulk bar as from a row", async () => {
@@ -648,9 +707,7 @@ describe("PluginsPage", () => {
       const dialog = screen.getByRole("dialog", {
         name: "Delete plugin permanently",
       });
-      expect(dialog).toHaveTextContent(
-        "This destroys Policy Runtime along with its files and versions",
-      );
+      expect(dialog).toHaveTextContent("Permanent deletion can not be undone.");
       expect(purgeMutateAsync).not.toHaveBeenCalled();
       await user.click(
         within(dialog).getByRole("button", { name: "Delete permanently" }),

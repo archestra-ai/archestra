@@ -42,18 +42,64 @@ export interface SkillPreview {
   files: (ResourceFile & { kind?: "reference" | "script" | "asset" })[];
 }
 
-const BLANK_SKILL_TEMPLATE = `---
+/**
+ * What a new skill starts with: a working example to edit from, in the
+ * layout the Agent Skills specification gives a skill. SKILL.md with the
+ * sections most skills have, one script and one reference file it points at,
+ * so the folders a skill can carry are there to see. The name and the
+ * description are left for the author: the form asks for both.
+ */
+const STARTER_SKILL_MANIFEST = `---
 name: ""
 description: ""
 ---
 
-# Insert instructions below
+# Instructions
+
+Replace this text with what the agent should do, step by step.
+
+## When to use
+
+Say when this skill applies. The agent decides from the description above, so put the words a user would use there too.
+
+## Steps
+
+1. Say what to do first.
+2. Run \`scripts/example.sh\` when a step needs a command.
+3. Read \`references/example.md\` for details that are too long for this file.
+
+## Example
+
+Show one request and the answer you expect.
 `;
+
+const STARTER_SKILL_FILES: ResourceFile[] = [
+  {
+    path: "references/example.md",
+    content: `# Example reference
+
+Put details here that the agent needs only sometimes: a long table, a format, a checklist. SKILL.md stays short and points at this file.
+
+Delete this file if the skill does not need it.
+`,
+    encoding: "utf8",
+  },
+  {
+    path: "scripts/example.sh",
+    content: `#!/bin/sh
+# An example script. The agent runs it from the skill's folder when the
+# instructions say so. Delete this file if the skill does not need it.
+echo "Hello from the skill"
+`,
+    encoding: "utf8",
+  },
+];
 
 export function blankSkillDraft(): SkillDraft {
   return {
-    manifest: BLANK_SKILL_TEMPLATE,
-    files: [],
+    manifest: STARTER_SKILL_MANIFEST,
+    // Copies: the draft's files are edited in place of these.
+    files: STARTER_SKILL_FILES.map((file) => ({ ...file })),
     environmentIds: [],
     labels: [],
     icon: null,

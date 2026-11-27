@@ -6,6 +6,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   resolveMcpClientServerName,
   type SupportedProvider,
@@ -357,7 +358,12 @@ export function useConnectPageData({
 
   const pluginsEnabled = org?.connectionPluginsEnabled === true;
   // Same eligibility and filter the setup uses to bundle plugins.
-  const { data: allPlugins } = usePlugins(pluginsEnabled && canDeliverPlugins);
+  // The plugins the Plugins list shows: the viewer's own and those shared
+  // with them. One an admin reaches only through admin access is not counted
+  // or installed here unasked, as the setup route does not bundle it.
+  const { data: allPlugins } = usePlugins(pluginsEnabled && canDeliverPlugins, {
+    access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+  });
   // The OS the setup command is for: the browser's, until the user picks the
   // other command.
   const [windows, setWindows] = useState(false);

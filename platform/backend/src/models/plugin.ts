@@ -207,6 +207,12 @@ class PluginModel {
     organizationId: string;
     clientType: ClientType;
     platform: "posix" | "windows";
+    /**
+     * How the installing user has to reach a plugin for it to be bundled
+     * without being named: the Plugins list's own filter, so a setup installs
+     * what that list shows.
+     */
+    access?: ResourceAccessFilter;
   }): Promise<Pick<Plugin, "id" | "supportedPlatforms">[]> {
     return db
       .select({
@@ -223,6 +229,19 @@ class PluginModel {
             schema.pluginsTable.approvedContentHash,
             schema.pluginsTable.contentHash,
           ),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          params.access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                ...params.access,
+                organizationId: schema.pluginsTable.organizationId,
+                resource: "plugin",
+                scopeColumn: schema.pluginsTable.id,
+                ownerColumn: schema.pluginsTable.authorId,
+              })
+            : undefined,
+          // SPDX-SnippetEnd
           notDeleted(schema.pluginsTable),
         ),
       )

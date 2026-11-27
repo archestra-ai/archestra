@@ -179,6 +179,10 @@ const SYNC_INTERVAL_LABELS: Record<string, string> = {
   "1d": "Synced once a day",
 };
 
+/** Why a deleted built-in skill has no permanent delete, on a row or in bulk. */
+const BUILT_IN_PURGE_REFUSAL =
+  "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart";
+
 const SKILLS_DESCRIPTION = "Specific task instructions for your agents.";
 
 export default function SkillsPage() {
@@ -585,6 +589,9 @@ function SkillsList() {
   const selectedSkills = allMatchingSelected
     ? (allMatchingSkills ?? pageSelectedSkills)
     : pageSelectedSkills;
+  const selectedBuiltInCount = selectedSkills.filter(
+    (skill) => skill.sourceType === "built_in",
+  ).length;
   const clearSelection = () => {
     selection.clearSelection();
     setEscalatedFor(null);
@@ -763,7 +770,7 @@ function SkillsList() {
               setPermanentlyDeleting({ skills: [skill], fromSelection: false }),
             disabledReason:
               skill.sourceType === "built_in"
-                ? "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart"
+                ? BUILT_IN_PURGE_REFUSAL
                 : undefined,
           }),
         ]
@@ -1261,10 +1268,19 @@ function SkillsList() {
                             permission button for it: offered only to the
                             admins who can do it. */}
                         {admin.isGlobalAdmin && (
-                          <Button
-                            type="button"
+                          // Refused for the reason a built-in's own row
+                          // refuses it: offering it only to fail afterwards
+                          // helps nobody.
+                          <PermissionButton
+                            permissions={{}}
                             variant="destructive"
                             size="sm"
+                            disabled={selectedBuiltInCount > 0}
+                            tooltip={
+                              selectedBuiltInCount > 0
+                                ? `${BUILT_IN_PURGE_REFUSAL}. Untick ${selectedBuiltInCount === 1 ? "the built-in skill" : `the ${selectedBuiltInCount} built-in skills`} to delete the rest.`
+                                : undefined
+                            }
                             onClick={() =>
                               setPermanentlyDeleting({
                                 skills: selectedSkills,
@@ -1274,7 +1290,7 @@ function SkillsList() {
                           >
                             <Trash2 className="h-4 w-4" />
                             <span>{PERMANENT_DELETE_LABEL}</span>
-                          </Button>
+                          </PermissionButton>
                         )}
                       </>
                     ) : (
@@ -1772,11 +1788,7 @@ function PermanentlyDeleteSkillsDialog({
   return (
     <PermanentDeleteDialog
       noun="skill"
-      items={skills}
-      lost={{
-        one: "every version and resource file, its grants and environment assignments, and any public share link for it",
-        many: "every version and resource file, their grants and environment assignments, and any public share links for them",
-      }}
+      count={skills.length}
       open={open}
       onOpenChange={onOpenChange}
       isPending={permanentlyDeleteSkills.isPending}

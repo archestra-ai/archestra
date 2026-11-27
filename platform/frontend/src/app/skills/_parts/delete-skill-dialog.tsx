@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DeletedItemsHint } from "@/components/deleted-items-hint";
 import { ItemNames } from "@/components/item-names";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDeleteSkill } from "@/lib/skills/skill.query";
@@ -77,7 +76,6 @@ export function SkillDeleteDescription({
   /** The Deleted link was followed: the dialog it sits in should close. */
   onNavigate?: () => void;
 }) {
-  const isSkillsList = usePathname() === "/skills";
   return (
     <>
       {/* The header puts 8px under the title. This adds 8px, so the text
@@ -89,32 +87,14 @@ export function SkillDeleteDescription({
         <span>{skills.length === 1 ? " skill." : " skills."}</span>
       </span>
       <span className="mt-3 block">
-        {canOpenDeletedView ? (
-          <>
-            <span>You can restore deleted skills from the </span>
-            <Link
-              href={DELETED_SKILLS_HREF}
-              onClick={onNavigate}
-              className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
-            >
-              Deleted
-            </Link>
-            <span>
-              {isSkillsList
-                ? " filter on this page."
-                : " filter on the Skills page."}
-            </span>
-          </>
-        ) : (
-          <span>An admin can restore deleted skills.</span>
-        )}
+        <DeletedItemsHint
+          nounPlural="skills"
+          listPath="/skills"
+          listName="Skills"
+          canOpenDeletedView={canOpenDeletedView}
+          onNavigate={onNavigate}
+        />
       </span>
     </>
   );
 }
-
-/**
- * Every deleted skill, from the first page: the list's current search and
- * filters are left behind, since the skill just deleted may not match them.
- */
-const DELETED_SKILLS_HREF = "/skills?page=1&status=deleted";

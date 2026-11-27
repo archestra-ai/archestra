@@ -454,6 +454,11 @@ export function useRestorePlugins() {
   return usePluginsMutation({
     request: (id) => restorePlugin({ path: { id } }),
     words: { done: "restored", doing: "restore" },
+    // A restore is refused when its owner's name for that client is taken,
+    // and two deleted plugins can share a name. Sent together, both would be
+    // checked before either came back; one after the other, the second is
+    // refused.
+    oneAtATime: true,
   });
 }
 
@@ -486,17 +491,23 @@ function usePluginsMutation(params: {
   request: (id: string) => Promise<{ error?: unknown }>;
   /** The action as a past participle and as a verb: "deleted", "delete". */
   words: { done: string; doing: string };
+  /** Wait for each request's answer before sending the next. */
+  oneAtATime?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const { request, words } = params;
+  const { request, words, oneAtATime } = params;
   return useMutation({
     mutationFn: async (plugins: Array<{ id: string; name: string }>) => {
-      const outcomes = await Promise.all(
-        plugins.map(async (plugin) => {
-          const { error } = await request(plugin.id);
-          return { plugin, error };
-        }),
-      );
+      const send = async (plugin: { id: string; name: string }) => {
+        const { error } = await request(plugin.id);
+        return { plugin, error };
+      };
+      const outcomes: Awaited<ReturnType<typeof send>>[] = [];
+      if (oneAtATime) {
+        for (const plugin of plugins) outcomes.push(await send(plugin));
+      } else {
+        outcomes.push(...(await Promise.all(plugins.map(send))));
+      }
       return {
         succeeded: outcomes
           .filter(({ error }) => !error)

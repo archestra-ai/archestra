@@ -9,6 +9,7 @@ const sdk = vi.hoisted(() => ({
   getPlugin: vi.fn(),
   importGithubPlugin: vi.fn(),
   importGithubPluginMarketplace: vi.fn(),
+  restorePlugin: vi.fn(),
 }));
 
 vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
@@ -30,6 +31,7 @@ import {
   useImportGithubPlugin,
   useImportGithubPluginMarketplace,
   usePlugin,
+  useRestorePlugins,
 } from "./plugin.query";
 
 function createTestClient() {
@@ -70,6 +72,39 @@ describe("Plugin bulk mutations", () => {
 
     expect(outcome.succeeded).toEqual([{ id: "p1", name: "One" }]);
     expect(outcome.failed).toHaveLength(1);
+  });
+
+  it("restores several plugins one after the other, so a name two of them share is refused for the second", async () => {
+    let answerFirst: (value: unknown) => void = () => {};
+    sdk.restorePlugin
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          answerFirst = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: { message: "Cannot restore" },
+      });
+    const { result } = renderHook(() => useRestorePlugins(), { wrapper });
+
+    let outcome: Awaited<ReturnType<typeof result.current.mutateAsync>>;
+    const restoring = act(async () => {
+      outcome = await result.current.mutateAsync([
+        { id: "p1", name: "Tools" },
+        { id: "p2", name: "Tools" },
+      ]);
+    });
+    // The second is not sent while the first is unanswered.
+    await waitFor(() => expect(sdk.restorePlugin).toHaveBeenCalledTimes(1));
+    answerFirst({ data: { id: "p1" }, error: undefined });
+    await restoring;
+
+    expect(sdk.restorePlugin).toHaveBeenCalledTimes(2);
+    // biome-ignore lint/style/noNonNullAssertion: assigned inside act above
+    expect(outcome!.succeeded).toEqual([{ id: "p1", name: "Tools" }]);
+    // biome-ignore lint/style/noNonNullAssertion: assigned inside act above
+    expect(outcome!.failed).toHaveLength(1);
   });
 
   it("reports one deleted plugin and several in the same words from every caller", async () => {

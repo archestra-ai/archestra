@@ -13,6 +13,7 @@ FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends apt libapt-pkg6.0 tini libpcre2-8-0 perl-base \
+    libpam0g libpam-modules libpam-modules-bin libpam-runtime \
   # CVE-2026-109518: upgrade the package manager inherited from the base image.
   && for package in apt libapt-pkg6.0; do \
     dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge 2.6.2 || exit 1; \
@@ -27,6 +28,10 @@ RUN apt-get update \
   && dpkg --compare-versions \
     "$(dpkg-query --show --showformat='${Version}' perl-base)" \
     ge 5.36.0-7+deb12u4 \
+  # Reject a repository snapshot that predates the PAM update.
+  && for package in libpam0g libpam-modules libpam-modules-bin libpam-runtime; do \
+    dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge 1.5.2-6+deb12u3 || exit 1; \
+  done \
   && rm -rf /var/lib/apt/lists/*
 
 # The entrypoint is `node /app/server.mjs`, server.mjs imports nothing outside

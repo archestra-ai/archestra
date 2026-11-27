@@ -34,8 +34,9 @@ import { useAppearanceSettings } from "@/lib/organization.query";
 import {
   type PluginDetail,
   useApplyGithubPluginUpdate,
-  useDeletePlugin,
+  useDeletePlugins,
   usePlugin,
+  usePlugins,
   usePreviewGithubPluginUpdate,
   useTriggerPluginGithubSync,
   useUpdatePlugin,
@@ -148,8 +149,11 @@ beforeEach(() => {
     isPending: false,
     data: undefined,
   };
-  vi.mocked(useDeletePlugin).mockReturnValue(
-    mutationStub as unknown as ReturnType<typeof useDeletePlugin>,
+  vi.mocked(usePlugins).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof usePlugins>);
+  vi.mocked(useDeletePlugins).mockReturnValue(
+    mutationStub as unknown as ReturnType<typeof useDeletePlugins>,
   );
   vi.mocked(useApplyGithubPluginUpdate).mockReturnValue(
     mutationStub as unknown as ReturnType<typeof useApplyGithubPluginUpdate>,
@@ -225,6 +229,133 @@ describe("PluginDetailPage", () => {
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: "Session sentry" }),
     );
+  });
+
+  it("saves against the files it loaded, so files written since are not replaced unseen", async () => {
+    const user = userEvent.setup();
+    const view = renderPage(BASE_PLUGIN);
+    const rerenderWith = (plugin: PluginDetail) => {
+      vi.mocked(usePlugin).mockReturnValue({
+        data: plugin,
+        isPending: false,
+      } as unknown as ReturnType<typeof usePlugin>);
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <PluginDetailPage id={plugin.id} />
+        </QueryClientProvider>,
+      );
+    };
+    const save = () => user.click(screen.getByRole("button", { name: "Save" }));
+    const lastSave = () => updateMutateAsync.mock.calls.at(-1)?.[0];
+
+    // Refused: someone else wrote the files first.
+    updateMutateAsync.mockRejectedValueOnce(new Error("409"));
+    await user.type(screen.getByLabelText("Description"), " More.");
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "abc123" });
+
+    // The other write arrives under the unsaved draft. The draft still holds
+    // the files it was taken from, so a retry is still held against them.
+    rerenderWith({ ...BASE_PLUGIN, contentHash: "moved" });
+    updateMutateAsync.mockRejectedValueOnce(new Error("409"));
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "abc123" });
+
+    // Discarding takes the plugin as it is now, and its hash with it.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.type(screen.getByLabelText("Description"), " Again.");
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "moved" });
+
+    // A save puts the saved plugin in the cache, and the draft moves on to
+    // the files it wrote.
+    rerenderWith({ ...BASE_PLUGIN, contentHash: "saved" });
+    await user.type(screen.getByLabelText("Description"), " Once more.");
+    await save();
+    expect(lastSave()).toMatchObject({ baseContentHash: "saved" });
+  });
+
+  it("turns installing off from the page, for a manual plugin and a Git one", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage(BASE_PLUGIN);
+
+    const available = screen.getByRole("switch", {
+      name: "Available to install",
+    });
+    expect(available).toBeChecked();
+    await user.click(available);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+
+    // A Git plugin's files are the repository's; whether it can be installed
+    // is still this page's to decide, and a disabled one can be turned on.
+    unmount();
+    renderPage({
+      ...BASE_PLUGIN,
+      sourceKind: "github",
+      sourceRepo: "acme/plugins",
+      enabled: false,
+    } as PluginDetail);
+    const off = screen.getByRole("switch", { name: "Available to install" });
+    expect(off).not.toBeChecked();
+    await user.click(off);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it("refuses a rename into a name the owner already holds, and only notes a stored duplicate", async () => {
+    const twin = (displayName: string) => ({
+      id: "plugin-2",
+      displayName,
+      clientType: BASE_PLUGIN.clientType,
+      authorId: BASE_PLUGIN.authorId,
+    });
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [twin("Release helper")],
+    } as unknown as ReturnType<typeof usePlugins>);
+    const user = userEvent.setup();
+    const { unmount } = renderPage(BASE_PLUGIN);
+
+    await user.clear(screen.getByLabelText("Display name"));
+    await user.type(screen.getByLabelText("Display name"), "release HELPER");
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toHaveAttribute("aria-disabled", "true");
+    expect(save).toHaveAccessibleDescription(
+      "Name is already in use. Try another one.",
+    );
+
+    // Stored under the same name as another of the owner's plugins: nothing
+    // was renamed, so its other fields still save.
+    unmount();
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [twin(BASE_PLUGIN.displayName)],
+    } as unknown as ReturnType<typeof usePlugins>);
+    renderPage(BASE_PLUGIN);
+    expect(screen.getByText("Name already in use")).toBeVisible();
+    await user.type(screen.getByLabelText("Description"), " More.");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("offers the whole plugin as a download in the header, not on the file editor", () => {
+    renderPage(BASE_PLUGIN);
+
+    expect(screen.getByRole("button", { name: "Download" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Download as .zip" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("deletes a manual plugin from a button, since a menu would hold nothing else", () => {
+    renderPage(BASE_PLUGIN);
+
+    expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "More actions" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows permissions from the page-header URL", () => {

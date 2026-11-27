@@ -2,6 +2,7 @@
 
 import {
   DEFAULT_MODELS,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   DocsPage,
   OPENCODE_PRIMARY_PROVIDERS,
   PROVIDERS_REQUIRING_BASE_URL,
@@ -288,8 +289,11 @@ export function ConnectCommandPanel({
     useScopedCapabilities();
   const pluginsQueryEnabled =
     pluginsEnabled && canUseAnyPlugin(scopedGrants ?? []);
-  const { data: allPlugins, isPending: pluginsPending } =
-    usePlugins(pluginsQueryEnabled);
+  // The plugins the Plugins list shows, as on the Connect page itself.
+  const { data: allPlugins, isPending: pluginsPending } = usePlugins(
+    pluginsQueryEnabled,
+    { access: DEFAULT_RESOURCE_ACCESS_RELATIONS },
+  );
   const plugins = useMemo(
     () =>
       (allPlugins ?? []).filter(

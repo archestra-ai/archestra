@@ -32,7 +32,7 @@ export function PluginSourceIcon({ plugin }: { plugin: PluginSource }) {
     <span
       className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30 text-muted-foreground"
       aria-hidden
-      title={repo ? `Source: ${repositoryLabel(repo)}` : "Manual plugin source"}
+      title={repo ? `Source: ${repositoryLabel(repo)}` : undefined}
     >
       <PluginSourceGlyph plugin={plugin} />
     </span>

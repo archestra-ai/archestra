@@ -398,6 +398,26 @@ describe("PluginsPage", () => {
       expect(shownNames()).toEqual(names.slice(20));
     });
 
+    it("keeps the page in the URL while it is still learning whether the reader gets the Deleted view", () => {
+      const push = vi.fn();
+      vi.mocked(useRouter).mockReturnValue({
+        push,
+        replace: vi.fn(),
+      } as unknown as ReturnType<typeof useRouter>);
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams("status=deleted&page=3") as ReturnType<
+          typeof useSearchParams
+        >,
+      );
+      access.isPending = true;
+
+      render(<PluginsPage />);
+
+      // No list yet, so no empty table to send the reader back to page one.
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(push).not.toHaveBeenCalled();
+    });
+
     it("writes the page to the URL when the pager moves", async () => {
       const push = vi.fn();
       vi.mocked(useRouter).mockReturnValue({

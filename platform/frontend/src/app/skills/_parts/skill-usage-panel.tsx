@@ -34,6 +34,7 @@ import {
   type SkillUsageReference,
   useSkillUsageStatistics,
 } from "@/lib/skills/skill.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 
 type UsageStatistics =
@@ -67,10 +68,19 @@ const SEARCHABLE_FROM = 8;
 export function SkillUsagePanel({
   skillRef,
   enabled = true,
+  allTime,
 }: {
   skillRef: SkillUsageReference;
   /** Lets the dialog hold the request back until it is actually opened. */
   enabled?: boolean;
+  /**
+   * The skill's activations since it was created, as the skills list counts
+   * them in its Uses column. Everything this panel draws covers the reported
+   * window only, so the two numbers differ for any skill older than the
+   * window; given this, the panel names both instead of leaving the reader to
+   * reconcile a list that says 40 with a page that says none.
+   */
+  allTime?: { usageCount: number; lastUsedAt: string | null };
 }) {
   const { data: stats, isPending } = useSkillUsageStatistics(
     enabled ? skillRef : null,
@@ -90,9 +100,15 @@ export function SkillUsagePanel({
           <EmptyMedia variant="icon">
             <ChartNoAxesColumn />
           </EmptyMedia>
-          <EmptyTitle>No activations yet</EmptyTitle>
+          <EmptyTitle>
+            {/* "Yet" only when it is known to be true: without the all-time
+                count this panel knows the window and nothing before it. */}
+            {allTime?.usageCount === 0
+              ? "No activations yet"
+              : `No activations in the last ${summary.windowDays} days`}
+          </EmptyTitle>
           <EmptyDescription>
-            {`This skill has not been activated in the last ${summary.windowDays} days.`}
+            {emptyUsageDescription(allTime, summary.windowDays)}
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -105,6 +121,11 @@ export function SkillUsagePanel({
         <SummaryStat
           label={summary.totalUses === 1 ? "Activation" : "Activations"}
           value={summary.totalUses.toLocaleString()}
+          hint={
+            allTime && allTime.usageCount > summary.totalUses
+              ? `last ${summary.windowDays} days · ${allTime.usageCount.toLocaleString()} in total`
+              : `last ${summary.windowDays} days`
+          }
         />
         <SummaryStat
           label={summary.actorCount === 1 ? "User" : "Users"}
@@ -383,6 +404,26 @@ function SummaryStat({
       <dd className="truncate text-2xl font-semibold tabular-nums">{value}</dd>
     </div>
   );
+}
+
+/** What the empty window means next to the skill's all-time count. */
+function emptyUsageDescription(
+  allTime: { usageCount: number; lastUsedAt: string | null } | undefined,
+  windowDays: number,
+): string {
+  if (!allTime) {
+    return `This view covers the last ${windowDays} days.`;
+  }
+  if (allTime.usageCount === 0) {
+    return "This skill has not been activated.";
+  }
+  const total = `${allTime.usageCount.toLocaleString()} ${
+    allTime.usageCount === 1 ? "time" : "times"
+  }`;
+  const lastUsed = allTime.lastUsedAt
+    ? `, most recently ${formatRelativeTimeFromNow(allTime.lastUsedAt)}`
+    : "";
+  return `It has been activated ${total} in total${lastUsed}. This view covers the last ${windowDays} days.`;
 }
 
 function UsageSkeleton() {

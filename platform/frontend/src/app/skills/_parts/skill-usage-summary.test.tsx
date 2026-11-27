@@ -16,14 +16,14 @@ it("presents skill usage as one compact, interactive summary", async () => {
   );
 
   const summary = screen.getByRole("button", {
-    name: "View usage for document-tools: 12 uses, 3 users, Never used",
+    name: "View usage for document-tools: 12 uses in total, 3 users, Never used",
   });
   expect(summary).toHaveTextContent("12");
   expect(summary).not.toHaveTextContent("3 users");
 
   await userEvent.hover(summary);
   const tooltip = await screen.findByRole("tooltip");
-  expect(tooltip).toHaveTextContent("12 uses");
+  expect(tooltip).toHaveTextContent("12 uses in total");
   expect(tooltip).toHaveTextContent("3 users · Never used");
 
   await userEvent.click(summary);

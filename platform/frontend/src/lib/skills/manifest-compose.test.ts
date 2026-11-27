@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   composeManifest,
+  findFrontmatterNotKept,
   parseManifestFields,
   setManifestFrontmatterField,
 } from "./manifest-compose";
@@ -134,7 +135,97 @@ describe("parseManifestFields", () => {
  * they live in stays editable right below them, so a write has to leave
  * everything else in the frontmatter — and in the body — exactly as it was.
  */
+describe("parseManifestFields read as YAML", () => {
+  it("leaves a comment after a value out of the value", () => {
+    const fields = parseManifestFields(
+      "---\nname: release-notes # the repository's comment\ndescription: 'Draft notes' # another\n---\n\nBody",
+    );
+
+    expect(fields.name).toBe("release-notes");
+    expect(fields.description).toBe("Draft notes");
+  });
+
+  it("reads a description written over several lines as its text", () => {
+    const fields = parseManifestFields(
+      "---\nname: release-notes\ndescription: >-\n  Draft release notes\n  from commits.\n---\n\nBody",
+    );
+
+    expect(fields.description).toBe("Draft release notes from commits.");
+    expect(fields.hasDescription).toBe(true);
+  });
+
+  it("keeps showing the fields while the frontmatter is not valid YAML", () => {
+    // A quote opened and not yet closed, between two keystrokes.
+    const fields = parseManifestFields(
+      '---\nname: release-notes\ndescription: "Draft\nlicense: [\n---\n\nBody',
+    );
+
+    expect(fields.name).toBe("release-notes");
+    expect(fields.hasName).toBe(true);
+  });
+});
+
 describe("setManifestFrontmatterField", () => {
+  it("replaces a value written over several lines whole, and the result is one valid value", () => {
+    const manifest = [
+      "---",
+      "name: release-notes",
+      "description: >-",
+      "  Draft release notes",
+      "",
+      "  from commits.",
+      "",
+      "license: MIT",
+      "---",
+      "",
+      "description: this line is the body's",
+    ].join("\n");
+
+    const edited = setManifestFrontmatterField({
+      manifest,
+      field: "description",
+      value: "New description",
+    });
+
+    expect(edited).toBe(
+      [
+        "---",
+        "name: release-notes",
+        'description: "New description"',
+        "",
+        "license: MIT",
+        "---",
+        "",
+        "description: this line is the body's",
+      ].join("\n"),
+    );
+    expect(parseManifestFields(edited).description).toBe("New description");
+  });
+
+  it("writes the value as typed, whatever replacement patterns it looks like", () => {
+    const edited = setManifestFrontmatterField({
+      manifest: "---\nname: a\ndescription: old\n---\n\nBody",
+      field: "description",
+      value: "costs $& and $1, see $`",
+    });
+
+    expect(parseManifestFields(edited).description).toBe(
+      "costs $& and $1, see $`",
+    );
+  });
+
+  it("keeps Windows line endings on the line it rewrites", () => {
+    const edited = setManifestFrontmatterField({
+      manifest: "---\r\nname: a\r\ndescription: old\r\n---\r\n\r\nBody",
+      field: "name",
+      value: "b",
+    });
+
+    expect(edited).toBe(
+      '---\r\nname: "b"\r\ndescription: old\r\n---\r\n\r\nBody',
+    );
+  });
+
   const manifest = [
     "---",
     'name: "old-name"',
@@ -203,5 +294,61 @@ describe("setManifestFrontmatterField", () => {
     });
     // The body's own `name:` line is prose, not configuration.
     expect(next).toContain("name: not-frontmatter");
+  });
+});
+
+describe("findFrontmatterNotKept", () => {
+  it("names the keys a save has no column for and the nested metadata it would flatten", () => {
+    const manifest = [
+      "---",
+      "name: release-notes",
+      "description: Draft release notes.",
+      "# A comment between fields.",
+      "model: fast",
+      "argument-hint: <version>",
+      "allowed-tools: Read Grep",
+      "metadata:",
+      "  owner: docs",
+      "  review:",
+      "    cadence: weekly",
+      "  tags: [a, b]",
+      "---",
+      "",
+      "Body with model: in it.",
+    ].join("\n");
+
+    expect(findFrontmatterNotKept(manifest)).toEqual({
+      keys: ["model", "argument-hint"],
+      nestedMetadataKeys: ["review", "tags"],
+    });
+  });
+
+  it("finds nothing to warn about in a manifest of stored fields", () => {
+    const manifest = composeManifest({
+      name: "pdf-tools",
+      description: "Work with PDFs.",
+      license: "MIT",
+      compatibility: "Needs poppler.",
+      allowedTools: "Read",
+      agentName: "researcher",
+      templated: true,
+      metadata: { owner: "docs", version: "2" },
+      content: "Body.",
+    });
+
+    expect(findFrontmatterNotKept(manifest)).toEqual({
+      keys: [],
+      nestedMetadataKeys: [],
+    });
+  });
+
+  it("stays quiet about frontmatter that is missing or not valid YAML", () => {
+    const nothing = { keys: [], nestedMetadataKeys: [] };
+    expect(findFrontmatterNotKept("# No frontmatter")).toEqual(nothing);
+    expect(
+      findFrontmatterNotKept(
+        "---\nname: a\ndescription: Use when: asked\nmodel: fast\n---\n",
+      ),
+    ).toEqual(nothing);
   });
 });

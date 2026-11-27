@@ -9,10 +9,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
+import { DownloadFilesButton } from "@/components/file-workspace/download-files-button";
 import { FilterBar } from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
@@ -23,10 +24,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
+import { useSession } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
+import type { SkillManifestProblem } from "@/lib/skills/manifest-problem";
 import {
   type SkillCatalogResult,
   useCreateSkill,
@@ -40,10 +49,18 @@ import { POPULAR_REPOS } from "../_parts/popular-repos";
 import {
   blankSkillDraft,
   buildSkillSaveBody,
+  isSkillDraftDirty,
   type SkillDraft,
+  skillArchiveFiles,
+  skillDraftGap,
 } from "../_parts/skill-draft";
 import { SkillForm } from "../_parts/skill-form";
 import { SkillBackLink } from "../_parts/skill-page-shell";
+import { useNoVisibleSkills } from "../_parts/use-no-visible-skills";
+import {
+  skillDescriptionProblem,
+  useSkillNameProblem,
+} from "../_parts/use-skill-name-problem";
 
 type CreateStep = "source" | "configure";
 
@@ -96,8 +113,13 @@ function NewSkillWizard() {
     ? CREATE_STEPS.filter((s) => s.id !== "source")
     : CREATE_STEPS;
   const stepIndex = steps.findIndex((s) => s.id === effectiveStep);
+  // With no skill to list, this page is where Skills opens. Its first step
+  // then says what a skill is, and has no list to go back to.
+  const noSkills = useNoVisibleSkills();
+  const isFirstSkill = noSkills.hasNoSkills && stepIndex === 0;
 
-  const [draft, setDraft] = useState<SkillDraft>(blankSkillDraft);
+  const [blankDraft] = useState<SkillDraft>(blankSkillDraft);
+  const [draft, setDraft] = useState<SkillDraft>(blankDraft);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const patchDraft = (patch: Partial<SkillDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -105,9 +127,58 @@ function NewSkillWizard() {
     () => parseManifestFields(draft.manifest),
     [draft.manifest],
   );
-  const contentComplete = parsed.hasName && parsed.hasDescription;
+  const { data: session } = useSession();
+  // A save refused for a line of SKILL.md marks that line in the editor,
+  // until the manifest is edited.
+  const [refusedManifest, setRefusedManifest] =
+    useState<SkillManifestProblem | null>(null);
+  const manifestProblem =
+    refusedManifest?.manifest === draft.manifest ? refusedManifest : null;
+  const createSkill = useCreateSkill({
+    onManifestProblem: setRefusedManifest,
+  });
+  const nameProblem = useSkillNameProblem({
+    name: parsed.name,
+    originalName: null,
+    ownerId: session?.user?.id,
+    // A successful create refreshes the skills while this page is still up,
+    // on its way to the new skill. The skill just created carries the
+    // draft's name and owner, and is not the draft's duplicate.
+    skillId: createSkill.data?.id,
+  });
 
-  const createSkill = useCreateSkill();
+  const descriptionProblem = skillDescriptionProblem({
+    description: parsed.description,
+    originalDescription: null,
+  });
+  const createGap =
+    skillDraftGap(parsed) ?? nameProblem?.message ?? descriptionProblem ?? null;
+
+  // The draft exists only on this page, so every way off it asks first: the
+  // sidebar, the back link, a reload. The wizard's own steps are buttons that
+  // keep the draft, and a create that succeeded has nothing left to lose.
+  const [isLeavingAfterCreate, setIsLeavingAfterCreate] = useState(false);
+  const isDirty = !isLeavingAfterCreate && isSkillDraftDirty(draft, blankDraft);
+  useBeforeUnloadWhileDirty(isDirty);
+  const pendingHrefRef = useRef<string | null>(null);
+  const guard = useUnsavedChangesGuard({
+    isDirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      if (href) router.push(href);
+    },
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      pendingHrefRef.current = href;
+      guard.requestClose();
+    },
+    [guard],
+  );
+  useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
+
   const handleCreate = async () => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     // A handled failure resolves to null and a rejection is reported by the
@@ -116,7 +187,9 @@ function NewSkillWizard() {
     const created = await createSkill
       .mutateAsync(buildSkillSaveBody({ ...draft, labels: finalLabels }, null))
       .catch(() => null);
-    if (created) router.push(`/skills/${created.id}`);
+    if (!created) return;
+    setIsLeavingAfterCreate(true);
+    router.push(`/skills/${created.id}`);
   };
 
   const openImport = () => setImportState({ repoUrl: "", autoDiscover: false });
@@ -161,26 +234,52 @@ function NewSkillWizard() {
       <PageLayout
         title="Add a new skill"
         description={STEP_DESCRIPTIONS[effectiveStep]}
-        backLink={<SkillBackLink href="/skills" label="Skills" />}
-        actionButton={
-          <WizardStepper
-            compact
-            steps={steps}
-            activeStep={effectiveStep}
-            onStepClick={(target) => {
-              const targetIndex = steps.findIndex((s) => s.id === target);
-              if (targetIndex < stepIndex) setStep(target);
-            }}
-          />
+        backLink={
+          isFirstSkill ? undefined : (
+            <SkillBackLink href="/skills" label="Skills" />
+          )
         }
-        maxWidth="wizard"
+        actionButton={
+          <div className="flex items-center gap-3">
+            {effectiveStep === "configure" && (
+              <DownloadFilesButton
+                name={parsed.name || "skill"}
+                files={skillArchiveFiles(draft)}
+              />
+            )}
+            <WizardStepper
+              compact
+              steps={steps}
+              activeStep={effectiveStep}
+              onStepClick={(target) => {
+                const targetIndex = steps.findIndex((s) => s.id === target);
+                if (targetIndex < stepIndex) setStep(target);
+              }}
+            />
+          </div>
+        }
         contentOverflowX="clip"
       >
         <div className="space-y-6">
-          {isOrganizationPending ? null : (
+          {/* Held until it is known whether any skill exists, so the step does
+              not jump down when the introduction arrives above it. */}
+          {isOrganizationPending || noSkills.isPending ? null : (
             <>
+              {isFirstSkill && (
+                <div className="max-w-2xl space-y-2">
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    Teach your agent
+                  </h2>
+                  <p className="leading-relaxed text-pretty text-muted-foreground">
+                    A skill teaches your agent how to do a specific task. It can
+                    be a simple SKILL.md file or bundled with scripts and
+                    example files. Add ready skills from marketplaces or write
+                    your own. Then share them with a single command.
+                  </p>
+                </div>
+              )}
               {effectiveStep === "source" && (
-                <div className="mx-auto max-w-3xl space-y-8">
+                <div className="space-y-8">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <CatalogSourceCard
                       icon={<GitBranch className="size-5" />}
@@ -312,12 +411,21 @@ function NewSkillWizard() {
                       }))
                     }
                     labelsRef={labelsRef}
+                    nameProblem={nameProblem}
+                    descriptionProblem={descriptionProblem}
+                    manifestProblem={manifestProblem}
                   />
                   <WizardFooter>
                     {catalogDisabled ? (
-                      <Button variant="outline" asChild>
-                        <Link href="/skills">Cancel</Link>
-                      </Button>
+                      noSkills.hasNoSkills ? (
+                        // No list to cancel back to; the empty item keeps
+                        // Create on the right.
+                        <span aria-hidden />
+                      ) : (
+                        <Button variant="outline" asChild>
+                          <Link href="/skills">Cancel</Link>
+                        </Button>
+                      )
                     ) : (
                       <Button
                         variant="outline"
@@ -329,7 +437,10 @@ function NewSkillWizard() {
                     )}
                     <PermissionButton
                       permissions={{ skill: ["create"] }}
-                      disabled={!contentComplete || createSkill.isPending}
+                      disabled={createGap !== null || createSkill.isPending}
+                      // Says what is missing: a disabled button with no
+                      // reason left the author guessing.
+                      tooltip={createGap ?? undefined}
                       onClick={handleCreate}
                     >
                       {createSkill.isPending ? "Creating..." : "Create skill"}
@@ -351,6 +462,14 @@ function NewSkillWizard() {
           if (!open) setImportState(null);
         }}
         onImported={goToSkills}
+      />
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={() => {
+          pendingHrefRef.current = null;
+          guard.keepEditing();
+        }}
+        onDiscard={guard.discardChanges}
       />
     </>
   );

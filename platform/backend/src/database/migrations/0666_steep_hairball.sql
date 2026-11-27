@@ -1,1 +1,0 @@
-ALTER TABLE "skills" ADD COLUMN "frontmatter_source" text;

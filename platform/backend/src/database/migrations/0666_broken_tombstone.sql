@@ -19,6 +19,7 @@ CREATE TABLE "plugin_versions" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "skills" ADD COLUMN "frontmatter_source" text;--> statement-breakpoint
 ALTER TABLE "plugin_version_files" ADD CONSTRAINT "plugin_version_files_version_id_plugin_versions_id_fk" FOREIGN KEY ("version_id") REFERENCES "public"."plugin_versions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "plugin_versions" ADD CONSTRAINT "plugin_versions_plugin_id_plugins_id_fk" FOREIGN KEY ("plugin_id") REFERENCES "public"."plugins"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "plugin_version_files_version_id_idx" ON "plugin_version_files" USING btree ("version_id");--> statement-breakpoint

@@ -16,6 +16,8 @@ const {
   mutateConversation,
   hiddenProviders,
   hiddenCopilotPlans,
+  hiddenPersonalSubscriptions,
+  subscriptionNames,
   navigate,
 } = vi.hoisted(() => ({
   agents: [
@@ -74,6 +76,8 @@ const {
   ],
   hiddenProviders: new Set<string>(),
   hiddenCopilotPlans: new Set<string>(),
+  hiddenPersonalSubscriptions: new Set<string>(),
+  subscriptionNames: new Map<string, string>(),
   keys: [
     {
       id: "key-org",
@@ -156,6 +160,12 @@ vi.mock("@/lib/integration-overrides", () => ({
     canAddKey: (provider: string) =>
       !hiddenProviders.has(provider) &&
       !(provider === "github-copilot" && hiddenCopilotPlans.has("personal")),
+    canAddPersonalSubscription: (provider: string) =>
+      !hiddenProviders.has(provider) &&
+      !hiddenPersonalSubscriptions.has(provider) &&
+      !(provider === "github-copilot" && hiddenCopilotPlans.has("personal")),
+    personalSubscriptionLabel: (provider: string, fallback?: string) =>
+      subscriptionNames.get(provider) ?? fallback ?? provider,
   }),
 }));
 
@@ -175,6 +185,8 @@ beforeEach(() => {
   keys.splice(0, keys.length, ...originalKeys);
   hiddenProviders.clear();
   hiddenCopilotPlans.clear();
+  hiddenPersonalSubscriptions.clear();
+  subscriptionNames.clear();
   navigate.mockClear();
   readiness.splice(0);
   pools.splice(0);
@@ -471,6 +483,19 @@ describe("ChatSetupMenu", () => {
     ).toBeInTheDocument();
   });
 
+  it("omits a sign-in for a personal subscription that is turned off, and names one the organization renamed", async () => {
+    hiddenPersonalSubscriptions.add("openai");
+    subscriptionNames.set("xai", "Company Grok");
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+
+    expect(screen.queryByText("ChatGPT Subscription")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Company Grok/ }),
+    ).toBeInTheDocument();
+  });
+
   it("lists each GitHub Copilot account by its own plan's switch, and names a plan after its organization", async () => {
     keys.push(
       {
@@ -712,6 +737,42 @@ describe("ChatSetupMenu behind one form field", () => {
     await user.click(screen.getByRole("option", { name: /Team vLLM/ }));
     expect(onApiKeyChange).toHaveBeenCalledWith("key-team");
     expect(props.close).toHaveBeenCalledOnce();
+  });
+
+  it("lists no model pools and no auto routers where the caller cannot set one, though both exist", async () => {
+    pools.push({ id: "pool-1", name: "qwen3-32b", providers: ["vllm"] });
+    const tier = (id: string) => ({
+      id,
+      provider: "vllm" as const,
+      displayName: id,
+    });
+    vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
+      data: {
+        model: null,
+        defaultAutoRouterId: null,
+        autoRouters: [
+          {
+            id: "router-a",
+            name: "auto",
+            tiers: { fast: tier("f"), normal: tier("n"), smart: tier("s") },
+          },
+        ],
+      },
+    } as never);
+    renderMenu({
+      ...formProps,
+      only: "key",
+      keyFilter: (key) => key.scope === "team",
+    });
+
+    expect(screen.getByPlaceholderText("Search keys…")).toBeVisible();
+    expect(
+      screen.queryByRole("group", { name: "Model pools" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /^Auto/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Team vLLM/ })).toBeVisible();
   });
 
   it("adds a key from the key list, even while it is empty", async () => {

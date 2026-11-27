@@ -30,6 +30,9 @@ pub struct DeferredReturnLookup {
     pub control_tool: String,
     pub supports_delegation: bool,
     pub yell_tool: Option<String>,
+    /// Who presents the lookup, as the host authenticated the request.
+    #[napi(ts_type = "'runtime' | 'attended' | 'delegated' | 'unknown'")]
+    pub presenter: String,
 }
 
 #[napi(object)]
@@ -59,10 +62,19 @@ pub async fn load_deferred_return(
             return Err(invalid_input(format!("invalid {name}")));
         }
     }
-    let policy: deployments::HostedPolicy = policy.into();
+    let policy: deployments::HostedPolicy = policy.try_into()?;
+    let presenter = crate::lines::Presenter::parse(&lookup.presenter)?.beyond_review()?;
     let result = AssertUnwindSafe(async move {
         let state = initialized().await?.encrypted(encryption)?;
-        on_deployment(&state, &lookup.organization_id, &policy, |pinned| {
+        let key = SessionKey::new(&lookup.organization_id, &lookup.session_id);
+        let root = crate::session::recorded_root(&Sql(&state.store), &key)?;
+        let line = crate::lines::Line {
+            organization_id: lookup.organization_id.clone(),
+            variant: state
+                .variant_of(&lookup.organization_id, root.as_deref(), presenter)
+                .await?,
+        };
+        on_deployment(&state, &line, &policy, |pinned| {
             deferred_return(pinned, lookup.clone())
         })
         .await

@@ -136,6 +136,50 @@ class CliTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("No stable release refs", result.stderr)
 
+    def test_release_line_checks_upgrades_from_each_older_line(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / checker.MIGRATIONS
+            (folder / "meta").mkdir(parents=True)
+
+            def git(*args):
+                return subprocess.check_output(["git", "-C", directory, *args], stderr=subprocess.STDOUT)
+
+            def commit(entries, *refs):
+                (folder / "meta/_journal.json").write_text(json.dumps({"entries": entries}))
+                for entry in entries:
+                    (folder / (entry["tag"] + ".sql")).write_text(entry["tag"])
+                git("add", ".")
+                git("commit", "-qm", "history")
+                for ref in refs:
+                    git("update-ref", f"refs/remotes/origin/{ref}", "HEAD")
+
+            def run():
+                return subprocess.run(
+                    ["python3", str(SCRIPT), "--base-branch", "release/1.4"],
+                    cwd=root / "platform", capture_output=True, text=True,
+                )
+
+            git("init", "-q")
+            git("config", "user.email", "test@example.com")
+            git("config", "user.name", "Test")
+            common = {"tag": "common", "when": 100}
+            backport = {"tag": "backport", "when": 400}
+            commit([common, backport], "release/1.3")
+            # release/1.4 was cut without 1.3's backport: 1.3 installations
+            # would keep a migration 1.4 never ran.
+            commit([common, {"tag": "feature", "when": 200}], "release/1.4", "main", "release/1.5")
+            result = run()
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("Migration upgrade: origin/release/1.3 -> WORKTREE", result.stdout)
+            self.assertIn("Source migration backport", result.stdout)
+            self.assertNotIn("origin/release/1.5", result.stdout)
+
+            commit([common, backport, {"tag": "feature", "when": 500}], "release/1.4", "main")
+            result = run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("Migration upgrade: origin/release/1.3 -> WORKTREE", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

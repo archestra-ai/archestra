@@ -13,17 +13,13 @@ export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
   "archestra.appa.trusted-context",
 );
 
-export const APPA_PLUGIN_RETAINED_SHAPE: unique symbol = Symbol(
-  "archestra.appa.retained-shape",
-);
-
 export const APPA_CHILD_TRAJECTORY_RECEIPT: unique symbol = Symbol(
   "archestra.appa.child-trajectory-receipt",
 );
 
 export const GROK_DEFERRED_TOOLS = Symbol("grok-deferred-tools");
 
-/** Admission verified a waived child; withdraw old guidance without governing it. */
+/** Admission verified a child out of OpenAPPA; withdraw old guidance without governing it. */
 export const APPA_WITHDRAWN_CHILD_RETURN = Symbol(
   "archestra.appa.withdrawn-child-return",
 );
@@ -94,7 +90,7 @@ export type AppaTrustedContext = {
   childReturnRefusal?: ApiError;
 };
 
-/** What a waived session's request needs to keep its governed shape. */
+/** What a governed request's guidance insertion reads of its shape. */
 export type AppaRetainedShape = {
   adapter: AppaClientAdapter | undefined;
   identity: AppaTrustedContext["toolIdentity"];
@@ -178,8 +174,6 @@ export type AppaClientAdapter = {
   readonly trajectoryPrefix: string;
   /** Client signals select tool syntax, not authority; they may be spoofed. */
   matches(context: AppaMatchContext): boolean;
-  /** Explicit native headless signal, equivalent to the client's unattended header. */
-  isUnattended?(headers: IncomingHttpHeaders): boolean;
   /** `namespace` is the tool group the request declared the name under, if any. */
   classifyToolName(name: string, namespace?: string): "gateway" | "local";
   normalizeLocalToolName(name: string): string;
@@ -314,12 +308,6 @@ export type AppaClientAdapter = {
   reviewedSession?(context: AppaMatchContext): AppaReviewedSession | undefined;
   /** True when this local tool starts a delegated child run. */
   isSpawnTool(name: string, namespace?: string, args?: unknown): boolean;
-  /** A continuation that still needs host lineage checks, even under a waiver. */
-  isChildContinuationTool?(
-    name: string,
-    namespace?: string,
-    args?: unknown,
-  ): boolean;
   /**
    * Classifies a native spawn launch result. A successful launch stays
    * pending until the child binds the prepared fork. A failed launch closes

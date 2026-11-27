@@ -416,6 +416,38 @@ class OpenAppaBatteriesService {
     return read;
   }
 
+  /**
+   * The composition stored as the one the runtime serves this organization,
+   * read without recomposing; null while none ever opened and only the root
+   * text is stored.
+   */
+  async servedComposition(organizationId: string): Promise<string | null> {
+    const stored = await OpenAppaEffectivePolicyModel.find(organizationId);
+    return stored && compositionView(stored).served.kind !== "root_only"
+      ? stored.content
+      : null;
+  }
+
+  /**
+   * The served composition, or why none can be checked yet: the stored one
+   * answers an older root revision, or none is stored for a saved root.
+   */
+  async currentComposition(
+    organizationId: string,
+  ): Promise<
+    { kind: "none" } | { kind: "stale" } | { kind: "served"; content: string }
+  > {
+    const [stored, root] = await Promise.all([
+      OpenAppaEffectivePolicyModel.find(organizationId),
+      guardrailsPolicyService.get(organizationId),
+    ]);
+    if (stored ? !answersRoot(stored, root) : root.revision !== 0)
+      return { kind: "stale" };
+    return stored && compositionView(stored).served.kind !== "root_only"
+      ? { kind: "served", content: stored.content }
+      : { kind: "none" };
+  }
+
   /** The effective policy as the API shows it: the row and what it serves. */
   async effectivePolicyView(
     organizationId: string,
@@ -451,7 +483,12 @@ class OpenAppaBatteriesService {
   async composeInDeployment(params: {
     organizationId: string;
     content: string;
-  }): Promise<{ refusal: string[]; heldBack: string[] }> {
+  }): Promise<{
+    refusal: string[];
+    heldBack: string[];
+    /** The composition the deployment would serve; null when it is refused. */
+    composed: string | null;
+  }> {
     const { organizationId, content } = params;
     const [root, installs] = await Promise.all([
       guardrailsPolicyService.get(organizationId),
@@ -475,6 +512,7 @@ class OpenAppaBatteriesService {
           ? [...(planned.foldErrors ?? []), ...composed.errors]
           : [],
       heldBack: held.map(heldBackNote),
+      composed: composed.content ?? null,
     };
   }
 
@@ -1154,16 +1192,7 @@ class OpenAppaBatteriesService {
   ): Promise<EffectivePolicy> {
     const root = await guardrailsPolicyService.get(organizationId);
     const effective = await OpenAppaEffectivePolicyModel.find(organizationId);
-    // Revision zero is shipped policy text and can change without a database revision.
-    if (
-      effective &&
-      effective.rootRevision === root.revision &&
-      effective.installFingerprint.startsWith(COMPOSITION_VERSION) &&
-      effective.installFingerprint.endsWith(
-        root.revision === 0 ? `:${root.contentHash}` : "",
-      )
-    )
-      return effective;
+    if (effective && answersRoot(effective, root)) return effective;
     logger.info(
       {
         organizationId,
@@ -2368,6 +2397,23 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // composed before host client coding tool aliases were supplied to saved
 // revisions (v14).
 const COMPOSITION_VERSION = "v14:";
+
+/**
+ * Whether a stored composition answers `root`. Revision zero is shipped policy
+ * text and can change without a database revision.
+ */
+function answersRoot(
+  stored: Pick<EffectivePolicy, "rootRevision" | "installFingerprint">,
+  root: Pick<GuardrailsPolicy, "revision" | "contentHash">,
+): boolean {
+  return (
+    stored.rootRevision === root.revision &&
+    stored.installFingerprint.startsWith(COMPOSITION_VERSION) &&
+    stored.installFingerprint.endsWith(
+      root.revision === 0 ? `:${root.contentHash}` : "",
+    )
+  );
+}
 
 /**
  * What a stored composition answers: the batteries it composed, the credential

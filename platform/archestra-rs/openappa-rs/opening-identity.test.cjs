@@ -87,6 +87,7 @@ for (const [version, openedBy] of [
     await native.initializeOpenappa(databaseUrl, 4);
     const session = {
       organization_id: fixture.organization_id,
+      presenter: 'attended',
       caller_id: fixture.caller_id,
       session_id: fixture.session_id,
     };
@@ -110,17 +111,17 @@ for (const [version, openedBy] of [
       (await hook({ event: 'tool_call', operation_id: 'call:a1', tool: 'archive', arguments: {} })).decision,
       'allow_call',
     );
-    const status = await native.getOpenappaStatus(fresh.organization_id, fresh.session_id, hosted(revised));
+    const status = await native.getOpenappaStatus(fresh.organization_id, fresh.session_id, 'attended', hosted(revised));
     assert.equal(typeof status.policyRevision, 'number');
     // The legacy conversation reports no status: its next call is refused instead.
-    assert.equal((await native.getOpenappaStatus(session.organization_id, session.session_id, hosted(revised))) ?? null, null);
+    assert.equal((await native.getOpenappaStatus(session.organization_id, session.session_id, 'attended', hosted(revised))) ?? null, null);
     assert.equal(await eventCount(fixture.root), events);
   });
 }
 
 test('refuses a root whose stored batch no longer decodes, under a code the host classifies', { skip: !databaseUrl, timeout: 60000 }, async () => {
   await native.initializeOpenappa(databaseUrl, 4);
-  const session = { organization_id: `undecodable-${randomUUID()}`, caller_id: 'user:owner', session_id: randomUUID() };
+  const session = { organization_id: `undecodable-${randomUUID()}`, presenter: 'attended', caller_id: 'user:owner', session_id: randomUUID() };
   const dispatch = async (event) =>
     JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(opening)));
   assert.equal((await dispatch({ event: 'session_start' })).decision, 'ack');

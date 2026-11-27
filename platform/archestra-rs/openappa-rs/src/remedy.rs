@@ -21,7 +21,7 @@ use appa_eventlog::encryption::StorageCipher;
 use appa_runtime::api::{
     ExecuteRemedyPlanArgs, NoAnswerClass, RemedyOutcome, RemedyPresentation, RemedyRefusal,
 };
-use appa_runtime_api::ProposedCall;
+use appa_runtime_api::{HookDecision, ProposedCall, WireDecision};
 use napi_derive::napi;
 use serde::Serialize;
 use serde_json::{Value, json, value::RawValue};
@@ -83,6 +83,7 @@ pub async fn execute_remedy_by_offer(
         parent_id: owner.parent_id,
         principal: None,
         fork_of: None,
+        presenter: input.presenter,
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
@@ -106,8 +107,8 @@ pub async fn execute_remedy_by_offer(
         declares: None,
     };
     validate(&input)?;
-    let response: Value =
-        serde_json::from_str(&run(input, policy.into(), encryption).await?).map_err(invariant)?;
+    let response: Value = serde_json::from_str(&run(input, policy.try_into()?, encryption).await?)
+        .map_err(invariant)?;
     Ok(with_offer_status(response, OfferStatusKind::Known)?.to_string())
 }
 
@@ -129,6 +130,9 @@ pub struct OfferReviewOutput {
     pub scope: Option<String>,
     /// The ruling authority's own hint to the reviewer, when it declares one.
     pub hint: Option<String>,
+    /// The deployment line the session's family follows, whose head moving retires
+    /// the offer.
+    pub deployment: String,
 }
 
 /// Reads an offer's original refusal from authenticated, host-scoped journal
@@ -157,17 +161,35 @@ pub async fn load_offer_review(
     organization_id: String,
     session_id: String,
     offer_id: String,
+    #[napi(ts_arg_type = "'runtime' | 'attended' | 'delegated' | 'unknown' | 'reviewer'")]
+    presenter: String,
     encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OfferReviewOutput>> {
+    let presenter = crate::lines::Presenter::parse(&presenter)?;
     // Mirror execute_remedy_by_offer: clone state, drop the mutex, then lease
     // a connection before host SQL so review loads never contend with
     // dispatches on the runtime state mutex.
     let state = initialized().await?.encrypted(encryption)?;
     let leased = state.lease().await?;
     let pg = &Sql(&leased.state.store);
+    let key = crate::session::SessionKey::new(&organization_id, &session_id);
+    let root = crate::session::recorded_root(pg, &key)?;
+    let deployment = leased
+        .state
+        .variant_of(&organization_id, root.as_deref(), presenter)
+        .await?
+        .line(&organization_id)
+        .as_str()
+        .to_owned();
+    let on_line = |review: Option<OfferReviewOutput>| {
+        review.map(|review| OfferReviewOutput {
+            deployment: deployment.clone(),
+            ..review
+        })
+    };
     if pg.0.cipher().is_encrypted() {
         let receipts = encrypted_receipts(pg, &organization_id, &session_id)?;
-        return Ok(review_in(receipts, &offer_id, &session_id));
+        return Ok(on_line(review_in(receipts, &offer_id, &session_id)));
     }
     // The SQL closure needs its own offer id copy because it must be 'static.
     let target_offer_id = offer_id.clone();
@@ -211,6 +233,7 @@ pub async fn load_offer_review(
                     arguments: row.get("arguments"),
                     scope: row.get("scope"),
                     hint: row.get("hint"),
+                    deployment: String::new(),
                 }));
             }
             let opened = sealed::read(
@@ -227,7 +250,7 @@ pub async fn load_offer_review(
             ))
         })
         ?;
-    Ok(review)
+    Ok(on_line(review))
 }
 
 /// The review entry for `offer_id` among a session's receipts, newest first,
@@ -254,6 +277,7 @@ fn review_in(
             arguments: source.get("arguments").map(Value::to_string),
             scope: review.get("scope").map(Value::to_string),
             hint: review["hint"].as_str().map(str::to_owned),
+            deployment: String::new(),
         })
     })
 }
@@ -388,6 +412,28 @@ pub(crate) fn runtime_refusal(text: String) -> napi::Result<Value> {
     .map_err(invariant)
 }
 
+/// Carries the typed outcome a runtime refusal states onto a host response built from its
+/// text, in the fields and spelling the runtime's wire gives it.
+pub(crate) fn with_refusal_outcomes(
+    mut response: Value,
+    refusal: &HookDecision,
+) -> napi::Result<Value> {
+    let stated = WireDecision::of(refusal);
+    let object = response
+        .as_object_mut()
+        .ok_or_else(|| invariant("decision is not an object"))?;
+    for (field, value) in [
+        ("outcomes", stated.outcomes.map(|held| json!(held))),
+        ("deciding", stated.deciding.map(|deciding| json!(deciding))),
+        ("retry", stated.retry.map(|retry| json!(retry))),
+    ] {
+        if let Some(value) = value {
+            object.insert(field.to_owned(), value);
+        }
+    }
+    Ok(response)
+}
+
 fn with_offer_status(response: Value, status: OfferStatusKind) -> napi::Result<Value> {
     serde_json::to_value(OfferStatusResponse {
         response: &response,
@@ -463,7 +509,7 @@ pub(crate) fn render_remedy_outcome(
         // The offer stands and the feedback tells the model what to do next:
         // an answer for it, not a runtime failure that ends the turn. It is an
         // error result because nothing was released.
-        RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, true, feedback),
+        RemedyOutcome::NoAnswer { feedback, .. } => (OutputSource::Runtime, None, true, feedback),
         RemedyOutcome::Refused {
             reason: appa_runtime::api::RemedyRefusal::Runtime { detail },
         } => {
@@ -890,7 +936,7 @@ pub(crate) fn unknown_result_response() -> Value {
 mod typed_tests {
     use super::{
         RemedyAct, authoritative_unexecuted_response, presentation_offer_ids, render_released_call,
-        render_remedy_outcome, unknown_result_response,
+        render_remedy_outcome, runtime_refusal, unknown_result_response, with_refusal_outcomes,
     };
     use crate::input::{OfferId, OfferOwner};
     use crate::operations::presentation_from_context;
@@ -899,10 +945,55 @@ mod typed_tests {
     use serde_json::Value;
 
     #[test]
+    fn a_control_gate_refusal_states_the_runtime_outcome_beside_its_text() {
+        use appa_runtime_api::{HookDecision, Outcomes, Remediable, Remedy, RetryHint};
+
+        let missing = HookDecision::Block {
+            reason: "no answer".into(),
+            outcomes: Some(Outcomes::MissingFact(RetryHint::AfterRepair)),
+        };
+        let response =
+            with_refusal_outcomes(runtime_refusal("no answer".into()).unwrap(), &missing).unwrap();
+        assert_eq!(response["approved_output"], "no answer");
+        assert_eq!(response["outcomes"], serde_json::json!(["missing_fact"]));
+        assert_eq!(response["deciding"], "missing_fact");
+        assert_eq!(response["retry"], "after_repair");
+
+        let remediable = HookDecision::DenyCall {
+            feedback: "needs a ruling".into(),
+            offers: Vec::new(),
+            review: Vec::new(),
+            outcomes: Some(Outcomes::Remediable(Remediable::new(
+                Remedy::Consent,
+                [Remedy::WaivableGap],
+            ))),
+        };
+        let response = with_refusal_outcomes(
+            runtime_refusal("needs a ruling".into()).unwrap(),
+            &remediable,
+        )
+        .unwrap();
+        assert_eq!(
+            response["outcomes"],
+            serde_json::json!(["waivable_gap", "consent"])
+        );
+        assert_eq!(response["deciding"], "consent");
+        assert!(response.get("retry").is_none());
+
+        let unstated = HookDecision::Block {
+            reason: "legacy".into(),
+            outcomes: None,
+        };
+        let response =
+            with_refusal_outcomes(runtime_refusal("legacy".into()).unwrap(), &unstated).unwrap();
+        assert_eq!(response, runtime_refusal("legacy".into()).unwrap());
+    }
+
+    #[test]
     fn remedy_operation_preserves_existing_receipt_identifiers() {
         let mut input: crate::input::Input = serde_json::from_str(
             r#"{
-                "organization_id": "test-organization",
+                "presenter": "attended", "organization_id": "test-organization",
                 "session_id": "test-session",
                 "event": "remedy",
                 "arguments": {"value": 1}
@@ -923,6 +1014,7 @@ mod typed_tests {
         let presentation = RemedyPresentation {
             feedback: "[appa] Blocked. execute_remedy_plan(offer_id: \"untrusted-snippet\")"
                 .to_owned(),
+            outcomes: None,
             offers: Vec::new(),
             review: Vec::new(),
             display: Vec::new(),
@@ -935,6 +1027,7 @@ mod typed_tests {
     fn only_structured_runtime_offers_are_registered() {
         let presentation = RemedyPresentation {
             feedback: "arbitrary runtime prose".to_owned(),
+            outcomes: None,
             offers: vec![OfferedRemedy {
                 id: "typed-offer".to_owned(),
                 returns: None,
@@ -1295,6 +1388,7 @@ mod remedy_tests {
         RemedyOutcome::Declined {
             presentation: RemedyPresentation {
                 feedback: feedback.to_owned(),
+                outcomes: None,
                 offers: offers
                     .iter()
                     .map(|id| OfferedRemedy {
@@ -1334,6 +1428,7 @@ mod remedy_tests {
         let response = render(
             RemedyOutcome::NoAnswer {
                 feedback: feedback.to_owned(),
+                retry: None,
             },
             &owner(None),
             None,

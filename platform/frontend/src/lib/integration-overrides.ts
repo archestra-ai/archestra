@@ -10,10 +10,17 @@ import {
   integrationLabel,
   isCopilotPlanHidden,
   isIntegrationHidden,
+  isPersonalSubscriptionHidden,
+  isPersonalSubscriptionProvider,
+  isProviderApiKeyHidden,
   isProviderKeyHidden,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
   type ModelProviderOverride,
+  type ModelProviderOverrides,
+  type ProviderPlan,
+  personalSubscriptionLabel,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -48,13 +55,40 @@ export type NamedIntegrationCatalog<Id extends string> =
      */
     isCopilotPlanHidden: (plan: CopilotPlan) => boolean;
     /**
-     * A key whose provider, or GitHub Copilot plan, the admin turned off.
-     * Never offer it.
+     * A key whose provider, or plan, the admin turned off: its API keys, its
+     * personal subscription (`subscriptionKind` or server-resolved `plan`), or
+     * a GitHub Copilot plan. Never offer it.
      */
     isKeyHidden: (key: {
       provider: SupportedProvider;
+      plan?: ProviderPlan | null;
       isGithubAppKey?: boolean | null;
+      subscriptionKind?: SubscriptionCredentialKind | null;
     }) => boolean;
+    /**
+     * The provider's personal subscription (Claude Code, ChatGPT, GitHub
+     * Copilot, SuperGrok, Microsoft 365 Copilot) is off, alone or with the
+     * provider itself.
+     */
+    isPersonalSubscriptionHidden: (id: SupportedProvider) => boolean;
+    /**
+     * New API keys of the provider are off, alone or with the provider
+     * itself. Always true for providers that take no API keys.
+     */
+    isProviderApiKeyHidden: (id: SupportedProvider) => boolean;
+    /** Whether a person may add a new ordinary API key for this provider. */
+    canAddApiKey: (id: SupportedProvider) => boolean;
+    /** Whether a person may connect this provider's personal subscription. */
+    canAddPersonalSubscription: (id: SupportedProvider) => boolean;
+    /**
+     * The personal subscription's name: the admin's, or the built-in one
+     * (`fallback` when given, for surfaces with a longer built-in name such
+     * as "ChatGPT Subscription").
+     */
+    personalSubscriptionLabel: (
+      id: SupportedProvider,
+      fallback?: string,
+    ) => string;
     /**
      * The GitHub Copilot enterprise plan's name: the admin's, or "GitHub
      * Copilot Organization". A plan whose GitHub organization is known shows
@@ -62,9 +96,10 @@ export type NamedIntegrationCatalog<Id extends string> =
      */
     enterprisePlanName: string;
     /**
-     * Whether a person may add a new key or subscription for this provider.
-     * A new GitHub Copilot key is always a personal sign-in (the enterprise
-     * plan has its own setup), so it also needs personal subscriptions on.
+     * Whether a person may add a new key or subscription for this provider:
+     * an API key or a personal subscription. A new GitHub Copilot key is
+     * always a personal sign-in (the enterprise plan has its own setup), so
+     * it needs personal subscriptions on.
      */
     canAddKey: (id: SupportedProvider) => boolean;
   };
@@ -109,13 +144,24 @@ export function useModelProviderCatalog(
         isCopilotPlanHidden(overrides, plan),
       isKeyHidden: (key: {
         provider: SupportedProvider;
+        plan?: ProviderPlan | null;
         isGithubAppKey?: boolean | null;
+        subscriptionKind?: SubscriptionCredentialKind | null;
       }) => isProviderKeyHidden(overrides, key),
+      isPersonalSubscriptionHidden: (id: SupportedProvider) =>
+        isPersonalSubscriptionHidden(overrides, id),
+      isProviderApiKeyHidden: (id: SupportedProvider) =>
+        isProviderApiKeyHidden(overrides, id),
+      canAddApiKey: (id: SupportedProvider) =>
+        !isProviderApiKeyHidden(overrides, id),
+      canAddPersonalSubscription: (id: SupportedProvider) =>
+        canAddPersonalSubscription(overrides, id),
+      personalSubscriptionLabel: (id: SupportedProvider, fallback?: string) =>
+        personalSubscriptionLabel(overrides, id, fallback),
       enterprisePlanName: copilotEnterprisePlanLabel(overrides),
       canAddKey: (id: SupportedProvider) =>
-        id === "github-copilot"
-          ? !isCopilotPlanHidden(overrides, "personal")
-          : !isIntegrationHidden(overrides, id),
+        !isProviderApiKeyHidden(overrides, id) ||
+        canAddPersonalSubscription(overrides, id),
     }),
     [overrides],
   );
@@ -150,6 +196,16 @@ export function useKnowledgeConnectorCatalog(): IntegrationCatalog<ConnectorType
 // ===================================================================
 // Internal
 // ===================================================================
+
+function canAddPersonalSubscription(
+  overrides: ModelProviderOverrides | null,
+  id: SupportedProvider,
+): boolean {
+  return (
+    isPersonalSubscriptionProvider(id) &&
+    !isPersonalSubscriptionHidden(overrides, id)
+  );
+}
 
 function buildCatalog<Id extends string>(
   overrides: Partial<Record<Id, IntegrationToggle>> | null,

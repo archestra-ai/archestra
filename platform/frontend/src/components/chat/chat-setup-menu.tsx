@@ -181,7 +181,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
         );
         if (connected.length > 0)
           return connected.map((key) => ({ kind, key }));
-        return catalog.canAddKey(spec.provider)
+        return catalog.canAddPersonalSubscription(spec.provider)
           ? [{ kind, key: undefined }]
           : [];
       }),
@@ -760,6 +760,10 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
               <SubscriptionRow
                 key={key?.id ?? kind}
                 kind={kind}
+                label={catalog.personalSubscriptionLabel(
+                  SUBSCRIPTION_CREDENTIALS[kind].provider,
+                  SUBSCRIPTION_CREDENTIALS[kind].label,
+                )}
                 apiKey={key}
                 selected={
                   !currentPool && !onAuto && !!key && key.id === currentKey?.id
@@ -1216,11 +1220,14 @@ function Meta({ children }: { children: ReactNode }) {
 
 function SubscriptionRow({
   kind,
+  label,
   apiKey,
   selected,
   onSelect,
 }: {
   kind: SubscriptionCredentialKind;
+  /** The subscription's name, as the organization calls it. */
+  label: string;
   apiKey?: LlmProviderApiKey;
   selected: boolean;
   onSelect: () => void;
@@ -1230,7 +1237,7 @@ function SubscriptionRow({
   return (
     <CommandItem
       value={apiKey ? keyValue(apiKey.id) : `connect-subscription-${kind}`}
-      keywords={subscriptionKeywords(kind, apiKey)}
+      keywords={[label, ...subscriptionKeywords(kind, apiKey)]}
       onSelect={onSelect}
       className={ITEM}
     >
@@ -1238,7 +1245,7 @@ function SubscriptionRow({
         <SubscriptionBrandIcon kind={kind} provider={spec.provider} />
       </PickerIcon>
       <span className="min-w-0 flex-1 truncate font-medium">
-        {apiKey?.name ?? spec.label}
+        {apiKey?.name ?? label}
       </span>
       <Meta>{status}</Meta>
       <Selected on={selected} />

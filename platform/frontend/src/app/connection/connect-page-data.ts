@@ -170,9 +170,14 @@ export interface ConnectPageData {
   /**
    * OpenAPPA guardrails on the LLM proxy: off, or on with what happens to
    * agents it doesn't support natively (pass through or blocked). null when
-   * this user can't read the setting.
+   * this user can't read the setting. `observing`: they run in Observe, so
+   * calls are checked and recorded but not blocked.
    */
-  guardrails: { name: string; state: "off" | "bypass" | "block" | null };
+  guardrails: {
+    name: string;
+    state: "off" | "bypass" | "block" | null;
+    observing: boolean;
+  };
   /** Can open /settings/connection (admin). */
   canManage: boolean;
   /** What connecting this client would create. */
@@ -546,6 +551,7 @@ export function useConnectPageData({
           : guardrails.active
             ? guardrails.unsupportedClientAction
             : "off",
+      observing: guardrails?.active === true && guardrails.mode === "observe",
     },
     canManage: canManage === true,
     footprintFor: () => footprint,

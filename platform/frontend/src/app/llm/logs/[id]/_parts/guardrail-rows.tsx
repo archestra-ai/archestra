@@ -14,6 +14,7 @@ import {
   CONSULT_KIND,
   DECISION_TONE,
   type GuardrailsData,
+  type GutterLabel,
   type LabelSegment,
   type LabelState,
   type TraceConsult,
@@ -35,7 +36,7 @@ export type Entry =
       type: "span";
       key: string;
       span: TimelineSpan;
-      gutter: LabelState | null;
+      gutter: GutterLabel | null;
       /** The tool call's checks, for the badge while they are hidden. */
       checks: TraceConsult[];
     }
@@ -44,7 +45,7 @@ export type Entry =
       key: string;
       consult: TraceConsult;
       toolSpan: TimelineSpan | null;
-      gutter: LabelState | null;
+      gutter: GutterLabel | null;
     };
 
 export function buildEntries({
@@ -127,7 +128,7 @@ export function buildEntries({
 function consultEntry(
   consult: TraceConsult,
   toolSpan: TimelineSpan | null,
-  labelAt: (ms: number) => LabelState | null,
+  labelAt: (ms: number) => GutterLabel | null,
 ): Entry {
   return {
     type: "consult",
@@ -262,7 +263,7 @@ export function GuardrailsBar({
 }
 
 export type GutterProps = {
-  label: LabelState;
+  label: GutterLabel;
   /** Change markers on this row's top or bottom edge. */
   nodes: { top: LabelChange[]; bottom: LabelChange[] } | null;
   isChangeActive: (change: LabelChange) => boolean;
@@ -275,7 +276,7 @@ export function gutterWords(
   note: LabelChange[] | null,
 ): string {
   if (!gutter) return "";
-  const here = `, label ${trustTone(gutter.label.trust).label} ${audienceTone(gutter.label.audience).label}`;
+  const here = `, ${gutter.label.inferred ? "inferred session baseline" : "last recorded session label"} ${trustTone(gutter.label.trust).label} ${audienceTone(gutter.label.audience).label}`;
   return note && note.length > 0
     ? `${here}, changed the label: ${note.map(changeWords).join("; ")}`
     : here;

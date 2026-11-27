@@ -1,26 +1,58 @@
 {
   "schema": 1,
-  "sourceSha": "ca17ee0d217617c10d34964b6d0b8d4be7b6f69b",
-  "baseSha": "373ec2a708c41e2de90c3fa12c356ffed1166788",
-  "runId": 45048967654,
+  "sourceSha": "e79308108dd2526ee84fb37398837c60df008cd3",
+  "baseSha": "bce72337018bfd4c9ff5ad401f9ae26ed9f50629",
+  "runId": 45869272068,
   "attempt": 1,
-  "platformTree": "488cc4ced29a20dbe13b4c84c178b4b0ed136b62",
+  "platformTree": "48c194c20026b5e83a4d11933bd3cbc56bf52080",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "0071900e9df29dca64cf19a7639852ab94e13d59"
+      "blob": "a330bbcca3e163c21dcabc6a154cdb0b140f4e9e"
     },
     {
       "path": "docs/assets/automated_screenshots/insights-logs_client-connections.dark.webp",
-      "blob": "18b0c35056ce4cbb7ce251914f2b969ee28ee65b"
+      "blob": "52d4bf6ecb7d56b4947f5bdf05625e876b71426e"
     },
     {
       "path": "docs/assets/automated_screenshots/insights-logs_client-connections.webp",
-      "blob": "063afad9d007f555ba3550279a0d90c4047b784f"
+      "blob": "071d375bad47f520591ec143dac5a3fa98c41b3a"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/llm-proxy-auto-routing_configure.dark.webp",
+      "blob": "d26a69e9fa40c2fb39ba9289a825e4228ecfcb5b"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/llm-proxy-auto-routing_configure.webp",
+      "blob": "f6bfcabc9895f35cb1154527a38f2c9696fa741e"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/llm-proxy-auto-routing_overview.dark.webp",
+      "blob": "91092798b7d9d0f39f1d03955a4ea44daeb51e76"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/llm-proxy-auto-routing_overview.webp",
+      "blob": "0556fb08e68e0578d8e64a0e57c25f1c936619a6"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
+      "blob": "68865c4c8a3f524e70990a5f35fb5ac933ac8e0d"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
+      "blob": "c1aa80313f0af1b95d956e20c13365f86670ec89"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/platform-openappa_yells.dark.webp",
+      "blob": "92a537c0539afbef4b2da090dc7354e069823f5c"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/platform-openappa_yells.webp",
+      "blob": "e96b6f841736575386c3f2e6613ebd85022fa0e7"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "0882b1f434f0efb632406694a7cddfc4f732fe3f"
+      "blob": "77773fc15d9a9d445276567b149b5e38dbdf55a3"
     }
   ]
 }

@@ -2,7 +2,10 @@
 
 import type { ComponentProps, ReactNode } from "react";
 import { CompanyConnectionPickers } from "@/components/claude-connection-pickers";
-import { noCompanyConnection } from "@/components/claude-connection-pickers.utils";
+import {
+  companyConnectionIdOf,
+  noCompanyConnection,
+} from "@/components/claude-connection-pickers.utils";
 
 /**
  * Who decides the company option's connection and model here: a runtime's
@@ -59,6 +62,7 @@ export function CompanyAccountFields({
 }) {
   const { apiKeyId, modelId, connectionFixed } = pickers;
   const connection = apiKeyId ?? undefined;
+  const hasConnection = !!companyConnectionIdOf(pickers.keys, apiKeyId ?? null);
   const text = amongSeveral ? AMONG_SEVERAL[level] : SENTENCES[level];
   // The connection is not this level's to set: a plan's own card, or one a
   // level above fixes. Only the model is spoken of.
@@ -75,10 +79,31 @@ export function CompanyAccountFields({
       connectionFixed,
       lockedConnection: pickers.lockedConnection,
     });
+  // With no connection and no model set, the empty field already says who
+  // picks, so no sentence is needed.
+  const sentence =
+    line ??
+    (modelAlone
+      ? modelId
+        ? text.model
+        : text.modelOpen
+      : !apiKeyId
+        ? text.open
+        : !modelId
+          ? text.connection
+          : text.both);
   return (
     <>
       <CompanyConnectionPickers
         {...pickers}
+        // Empty, the field says who picks: the level below.
+        emptyConnection={
+          pickers.emptyConnection ?? emptyConnectionText(level, pickers.plan)
+        }
+        emptyModel={
+          pickers.emptyModel ??
+          (hasConnection || connectionFixed ? emptyModelText(level) : undefined)
+        }
         // A new connection has its own models: the old one's does not stay.
         onApiKeyChange={(keyId) => onChange({ llmApiKeyId: keyId })}
         onApiKeyClear={() => onChange({})}
@@ -88,19 +113,8 @@ export function CompanyAccountFields({
         onModelClear={() => onChange({ llmApiKeyId: connection })}
       />
       {between}
-      {fixedAbove !== "both" && !empty && (
-        <p className="text-xs text-muted-foreground">
-          {line ??
-            (modelAlone
-              ? modelId
-                ? text.model
-                : text.modelOpen
-              : !apiKeyId
-                ? text.open
-                : !modelId
-                  ? text.connection
-                  : text.both)}
-        </p>
+      {fixedAbove !== "both" && !empty && sentence && (
+        <p className="text-xs text-muted-foreground">{sentence}</p>
       )}
     </>
   );
@@ -135,21 +149,33 @@ const AMONG_SEVERAL: Record<CompanyAccountLevel, Sentences> = {
   },
 };
 
+function emptyConnectionText(level: CompanyAccountLevel, plan = false): string {
+  if (level === "runtime")
+    return plan ? "Agent chooses plan" : "Each agent chooses its own key";
+  return plan ? "User chooses plan themselves" : "User chooses key themselves";
+}
+
+function emptyModelText(level: CompanyAccountLevel): string {
+  return level === "runtime"
+    ? "Each agent chooses its own model"
+    : "User chooses model themselves";
+}
+
 const SENTENCES: Record<CompanyAccountLevel, Sentences> = {
   runtime: {
-    open: "Optional. Set a connection and model to fix them for every agent on this runtime. Leave them empty to set them in each agent's settings.",
+    open: "",
     connection:
-      "Every agent on this runtime uses this connection. Set the model in each agent's settings, or set it here.",
-    both: "Every agent on this runtime uses this connection and model.",
+      "Every agent on this runtime uses this API key. Set the model in each agent's settings, or choose one here.",
+    both: "Every agent on this runtime uses this API key and model.",
     modelOpen:
       "Optional. Leave the model empty to set it in each agent's settings.",
     model: "Every agent on this runtime uses this model.",
   },
   agent: {
-    open: "Optional. Set a connection and model to fix them for every run on the company account. Leave them empty and each person picks their own on the agent's page.",
+    open: "",
     connection:
-      "Every run uses this connection. Each person picks their model on the agent's page, unless you set one here.",
-    both: "Every run uses this connection and model.",
+      "Every run uses this API key. Each person picks a model on the agent's page unless you choose one here.",
+    both: "Every run uses this API key and model.",
     modelOpen:
       "Each person picks their model on the agent's page, unless you set one here.",
     model: "Every run uses this model.",

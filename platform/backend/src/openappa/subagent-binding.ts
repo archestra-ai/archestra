@@ -46,6 +46,8 @@ export function subagentChildSession(
     ...(parent.caller_id ? { caller_id: parent.caller_id } : {}),
     session_id: childSessionId(parent.session_id, `agent:${spawnCallId}`),
     parent_id: parent.session_id,
+    // Its parent's spawn signed it into that family.
+    presenter: "delegated",
   };
 }
 
@@ -113,6 +115,7 @@ export function verifySubagentBinding(
         organization_id: claims.organizationId,
         ...(claims.callerId ? { caller_id: claims.callerId } : {}),
         session_id: claims.parentId,
+        presenter: "delegated",
       },
       claims.spawnCallId,
     ),

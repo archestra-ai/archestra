@@ -267,7 +267,8 @@ export function useChatSetupOptions(params: {
       allKeys.filter(
         (k) =>
           providerSupportsChat(k.provider) &&
-          // A GitHub Copilot key follows its own plan's switch.
+          // A key follows its own plan's switch: API keys, a personal
+          // subscription, or a GitHub Copilot plan.
           !catalog.isKeyHidden(k) &&
           (!isPersonalSubscription(k) || k.userId === userId) &&
           (!keyFilter || keyFilter(k)),
@@ -288,27 +289,37 @@ export function useChatSetupOptions(params: {
     [keys, catalog, params.currentProvider],
   );
 
-  // ---- model pools: picked in place of a key, and the pool picks the model
-  const { data: pools = [] } = useAvailableModelPools({
-    enabled: !!params.onModelPoolChange,
+  // ---- model pools: picked in place of a key, and the pool picks the model.
+  // A caller with no way to set a pool shows none: a disabled query still
+  // returns whatever an earlier screen cached.
+  const poolsSupported = !!params.onModelPoolChange;
+  const { data: availablePools = [] } = useAvailableModelPools({
+    enabled: poolsSupported,
   });
+  const pools = poolsSupported ? availablePools : NO_POOLS;
   // ---- auto routers: picked in place of a key like a pool
   const organizationDefault = useOrganizationDefaultModel({
-    enabled: !!params.onModelPoolChange,
+    enabled: poolsSupported,
     forChat: true,
   });
-  const selectedAutoRouterId = autoRouterIdOfChoice(params.modelPoolId);
+  const selectedAutoRouterId = poolsSupported
+    ? autoRouterIdOfChoice(params.modelPoolId)
+    : null;
   const autoSelected = selectedAutoRouterId !== null;
   const autoRouters =
-    activeAgent?.runtime == null ? organizationDefault.autoRouters : [];
-  const selectedAutoRouter = organizationDefault.autoRouters.find(
-    (router) => router.id === selectedAutoRouterId,
-  );
+    poolsSupported && activeAgent?.runtime == null
+      ? organizationDefault.autoRouters
+      : NO_AUTO_ROUTERS;
+  const selectedAutoRouter = poolsSupported
+    ? organizationDefault.autoRouters.find(
+        (router) => router.id === selectedAutoRouterId,
+      )
+    : undefined;
   const autoModelName = selectedAutoRouter?.normalOnlyReason
     ? selectedAutoRouter.tiers.normal.displayName
     : (selectedAutoRouter?.label ?? "Auto");
   const activePool =
-    params.modelPoolId && !autoSelected
+    poolsSupported && params.modelPoolId && !autoSelected
       ? pools.find((pool) => pool.id === params.modelPoolId)
       : undefined;
 
@@ -409,6 +420,9 @@ export function useChatSetupOptions(params: {
 }
 
 // ============================================================================
+
+const NO_POOLS: never[] = [];
+const NO_AUTO_ROUTERS: never[] = [];
 
 function keyScopeLabel(key: LlmProviderApiKey) {
   if (isOrganizationSubscription(key))

@@ -1,5 +1,38 @@
 Archestra Platform has been installed!
 
+{{- /*
+  On the first upgrade into a new stable line (for example 1.4.x to 1.5.0), link
+  that line's upgrade guide. The running platform Deployment's version label is
+  the version being replaced. `lookup` returns nothing under `helm template` and
+  dry runs, so Argo CD, Flux and CI renders print nothing extra, and nothing here
+  waits for input.
+*/}}
+{{- $current := .Chart.AppVersion }}
+{{- if and .Release.IsUpgrade (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+$" $current) }}
+{{- $deployment := lookup "apps/v1" "Deployment" .Release.Namespace (include "archestra-platform.fullname" .) }}
+{{- $previous := "" }}
+{{- if $deployment }}
+{{- $previous = index ($deployment.metadata.labels | default dict) "app.kubernetes.io/version" | default "" }}
+{{- end }}
+{{- if regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" $previous }}
+{{- $to := semver $current }}
+{{- $from := semver $previous }}
+{{- if semverCompare (printf "<%d.%d.0-0" $to.Major $to.Minor) $previous }}
+{{- $docs := printf "https://archestra.ai/docs/v%d.%d" $to.Major $to.Minor }}
+
+Upgrading from v{{ $from.Major }}.{{ $from.Minor }} to v{{ $to.Major }}.{{ $to.Minor }}:
+{{- if and (eq $from.Major $to.Major) (eq (add1 $from.Minor) $to.Minor) }}
+  Read the upgrade guide before using this release:
+  {{ $docs }}/admin/upgrade-v{{ $from.Major }}-{{ $from.Minor }}-to-v{{ $to.Major }}-{{ $to.Minor }}
+{{- else }}
+  This upgrade skips at least one stable line. Read the upgrade guide of each
+  line in between, starting from the v{{ $to.Major }}.{{ $to.Minor }} docs:
+  {{ $docs }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
 {{- $frontendUrl := index .Values.archestra.env "ARCHESTRA_FRONTEND_URL" | default "" }}
 
 {{- if not $frontendUrl }}

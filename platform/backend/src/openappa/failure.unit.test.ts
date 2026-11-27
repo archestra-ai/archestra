@@ -736,7 +736,7 @@ describe("unansweredAnnotationNotice", () => {
             `OpenAPPA processing interrupted: annotator=${annotator} error=non_success status=${status} detail="private helper diagnostic"`,
           ),
         ),
-      );
+      )?.notice;
     const missingModel = notice("archestra.llm-annotator", 409);
     expect(missingModel).toContain("no usable model configuration");
     expect(missingModel).toContain("The call did not run.");
@@ -761,7 +761,8 @@ describe("unansweredAnnotationNotice", () => {
       ),
     );
 
-    expect(unansweredAnnotationNotice(failure)).toBe(
+    expect(unansweredAnnotationNotice(failure)?.retry).toBe("later");
+    expect(unansweredAnnotationNotice(failure)?.notice).toBe(
       '[appa] Not checked: OpenAPPA could not rule on this call because its annotator "archestra.tool-call" did not answer in time. The call did not run. The failure is temporary, on the Guardrails side. Make the same call again to retry. Do not switch to another tool or call yell to get around the check. If it fails the same way again, stop and tell the user that Guardrails could not check this call; with no user to tell, end the task and report that.',
     );
   });
@@ -771,12 +772,14 @@ describe("unansweredAnnotationNotice", () => {
     ['non_success status=502 detail="upstream reset"', "returned an error"],
     ["non_success status=429", "returned an error"],
   ])("advises one retry when another attempt can succeed: %s", (reason, phrase) => {
-    const notice = unansweredAnnotationNotice(
+    const answer = unansweredAnnotationNotice(
       new Error(
         `OpenAPPA processing interrupted: annotator=github.repository-visibility error=${reason}`,
       ),
     );
+    const notice = answer?.notice;
 
+    expect(answer?.retry).toBe("later");
     expect(notice).toContain(`"github.repository-visibility" ${phrase}.`);
     expect(notice).toContain("Make the same call again to retry.");
     expect(notice).not.toContain("upstream reset");
@@ -794,12 +797,14 @@ describe("unansweredAnnotationNotice", () => {
       "returned an error",
     ],
   ])("does not invite a retry that cannot help: %s", (reason, phrase) => {
-    const notice = unansweredAnnotationNotice(
+    const answer = unansweredAnnotationNotice(
       new Error(
         `OpenAPPA processing interrupted: annotator=archestra.tool-call error=${reason}`,
       ),
     );
+    const notice = answer?.notice;
 
+    expect(answer?.retry).toBe("after_repair");
     expect(notice).toContain(`"archestra.tool-call" ${phrase}.`);
     expect(notice).toContain("Retrying it will not help.");
     expect(notice).not.toContain("No LLM provider API key");
@@ -819,6 +824,23 @@ describe("unansweredAnnotationNotice", () => {
     expect(
       unansweredAnnotationNotice(openappaFailure(new Error(message))),
     ).toBe(null);
+  });
+
+  // A call the provider already ran must never be asked for again, so its
+  // notice is its own; whether asking again could help stays the same.
+  test.each([
+    "timeout",
+    "unreachable",
+    "unregistered",
+    'non_success status=409 detail="private"',
+  ])("words a notice for a call that already ran apart: %s", (reason) => {
+    const failure = new Error(
+      `OpenAPPA processing interrupted: annotator=archestra.llm-annotator error=${reason}`,
+    );
+    const proposed = unansweredAnnotationNotice(failure);
+    const executed = unansweredAnnotationNotice(failure, "executed");
+    expect(executed?.retry).toBe(proposed?.retry);
+    expect(executed?.notice).not.toBe(proposed?.notice);
   });
 });
 

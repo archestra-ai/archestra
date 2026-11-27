@@ -14,24 +14,29 @@ import {
   cheapestBudget,
   type FitHistory,
   fitAdmission,
+  matchesRecordedHistory,
   planInput,
   readFitHistory,
+  recordedPastRead,
 } from "./fit";
 import { routerFeatures } from "./signals";
 import { type RouterTierSet, TIER_NAMES } from "./tiers";
 
 /**
- * The current fit history, read at the active plan's scorer version and
- * tiers, re-solved at `budgetUsdPerDay` (the plan's budget by default) and
- * read back per displayed session; publishes nothing. Diagnostics admit
- * apart from simulations so browsing budgets never starves them.
+ * The current fit history, read at the active plan's scorer version, tiers,
+ * past-sessions frame and traffic factor, re-solved at `budgetUsdPerDay`
+ * (the plan's budget by default) and read back per displayed session;
+ * publishes nothing. Diagnostics admit apart from simulations so browsing
+ * budgets never starves them.
  */
 export function diagnoseAutoRouting(
   router: FitRouter,
   budgetUsdPerDay: number | undefined,
+  /** Whether the caller may see the organization's past sessions one by one, as its logs. */
+  showPastSessions: boolean,
 ): Promise<AutoRoutingDiagnostics> {
   return diagnosticsAdmission(router.id, () =>
-    diagnose(router, budgetUsdPerDay),
+    diagnose(router, budgetUsdPerDay, showPastSessions),
   );
 }
 
@@ -116,22 +121,27 @@ type Holdout =
   | { status: "ok"; predictions: (number | null)[] }
   | { status: "no_holdout" | "failed" };
 
-type FitRouter = Pick<AutoRouter, "id" | "organizationId" | "usesPastSessions">;
+type FitRouter = Pick<
+  AutoRouter,
+  "id" | "organizationId" | "learnFromPastSessions" | "expectedTrafficFactor"
+>;
 
 /** Per router, least recently used first. */
 const bases = new Map<
   string,
-  { identity: string; usageSince: Date; expiresAt: number; basis: Basis }
+  { identity: string; usageSince: Date; expiresAt: number; basis: Basis | null }
 >();
 
 async function diagnose(
   router: FitRouter,
   requestedBudget: number | undefined,
+  showPastSessions: boolean,
 ): Promise<AutoRoutingDiagnostics> {
   const active = await RoutingPlanModel.findActive(router.id);
   if (!active) return { status: "cold_start" };
   const tiers = StoredTierSetSchema.parse(active.tiersFingerprint);
   const basis = await cachedBasis(router, active, tiers);
+  if (basis === null) return { status: "basis_unavailable" };
   if (basis.history.sample.length === 0) return { status: "cold_start" };
 
   if (active.budgetUsdPerDay === null) {
@@ -149,9 +159,12 @@ async function diagnose(
     };
   }
   const plan = SolvedPlanSchema.parse(JSON.parse(solved.planJson));
+  const shown = showPastSessions
+    ? basis.display
+    : basis.display.filter((d) => !basis.history.sample[d.index].past);
   const routed = assessSessions(
     solved.planJson,
-    basis.display.map((d) => d.features),
+    shown.map((d) => d.features),
   );
   const { q } = plan.policy;
 
@@ -163,7 +176,7 @@ async function diagnose(
     q,
     tierSessionShare: plan.summary.tier_session_share,
     sizeFit: basis.sizeFit,
-    sessions: basis.display.map((d, k) => ({
+    sessions: shown.map((d, k) => ({
       tierNeeded: d.features.tier_needed,
       pLong: d.features.p_long,
       realizedTokens: d.realizedTokens,
@@ -179,7 +192,7 @@ async function cachedBasis(
   router: FitRouter,
   active: RoutingPlan,
   tiers: RouterTierSet,
-): Promise<Basis> {
+): Promise<Basis | null> {
   const now = Date.now();
   const cached = bases.get(router.id);
   bases.delete(router.id);
@@ -204,7 +217,11 @@ async function cachedBasis(
   return entry.basis;
 }
 
-/** What a basis was built from: the plan, the router's usage since `usageSince`, and the latest backfill it reads. */
+/**
+ * What a basis was built from: the plan (with its frame and factor), the
+ * router's usage since `usageSince`, and the latest backfill, which may
+ * score more of the frame's sample.
+ */
 async function basisIdentity(
   router: FitRouter,
   active: RoutingPlan,
@@ -212,30 +229,44 @@ async function basisIdentity(
 ): Promise<string> {
   const [usageAt, backfill] = await Promise.all([
     RoutingUsageModel.findLatestCreatedAt(router.id, usageSince),
-    router.usesPastSessions
-      ? RoutingBackfillModel.findLatest(router.organizationId)
-      : null,
+    RoutingBackfillModel.findLatest(router.organizationId),
   ]);
   return JSON.stringify([
     active.id,
     active.scorerVersionId,
+    active.historyFrameId,
+    active.volumeFactor,
+    active.volumeSource,
     usageAt?.getTime() ?? null,
     backfill?.id ?? null,
     backfill?.updatedAt.getTime() ?? null,
   ]);
 }
 
+/**
+ * The sessions and volume the active plan was fitted on. A plan that
+ * recorded its past-sessions read is replayed as recorded, whatever the
+ * router's settings are now; null when the replay no longer holds the past
+ * sessions the plan recorded, as once retention dropped some of them or more
+ * of its frame was scored since. A plan recorded before plans stored their
+ * read takes the one a fit would.
+ */
 async function buildBasis(
   router: FitRouter,
   active: RoutingPlan,
   tiers: RouterTierSet,
-): Promise<Basis> {
+): Promise<Basis | null> {
+  const recorded = recordedPastRead(active);
   const history = await readFitHistory({
     router,
     scorerVersionId: active.scorerVersionId,
     inputWatermark: active.inputWatermark,
     longContextThreshold: tiers.long_context_threshold,
+    ...(recorded && { recorded }),
   });
+  if (recorded && !matchesRecordedHistory(active, history)) {
+    return null;
+  }
   const features = history.sample.map((row) => routerFeatures(row.features));
   const realized = history.sample.map(realizedTokens);
   const holdout = await predictOutOfSample(history, tiers, features);
@@ -286,7 +317,7 @@ function summarizeSizeFit(
 }
 
 async function solve(
-  history: Pick<FitHistory, "sample" | "volume">,
+  history: Pick<FitHistory, "sample" | "volume" | "volumeFactor">,
   tiers: RouterTierSet,
   budgetUsdPerDay: number,
 ): Promise<
@@ -347,7 +378,11 @@ async function predictOutOfSample(
     const trained = await fitPlan(
       JSON.stringify(
         planInput(
-          { sample: train, volume: history.volume },
+          {
+            sample: train,
+            volume: history.volume,
+            volumeFactor: history.volumeFactor,
+          },
           tiers,
           UNBOUNDED_BUDGET_USD_PER_DAY,
         ),

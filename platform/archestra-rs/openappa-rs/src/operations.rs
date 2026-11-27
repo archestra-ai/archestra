@@ -39,6 +39,42 @@ pub(crate) enum OperationState {
     Complete(CompletedOperation),
 }
 
+/// Whether neither a call under `operation` nor a processed result under `result` was ever
+/// recorded, read without claiming anything.
+pub(crate) fn result_untracked(
+    pg: &Sql<'_>,
+    result: &ProcessedResultKey,
+    operation: &OperationKey,
+) -> napi::Result<bool> {
+    let (organization_id, result_session, call_id) = (
+        result.session.organization_id.clone(),
+        result.session.session_id.clone(),
+        result.tool_call_id.clone(),
+    );
+    let (operation_session, operation_id) = (
+        operation.session.session_id.clone(),
+        operation.operation_id.clone(),
+    );
+    pg.with_client(move |client| {
+        Ok(client
+            .query_one(
+                "SELECT NOT EXISTS (SELECT 1 FROM openappa_processed_results \
+                   WHERE organization_id = $1 AND session_id = $2 AND tool_call_id = $3) \
+                 AND NOT EXISTS (SELECT 1 FROM openappa_operations \
+                   WHERE organization_id = $1 AND session_id = $4 AND operation_id = $5)",
+                &[
+                    &organization_id,
+                    &result_session,
+                    &call_id,
+                    &operation_session,
+                    &operation_id,
+                ],
+            )?
+            .get::<_, bool>(0))
+    })
+    .map_err(sql_failure)
+}
+
 pub(crate) fn read_operation_state(
     pg: &Sql<'_>,
     key: &OperationKey,
@@ -569,7 +605,7 @@ mod tests {
     fn an_anonymous_remedy_omits_the_spender_and_a_foreign_version_is_invalid() {
         let anonymous = serde_json::from_str::<crate::input::OfferInput>(
             r#"{
-                "organization_id": "organization",
+                "presenter": "attended", "organization_id": "organization",
                 "trajectory": {"v": 1, "session_id": "session", "parent_id": null},
                 "arguments": {"offer_id": "0123456789abcdef"},
                 "execution_mode": "untracked",
@@ -632,7 +668,7 @@ mod tests {
     #[test]
     fn retry_fields_stay_in_context_and_out_of_the_idempotency_key() {
         let input: crate::input::Input = serde_json::from_value(serde_json::json!({
-            "organization_id": "organization",
+            "presenter": "attended", "organization_id": "organization",
             "session_id": "session",
             "event": "tool_call",
             "tool": "read_untrusted",
@@ -649,7 +685,7 @@ mod tests {
         assert_eq!(context["dispatch"], "my_gateway_archestra__run_tool");
 
         let legacy: crate::input::Input = serde_json::from_value(serde_json::json!({
-            "organization_id": "organization",
+            "presenter": "attended", "organization_id": "organization",
             "session_id": "session",
             "event": "tool_call",
             "tool": "read_untrusted",
@@ -667,7 +703,7 @@ mod tests {
     fn a_declared_return_is_keyed_with_its_call_and_read_back_for_recovery() {
         let spawn = |declares: Option<serde_json::Value>| -> crate::input::Input {
             let mut input = serde_json::json!({
-                "organization_id": "organization",
+                "presenter": "attended", "organization_id": "organization",
                 "session_id": "session",
                 "event": "tool_call",
                 "operation_id": "call:spawn",

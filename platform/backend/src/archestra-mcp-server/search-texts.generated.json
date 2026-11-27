@@ -700,7 +700,7 @@
     "searchText": "write create file agent runtime workspace run id, save note or config text, upload base64 binary content, overwrite existing file, relative path, compose new file in sandbox filesystem"
   },
   "yell": {
-    "definitionHash": "cb532e6dee61203d217c417662830b90debb25cb035567c539c2b00bdb097095",
-    "searchText": "send feedback complaint report about OpenAPPA guardrails, blocked tool calls, repeated approval prompts, confusing remedy plan, user frustration, diagnostic archive, policy decisions trajectory, break the glass disable guardrails for session, escalate issue"
+    "definitionHash": "6ef3be1d8a6c824c14e3ce233922a7b169a98af1e124da4ab9414a2f5f05fbce",
+    "searchText": "send feedback complaint report about OpenAPPA guardrails, blocked tool calls, repeated approval prompts, confusing remedy plan, user frustration, diagnostic archive, policy decisions trajectory, escalate issue to guardrails log"
   }
 }

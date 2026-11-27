@@ -86,6 +86,7 @@ import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
+import { assertPersonalSubscriptionAllowed } from "@/services/integration-overrides";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
@@ -476,6 +477,12 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request) => {
       const runtime = await requireClaudeAccountRuntime(request);
+      // A new Claude Code sign-in is a personal subscription on Anthropic,
+      // so it follows that switch. A connected account keeps working.
+      await assertPersonalSubscriptionAllowed({
+        organizationId: request.organizationId,
+        provider: "anthropic",
+      });
       const owner = { runtime, userId: request.user.id };
       const before = await claudeCodeAccountManager.status({
         ...owner,
@@ -590,6 +597,12 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
+      // A new Claude Code sign-in is a personal subscription on Anthropic,
+      // so it follows that switch. A connected account keeps working.
+      await assertPersonalSubscriptionAllowed({
+        organizationId: request.organizationId,
+        provider: "anthropic",
+      });
       const owner = {
         organizationId: request.organizationId,
         userId: request.user.id,

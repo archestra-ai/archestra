@@ -206,11 +206,15 @@ ${catchAllRules()}`,
           )
           .map(({ label }) => label),
         misdecided: calls.flatMap(({ label, rule, arguments: args }, index) => {
-          const { actual, refusal, error } = governed[index];
+          const {
+            actual,
+            refusal,
+            error,
+            unanswered: waited,
+          } = governed[index];
           const helper = rule === null ? null : ruleHelper(policies, rule);
           const unanswered =
-            helper !== null &&
-            UNANSWERED_ANNOTATOR.exec(error ?? "")?.[1] === helper.name;
+            helper !== null && unansweredAnnotator(waited) === helper.name;
           // A helper whose audience the call fills is consulted, so only its
           // unanswered consult shows the rule decided; otherwise any decision.
           const asked = helper?.reads.every((read) => read in args) === true;
@@ -749,7 +753,7 @@ type ReplayFile = {
   path: string;
   status: string;
   error?: string;
-  steps: { status: string; actual: string | null; error?: string }[];
+  steps: ReplayStep[];
 };
 
 /**
@@ -785,7 +789,7 @@ async function replay(params: {
 /** What a step decided, or the annotator whose consult it waited on in vain. */
 function stepOutcome(step: ReplayFile["steps"][number]): string | null {
   return step.status === "cannot_run"
-    ? (UNANSWERED_ANNOTATOR.exec(step.error ?? "")?.[1] ?? null)
+    ? unansweredAnnotator(step.unanswered)
     : step.actual;
 }
 
@@ -826,6 +830,8 @@ type Decision = {
   actual: string | null;
   /** Why the step decided nothing, or the feedback of its decision. */
   error?: string;
+  /** The externals a step that could not run asked in vain. */
+  unanswered?: Unanswered[];
   /** Why the replay ran no step for the call; absent when it ran one. */
   refusal?: string;
 };
@@ -844,7 +850,8 @@ const CATCH_ALL: Decision = {
 const UNANSWERED_HELPER = {
   status: "cannot_run",
   actual: null,
-  error: expect.stringMatching(/annotator=github\.repository-visibility /),
+  error: expect.any(String),
+  unanswered: [{ role: "annotator", name: "github.repository-visibility" }],
 };
 /** A base read's static label lets a fresh trajectory's call run. */
 const BASE_READ: Decision = { status: "passed", actual: "allow" };
@@ -1042,8 +1049,31 @@ function asksApproval(policies: string[], rule: string | null): boolean {
   );
 }
 
-/** The annotator a step's error names when its consult went unanswered. */
-const UNANSWERED_ANNOTATOR = /annotator=(\S+) error=/;
+/** An external a replay step that could not run asked without an answer. */
+type Unanswered = {
+  role:
+    | "authority"
+    | "sanitizer"
+    | "annotator"
+    | "audience_source"
+    | "context_provider";
+  name: string;
+};
+
+type ReplayStep = {
+  status: string;
+  actual: string | null;
+  error?: string;
+  unanswered?: Unanswered[];
+};
+
+/** The annotators a step waited on in vain, or null when it waited on none. */
+function unansweredAnnotator(unanswered: Unanswered[] = []): string | null {
+  const annotators = unanswered
+    .filter(({ role }) => role === "annotator")
+    .map(({ name }) => name);
+  return annotators.length > 0 ? annotators.join("+") : null;
+}
 
 /**
  * Runs `replay` with no `claude` CLI on PATH. A `claude-code` annotator spawns
@@ -1092,7 +1122,7 @@ async function decide(
         path: string;
         status: string;
         error?: string;
-        steps: { status: string; actual: string | null; error?: string }[];
+        steps: ReplayStep[];
       }[];
     };
     for (const file of response.files) {
@@ -1103,6 +1133,9 @@ async function decide(
             status: step.status,
             actual: step.actual,
             ...(step.error === undefined ? {} : { error: step.error }),
+            ...(step.unanswered === undefined
+              ? {}
+              : { unanswered: step.unanswered }),
           }
         : { status: file.status, actual: null, refusal: file.error ?? "" };
     }

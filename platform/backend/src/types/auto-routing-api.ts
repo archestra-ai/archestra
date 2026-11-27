@@ -14,6 +14,7 @@ import {
   RoutingPlanRecordSchema,
   RoutingPlanStatusSchema,
   RoutingPlanTriggerSchema,
+  RoutingVolumeSourceSchema,
   SelectRoutingDecisionSchema,
 } from "@/types/auto-routing";
 
@@ -27,6 +28,16 @@ const NullableBudgetPresetSchema = z.union([
 ]);
 
 export const AutoRoutingTierNameSchema = z.enum(["fast", "normal", "smart"]);
+
+/** How much busier than the organization's past traffic a router is expected to be. */
+const ExpectedTrafficFactorSchema = z.number().positive().max(100);
+
+/** A usage window's arrival rate. */
+const SimulatedTrafficSchema = z.object({
+  sessionsPerDay: z.number().nonnegative(),
+  tokensPerDay: z.number().nonnegative(),
+});
+export type SimulatedTraffic = z.infer<typeof SimulatedTrafficSchema>;
 
 const AutoRoutingTierModelSchema = z.object({
   id: z.string().uuid(),
@@ -81,8 +92,19 @@ export const AutoRouterResponseSchema = z.object({
     apiKeyId: z.string().uuid().nullable(),
     model: z.string(),
   }),
-  /** Also learns from the organization's scored past sessions; only its first router does. */
-  usesPastSessions: z.boolean(),
+  /** Set to also learn from the organization's scored past sessions. */
+  learnFromPastSessions: z.boolean(),
+  /** Learns from them: set to, and its decision model is the default one, whose scores they carry. */
+  readsPastSessions: z.boolean(),
+  /** Scales the past sessions' volume while a fit plans for it, until the router's own traffic spans a week. */
+  expectedTrafficFactor: z.number().positive(),
+  /** The traffic a fit started now plans for. */
+  traffic: z.object({
+    /** `history` while the router's own traffic spans less than a week and past sessions stand in for it. */
+    volumeSource: RoutingVolumeSourceSchema,
+    /** The organization's past traffic the router reads, before the factor; null when it reads none. */
+    pastBaseline: SimulatedTrafficSchema.nullable(),
+  }),
   /** Virtual keys that may call the router by name; set from each key. */
   virtualApiKeyIds: z.array(z.string().uuid()),
   /** Where the router is picked: agents set to it, and whether the organization default is. */
@@ -101,6 +123,8 @@ export const AutoRouterResponseSchema = z.object({
       scorerVersionId: z.string().uuid(),
       sessions: z.number().int().nonnegative(),
       required: z.number().int().positive(),
+      /** The organization's past sessions among `sessions`; 0 while the router waits on its own. */
+      pastSessions: z.number().int().nonnegative(),
     }),
     /** Error of the newest fit outcome, when it failed. */
     lastFitError: z.string().nullable(),
@@ -124,6 +148,8 @@ export const AutoRoutingStateResponseSchema = z.object({
       apiKeys: z.array(AutoRoutingApiKeyRefSchema),
     }),
   ),
+  /** The decision model past sessions are scored with, so the only one that reads them. */
+  defaultDecisionModel: z.string(),
 });
 export type AutoRoutingStateResponse = z.infer<
   typeof AutoRoutingStateResponseSchema
@@ -187,6 +213,10 @@ export const CreateAutoRouterBodySchema = z.strictObject({
   tiers: AutoRouterTiersBodySchema,
   /** Defaults to the default decision model on the organization's primary key. */
   decisionModel: AutoRouterDecisionModelBodySchema.optional(),
+  /** Defaults to true. */
+  learnFromPastSessions: z.boolean().optional(),
+  /** Defaults to 1. */
+  expectedTrafficFactor: ExpectedTrafficFactorSchema.optional(),
 });
 export type CreateAutoRouterBody = z.infer<typeof CreateAutoRouterBodySchema>;
 
@@ -198,6 +228,8 @@ export const UpdateAutoRouterBodySchema = z.strictObject({
   budgetPreset: NullableBudgetPresetSchema.optional(),
   tiers: AutoRouterTiersBodySchema.optional(),
   decisionModel: AutoRouterDecisionModelBodySchema.optional(),
+  learnFromPastSessions: z.boolean().optional(),
+  expectedTrafficFactor: ExpectedTrafficFactorSchema.optional(),
 });
 export type UpdateAutoRouterBody = z.infer<typeof UpdateAutoRouterBodySchema>;
 
@@ -311,10 +343,24 @@ export const InteractionAutoRoutingResponseSchema = z.object({
     .nullable(),
 });
 
-/** Scales the fitted window's sessions/day and tokens/day alike. */
-const VolumeMultiplierSchema = z.number().positive().max(100);
+/**
+ * Scales the fitted window's unscaled sessions/day and tokens/day alike, in
+ * place of the router's expected traffic factor: a what-if on the window,
+ * never combined with the factor.
+ */
+const VolumeMultiplierSchema = ExpectedTrafficFactorSchema.describe(
+  "Scales the fitted usage window's unscaled volume; the router's expected traffic factor is not applied on top",
+);
 
-/** At a budget, or at the budget a preset resolves to on the current usage. */
+/** An unsaved expected traffic factor, applied as a fit applies the router's: to past traffic only. */
+const SimulatedTrafficFactorSchema = ExpectedTrafficFactorSchema.describe(
+  "An expected traffic factor to simulate in place of the router's, applied as a fit applies it: only while past sessions size the plan",
+);
+
+/**
+ * At a budget, or at the budget a preset resolves to on the current usage;
+ * at a raw volume multiplier or at unsaved settings' expected traffic factor.
+ */
 export const AutoRoutingSimulateBodySchema = z.union([
   z.strictObject({
     budgetUsdPerDay: BudgetUsdPerDaySchema,
@@ -324,14 +370,15 @@ export const AutoRoutingSimulateBodySchema = z.union([
     budgetPreset: AutoRoutingBudgetPresetSchema,
     volumeMultiplier: VolumeMultiplierSchema,
   }),
+  z.strictObject({
+    budgetUsdPerDay: BudgetUsdPerDaySchema,
+    expectedTrafficFactor: SimulatedTrafficFactorSchema,
+  }),
+  z.strictObject({
+    budgetPreset: AutoRoutingBudgetPresetSchema,
+    expectedTrafficFactor: SimulatedTrafficFactorSchema,
+  }),
 ]);
-
-/** The fitted usage window's arrival rate, before the simulated multiplier. */
-const SimulatedTrafficSchema = z.object({
-  sessionsPerDay: z.number().nonnegative(),
-  tokensPerDay: z.number().nonnegative(),
-});
-export type SimulatedTraffic = z.infer<typeof SimulatedTrafficSchema>;
 
 /**
  * A fit at the given budget and scaled volume that publishes nothing.
@@ -359,6 +406,7 @@ export const AutoRoutingSimulateResponseSchema = z.discriminatedUnion(
       status: z.literal("cold_start"),
       sessions: z.number().int().nonnegative(),
       required: z.number().int().positive(),
+      pastSessions: z.number().int().nonnegative(),
     }),
   ],
 );
@@ -430,6 +478,8 @@ export const AutoRoutingDiagnosticsResponseSchema = z.discriminatedUnion(
       minBudgetUsdPerDay: z.number(),
     }),
     z.object({ status: z.literal("cold_start") }),
+    /** The past sessions the active plan was fitted on are no longer retained. */
+    z.object({ status: z.literal("basis_unavailable") }),
   ],
 );
 export type AutoRoutingDiagnostics = z.infer<
@@ -458,6 +508,11 @@ export type AutoRoutingPreviewResponse = z.infer<
 export const AUTO_ROUTING_BACKFILL_MAX_SESSIONS = 5000;
 
 /** Starts scoring what `scoreOffer` named; refused with a 409 once it names something else. */
+export const AutoRoutingScanBackfillBodySchema = z.strictObject({
+  /** The organization's newest backfill as the caller saw it, or null when it saw none; refused with a 409 once another is newer. */
+  latestBackfillId: z.string().uuid().nullable(),
+});
+
 export const AutoRoutingScoreBackfillBodySchema = z.strictObject({
   backfillId: z.string().uuid(),
   scorerVersionId: z.string().uuid(),
@@ -478,6 +533,16 @@ export const AutoRoutingScoreBackfillBodySchema = z.strictObject({
 export type AutoRoutingScoreBackfillBody = z.infer<
   typeof AutoRoutingScoreBackfillBodySchema
 >;
+
+export const AutoRoutingBackfillQuerySchema = z.object({
+  /** The router whose fit after the newest scoring run `awaitingFit` and `fitBlockedReason` describe. */
+  routerId: z.string().uuid().optional(),
+});
+
+export const AutoRoutingCancelBackfillQuerySchema = z.object({
+  /** The phase the caller saw the backfill in; a backfill since moved on to another phase is not cancelled. */
+  phase: RoutingBackfillPhaseSchema,
+});
 
 export const AutoRoutingBackfillResponseSchema = z.object({
   /** The organization's newest backfill. */
@@ -507,9 +572,9 @@ export const AutoRoutingBackfillResponseSchema = z.object({
         .nullable(),
       error: z.string().nullable(),
       completedAt: z.date().nullable(),
-      /** The fit its completion requested has no outcome yet and will run. */
+      /** The requested router's fit its completion requested has no outcome yet and will run. */
       awaitingFit: z.boolean(),
-      /** Why the fit its completion requested will not run while settings stay as they are. */
+      /** Why the requested router's fit its completion requested will not run while settings stay as they are. */
       fitBlockedReason: z.string().nullable(),
     })
     .nullable(),
@@ -524,12 +589,21 @@ export const AutoRoutingBackfillResponseSchema = z.object({
       cutoff: z.date(),
       sessions: z.number().int().positive(),
       remaining: z.number().int().positive(),
+      /** The most scored sessions the sample can yield: those scored and those left; skipped and failed ones never count. */
+      usableSessions: z.number().int().positive(),
       estimatedCostUsd: z.number(),
       suggestedMaxCostUsd: z.number(),
       /** The sessions were scored before by another scorer version. */
       rescore: z.boolean(),
     })
     .nullable(),
+  /** Scored past sessions a router needs before they start it sooner than its own sessions would. */
+  pastSessionsNeeded: z.number().int().nonnegative(),
+  /**
+   * Whether scoring can start: the organization-wide Jev key a run pays with
+   * resolves. Null while a job runs, since none can start until it ends.
+   */
+  payer: z.union([AutoRoutingScorerStateSchema, z.null()]),
   /** The organization's newest backfills, newest first: what scanning and scoring did. */
   history: z.array(
     z.object({

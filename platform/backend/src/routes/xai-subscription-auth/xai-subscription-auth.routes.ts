@@ -5,6 +5,7 @@ import { isRateLimited } from "@/agents/utils";
 import { CacheKey } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import { assertPersonalSubscriptionAllowed } from "@/services/integration-overrides";
 import { decodeJwtClaims } from "@/services/openai-codex-credentials";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import {
@@ -58,7 +59,13 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeviceStartResponseSchema),
       },
     },
-    async ({ user }) => {
+    async ({ organizationId, user }) => {
+      // A sign-in only leads to a personal key, so refuse it up front when
+      // the admins turned SuperGrok off.
+      await assertPersonalSubscriptionAllowed({
+        organizationId,
+        provider: "xai",
+      });
       // Both endpoints relay traffic to xAI; cap per user so a misbehaving
       // client can't drive xAI rate-limit pressure through the backend.
       if (

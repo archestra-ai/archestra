@@ -40,6 +40,7 @@ export async function remedyCallNeedsHumanReview(params: {
     organizationId: params.organizationId,
     sessionId: offer.sessionId,
     offerId: offer.offerId,
+    presenter: "reviewer",
   });
   return review !== null;
 }
@@ -90,6 +91,7 @@ export async function attachHitlReviews(params: {
       organizationId: params.organizationId,
       sessionId: offer.sessionId,
       offerId: offer.offerId,
+      presenter: "reviewer",
     });
     if (!review) continue;
     const attached = await A2ATaskApprovalRequestModel.attachOpenappaReview({

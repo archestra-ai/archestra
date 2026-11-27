@@ -42,7 +42,7 @@ jobs:
 
       # gcloud for GKE credentials only; images live on GHCR.
       - name: Authenticate to Google Cloud
-        uses: archestra-ai/.github/actions/google-auth@v1.31.1
+        uses: archestra-ai/.github/actions/google-auth@v1.32.0
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -122,8 +122,8 @@ jobs:
       # Release images (build-platform-release-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
       # Match the 16-core E2E builder; build arm64 natively.
-      amd64_runner: ubuntu-24.04-16core
-      arm64_runner: ubuntu-24.04-arm-32core
+      amd64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core' || 'ubuntu-24.04-16core' }}
+      arm64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-32core-arm' || 'ubuntu-24.04-arm-32core' }}
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
       # The Sentry source-map token lives in the staging-build environment,
       # which only main may use. Dispatches from other branches build without
@@ -136,10 +136,16 @@ jobs:
   # release) that staging and demo run, so every main commit exercises it
   # before a release does. The docker run image above stays: it carries the
   # previous build's frontend chunks, and docker run testers use it.
+  #
+  # Built after the docker run image, from that image's registry cache for this
+  # same commit: the two targets share every heavy stage (builder, runtime), so
+  # only the small slim-only stages run here instead of a second full build.
+  # Image scanning builds platform-slim from the same cache.
   publish-dev-platform-slim-image:
     name: Build Platform Slim Dev Docker Image
     needs:
       - resolve-previous-platform-image
+      - publish-dev-platform-image
     permissions:
       contents: read # Required to checkout the repository and build the image.
       packages: write # Publish development images and build caches to GHCR.
@@ -157,8 +163,9 @@ jobs:
       # As above: amd64 only for the automated staging deploy.
       amd64_only: ${{ github.event_name == 'push' }}
       # Match the 16-core E2E builder; build arm64 natively.
-      amd64_runner: ubuntu-24.04-16core
-      arm64_runner: ubuntu-24.04-arm-32core
+      amd64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core' || 'ubuntu-24.04-16core' }}
+      arm64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-32core-arm' || 'ubuntu-24.04-arm-32core' }}
+      cache_image_name: platform
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
       environment: ${{ github.ref == 'refs/heads/main' && 'staging-build' || '' }}
     secrets:

@@ -846,34 +846,7 @@ describe("extractOwnedAppRender", () => {
 });
 
 describe("identifyCompactToolGroups", () => {
-  it("hides a denial notice until its streaming input names the target", () => {
-    const streaming = (input: unknown) =>
-      [
-        {
-          type: "tool-archestra__get_remedy_plans",
-          toolCallId: "notice",
-          state: "input-streaming",
-          input,
-        },
-      ] as UIMessage["parts"];
-
-    const nameless = identifyCompactToolGroups(streaming(undefined), {
-      getToolShortName,
-    });
-    expect(nameless.groupMap.size).toBe(0);
-    expect([...nameless.consumedIndices]).toEqual([0]);
-
-    const named = identifyCompactToolGroups(
-      streaming({ tool: "google__search" }),
-      { getToolShortName },
-    );
-    const [entry] = named.groupMap.get(0)?.entries ?? [];
-    expect(entry?.kind === "tool" && entry.remedyChain?.targetToolName).toBe(
-      "google__search",
-    );
-  });
-
-  it("folds a guarded call into one entry at its first notice", () => {
+  it("keeps a guarded call's notice, remedy and retry as separate entries", () => {
     const ruling =
       '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "00aa00aa00aa00aa", plan: "Accept")';
     const parts = [
@@ -889,7 +862,6 @@ describe("identifyCompactToolGroups", () => {
         },
         output: ruling,
       },
-      { type: "text", text: "Executing the offered plan." },
       {
         type: "tool-archestra__execute_remedy_plan",
         toolCallId: "remedy",
@@ -900,72 +872,71 @@ describe("identifyCompactToolGroups", () => {
       {
         type: "tool-google__search",
         toolCallId: "retry",
-        state: "input-available",
+        state: "output-available",
         input: { q: "weather" },
-      },
-      {
-        type: "tool-google__search",
-        toolCallId: "retry",
-        state: "approval-requested",
-        input: { q: "weather" },
+        output: "sunny",
       },
     ] as UIMessage["parts"];
 
-    const compact = identifyCompactToolGroups(parts.slice(0, 4), {
-      getToolShortName,
-    });
-    const entry = compact.groupMap.get(0)?.entries[0];
-    expect(compact.groupMap.size).toBe(1);
-    expect(compact.groupMap.get(0)?.entries).toHaveLength(1);
-    expect(entry?.kind === "tool" && entry.remedyChain?.targetToolName).toBe(
-      "google__search",
-    );
-    expect([...compact.consumedIndices].sort()).toEqual([0, 2, 3]);
+    const { groupMap } = identifyCompactToolGroups(parts, { getToolShortName });
 
-    // An approval-requested final attempt stays in its compact circle row so
-    // the approval controls open directly under the circle.
-    const approval = identifyCompactToolGroups(
-      [...parts.slice(0, 3), parts[4]] as UIMessage["parts"],
+    expect(groupMap.size).toBe(1);
+    expect(
+      groupMap
+        .get(0)
+        ?.entries.map((entry) => [
+          entry.partIndex,
+          entry.kind === "hook" ? null : entry.toolName,
+        ]),
+    ).toEqual([
+      [0, "archestra__get_remedy_plans"],
+      [1, "archestra__execute_remedy_plan"],
+      [2, "google__search"],
+    ]);
+  });
+
+  it("hides a denial notice until its streaming input names the call it blocked", () => {
+    const streaming = (input: unknown) =>
+      [
+        {
+          type: "tool-archestra__get_remedy_plans",
+          toolCallId: "notice",
+          state: "input-streaming",
+          input,
+        },
+      ] as UIMessage["parts"];
+
+    // Nothing to show it under yet: no circle under the notice's own name.
+    for (const input of [undefined, { tool: "google__sea" }]) {
+      const nameless = identifyCompactToolGroups(streaming(input), {
+        getToolShortName,
+      });
+      expect(nameless.groupMap.size).toBe(0);
+      expect([...nameless.consumedIndices]).toEqual([0]);
+    }
+
+    // Another field follows the name, so the name is whole.
+    const named = identifyCompactToolGroups(
+      streaming({ tool: "google__search", arguments: "{" }),
       { getToolShortName },
     );
-    expect(approval.groupMap.size).toBe(1);
-    expect(approval.remedyChainCards.size).toBe(0);
-    const approvalEntry = approval.groupMap.get(0)?.entries[0];
-    expect(
-      approvalEntry?.kind === "tool" &&
-        approvalEntry.remedyChain?.finalAttempt?.part.toolCallId,
-    ).toBe("retry");
-    expect([...approval.consumedIndices].sort()).toEqual([0, 2, 3]);
+    expect(named.groupMap.get(0)?.entries).toHaveLength(1);
+  });
 
-    // Only a truly non-compact target (such as todo_write) drops out to
-    // remedyChainCards.
-    const nonCompactParts = [
-      {
-        ...parts[0],
-        input: {
-          tool: "archestra__todo_write",
-          arguments: { todos: [] },
-          ruling,
-          notice: { v: 1, call_id: "notice" },
+  it("keeps a get_remedy_plans call that is not a notice, once its input is in", () => {
+    const { groupMap } = identifyCompactToolGroups(
+      [
+        {
+          type: "tool-archestra__get_remedy_plans",
+          toolCallId: "direct",
+          state: "input-available",
+          input: {},
         },
-      },
-      parts[2],
-      {
-        type: "tool-archestra__todo_write",
-        toolCallId: "retry-todo",
-        state: "output-available",
-        input: { todos: [] },
-        output: "ok",
-      },
-    ] as UIMessage["parts"];
-    const nonCompact = identifyCompactToolGroups(nonCompactParts, {
-      getToolShortName,
-    });
-    expect(nonCompact.groupMap.size).toBe(0);
-    expect(
-      nonCompact.remedyChainCards.get(0)?.finalAttempt?.part.toolCallId,
-    ).toBe("retry-todo");
-    expect([...nonCompact.consumedIndices].sort()).toEqual([1, 2]);
+      ] as UIMessage["parts"],
+      { getToolShortName },
+    );
+
+    expect(groupMap.get(0)?.entries).toHaveLength(1);
   });
 
   it("groups adjacent compact-eligible tool calls together", () => {

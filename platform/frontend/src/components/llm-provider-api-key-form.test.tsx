@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type UseFormReturn, useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -476,6 +476,51 @@ describe("LlmProviderApiKeyForm", () => {
     await waitFor(() => {
       expect(form.getValues("name")).toBe("Microsoft 365 Copilot (3)");
     });
+  });
+
+  it("offers the ChatGPT tab only while ChatGPT is on, under the organization's name", async () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          openai: { plans: { personal: { displayName: "Company ChatGPT" } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    renderForm();
+
+    expect(
+      await screen.findByRole("tab", { name: "Company ChatGPT" }),
+    ).toBeInTheDocument();
+    cleanup();
+
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          openai: { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    renderForm();
+
+    await waitFor(() => expect(form.getValues("name")).toBe("OpenAI"));
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(form.getValues("authMethod")).toBe("api-key");
+  });
+
+  it("opens on the ChatGPT sign-in when OpenAI API keys are off", async () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          openai: { plans: { apiKey: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    renderForm();
+
+    await waitFor(() =>
+      expect(form.getValues("authMethod")).toBe("subscription"),
+    );
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 
   it("retitles the auto-filled name to match the OpenAI credential type", async () => {

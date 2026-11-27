@@ -1286,14 +1286,24 @@ function guardrailsStatus(
   /** Setup connects this agent to the MCP gateway. */
   gateway: boolean,
 ): {
-  tone?: "ok" | "warn" | "block";
+  tone?: "ok" | "observe" | "warn" | "block";
   label: string;
   detail: string;
 } | null {
-  const { state } = data.guardrails;
+  const { state, observing } = data.guardrails;
   if (state === null) return null;
-  // Three states: Enforced, Not enforced (requests bypass the guardrails and
-  // run without checks) and Blocked.
+  // A reached agent's calls are checked; under Observe they still run.
+  const checked = (detail: string) =>
+    observing
+      ? {
+          tone: "observe" as const,
+          label: "Observe only",
+          detail: `${detail} Under Observe each call is checked and recorded, but not blocked.`,
+        }
+      : { tone: "ok" as const, label: "Enforced", detail };
+  // Four states: Enforced, Observe only (checked and recorded, not blocked),
+  // Not enforced (requests bypass the guardrails and run without checks) and
+  // Blocked.
   if (state === "off")
     return {
       tone: "warn",
@@ -1305,11 +1315,9 @@ function guardrailsStatus(
   // gateway, which approvals also go through: a setup without it adds none.
   if (client.id === "cursor" && !routed)
     return gateway
-      ? {
-          tone: "ok",
-          label: "Enforced",
-          detail: `Each of ${client.label}'s tool calls is checked against your organization's policy, through hooks that setup adds to ${client.label}. ${client.label} keeps its own models and your ${client.label} plan.`,
-        }
+      ? checked(
+          `Each of ${client.label}'s tool calls is checked against your organization's policy, through hooks that setup adds to ${client.label}. ${client.label} keeps its own models and your ${client.label} plan.`,
+        )
       : {
           tone: "warn",
           label: "Not enforced",
@@ -1325,18 +1333,13 @@ function guardrailsStatus(
           : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
     };
   if (client.id === "chatgpt")
-    return {
-      tone: "ok",
-      label: "Enforced",
-      detail:
-        "Each tool call in the desktop app's Work and Codex tabs is checked against your organization's policy. Chats and dots run on OpenAI's servers, so they aren't checked.",
-    };
+    return checked(
+      "Each tool call in the desktop app's Work and Codex tabs is checked against your organization's policy. Chats and dots run on OpenAI's servers, so they aren't checked.",
+    );
   if (GUARDRAILS_NATIVE.has(client.id))
-    return {
-      tone: "ok",
-      label: "Enforced",
-      detail: `Each of ${client.label}'s tool calls is checked against your organization's policy.`,
-    };
+    return checked(
+      `Each of ${client.label}'s tool calls is checked against your organization's policy.`,
+    );
   return state === "block"
     ? {
         tone: "block",
@@ -1479,6 +1482,8 @@ function ProfileCard({
       icon:
         guard.tone === "ok" ? (
           <ShieldCheck className="text-emerald-600 dark:text-emerald-400" />
+        ) : guard.tone === "observe" ? (
+          <ShieldCheck className="text-amber-600 dark:text-amber-400" />
         ) : (
           <ShieldOff
             className={cn(

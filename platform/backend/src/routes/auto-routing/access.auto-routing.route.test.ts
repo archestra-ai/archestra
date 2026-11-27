@@ -2,6 +2,7 @@ import { authPlugin } from "@/auth/fastify-plugin";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import AutoRouterModel from "@/models/auto-router";
+import RoutingBackfillModel from "@/models/routing-backfill";
 import ServiceAccountModel from "@/models/service-account";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { autoRouterId, configureAutoRouting } from "@/test/auto-routing";
@@ -23,7 +24,8 @@ const reads = (routerId: string) =>
     { method: "GET", url: "/api/auto-routing/backfill" },
     { method: "GET", url: `/api/auto-routing/routers/${routerId}/diagnostics` },
   ] as const;
-const writes = (routerId: string) =>
+const NO_BACKFILL_ID = "00000000-0000-4000-8000-000000000003";
+const writes = (routerId: string, backfillId = NO_BACKFILL_ID) =>
   [
     {
       method: "PUT",
@@ -41,7 +43,11 @@ const writes = (routerId: string) =>
       url: `/api/auto-routing/routers/${routerId}/preview`,
       payload: { text: "Fix a typo" },
     },
-    { method: "POST", url: "/api/auto-routing/backfill/scan" },
+    {
+      method: "POST",
+      url: "/api/auto-routing/backfill/scan",
+      payload: { latestBackfillId: null },
+    },
     {
       method: "POST",
       url: "/api/auto-routing/backfill/score",
@@ -52,7 +58,10 @@ const writes = (routerId: string) =>
         maxCostUsd: 1,
       },
     },
-    { method: "DELETE", url: "/api/auto-routing/backfill" },
+    {
+      method: "DELETE",
+      url: `/api/auto-routing/backfill/${backfillId}?phase=scan`,
+    },
     { method: "DELETE", url: `/api/auto-routing/routers/${routerId}` },
   ] as const;
 
@@ -136,7 +145,10 @@ describe("auto routing API access", () => {
     const expected = [200, 200, 200, 400, 200, 409, 200, 200];
 
     const statuses = [];
-    for (const request of writes(routerId)) {
+    for (const index of writes(routerId).keys()) {
+      // The cancel names the scan the earlier write started.
+      const latest = await RoutingBackfillModel.findLatest(organizationId);
+      const request = writes(routerId, latest?.id)[index];
       statuses.push(
         (await app.inject({ ...request, headers: { authorization } }))
           .statusCode,

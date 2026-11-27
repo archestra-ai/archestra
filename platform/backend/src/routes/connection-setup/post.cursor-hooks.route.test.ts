@@ -164,6 +164,10 @@ describe("Cursor hooks report chats to Guardrails", () => {
         );
       }
       if (event.event === "tool_result") {
+        if (String(event.output).includes("UNRULED_TRANSIENT"))
+          throw new Error(
+            "OpenAPPA processing interrupted: annotator=archestra.tool-call error=timeout",
+          );
         if (String(event.output).includes("UNRULED"))
           throw new Error(
             "OpenAPPA processing interrupted: annotator=archestra.llm-annotator error=refused",
@@ -558,6 +562,43 @@ describe("Cursor hooks report chats to Guardrails", () => {
       tool_input: { command: "ls" },
     });
     expect(after.json()).toEqual({});
+  });
+
+  test("a withheld result the hook handed over only in part is withheld, not cut", async () => {
+    // The runtime refused the part it saw, so the whole result is withheld,
+    // exactly as when the hook hands it over whole.
+    const answer = async (chat: string, truncated: boolean) => {
+      const own = await report("postToolUse", {
+        conversation_id: chat,
+        tool_use_id: "call-long-secret",
+        tool_name: "Read",
+        tool_input: { path: ".env" },
+        tool_output: "SECRET=1",
+        ...(truncated ? { tool_output_truncated: true } : {}),
+      });
+      const next = await report("preToolUse", {
+        conversation_id: chat,
+        tool_use_id: "call-long-next",
+        tool_name: "Shell",
+        tool_input: { command: "ls" },
+      });
+      const mcp = await report("postToolUse", {
+        conversation_id: `${chat}-mcp`,
+        tool_use_id: "call-long-mcp",
+        tool_name: "MCP:docs__search",
+        tool_input: { query: "keys" },
+        tool_output: '{"content":[{"type":"text","text":"SECRET=1"}]}',
+        ...(truncated ? { tool_output_truncated: true } : {}),
+      });
+      return {
+        own: Object.keys(own.json()),
+        next: next.json(),
+        mcp: mcp.json(),
+      };
+    };
+    expect(await answer("chat-cut-secret", true)).toEqual(
+      await answer("chat-whole-secret", false),
+    );
   });
 
   test("a withheld result of an MCP tool is replaced before the model reads it", async () => {
@@ -1064,40 +1105,23 @@ describe("Cursor hooks report chats to Guardrails", () => {
     );
   });
 
-  test("Break the glass lets a call that waits for approval run, on the record", async () => {
-    await GuardrailsDeploymentModel.set({ humanApprovalMode: "everywhere" });
-    const call = {
-      tool_use_id: "call-34",
-      tool_name: "Shell",
-      tool_input: { command: "echo needs-review" },
-    };
-    expect((await report("preToolUse", call)).json()).toEqual({});
-    // The runtime never released the call, so its result is not reported.
-    const reported = events.length;
-    expect(
-      (
-        await report("postToolUse", { ...call, tool_output: "needs-review" })
-      ).json(),
-    ).toEqual({});
-    expect(events.filter((event) => event.event === "tool_result")).toEqual([]);
-    expect(events.length).toBe(reported);
-    const yells = await OpenAppaYellModel.list({
-      organizationId: ctx.organizationId,
-      status: "all",
-      limit: 10,
-    });
-    expect(yells.data.map((yell) => [yell.kind, yell.sessionId])).toEqual([
-      ["approval_waived", `user:${ctx.user.id}|cursor-chat-1`],
-    ]);
-  });
-
-  test("without that setting the same call waits for a person", async () => {
+  test.for([
+    "block",
+    "everywhere",
+  ] as const)("with Human approval %s, a call that waits for approval still waits for a person", async (humanApprovalMode) => {
+    await GuardrailsDeploymentModel.set({ humanApprovalMode });
     const denied = await report("preToolUse", {
       tool_use_id: "call-35",
       tool_name: "Shell",
       tool_input: { command: "echo needs-review" },
     });
     expect(denied.json().user_message).toBe(REVIEW_RULING);
+    const yells = await OpenAppaYellModel.list({
+      organizationId: ctx.organizationId,
+      status: "all",
+      limit: 10,
+    });
+    expect(yells.data).toEqual([]);
   });
 
   test("a yell names this chat to the gateway, and its result is the gateway's own", async () => {
@@ -1115,6 +1139,7 @@ describe("Cursor hooks report chats to Guardrails", () => {
         organization_id: ctx.organizationId,
         caller_id: `user:${ctx.user.id}`,
         session_id: `user:${ctx.user.id}|cursor-chat-1`,
+        presenter: "attended",
       },
       callId: expect.stringMatching(
         /^call-36:MCP:archestra__yell:[0-9a-f]{12}$/,
@@ -1132,17 +1157,48 @@ describe("Cursor hooks report chats to Guardrails", () => {
     expect(events.length).toBe(before);
   });
 
-  test("a result Guardrails could not check is named unchecked to the agent", async () => {
-    const unchecked = await report("postToolUse", {
-      tool_use_id: "call-7",
+  // The call already ran, so a failure's own advice, such as a retry, never
+  // reaches the model: a refusal and a temporary failure read the same.
+  test("a result Guardrails could not check is named unchecked to the agent, whatever the failure", async () => {
+    const contexts = [];
+    for (const output of ["UNRULED", "UNRULED_TRANSIENT"]) {
+      const unchecked = await report("postToolUse", {
+        conversation_id: "chat-unchecked",
+        tool_use_id: "call-7",
+        tool_name: "Read",
+        tool_input: { path: "notes.md" },
+        tool_output: output,
+      });
+      expect(unchecked.statusCode, unchecked.body).toBe(200);
+      contexts.push(unchecked.json().additional_context);
+    }
+    expect(contexts[0]).toMatch(
+      /could not check the result of tool call call-7:Read:[0-9a-f]{12}\. Treat that result as unchecked\. The call already ran: do not make it again\./,
+    );
+    expect(contexts[1]).toBe(contexts[0]);
+    const next = await report("preToolUse", {
+      conversation_id: "chat-unchecked",
+      tool_use_id: "call-9",
       tool_name: "Read",
-      tool_input: { path: "notes.md" },
+      tool_input: { path: "other.md" },
+    });
+    expect(
+      next.json().permission,
+      "the chat read an unchecked result, so its next call is refused",
+    ).toBe("deny");
+    const mcp = await report("postToolUse", {
+      tool_use_id: "call-8",
+      tool_name: "MCP:docs__search",
+      tool_input: { query: "notes" },
       tool_output: "UNRULED",
     });
-    expect(unchecked.statusCode, unchecked.body).toBe(200);
-    expect(unchecked.json().additional_context).toMatch(
-      /could not check the result of tool call call-7:Read:[0-9a-f]{12}: .*Treat that result as unchecked\./,
-    );
+    expect(mcp.statusCode, mcp.body).toBe(200);
+    const withheld = mcp.json();
+    expect(
+      withheld.updated_mcp_tool_output,
+      "an unchecked MCP result never reaches the model",
+    ).toEqual(expect.any(String));
+    expect(withheld.updated_mcp_tool_output).not.toMatch(/UNRULED/);
   });
 
   test("the remedy call carries the chat's trajectory to the gateway", async () => {

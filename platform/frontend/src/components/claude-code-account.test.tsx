@@ -13,6 +13,7 @@ import {
   expect,
   it,
 } from "vitest";
+import { organizationKeys } from "@/lib/organization.query";
 import { ClaudeCodeAccount } from "./claude-code-account";
 
 const origin = "http://localhost:9000";
@@ -284,5 +285,26 @@ it("says the account could not be checked instead of offering a sign-in that can
   await screen.findByText("Could not check Claude Code");
   expect(
     screen.queryByRole("button", { name: "Sign in with Claude" }),
+  ).not.toBeInTheDocument();
+});
+
+it("offers no new sign-in once Claude Code is turned off, and says so in plain words", async () => {
+  server.use(
+    http.get(accountUrl, () => HttpResponse.json({ state: "disconnected" })),
+  );
+  queryClient.setQueryData(organizationKeys.details(), {
+    modelProviderOverrides: {
+      anthropic: { plans: { personal: { hidden: true } } },
+    },
+  });
+  renderAccount("compact");
+
+  expect(
+    await screen.findByText(
+      "Claude Code is turned off for this organization. Ask an administrator to turn it on under Settings → LLM → Model providers.",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Sign in" }),
   ).not.toBeInTheDocument();
 });

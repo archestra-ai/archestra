@@ -10,6 +10,7 @@ import { spyOnLogger } from "@/test/logging";
 import {
   readGuardrailsV2Activation,
   setGuardrailsDeployment,
+  turnOnForFirstPolicy,
 } from "./guardrails-deployment";
 
 spyOnLogger();
@@ -134,5 +135,108 @@ describe("setGuardrailsDeployment", () => {
     await clear();
     await setGuardrailsDeployment({ enabled: true });
     expect(await queued()).toEqual([]);
+  });
+});
+
+describe("turnOnForFirstPolicy", () => {
+  test("saves Enforce only while no mode was saved, and never overwrites one", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: "admin" });
+    const first = { organizationId, userId, revision: 1 };
+
+    for (const mode of ["off", "observe"] as const) {
+      await setGuardrailsDeployment({ mode });
+      const before = await GuardrailsDeploymentModel.get();
+      await expect(turnOnForFirstPolicy(first)).resolves.toMatchObject({
+        turnedOn: false,
+      });
+      expect(await GuardrailsDeploymentModel.get()).toEqual(before);
+    }
+
+    await db.delete(schema.guardrailsDeploymentTable);
+    await GuardrailsDeploymentModel.set({
+      unapprovableBlockMode: "allow",
+      humanApprovalMode: "unattended",
+      breakTheGlassEnabled: false,
+    });
+    await expect(turnOnForFirstPolicy(first)).resolves.toEqual({
+      enabled: true,
+      turnedOn: true,
+    });
+    // The switch is written with Enforce's waiver column, so an older replica
+    // waives nothing; the other legacy settings stay as stored.
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      mode: "enforce",
+      enabled: true,
+      unapprovableBlockMode: "refuse",
+      humanApprovalMode: "unattended",
+      breakTheGlassEnabled: false,
+    });
+  });
+
+  test("a save that names no mode leaves it unsaved, so the first publish still switches on", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: "admin" });
+    await setGuardrailsDeployment({ breakTheGlassEnabled: false });
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      mode: null,
+      enabled: false,
+    });
+    await expect(
+      turnOnForFirstPolicy({ organizationId, userId, revision: 1 }),
+    ).resolves.toEqual({ enabled: true, turnedOn: true });
+  });
+
+  test("an Off saved after the first-publish check wins over its write", async () => {
+    // A fresh deployment passes the check; then an administrator saves Off.
+    await setGuardrailsDeployment({ mode: "off" });
+    expect(await GuardrailsDeploymentModel.turnOnIfNeverSet()).toBe(false);
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      mode: "off",
+      enabled: false,
+    });
+    await db.delete(schema.guardrailsDeploymentTable);
+    expect(await GuardrailsDeploymentModel.turnOnIfNeverSet()).toBe(true);
+    expect(await GuardrailsDeploymentModel.turnOnIfNeverSet()).toBe(false);
+  });
+});
+
+describe("GuardrailsDeploymentModel.reset", () => {
+  test("puts every deployment setting back to its column default", async () => {
+    await setGuardrailsDeployment({
+      mode: "observe",
+      personApproval: "auto_everywhere",
+      enforcedMarks: ["payments"],
+      breakTheGlassEnabled: false,
+      unsupportedClientAction: "block",
+    });
+    await db.transaction((tx) => GuardrailsDeploymentModel.reset(tx));
+    expect(await db.select().from(schema.guardrailsDeploymentTable)).toEqual(
+      [],
+    );
+    // With no row, the settings read as a row holding only column defaults.
+    const table = schema.guardrailsDeploymentTable;
+    await db.insert(table).values({ id: "defaults" });
+    const [defaults] = await db
+      .select()
+      .from(table)
+      .where(eq(table.id, "defaults"));
+    await db.delete(table).where(eq(table.id, "defaults"));
+    expect({
+      ...(await GuardrailsDeploymentModel.get()),
+      id: "defaults",
+    }).toEqual(defaults);
   });
 });

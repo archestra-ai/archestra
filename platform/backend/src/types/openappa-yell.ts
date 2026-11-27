@@ -4,10 +4,10 @@ import { z } from "zod";
 import { openappaYellsTable } from "@/database/schemas/openappa-yell";
 
 /**
- * Who raised a yell: the agent with its own `yell` call (`agent`), or the
- * platform when Break the glass settings let a blocked call through: one that
- * waited for human approval (`approval_waived`) or one no remedy could lift
- * (`block_waived`).
+ * Who raised a yell: the agent with its own `yell` call (`agent`). Earlier
+ * releases also recorded the platform letting a blocked call through: one
+ * that waited for human approval (`approval_waived`) or one no remedy could
+ * lift (`block_waived`); those rows are still read.
  */
 export const OpenAppaYellKindSchema = z.enum([
   "agent",
@@ -51,7 +51,6 @@ export const InsertOpenAppaYellSchema = createInsertSchema(
   toolCallId: true,
   message: true,
   withTrajectory: true,
-  superyell: true,
 });
 export type InsertOpenAppaYell = z.infer<typeof InsertOpenAppaYellSchema>;
 export const OpenAppaYellQuerySchema = CursorQuerySchema.extend({

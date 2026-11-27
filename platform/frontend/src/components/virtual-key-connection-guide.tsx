@@ -559,6 +559,7 @@ export function RequestExample({
   virtualApiKeyId,
   grantedRouterIds,
   fields,
+  compactCode = false,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -609,6 +610,7 @@ export function RequestExample({
    * which copies the real key when the reader may read it.
    */
   fields?: React.ReactNode;
+  compactCode?: boolean;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
@@ -941,6 +943,7 @@ export function RequestExample({
           code={example}
           secret={secret}
           placeholder={`$${credentialEnvVar}`}
+          compact={compactCode}
         />
       </div>
     );
@@ -1137,14 +1140,16 @@ export function MaskedCodeExample({
  * real key in the command when the reader may read it (their own key, or one
  * just created), and the env var otherwise; the block itself stays masked.
  */
-function FloatingCodeExample({
+export function FloatingCodeExample({
   code,
   secret,
-  placeholder,
+  placeholder = MASKED_KEY,
+  compact = false,
 }: {
   code: string;
-  secret: RevealableSecret | undefined;
-  placeholder: string;
+  secret?: RevealableSecret;
+  placeholder?: string;
+  compact?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -1168,7 +1173,8 @@ function FloatingCodeExample({
       <pre
         className={cn(
           terminalCodeClass,
-          "m-0 max-h-[360px] overflow-auto px-4 py-3.5 pr-24 text-[12.5px] leading-7",
+          "m-0 max-h-[360px] overflow-auto px-4 py-3.5 pr-24 text-[12.5px]",
+          compact ? "leading-[22px]" : "leading-7",
         )}
       >
         <HighlightedCurl code={code} />

@@ -65,7 +65,7 @@ url = "${noopUrl}"
 });
 
 // Each test opens its own organization, so its deployment compiles against the endpoint it published.
-const scope = () => ({ organization_id: `archestra-annotator-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() });
+const scope = () => ({ organization_id: `archestra-annotator-${randomUUID()}`, presenter: 'attended', caller_id: 'user:test', session_id: randomUUID() });
 const hook = async (policy, session, event) =>
   JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
 const call = (policy, session, id, tool, args) =>

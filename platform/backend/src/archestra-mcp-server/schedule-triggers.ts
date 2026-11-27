@@ -996,8 +996,9 @@ function condensePart(
   }
   // Reasoning and step markers carry nothing an investigation needs.
   if (type === "reasoning" || type === "step-start") return null;
-  // Other data parts (hook runs, MCP tasks) keep their payload; files and
-  // sources stay visible by type.
+  // Other data parts (MCP tasks, and hook runs readRunTranscript left for a
+  // debug-mode agent admin) keep their payload; files and sources stay
+  // visible by type.
   if (type.startsWith("data-") && part.data !== undefined)
     return {
       type,

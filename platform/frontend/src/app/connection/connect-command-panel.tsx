@@ -4,6 +4,7 @@ import {
   DocsPage,
   OPENCODE_PRIMARY_PROVIDERS,
   PROVIDERS_REQUIRING_BASE_URL,
+  personalSubscriptionTurnedOffMessage,
   providerRequiresPerUserCredential,
   resolveMcpClientServerName,
   type SupportedProvider,
@@ -416,12 +417,23 @@ export function ConnectCommandPanel({
   // OpenCode and Kilo Code get one virtual key for many providers. Other
   // clients get a virtual key when an admin mapped keys for them, and
   // otherwise keep the user's own provider key or subscription.
+  const grokNativeSessionAllowed =
+    !providerCatalog.isPersonalSubscriptionHidden("xai");
   const [grokAuthChoice, setGrokAuthChoice] = useState<
     "native-session" | "provider-key" | "virtual-key" | null
   >(null);
+  const effectiveGrokAuthChoice =
+    grokAuthChoice === "native-session" && !grokNativeSessionAllowed
+      ? null
+      : grokAuthChoice;
   const proxyAuth: ConnectProxyAuth =
     client.id === "grok-build"
-      ? (grokAuthChoice ?? "native-session")
+      ? (effectiveGrokAuthChoice ??
+        (grokNativeSessionAllowed
+          ? "native-session"
+          : adminMappedProviders.size > 0 && canAttribute === true
+            ? "virtual-key"
+            : "provider-key"))
       : client.id === "cursor" || client.id === "pi" || openCodeFamily
         ? "primary-providers"
         : adminMappedProviders.size > 0 && canAttribute === true
@@ -519,18 +531,13 @@ export function ConnectCommandPanel({
 
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
-  // A GitHub Copilot account whose plan the admins turned off is never offered,
-  // so a setup can't bind it: each plan's own switch decides. Other providers
-  // keep their own rules here (the provider list already drops hidden ones).
+  // An account whose plan the admins turned off (API keys, a personal
+  // subscription, a GitHub Copilot plan) is never offered, so a setup can't
+  // bind it: each plan's own switch decides, as the server's check does.
   const { data: allAvailableKeys, isPending: availableKeysPending } =
     useAvailableLlmProviderApiKeys();
   const availableKeys = useMemo(
-    () =>
-      allAvailableKeys?.filter(
-        (key) =>
-          key.provider !== "github-copilot" ||
-          !providerCatalog.isKeyHidden(key),
-      ),
+    () => allAvailableKeys?.filter((key) => !providerCatalog.isKeyHidden(key)),
     [allAvailableKeys, providerCatalog],
   );
   const usableOpenCodeKeys = useMemo(
@@ -577,6 +584,11 @@ export function ConnectCommandPanel({
     proxyAuth,
   ]);
 
+  const claudeDesktopSubscriptionHidden =
+    client.id === "claude-desktop" &&
+    proxyAuth === "provider-key" &&
+    providerCatalog.isPersonalSubscriptionHidden("anthropic");
+
   // A virtual key can only be minted against a configured key, so virtual-key
   // mode never offers a provider the command would fail on. Passthrough needs
   // no key (the user brings their own at runtime).
@@ -592,6 +604,7 @@ export function ConnectCommandPanel({
             );
       return supportedProviders.filter((provider) => backing.has(provider));
     }
+    if (claudeDesktopSubscriptionHidden) return [];
     if (proxyAuth === "native-session")
       return supportedProviders.filter((provider) => provider === "xai");
     if (proxyAuth !== "virtual-key") return supportedProviders;
@@ -610,6 +623,7 @@ export function ConnectCommandPanel({
     proxyAuth,
     configuredProviders,
     allPrimaryProviders,
+    claudeDesktopSubscriptionHidden,
     usableOpenCodeKeys,
     adminMappedProviders,
     client.id,
@@ -1383,9 +1397,11 @@ export function ConnectCommandPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="native-session">
-              Your SuperGrok subscription (native login)
-            </SelectItem>
+            {grokNativeSessionAllowed ? (
+              <SelectItem value="native-session">
+                {`Your ${providerCatalog.personalSubscriptionLabel("xai")} subscription (native login)`}
+              </SelectItem>
+            ) : null}
             <SelectItem value="provider-key">
               Your own API key (passthrough)
             </SelectItem>
@@ -1583,22 +1599,25 @@ export function ConnectCommandPanel({
               </span>
             ) : effectiveProxyAuth === "native-session" ? (
               <span>
-                Reuses your native SuperGrok login, model names and model
-                selection. Grok refreshes its original credentials directly;
-                nothing is copied. Use /login inside Grok to renew your login.
-                {appName} protection appears in the session receipt. No API key
-                or organization model catalog is required. MCP authorization is
-                a separate sign-in.
+                {`Reuses your native ${providerCatalog.personalSubscriptionLabel("xai")} login, model names and model selection. Grok refreshes its original credentials directly; nothing is copied. Use /login inside Grok to renew your login. ${appName} protection appears in the session receipt. No API key or organization model catalog is required. MCP authorization is a separate sign-in.`}
               </span>
             ) : effectiveProxyAuth === "provider-key" ? (
               client.id === "claude-desktop" ? (
-                <span>
-                  The installer opens Claude subscription sign-in and configures
-                  Desktop. Your token stays on your computer.
-                </span>
+                claudeDesktopSubscriptionHidden ? (
+                  <span>
+                    {personalSubscriptionTurnedOffMessage(
+                      providerCatalog.overrides,
+                      "anthropic",
+                    )}
+                  </span>
+                ) : (
+                  <span>
+                    {`The installer opens ${providerCatalog.personalSubscriptionLabel("anthropic", "Claude")} subscription sign-in and configures Desktop. Your token stays on your computer.`}
+                  </span>
+                )
               ) : client.id === "grok-build" ? (
                 <span>
-                  {`Requests use your own ${provider === "xai" ? "XAI_API_KEY" : provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"}. The key stays on your computer until Grok sends it through the proxy. Choose native login instead to use your SuperGrok subscription.`}
+                  {`Requests use your own ${provider === "xai" ? "XAI_API_KEY" : provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"}. The key stays on your computer until Grok sends it through the proxy.${grokNativeSessionAllowed ? ` Choose native login instead to use your ${providerCatalog.personalSubscriptionLabel("xai")} subscription.` : ""}`}
                   {passthroughAttributes ? (
                     <span>
                       {" "}
@@ -1903,8 +1922,12 @@ export function ConnectCommandPanel({
       </div>
     ) : null;
 
-  const noVirtualKeyMessage =
-    client.id === "cursor"
+  const noVirtualKeyMessage = claudeDesktopSubscriptionHidden
+    ? personalSubscriptionTurnedOffMessage(
+        providerCatalog.overrides,
+        "anthropic",
+      )
+    : client.id === "cursor"
       ? CURSOR_NO_KEYS_MESSAGE
       : allPrimaryProviders
         ? `No usable primary model providers are available, so ${client.label} connects without model routing. Mark a compatible provider key as primary to route its models.`
@@ -2104,7 +2127,7 @@ export function ConnectCommandPanel({
                     using{" "}
                     <span className="font-medium text-foreground">
                       {client.id === "claude-desktop"
-                        ? "your Claude subscription"
+                        ? `your ${providerCatalog.personalSubscriptionLabel("anthropic", "Claude")} subscription`
                         : "your provider key"}
                     </span>
                   </span>
@@ -2260,7 +2283,7 @@ export function ConnectCommandPanel({
                     ownKeyLabel:
                       client.id === "grok-build"
                         ? proxyAuth === "native-session"
-                          ? "Your SuperGrok subscription (native login)"
+                          ? `Your ${providerCatalog.personalSubscriptionLabel("xai")} subscription (native login)`
                           : "Your own API key (passthrough)"
                         : undefined,
                     providerLabels:
@@ -2433,6 +2456,10 @@ export function ConnectCommandPanel({
                 <InlineNoticeText>
                   {`Routing ${client.label}'s models needs permission to create virtual keys, so it connects without model routing.`}
                 </InlineNoticeText>
+              </InlineNotice>
+            ) : claudeDesktopSubscriptionHidden && hasProxy && includeProxy ? (
+              <InlineNotice variant="info">
+                <InlineNoticeText>{noVirtualKeyMessage}</InlineNoticeText>
               </InlineNotice>
             ) : virtualKeyUnbacked && allPrimaryProviders ? (
               <InlineNotice variant="info">

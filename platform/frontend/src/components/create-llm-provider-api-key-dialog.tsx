@@ -81,10 +81,14 @@ export function CreateLlmProviderApiKeyDialog({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const lastResetKeyRef = useRef<string | null>(null);
-  // Providers a person may add a key for: GitHub Copilot also needs its
-  // personal subscriptions on, since a key made here is a personal sign-in.
+  // Providers a person may add this kind of credential for: an API key needs
+  // the provider's API keys on, a sign-in its personal subscription.
   const visibleProviderIdsKey = providerCatalog.visibleIds
-    .filter(providerCatalog.canAddKey)
+    .filter(
+      credentialMode === "subscription"
+        ? providerCatalog.canAddPersonalSubscription
+        : providerCatalog.canAddApiKey,
+    )
     .join(",");
   const allowedProviderIdsKey = allowedProviders?.join(",") ?? null;
   const availableProviders = useMemo(() => {

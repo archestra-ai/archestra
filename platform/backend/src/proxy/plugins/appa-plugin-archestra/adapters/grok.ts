@@ -45,9 +45,6 @@ export class AppaGrokAdapter implements AppaClientAdapter {
   readonly rewriteRelayMessage = rewriteGrokRelayMessage;
   readonly admitRelayReport = admitGrokRelayReport;
   readonly admitsFailedRelayReports = true;
-  isUnattended(headers: IncomingHttpHeaders): boolean {
-    return readHeader(headers, "x-grok-client-mode") === "headless";
-  }
   readonly nativeQuestion = {
     toolName: "ask_user_question",
     supportsMultiple: true,
@@ -266,17 +263,6 @@ export class AppaGrokAdapter implements AppaClientAdapter {
       !namespace &&
       name === "spawn_subagent" &&
       !argumentRecord(args)?.resume_from
-    );
-  }
-  isChildContinuationTool(
-    name: string,
-    namespace?: string,
-    args?: unknown,
-  ): boolean {
-    return (
-      !namespace &&
-      name === "spawn_subagent" &&
-      Boolean(argumentRecord(args)?.resume_from)
     );
   }
   spawnPromptField(

@@ -1023,7 +1023,7 @@ describe("an agent's account lock", () => {
 
       expect(refused.statusCode, refused.body).toBe(400);
       expect(refused.json().error.message).toBe(
-        "To lock this agent to a company API key, its own account must be a company API key.",
+        "To lock this agent to an API key, its own account must be an API key.",
       );
       expect(await stored(id)).toMatchObject({
         claudeCode: { authentication: "provider" },

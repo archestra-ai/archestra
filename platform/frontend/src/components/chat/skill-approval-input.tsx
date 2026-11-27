@@ -7,7 +7,6 @@ import {
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { Response } from "@/components/ai-elements/response";
-import { SectionLabel } from "@/components/ai-elements/tool";
 import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,8 +18,8 @@ import type { SkillApprovalView } from "./skill-approval-presentation";
 
 export function SkillApprovalInput({ skill }: { skill: SkillApprovalView }) {
   return (
-    <div className="space-y-4 p-3">
-      <SectionLabel accent="bg-sky-400">Skill</SectionLabel>
+    <div className="space-y-4">
+      <p className="text-xs font-medium">Skill</p>
       <dl className="space-y-4">
         {skill.currentName ? (
           <SkillField label="Current name">

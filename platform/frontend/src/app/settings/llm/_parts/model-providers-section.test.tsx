@@ -182,3 +182,170 @@ describe("ModelProvidersSection — GitHub Copilot", () => {
     ).toBeNull();
   });
 });
+
+describe("ModelProvidersSection — personal subscriptions beside API keys", () => {
+  const pairs = [
+    { provider: "openai", apiKeys: "OpenAI", personal: "ChatGPT" },
+    { provider: "anthropic", apiKeys: "Anthropic", personal: "Claude Code" },
+    { provider: "xai", apiKeys: "xAI", personal: "SuperGrok" },
+  ] as const;
+  const apiKeySwitch = (label: string) =>
+    screen.getByRole("switch", { name: `Make ${label} API keys available` });
+  const personalSwitch = (label: string) =>
+    screen.getByRole("switch", {
+      name: `Make ${label} personal subscription available`,
+    });
+
+  it.each(pairs)("shows $apiKeys API keys and $personal as two cards", ({
+    provider,
+    apiKeys,
+    personal,
+  }) => {
+    render(<ModelProvidersSection />);
+
+    const apiKeyCard = screen.getByTestId(`model-provider-row-${provider}`);
+    expect(apiKeyCard).toHaveTextContent(apiKeys);
+    expect(apiKeyCard).toHaveTextContent("API keys");
+    expect(apiKeyCard).not.toHaveTextContent("Personal subscription");
+    const personalCard = screen.getByTestId(
+      `model-provider-row-${provider}-personal`,
+    );
+    expect(personalCard).toHaveTextContent(personal);
+    expect(personalCard).toHaveTextContent("Personal subscription");
+    expect(
+      screen.getByRole("textbox", {
+        name: `${personal} personal subscription display name`,
+      }),
+    ).toHaveAttribute("placeholder", `Show as “${personal}”`);
+  });
+
+  it.each(pairs)("turns off $personal alone", async ({
+    provider,
+    personal,
+  }) => {
+    render(<ModelProvidersSection />);
+
+    await userEvent.click(personalSwitch(personal));
+    await save();
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      modelProviderOverrides: {
+        [provider]: { plans: { personal: { hidden: true } } },
+      },
+    });
+  });
+
+  it.each(pairs)("stores both $apiKeys cards off as the provider off", async ({
+    provider,
+    apiKeys,
+    personal,
+  }) => {
+    render(<ModelProvidersSection />);
+
+    await userEvent.click(apiKeySwitch(apiKeys));
+    await userEvent.click(personalSwitch(personal));
+    await save();
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      modelProviderOverrides: { [provider]: { hidden: true } },
+    });
+  });
+
+  it.each(
+    pairs,
+  )("shows $apiKeys turned off as both cards off, and turns one back on", async ({
+    provider,
+    apiKeys,
+    personal,
+  }) => {
+    mockOrganization = {
+      modelProviderOverrides: { [provider]: { hidden: true } },
+    };
+    render(<ModelProvidersSection />);
+
+    expect(apiKeySwitch(apiKeys)).not.toBeChecked();
+    expect(personalSwitch(personal)).not.toBeChecked();
+
+    await userEvent.click(personalSwitch(personal));
+    await save();
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      modelProviderOverrides: {
+        [provider]: { plans: { apiKey: { hidden: true } } },
+      },
+    });
+  });
+
+  it("names the personal subscription apart from its provider's API keys", async () => {
+    render(<ModelProvidersSection />);
+
+    await userEvent.type(
+      screen.getByRole("textbox", {
+        name: "ChatGPT personal subscription display name",
+      }),
+      "My ChatGPT",
+    );
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "OpenAI API keys display name" }),
+      "OpenAI (company)",
+    );
+    await save();
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      modelProviderOverrides: {
+        openai: {
+          displayName: "OpenAI (company)",
+          plans: { personal: { displayName: "My ChatGPT" } },
+        },
+      },
+    });
+  });
+
+  it("keeps a personal subscription's name while it is off", async () => {
+    mockOrganization = {
+      modelProviderOverrides: {
+        xai: { plans: { personal: { displayName: "Grok" } } },
+      },
+    };
+    render(<ModelProvidersSection />);
+
+    expect(
+      screen.getByRole("textbox", {
+        name: "SuperGrok personal subscription display name",
+      }),
+    ).toHaveValue("Grok");
+    await userEvent.click(personalSwitch("SuperGrok"));
+    await save();
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      modelProviderOverrides: {
+        xai: { plans: { personal: { hidden: true, displayName: "Grok" } } },
+      },
+    });
+  });
+
+  it.each([
+    ["Claude Code", "model-provider-row-anthropic-personal"],
+    ["My Grok", "model-provider-row-xai-personal"],
+    ["Anthropic", "model-provider-row-anthropic-personal"],
+    ["personal subscription", "model-provider-row-openai-personal"],
+    ["personal subscription", "model-provider-row-microsoft-365-copilot"],
+  ])("finds a personal subscription card by %j", async (query, testId) => {
+    mockOrganization = {
+      modelProviderOverrides: {
+        xai: { plans: { personal: { displayName: "My Grok" } } },
+      },
+    };
+    render(<ModelProvidersSection />);
+
+    await userEvent.type(
+      screen.getByPlaceholderText("Search providers…"),
+      query,
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("model-provider-row-gemini")).toBeNull(),
+    );
+    expect(screen.getByTestId(testId)).toBeInTheDocument();
+  });
+});

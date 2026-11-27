@@ -253,7 +253,8 @@ rl.on("line", (line) => {
     );
     await viewLogsButton.click();
 
-    // Wait for logs content to appear inside the settings dialog
+    // The logs open on the server page's Logs tab.
+    await adminPage.waitForURL(/[?&]tab=logs/, { timeout: 30_000 });
     const logsContent = adminPage.getByTestId(E2eTestId.McpLogsContent);
     await logsContent.waitFor({ state: "visible", timeout: 30000 });
 
@@ -272,56 +273,38 @@ rl.on("line", (line) => {
       /(ErrImagePull|ImagePullBackOff|ErrImageNeverPull|Failed to pull|pull access denied|manifest unknown|repository does not exist|not found|denied)/i,
     );
 
-    // Close the settings dialog
-    await adminPage.keyboard.press("Escape");
-    await logsContent.waitFor({ state: "hidden", timeout: 5000 });
-
     // ========================================
     // STEP 4: Edit config to fix the image
     // ========================================
-    // Click "edit your config" link in the error banner (opens settings dialog to Configuration page)
-    const editConfigButton = adminPage.getByTestId(
-      `${E2eTestId.McpLogsEditConfigButton}-${CATALOG_ITEM_NAME}-issue`,
-    );
-    await editConfigButton.click();
-
-    // Wait for the settings dialog Configuration page to load
-    const settingsDialog = adminPage.getByRole("dialog", {
-      name: `${CATALOG_ITEM_NAME} Settings`,
+    // The server page's Edit action opens the configuration step.
+    await adminPage.getByRole("link", { name: "Edit", exact: true }).click();
+    await adminPage.waitForURL(/\/edit\?step=configuration/, {
+      timeout: 30_000,
     });
-    await settingsDialog.waitFor({ state: "visible", timeout: 10000 });
 
-    // Update the config to a valid MCP server that should start successfully
-    const dockerImageInput = settingsDialog.getByRole("textbox", {
+    // Update the config to a valid MCP server that should start successfully.
+    // The field holds the bogus image once the catalog item has loaded.
+    const dockerImageInput = adminPage.getByRole("textbox", {
       name: "Image (optional)",
     });
-    await dockerImageInput.clear();
+    await expect(dockerImageInput).toHaveValue(BOGUS_IMAGE, {
+      timeout: 30_000,
+    });
     await dockerImageInput.fill("");
 
-    const commandInput = settingsDialog.getByRole("textbox", {
-      name: "Command",
-    });
-    await commandInput.clear();
-    await commandInput.fill("node");
+    await adminPage.getByRole("textbox", { name: "Command" }).fill("node");
 
-    await settingsDialog
-      .getByRole("combobox", { name: "Transport Type" })
-      .click();
+    await adminPage.getByRole("combobox", { name: "Transport Type" }).click();
     await adminPage.getByRole("option", { name: "stdio", exact: true }).click();
 
-    const argumentsInput = settingsDialog.getByRole("textbox", {
-      name: "Arguments (one per line)",
-    });
-    await argumentsInput.clear();
-    await argumentsInput.fill(`-e\n${FIXED_MCP_SCRIPT}`);
+    await adminPage
+      .getByRole("textbox", { name: "Arguments (one per line)" })
+      .fill(`-e\n${FIXED_MCP_SCRIPT}`);
 
-    // Force manual reinstall by adding a prompted env var.
-    // Since #4696, the "Add Variable" button opens its own sub-dialog
-    // ("Add environment variable") and all env-var inputs scope to it.
-    // The new scope dropdown defaults to "Prompt at installation" — which
-    // is exactly what this test wants to force a manual reinstall — so we
-    // only need to fill the key and confirm; no scope toggle required.
-    await settingsDialog.getByRole("button", { name: "Add Variable" }).click();
+    // Force manual reinstall by adding a prompted env var. "Add Variable"
+    // opens its own sub-dialog, whose scope defaults to "Prompt at
+    // installation" — exactly what this test needs.
+    await adminPage.getByRole("button", { name: "Add Variable" }).click();
     const envVarDialog = adminPage.getByRole("dialog", {
       name: /Add environment variable/i,
     });
@@ -330,32 +313,26 @@ rl.on("line", (line) => {
     await envVarDialog.getByRole("button", { name: "Add variable" }).click();
     await envVarDialog.waitFor({ state: "hidden", timeout: 15_000 });
 
-    // Save changes (dialog stays open with keepOpenOnSave). The form's
-    // footer transforms into an inline confirm bar when the save would
-    // cascade — same surface, no stacked dialog. The CTA matches the
-    // backend path: this edit (command + prompted env var) takes the
-    // manual reinstall path, so the button is "Save change". An
-    // auto-path edit shows "Save and restart" and a pure rename "Save
-    // and rename" — match any to keep the test robust.
-    await clickButton({ page: adminPage, options: { name: "Save Changes" } });
-    const confirmReinstallButton = settingsDialog.getByRole("button", {
-      name: /Save (change|and (restart|rename))/,
+    // Save returns to the server page. When the save cascades to the install,
+    // the footer first turns into an inline confirm bar; this edit (command +
+    // prompted env var) takes the manual reinstall path ("Save change").
+    await adminPage.getByRole("button", { name: "Save", exact: true }).click();
+    const confirmReinstallButton = adminPage.getByRole("button", {
+      name: /^Save (change|and (restart|rename))$/,
     });
-    if (await confirmReinstallButton.isVisible().catch(() => false)) {
-      await confirmReinstallButton.click();
-      await confirmReinstallButton.waitFor({
-        state: "hidden",
-        timeout: 15_000,
-      });
-    }
-    await adminPage.waitForLoadState("domcontentloaded");
+    await expect(async () => {
+      if (await confirmReinstallButton.isVisible()) {
+        await confirmReinstallButton.click();
+      }
+      expect(adminPage.url()).not.toContain("/edit");
+    }).toPass({ timeout: 60_000, intervals: [500, 1000, 2000] });
 
     // ========================================
-    // STEP 5: Click install/reinstall and wait for tools discovery
+    // STEP 5: Reinstall with the prompted value and wait for tools discovery
     // ========================================
-    // Reinstall from the settings dialog. Failed local installations do not
-    // expose a card-level install action while the personal connection exists.
-    const reinstallActionButton = settingsDialog.getByRole("button", {
+    // The registry card offers Reinstall once the install is flagged.
+    await goToMcpRegistry(adminPage);
+    const reinstallActionButton = serverCard.getByRole("button", {
       name: "Reinstall",
     });
     await reinstallActionButton.waitFor({ state: "visible", timeout: 120_000 });
@@ -374,7 +351,6 @@ rl.on("line", (line) => {
       .click();
     await reinstallDialog.waitFor({ state: "hidden", timeout: 30_000 });
     await closeOpenDialogs(adminPage, { timeoutMs: 10_000 });
-    await expect(settingsDialog).not.toBeVisible({ timeout: 10_000 });
 
     await expect(async () => {
       await goToMcpRegistry(adminPage);

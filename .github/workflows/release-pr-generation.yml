@@ -36,11 +36,39 @@ jobs:
             const {selectGeneration} = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-pr-generation.mjs`);
             core.setOutput('run', String(await selectGeneration({github, context})));
 
-  openapi:
-    name: Generate release OpenAPI
+  # Release-please pushes this PR after nearly every merge to main, often
+  # minutes apart, and each generation spends ~40 paid runner minutes. Wait
+  # for the PR to settle so only the last push of a burst generates: a newer
+  # selected push cancels this wait before any generator starts. Only selected
+  # runs enter this group, so the generated push cannot cancel a pending wait.
+  # Set the RELEASE_GENERATION_SETTLE_MINUTES variable to 0 to skip the wait.
+  settle:
+    name: Wait for release-please to settle
     needs: select
     if: needs.select.outputs.run == 'true'
-    runs-on: ubuntu-24.04-16core
+    concurrency:
+      group: release-generation-settle-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions: {}
+    steps:
+      - name: Wait
+        env:
+          SETTLE_MINUTES: ${{ vars.RELEASE_GENERATION_SETTLE_MINUTES || '30' }}
+        run: |
+          if ! [[ "$SETTLE_MINUTES" =~ ^[0-9]+$ ]] || [ "$SETTLE_MINUTES" -gt 60 ]; then
+            echo "::error::RELEASE_GENERATION_SETTLE_MINUTES must be a whole number of minutes from 0 to 60, got '${SETTLE_MINUTES}'."
+            exit 1
+          fi
+          echo "Waiting ${SETTLE_MINUTES} min; a newer release-please push cancels this run."
+          sleep "$((SETTLE_MINUTES * 60))"
+
+  openapi:
+    name: Generate release OpenAPI
+    needs: [select, settle]
+    if: needs.select.outputs.run == 'true'
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'pull_request' && 'archestra-gce-16core-spot' || 'archestra-gce-16core') || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch; never for fork PRs.
     timeout-minutes: 25
     concurrency:
       group: release-generation-openapi-${{ github.event.pull_request.number }}
@@ -83,9 +111,9 @@ jobs:
 
   screenshots:
     name: Generate release screenshots
-    needs: select
+    needs: [select, settle]
     if: needs.select.outputs.run == 'true'
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'pull_request' && 'archestra-gce-8core-spot' || 'archestra-gce-8core') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch; never for fork PRs.
     timeout-minutes: 60
     concurrency:
       group: release-generation-screenshots-${{ github.event.pull_request.number }}
@@ -117,7 +145,7 @@ jobs:
 
   benchmark:
     name: Generate release benchmark
-    needs: select
+    needs: [select, settle]
     if: needs.select.outputs.run == 'true'
     uses: $/.github/workflows/llm-proxy-benchmark.yml
     permissions:
@@ -128,7 +156,7 @@ jobs:
 
   publish:
     name: Publish combined release generation
-    needs: [select, openapi, screenshots, benchmark]
+    needs: [select, settle, openapi, screenshots, benchmark]
     if: >-
       needs.select.outputs.run == 'true' &&
       needs.openapi.result == 'success' &&
@@ -152,7 +180,7 @@ jobs:
           path: generation-artifacts
       - name: Generate publication token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@v1.31.1
+        uses: archestra-ai/.github/actions/github-app-token@v1.32.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

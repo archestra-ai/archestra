@@ -94,17 +94,22 @@ export function ProvidersCard() {
       (key) => key.provider === provider && key.requiresReauthentication,
     );
 
+  // Providers whose API keys are on. GitHub Copilot and Microsoft 365
+  // Copilot take no API keys: they are personal subscriptions.
   const addable = providerCatalog.visibleIds.filter(
-    (provider) =>
-      providerCatalog.canAddKey(provider) && provider !== "github-copilot",
+    providerCatalog.canAddApiKey,
   );
   const starters = STARTER_PROVIDERS.filter((p) => addable.includes(p));
   const extras = addable.filter((p) => !starters.includes(p));
-  const offers = buildSubscriptionOffers(keys);
-  const chatgpt = providerCatalog.canAddKey("openai")
+  const offers = buildSubscriptionOffers(keys, {
+    label: providerCatalog.personalSubscriptionLabel,
+  });
+  const chatgpt = providerCatalog.canAddPersonalSubscription("openai")
     ? offers.find((offer) => offer.kind === "chatgpt")
     : undefined;
-  const copilotPersonal = providerCatalog.canAddKey("github-copilot")
+  const copilotPersonal = providerCatalog.canAddPersonalSubscription(
+    "github-copilot",
+  )
     ? offers.find((offer) => offer.kind === "github-copilot")
     : undefined;
   // Connecting the organization's Copilot plan adds an org key, as on Model
@@ -185,7 +190,7 @@ export function ProvidersCard() {
                   <DropdownMenuTrigger asChild>
                     <ChipButton>
                       <ProviderLogo provider="github-copilot" />
-                      GitHub Copilot
+                      {providerCatalog.label("github-copilot")}
                     </ChipButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
@@ -208,7 +213,7 @@ export function ProvidersCard() {
                   }
                 >
                   <ProviderLogo provider="github-copilot" />
-                  GitHub Copilot
+                  {providerCatalog.label("github-copilot")}
                 </ChipButton>
               ) : null}
             </ChipRow>

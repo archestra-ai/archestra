@@ -8,7 +8,6 @@ import {
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
-  YELL_RESULT_GUARDRAILS_OFF,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -19,15 +18,10 @@ import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaDeploymentModel from "@/models/openappa-deployment";
 import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import {
-  humanApprovalWaived,
-  isUnattendedSession,
-  recordWaivedReview,
-  type WaivedReviewRecord,
-} from "@/openappa/break-the-glass";
 import { policyCallId } from "@/openappa/call-id";
 import { compositionView } from "@/openappa/composition-view";
 import {
@@ -73,19 +67,12 @@ import {
   chatOpenAppaSession,
   executeRemedyByOffer,
   executeYell,
-  isDeferredReturnReference,
   listPeerMessages,
   loadOfferReview,
-  loadRetainedOfferRefusal,
+  type OpenAppaPresenter,
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
-import {
-  isHardBlock,
-  softBlocksAllowed,
-  waiveSoftBlock,
-} from "@/openappa/soft-block";
-import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
   rememberYellResult,
@@ -99,7 +86,6 @@ import {
 } from "@/services/agent-runtime/runtime-identity";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
-  breakTheGlassActiveIn,
   firstPolicyRefusal,
   getGuardrailsDeployment,
   turnOnForFirstPolicy,
@@ -174,7 +160,6 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
-  structuredSuccessResult,
   successResult,
 } from "./helpers";
 import * as serverRules from "./openappa-server-rules";
@@ -600,46 +585,21 @@ const registry = defineArchestraTools([
     shortName: "yell",
     title: "Report OpenAPPA feedback",
     description:
-      "Send feedback about OpenAPPA, with a diagnostic archive for review in the Guardrails log. Call it when a remedy plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated. When the Yell tool setting under Break the glass in Guardrails settings turns Guardrails off, the report also turns OpenAPPA off for this session, so its calls are no longer checked; the result says which happened. When the deployment explicitly enables external diagnostic forwarding, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content.",
+      "Send feedback about OpenAPPA, with a diagnostic archive for review in the Guardrails log. Call it when a remedy plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated. The report does not change how this session's calls are checked. When the deployment explicitly enables external diagnostic forwarding, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
       const identity = await yellIdentity({ args, context });
-      const breakTheGlass = breakTheGlassActiveIn(
-        await getGuardrailsDeployment(),
-      );
       const report = await executeYell({
         session: identity.session,
         toolCallId: identity.callId,
         args,
-        brokeTheGlass: breakTheGlass,
         ...(identity.needsAdmission ? { needsAdmission: true } : {}),
       });
-      if (!breakTheGlass) {
-        const result = report.isError
-          ? report
-          : successResult(
-              [...textParts(report), YELL_RESULT_GUARDRAILS_UNCHANGED].join(
-                "\n",
-              ),
-            );
-        await rememberYellResult({ ...identity, result });
-        return result;
-      }
-      // Break the glass turns OpenAPPA off even when the report failed to
-      // send: the agent is stuck either way.
-      await superyellSession(identity.session);
-      logger.warn(
-        {
-          organizationId: identity.session.organization_id,
-          sessionId: identity.session.session_id,
-          userId: context.userId,
-          reported: !report.isError,
-        },
-        "OpenAPPA turned off for a session by a yell, as the Yell tool setting says",
-      );
-      const result = successResult(
-        [...textParts(report), YELL_RESULT_GUARDRAILS_OFF].join("\n"),
-      );
+      const result = report.isError
+        ? report
+        : successResult(
+            [...textParts(report), YELL_RESULT_GUARDRAILS_UNCHANGED].join("\n"),
+          );
       await rememberYellResult({ ...identity, result });
       return result;
     },
@@ -1272,6 +1232,7 @@ const registry = defineArchestraTools([
         trajectory: stamp,
         context,
       });
+      const presenter = await remedyPresenter(context, stamp);
       const spender = authenticatedRuntimeSpender({
         userId: context.userId,
         callerId: context.openappaSession?.caller_id,
@@ -1288,52 +1249,13 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
-      // A decision on a deferred return answers no refusal, so there is nothing
-      // to waive: the runtime settles it for the session that owns the return.
-      if (
-        remedy.offer_id &&
-        !isDeferredReturnReference(remedy.offer_id) &&
-        (await softBlocksAllowed())
-      ) {
-        // A waiver runs before native offer validation, so authorize its target
-        // independently. Caller-supplied trajectories are not ownership proof.
-        const currentSession =
-          context.openappaSubagent?.session ?? context.openappaSession;
-        if (reviewSession.caller_id !== spender) {
-          if (
-            reviewSession.caller_id ||
-            currentSession?.organization_id !== context.organizationId ||
-            currentSession.session_id !== stamp.session_id ||
-            currentSession.caller_id !== spender
-          ) {
-            return unknownOfferResult();
-          }
-          reviewSession.caller_id = spender;
-        }
-        // Ownership alone does not establish a soft refusal. Unknown offers
-        // must not turn a hard-denied session into an unenforced one.
-        const refusal = await loadRetainedOfferRefusal({
-          organizationId: context.organizationId,
-          sessionId: stamp.session_id,
-          callerId: spender,
-          parentId: stamp.parent_id,
-          offerId: remedy.offer_id,
-        });
-        if (!refusal || isHardBlock(refusal)) return unknownOfferResult();
-        if (await waiveSoftBlock(reviewSession, "remedy_review", refusal)) {
-          return structuredSuccessResult({
-            outcome: "guardrails_disabled",
-            message:
-              "The deployment's soft-block override turned Guardrails off for this session. Retry the original operation. No human approval is claimed and no remedy plan was executed.",
-          });
-        }
-      }
       const callId = execution?.call_id ?? policyCallIdOf(context);
       if (remedy.offer_id === undefined) {
         // A return declared ahead of its spawn: no offer, so no review. The
         // runtime checks the floor and holds it for the next subagent call.
         const declared = await executeRemedyByOffer({
           organizationId: context.organizationId,
+          presenter,
           callerId: spender,
           sessionId: stamp.session_id,
           ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
@@ -1373,18 +1295,17 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         sessionId: stamp.session_id,
         offerId: remedy.offer_id,
+        presenter,
       });
-      // A publish while the reviewer decides retires the offer: the answer then
-      // applies to nothing, and the result says why.
+      // A publish on the session's line while the reviewer decides retires the
+      // offer: the answer then applies to nothing, and the result says why.
       const headBeforeReview = review
-        ? await OpenAppaDeploymentModel.head(context.organizationId)
+        ? await OpenAppaDeploymentModel.head(
+            review.deployment ?? context.organizationId,
+          )
         : null;
 
       let ruling: "approve" | "deny" | undefined;
-      // The settings under which the platform approved the review in place
-      // of a person, when it did.
-      let waivedReview: Awaited<ReturnType<typeof breakTheGlassAnswersReview>> =
-        null;
       let reviewOutcome: ClosedHitlReviewOutcome | undefined;
       let precheckRefusal: string | undefined;
       if (review) {
@@ -1412,131 +1333,119 @@ const registry = defineArchestraTools([
             // A none entry from before closures were stored has no reason.
             // That is not a denial, and it must not open another question.
             reviewOutcome = reviewOutcomeFromClosure(cached.closure);
-          } else {
-            // No person has ruled. The Human approval setting can let this
-            // plan through without one: the platform then approves the review
-            // itself instead of staging a question, and records a yell once
-            // the plan goes through.
-            waivedReview = await breakTheGlassAnswersReview({
-              session: reviewSession,
-              spender,
+          } else if (context.mrtr || context.elicitation) {
+            const toolDescription = await reviewedToolDescription({
+              review,
+              context,
             });
-            if (waivedReview) {
-              ruling = "approve";
-            } else if (context.mrtr || context.elicitation) {
-              const toolDescription = await reviewedToolDescription({
-                review,
-                context,
-              });
-              const stagedReview = {
-                offerId: remedy.offer_id,
-                text: review.text,
-                scope: review.scope ?? null,
-                ...(review.hint ? { hint: review.hint } : {}),
-                ...(review.tool ? { tool: review.tool } : {}),
-                ...(review.arguments ? { arguments: review.arguments } : {}),
-                ...(toolDescription ? { toolDescription } : {}),
-              };
-              const staged = await stageHitlReview({
+            const stagedReview = {
+              offerId: remedy.offer_id,
+              text: review.text,
+              scope: review.scope ?? null,
+              ...(review.hint ? { hint: review.hint } : {}),
+              ...(review.tool ? { tool: review.tool } : {}),
+              ...(review.arguments ? { arguments: review.arguments } : {}),
+              ...(toolDescription ? { toolDescription } : {}),
+            };
+            const staged = await stageHitlReview({
+              session: reviewSession,
+              ...(context.mrtr && callId ? { callId } : {}),
+              review: {
+                ...stagedReview,
+                remedyArguments: submittedArguments,
+              },
+            });
+            if (staged.status === "approve" || staged.status === "deny") {
+              const spent = await consumeHitlRuling({
                 session: reviewSession,
-                ...(context.mrtr && callId ? { callId } : {}),
-                review: {
-                  ...stagedReview,
-                  remedyArguments: submittedArguments,
-                },
+                offerId: remedy.offer_id,
               });
-              if (staged.status === "approve" || staged.status === "deny") {
-                const spent = await consumeHitlRuling({
-                  session: reviewSession,
-                  offerId: remedy.offer_id,
-                });
-                if (spent === "approve" || spent === "deny") ruling = spent;
-                else reviewOutcome = "review_invalid";
-              } else if (staged.status === "none") {
-                reviewOutcome = reviewOutcomeFromClosure(staged.closure);
-              } else if (context.mrtr) {
-                // External MCP clients reach their native question tool through
-                // ask_user. The review is already staged, so the model cannot
-                // alter the question or bind an answer to a different offer.
-                const lastAnswer =
-                  staged.status === "staged" ? staged.lastAnswer : undefined;
-                return lastAnswer
-                  ? result(
-                      hitlAnswerNotRecordedResult(
-                        remedy.offer_id,
-                        lastAnswer.reason,
-                      ),
-                    )
-                  : nativeReviewRequiredResult(remedy.offer_id);
-              } else if (context.elicitation) {
-                const prepared = await getHitlAskUserArguments({
-                  session: reviewSession,
-                  offerIds: [remedy.offer_id],
-                  presentation: "form",
-                });
-                const shown = displayedReview(review);
-                const shownArguments = reviewedCallArguments(shown);
-                const accepted = acceptedScope(shown.scope);
-                const outcome = await context.elicitation.elicit({
-                  toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-                  message: prepared?.question ?? shown.text,
-                  requestedSchema: HITL_RULING_SCHEMA,
-                  kind: "openappa_review",
-                  ...(shown.tool ? { reviewedTool: shown.tool } : {}),
-                  ...(shown.arguments
-                    ? {
-                        reviewedArguments: shownArguments
-                          ? JSON.stringify(shownArguments)
-                          : shown.arguments,
-                      }
-                    : {}),
-                  ...(accepted
-                    ? { reviewedCoverage: accepted }
-                    : { reviewedText: shown.text }),
-                });
-                if (outcome.status === "answered") {
-                  const parsed = parseHitlRuling(outcome.result);
-                  if (!parsed) {
-                    reviewOutcome =
-                      outcome.result.action === "decline"
-                        ? "review_declined"
-                        : outcome.result.action === "cancel"
-                          ? "review_cancelled"
-                          : "review_invalid";
-                  } else {
-                    const claimed = await claimStagedRuling({
-                      session: reviewSession,
-                      offerId: remedy.offer_id,
-                      ruling: parsed,
-                    });
-                    if (claimed.ok) {
-                      ruling = claimed.ruling;
-                    } else {
-                      if (callId)
-                        await recordHitlReviewResult({
-                          session: reviewSession,
-                          callId,
-                          offerId: remedy.offer_id,
-                          outcome: claimed.outcome,
-                        });
-                      return unansweredReviewResult(
-                        remedy.offer_id,
-                        claimed.outcome,
-                      );
+              if (spent === "approve" || spent === "deny") ruling = spent;
+              else reviewOutcome = "review_invalid";
+            } else if (staged.status === "none") {
+              reviewOutcome = reviewOutcomeFromClosure(staged.closure);
+            } else if (context.mrtr) {
+              // External MCP clients reach their native question tool through
+              // ask_user. The review is already staged, so the model cannot
+              // alter the question or bind an answer to a different offer.
+              const lastAnswer =
+                staged.status === "staged" ? staged.lastAnswer : undefined;
+              return lastAnswer
+                ? result(
+                    hitlAnswerNotRecordedResult(
+                      remedy.offer_id,
+                      lastAnswer.reason,
+                    ),
+                  )
+                : nativeReviewRequiredResult(remedy.offer_id);
+            } else if (context.elicitation) {
+              const prepared = await getHitlAskUserArguments({
+                session: reviewSession,
+                offerIds: [remedy.offer_id],
+                presentation: "form",
+              });
+              const shown = displayedReview(review);
+              const shownArguments = reviewedCallArguments(shown);
+              const accepted = acceptedScope(shown.scope);
+              const outcome = await context.elicitation.elicit({
+                toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+                message: prepared?.question ?? shown.text,
+                requestedSchema: HITL_RULING_SCHEMA,
+                kind: "openappa_review",
+                ...(shown.tool ? { reviewedTool: shown.tool } : {}),
+                ...(shown.arguments
+                  ? {
+                      reviewedArguments: shownArguments
+                        ? JSON.stringify(shownArguments)
+                        : shown.arguments,
                     }
-                  }
-                } else {
+                  : {}),
+                ...(accepted
+                  ? { reviewedCoverage: accepted }
+                  : { reviewedText: shown.text }),
+              });
+              if (outcome.status === "answered") {
+                const parsed = parseHitlRuling(outcome.result);
+                if (!parsed) {
                   reviewOutcome =
-                    outcome.status === "unanswered"
-                      ? "review_unanswered"
-                      : outcome.status === "no_viewer"
-                        ? "review_unavailable"
+                    outcome.result.action === "decline"
+                      ? "review_declined"
+                      : outcome.result.action === "cancel"
+                        ? "review_cancelled"
                         : "review_invalid";
+                } else {
+                  const claimed = await claimStagedRuling({
+                    session: reviewSession,
+                    offerId: remedy.offer_id,
+                    ruling: parsed,
+                  });
+                  if (claimed.ok) {
+                    ruling = claimed.ruling;
+                  } else {
+                    if (callId)
+                      await recordHitlReviewResult({
+                        session: reviewSession,
+                        callId,
+                        offerId: remedy.offer_id,
+                        outcome: claimed.outcome,
+                      });
+                    return unansweredReviewResult(
+                      remedy.offer_id,
+                      claimed.outcome,
+                    );
+                  }
                 }
+              } else {
+                reviewOutcome =
+                  outcome.status === "unanswered"
+                    ? "review_unanswered"
+                    : outcome.status === "no_viewer"
+                      ? "review_unavailable"
+                      : "review_invalid";
               }
-            } else {
-              reviewOutcome = "review_unavailable";
             }
+          } else {
+            reviewOutcome = "review_unavailable";
           }
         }
       }
@@ -1589,6 +1498,7 @@ const registry = defineArchestraTools([
       const executePlan = () =>
         executeRemedyByOffer({
           organizationId,
+          presenter,
           ...(spender ? { callerId: spender } : {}),
           sessionId: stamp.session_id,
           ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
@@ -1602,47 +1512,10 @@ const registry = defineArchestraTools([
         });
       const supersededByPublish = async (result: CallToolResult) =>
         retiredOffer(result) &&
-        (await policyPublishedSince(organizationId, headBeforeReview));
-      if (waivedReview) {
-        // The platform answers the review in place of a person. Its record,
-        // the yell and with the Yell tool setting the session bypass, is
-        // written first and the plan authorized inside the same transaction:
-        // an authorized plan always has its record, and a plan the runtime
-        // refuses or retires leaves none. No human ruling is attached for the
-        // chat card to show; the receipt says no person ruled.
-        let byOffer: Awaited<ReturnType<typeof executePlan>> | undefined;
-        const record = await recordWaivedReview({
-          session: reviewSession,
-          tool: review?.tool ?? "a reviewed call",
-          superyell: breakTheGlassActiveIn(waivedReview),
-          authorize: async () => {
-            // Once per review: a retried transaction reuses the outcome.
-            byOffer ??= await executePlan();
-            return (
-              byOffer.known &&
-              !byOffer.result.isError &&
-              !retiredOffer(byOffer.result)
-            );
-          },
-        });
-        // The record failed before the plan was authorized: nothing is
-        // spent, and the review is still open for another call.
-        if (!byOffer) return waiverUnrecordedResult(remedy.offer_id);
-        if (!byOffer.known) return byOffer.result;
-        if (await supersededByPublish(byOffer.result))
-          return supersededReview(byOffer.result);
-        if (record === "refused") return byOffer.result;
-        return {
-          ...byOffer.result,
-          content: Array.isArray(byOffer.result.content)
-            ? [
-                ...byOffer.result.content,
-                { type: "text" as const, text: WAIVED_REVIEW_RECEIPT[record] },
-              ]
-            : byOffer.result.content,
-        };
-      }
-
+        (await policyPublishedSince(
+          review?.deployment ?? organizationId,
+          headBeforeReview,
+        ));
       let byOffer: Awaited<ReturnType<typeof executePlan>>;
       try {
         byOffer = await executePlan();
@@ -1764,6 +1637,29 @@ function organizationUser(
   const { organizationId, userId } = context;
   if (!organizationId || !userId) throw new ApiError(401, message);
   return { organizationId, userId };
+}
+
+/**
+ * Who presents a remedy on the stamped trajectory: the run itself only when
+ * the gateway verified its binding and the stamped session is its own or
+ * recorded under it. An ordinary user call is attended, header or not.
+ */
+async function remedyPresenter(
+  context: ArchestraContext,
+  stamp: { session_id: string },
+): Promise<OpenAppaPresenter> {
+  if (context.openappaSubagent) return "delegated";
+  const session = context.openappaSession;
+  if (session?.presenter !== "runtime" || !session.caller_id) return "attended";
+  return stamp.session_id === session.session_id ||
+    (await OpenAppaSessionModel.hasAncestor({
+      organizationId: session.organization_id,
+      callerId: session.caller_id,
+      sessionId: stamp.session_id,
+      ancestorSessionId: session.session_id,
+    }))
+    ? "runtime"
+    : "attended";
 }
 
 function organization(context: ArchestraContext): string {
@@ -2004,53 +1900,6 @@ function unknownOfferResult() {
       },
     ],
   };
-}
-
-/** What the agent reads after a review the platform approved in place of a person. */
-const WAIVED_REVIEW_RECEIPT: Record<
-  Exclude<WaivedReviewRecord, "refused">,
-  string
-> = {
-  recorded:
-    "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself and recorded a yell in Guardrails → Yells. No human ruled. Follow the runtime outcome above. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.",
-  reports_off:
-    "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself. No human ruled. Yell reports are off in this deployment, so no yell was recorded. Follow the runtime outcome above. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.",
-  failed:
-    "[appa] Break the glass receipt: this plan needed a person's approval, and Human approval is waived for this session, so the platform approved the review itself. No human ruled. Guardrails could not record the yell for it: tell the user. Follow the runtime outcome above.",
-};
-
-/**
- * The settings under which the Break the glass settings answer this review in
- * place of a person, or null when a person must. No person answers in an
- * unattended session: one the proxy admitted as such (an Agent Runtime run,
- * known from its credential, or a client sending the unattended header), or a
- * workload spending its own offer. With Human approval waived everywhere no
- * session waits. The record of the waiver follows the plan's authorization.
- */
-async function breakTheGlassAnswersReview(params: {
-  session: OpenAppaSession;
-  spender: string;
-}): Promise<Awaited<ReturnType<typeof getGuardrailsDeployment>> | null> {
-  const settings = await getGuardrailsDeployment();
-  if (!settings.active || settings.humanApprovalMode === "block") return null;
-  const unattended =
-    parseWorkloadPrincipal(params.spender) !== null ||
-    (await isUnattendedSession(params.session));
-  return humanApprovalWaived(settings, unattended) ? settings : null;
-}
-
-/**
- * The record a review the platform answers needs could not be written, so the
- * plan was not authorized: nothing is spent, and the review is still open.
- */
-function waiverUnrecordedResult(offerId: string): CallToolResult {
-  return result({
-    ok: false,
-    outcome: "waiver_unrecorded",
-    offer_id: offerId,
-    instruction:
-      "Human approval is waived for this session, but Guardrails could not record the yell for this plan, so the plan was not authorized and the review is still open. Call execute_remedy_plan again with the same offer and plan; if that fails again, tell the user.",
-  });
 }
 
 function nativeReviewRequiredResult(offerId: string): CallToolResult {
@@ -2342,21 +2191,6 @@ async function peerExecution(params: {
     throw new ApiError(401, "Organization context is required");
   }
   if (params.proof === undefined) {
-    const session =
-      context.openappaSubagent?.session ?? context.openappaSession;
-    const callerId = authenticatedRuntimeSpender({
-      userId: context.userId,
-      callerId: context.openappaSession?.caller_id,
-    });
-    if (
-      (await softBlocksAllowed()) &&
-      session &&
-      callerId &&
-      session.organization_id === context.organizationId &&
-      session.caller_id === callerId
-    ) {
-      return { session, toolCallId: policyCallIdOf(context) ?? randomUUID() };
-    }
     throw new ApiError(
       400,
       "Peer messages require a signed execution proof from the protected proxy",
@@ -2389,6 +2223,8 @@ async function peerExecution(params: {
       session_id: proof.session_id,
       ...(proof.caller_id ? { caller_id: proof.caller_id } : {}),
       ...(proof.parent_id ? { parent_id: proof.parent_id } : {}),
+      // The host signed this proof into the one session it names.
+      presenter: "delegated",
     },
     toolCallId: proof.call_id,
   };
@@ -2476,12 +2312,12 @@ function retiredOffer(result: CallToolResult): boolean {
   );
 }
 
-/** Whether the organization published a policy revision after `before`. */
+/** Whether the deployment line published a policy revision after `before`. */
 async function policyPublishedSince(
-  organizationId: string,
+  line: string,
   before: { revision: number } | null,
 ): Promise<boolean> {
-  const after = await OpenAppaDeploymentModel.head(organizationId);
+  const after = await OpenAppaDeploymentModel.head(line);
   return after !== null && after.revision > (before?.revision ?? 0);
 }
 

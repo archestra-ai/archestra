@@ -149,7 +149,7 @@ jobs:
   docs-screenshot-capture:
     name: Capture Docs Screenshots (manual validation)
     if: github.event_name == 'workflow_dispatch' && inputs.validation_only
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'pull_request' && 'archestra-gce-8core-spot' || 'archestra-gce-8core') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch; never for fork PRs.
     timeout-minutes: 25
     permissions:
       contents: read
@@ -166,7 +166,7 @@ jobs:
     name: Docs Screenshots
     # Release PR captures belong to the single generation coordinator.
     if: github.event_name == 'workflow_dispatch' && !inputs.validation_only
-    runs-on: ubuntu-24.04-8core
+    runs-on: ${{ vars.GCE_RUNNERS == 'on' && !github.event.pull_request.head.repo.fork && (github.event_name == 'pull_request' && 'archestra-gce-8core-spot' || 'archestra-gce-8core') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] single-use GCE runners (archestra-ai/infra gcp/ci-runners), behind the GCE_RUNNERS kill switch; never for fork PRs.
     timeout-minutes: 60
     permissions:
       contents: write # Required to push updated screenshots.
@@ -181,7 +181,7 @@ jobs:
       # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
       - name: Generate GitHub App token
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@v1.31.1
+        uses: archestra-ai/.github/actions/github-app-token@v1.32.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

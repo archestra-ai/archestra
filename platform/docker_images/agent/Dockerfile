@@ -1,6 +1,6 @@
 # Curated Agent catalog images. The build context is platform/ so every native
 # CLI shares one hardened execution base.
-FROM dhi.io/uv:0.9.30@sha256:2ba66b2a3ecfd98962a18d4eeb399ca537e20a900f29df3bf6952c3190e84c00 AS uv
+FROM dhi.io/uv:0.13.9@sha256:923818bf3ed45deb3030c1fa0b2a46b354c812560185c51a94c57ff3f7bf10c1 AS uv
 # The uv release Hermes locks its environment with.
 FROM dhi.io/uv:0.12.3@sha256:6eb8ea7c3ff90b389a4d1e3c41ee66d8daa204fc6609df65b0ef21e3ba29dd57 AS uv-hermes
 
@@ -413,14 +413,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=cf08714037f2e2eb76f766a1c7cd39e3a690a82f6116abe356d28e3b3344b6ea ;; \
-      arm64) grok_arch=arm64; checksum=864757973551ae5ad38188594cf57afef896342c83387494caba104288ea64a1 ;; \
+      amd64) grok_arch=x64; checksum=4cef43ce2b62cccdb39acb216d8042f91d78d7fb022375b31dd7a3e8d747fc5c ;; \
+      arm64) grok_arch=arm64; checksum=c5139d8fb6fe050e5519cd1abc41e957366cf31a24983537627849c34f2bf5cd ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.89" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.89.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.90" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.90.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \

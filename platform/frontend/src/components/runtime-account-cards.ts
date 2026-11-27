@@ -16,7 +16,7 @@ import {
 } from "@/lib/organization-subscription";
 
 // The account cards of a runtime, as words: what an agent's own settings and
-// its runtime's settings both show under "Accounts that can run it". One
+// its runtime's settings both show under "Credentials to use". One
 // source, so the two cannot name an account differently.
 
 type CardText = { title: string; description: string };
@@ -26,14 +26,14 @@ type RuntimeShape = Pick<AgentRuntimeConfig, "command" | "inferenceProtocol">;
 export const CLAUDE_SUBSCRIPTION_CARD: CardText = {
   title: "Each person's Claude subscription",
   description:
-    "Everyone connects their own Claude account once. Not billed to the company, no cost limits. A run's container only gets a short-lived key.",
+    "Everyone connects their own Claude account once. No cost limits. A run's container only gets a short-lived key.",
 };
 
 /** The company's own connection: every runtime but the Copilot CLI has it. */
 export function companyApiKeyCard(appName: string): CardText {
   return {
-    title: "A company API key",
-    description: `An LLM provider connection set up in ${appName}. Billed to the company; cost limits apply. A run's container only gets a short-lived key.`,
+    title: "Provider API key",
+    description: `An LLM provider key set up in ${appName}. Cost limits apply. A run's container only gets a short-lived key.`,
   };
 }
 
@@ -60,7 +60,7 @@ export function personalSubscriptionCard(
   );
   return {
     title: `Each person's ${name} subscription`,
-    description: `Everyone connects their own ${name} account once. Not billed to the company, no cost limits. A run's container only gets a short-lived key.`,
+    description: `Everyone connects their own ${name} account once. No cost limits. A run's container only gets a short-lived key.`,
   };
 }
 

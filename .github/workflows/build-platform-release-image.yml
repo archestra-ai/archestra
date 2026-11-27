@@ -78,8 +78,8 @@ jobs:
       cache_compression: zstd
       checkout_ref: ${{ inputs.checkout_ref }}
       # Match the 16-core E2E builder; build arm64 natively.
-      amd64_runner: ubuntu-24.04-16core
-      arm64_runner: ubuntu-24.04-arm-32core
+      amd64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-16core' || 'ubuntu-24.04-16core' }}
+      arm64_runner: ${{ vars.GCE_RUNNERS == 'on' && 'archestra-gce-32core-arm' || 'ubuntu-24.04-arm-32core' }}
       # Both images serve the same frontend chunks; the previous docker run
       # image always exists, unlike a first -slim release's predecessor.
       previous_image: ${{ inputs.previous_version && format('docker.io/archestra/platform:{0}', inputs.previous_version) || '' }}

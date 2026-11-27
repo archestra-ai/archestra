@@ -1,4 +1,6 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
@@ -198,6 +200,90 @@ describe("a plugin's version history", () => {
       baseContentHash: history.data[0].contentHash,
     });
     expect(current.statusCode, current.body).toBe(200);
+  });
+
+  describe("a plugin from before versions were kept", () => {
+    /** As an upgrade leaves it: the plugin and its files, and no version. */
+    const createWithoutHistory = async () => {
+      const plugin = await create([
+        file("README.md", "one"),
+        file("hooks/hooks.json", "{}"),
+      ]);
+      await db
+        .delete(schema.pluginVersionsTable)
+        .where(eq(schema.pluginVersionsTable.pluginId, plugin.id));
+      return plugin;
+    };
+
+    test("has no versions until its files change", async () => {
+      const plugin = await createWithoutHistory();
+
+      expect((await versions(plugin.id)).data).toEqual([]);
+      // A save that changes no file starts no history either.
+      const described = await save(plugin.id, { description: "Described." });
+      expect(described.statusCode, described.body).toBe(200);
+      expect((await versions(plugin.id)).data).toEqual([]);
+    });
+
+    test("starts its history at the first change, with the files it held until then as version 1", async () => {
+      const plugin = await createWithoutHistory();
+      const before = await PluginModel.findById({
+        id: plugin.id,
+        organizationId,
+      });
+
+      const saved = await save(plugin.id, {
+        files: [file("README.md", "two")],
+      });
+
+      expect(saved.statusCode, saved.body).toBe(200);
+      const history = await versions(plugin.id);
+      expect(history.data.map((entry) => entry.version)).toEqual([2, 1]);
+      expect(history.data[1].contentHash).toBe(before?.contentHash);
+      const first = (await version(plugin.id, 1)).json();
+      expect(
+        first.files.map((entry: { path: string; content: string }) => [
+          entry.path,
+          entry.content,
+        ]),
+      ).toEqual([
+        ["README.md", "one"],
+        ["hooks/hooks.json", "{}"],
+      ]);
+      expect((await version(plugin.id, 2)).json().files).toEqual([
+        expect.objectContaining({ path: "README.md", content: "two" }),
+      ]);
+
+      // The next change adds one version, not another first one.
+      await save(plugin.id, { files: [file("README.md", "three")] });
+      expect(
+        (await versions(plugin.id)).data.map((entry) => entry.version),
+      ).toEqual([3, 2, 1]);
+    });
+
+    test("starts its history when an update from its repository is applied", async () => {
+      const plugin = await createWithoutHistory();
+      await db
+        .update(schema.pluginsTable)
+        .set({ pendingSourceSha: "next-commit" })
+        .where(eq(schema.pluginsTable.id, plugin.id));
+
+      const applied = await PluginModel.applyGithubUpdate({
+        id: plugin.id,
+        organizationId,
+        userId: user.id,
+        expectedPendingSha: "next-commit",
+        files: [file("README.md", "from the repository")],
+      });
+
+      expect(applied).not.toBeNull();
+      const history = await versions(plugin.id);
+      expect(history.data).toMatchObject([
+        { version: 2, sourceCommit: "next-commit" },
+        { version: 1 },
+      ]);
+      expect((await version(plugin.id, 1)).json().files).toHaveLength(2);
+    });
   });
 
   test("moves a manual plugin to another client, leaving its files and history as they are", async () => {

@@ -206,7 +206,7 @@ function VersionHistory({
           isError={versionsQuery.isError}
           errorMessage="Could not load this plugin's versions."
           onRetry={() => versionsQuery.refetch()}
-          emptyMessage="No versions"
+          emptyMessage="No versions yet"
           hasMore={!!versionsQuery.hasNextPage}
           isLoadingMore={versionsQuery.isFetchingNextPage}
           onLoadMore={() => versionsQuery.fetchNextPage()}
@@ -214,11 +214,17 @@ function VersionHistory({
         />
       }
       pane={
-        // Every plugin has at least version 1, so there is no version to
-        // show only while the reads are in flight or after one failed.
+        // No version to show while the reads are in flight, after one failed,
+        // or for a plugin from before versions were kept: its history starts
+        // at the next change to its files.
         activeVersion === null ? (
           isPluginLoading || versionsQuery.isPending ? (
             <PaneSkeleton />
+          ) : plugin && !versionsQuery.isError && versions.length === 0 ? (
+            <p className="p-6 text-sm text-muted-foreground">
+              This plugin has no versions yet. A version is kept each time its
+              files change, starting with the next change.
+            </p>
           ) : (
             <div className="p-6">
               <LoadFailure

@@ -163,6 +163,30 @@ describe("PluginVersionHistoryDialog", () => {
     expect(restoreButton()).toHaveAttribute("aria-disabled", "true");
   });
 
+  it("says that a plugin from before versions were kept has none yet, and does not call it a failure", () => {
+    vi.mocked(usePluginVersions).mockReturnValue({
+      data: { pages: [{ data: [] }] },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+
+    renderDialog();
+
+    expect(
+      screen.getByText(
+        "This plugin has no versions yet. A version is kept each time its files change, starting with the next change.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Could not load this plugin."),
+    ).not.toBeInTheDocument();
+  });
+
   it("reads an earlier version as a diff of its files", async () => {
     const user = userEvent.setup();
     renderDialog();

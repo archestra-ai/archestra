@@ -99,9 +99,7 @@ const pluginsTable = softDeletablePgTable(
     /**
      * @deprecated Plugins can no longer be switched off one by one. The
      * column stays because dropping a column is never done in a migration;
-     * nothing reads or writes it, and its default keeps inserts working. The
-     * migration that retired it moved every plugin that was switched off to
-     * the trash, so none of them started installing again.
+     * nothing reads or writes it, and its default keeps inserts working.
      */
     enabled: boolean("enabled").notNull().default(true),
     /** Service account creator; separate from human ownership. */

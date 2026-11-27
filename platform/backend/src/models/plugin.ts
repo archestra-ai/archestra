@@ -615,6 +615,9 @@ class PluginModel {
       if (!plugin) return null;
 
       if (fileUpdate) {
+        if (contentHash !== existing.contentHash) {
+          await startHistoryIfMissing(tx, existing);
+        }
         await tx
           .delete(schema.pluginFilesTable)
           .where(eq(schema.pluginFilesTable.pluginId, plugin.id));
@@ -823,6 +826,9 @@ class PluginModel {
   }): Promise<PluginWithFiles | null> {
     const applied = await withDbTransaction(async (tx) => {
       const contentHash = computeContentHash(params.files);
+      // As it is before the update, for a history that starts here.
+      const existing = await findRowWithTransaction(tx, params);
+      if (!existing) return null;
       const [plugin] = await tx
         .update(schema.pluginsTable)
         .set({
@@ -850,6 +856,7 @@ class PluginModel {
         )
         .returning({ id: schema.pluginsTable.id });
       if (!plugin) return null;
+      await startHistoryIfMissing(tx, existing);
       await tx
         .delete(schema.pluginFilesTable)
         .where(eq(schema.pluginFilesTable.pluginId, params.id));
@@ -1238,6 +1245,32 @@ async function attachVisibility(plugins: Plugin[]) {
     ),
     labels: labelsByPlugin.get(plugin.id) ?? [],
   }));
+}
+
+/**
+ * Start the history of a plugin that has none, with the files it holds now.
+ *
+ * A plugin created before versions were kept has no version. Its history
+ * starts at the first write that changes its files: that write calls this
+ * before it replaces them, so what the plugin held until then is version 1
+ * and can be read and restored. Nothing is written for a plugin that already
+ * has a history.
+ *
+ * The caller has updated the plugin row in this transaction, which holds the
+ * row's lock, so two writers cannot both start the history.
+ */
+async function startHistoryIfMissing(
+  tx: Transaction,
+  plugin: Pick<Plugin, "id" | "contentHash" | "sourceSha" | "updatedAt">,
+): Promise<void> {
+  if (await PluginVersionModel.hasAny(tx, plugin.id)) return;
+  await PluginVersionModel.append(tx, {
+    pluginId: plugin.id,
+    contentHash: plugin.contentHash,
+    files: await findFilesWithTransaction(tx, plugin.id),
+    sourceCommit: plugin.sourceSha,
+    createdAt: plugin.updatedAt,
+  });
 }
 
 async function findRowWithTransaction(

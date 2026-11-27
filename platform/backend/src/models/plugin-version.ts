@@ -41,6 +41,8 @@ class PluginVersionModel {
       files: VersionFileInput[];
       /** The commit the files came from; only a Git import or update has one. */
       sourceCommit?: string | null;
+      /** When the files were written, where that is not now. */
+      createdAt?: Date;
     },
   ): Promise<PluginVersion> {
     const [latest] = await tx
@@ -54,6 +56,7 @@ class PluginVersionModel {
         version: (latest?.version ?? 0) + 1,
         contentHash: params.contentHash,
         sourceCommit: params.sourceCommit ?? null,
+        ...(params.createdAt && { createdAt: params.createdAt }),
       })
       .returning();
     if (!version) {
@@ -72,6 +75,19 @@ class PluginVersionModel {
       );
     }
     return version;
+  }
+
+  /**
+   * Whether the plugin has a history yet. A plugin created before versions
+   * were kept has none until the first write that changes its files.
+   */
+  static async hasAny(tx: Transaction, pluginId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: schema.pluginVersionsTable.id })
+      .from(schema.pluginVersionsTable)
+      .where(eq(schema.pluginVersionsTable.pluginId, pluginId))
+      .limit(1);
+    return row !== undefined;
   }
 
   /**

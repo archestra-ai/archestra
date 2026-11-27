@@ -8,12 +8,25 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 // Monaco does not render in jsdom; the canonical mock is a textarea.
 vi.mock("@/components/editor");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/skills/skill.query");
 
 vi.mock("../_parts/import-skills-dialog", () => ({
-  ImportSkillsDialog: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="import-skills-dialog" /> : null,
+  ImportSkillsDialog: ({
+    open,
+    onImported,
+  }: {
+    open: boolean;
+    onImported: (skillIds: string[]) => void;
+  }) =>
+    open ? (
+      <div data-testid="import-skills-dialog">
+        <button type="button" onClick={() => onImported(["skill-imported"])}>
+          Finish import
+        </button>
+      </div>
+    ) : null,
 }));
 // Pulls its options over the network; the wizard only needs it to exist.
 vi.mock("../_parts/skill-access-fields", () => ({
@@ -26,6 +39,7 @@ import {
   useMissingPermissions,
   useSession,
 } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
   useCreateSkill,
@@ -51,6 +65,8 @@ function mockOrganization(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Skills from MCP servers are off unless a test turns them on.
+  vi.mocked(useFeature).mockReturnValue(false);
   createMutateAsync.mockResolvedValue({ id: "skill-new" });
   vi.mocked(useRouter).mockReturnValue({
     push: routerPush,
@@ -299,6 +315,34 @@ describe("NewSkillPage unsaved draft", () => {
     link.remove();
   });
 
+  it("asks before a finished import leaves a draft typed earlier behind", async () => {
+    mockOrganization(true);
+    renderPage();
+    const user = userEvent.setup();
+    await fillName(user);
+    // Back to the source step, which keeps the draft, and import from there.
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByText("Git repository"));
+    await user.click(screen.getByRole("button", { name: "Finish import" }));
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Discard unsaved changes?",
+    );
+    expect(routerPush).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(routerPush).toHaveBeenCalledWith("/skills?imported=skill-imported");
+  });
+
+  it("goes straight to the imported skills when there is no draft", async () => {
+    mockOrganization(true);
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Git repository"));
+    await user.click(screen.getByRole("button", { name: "Finish import" }));
+
+    expect(routerPush).toHaveBeenCalledWith("/skills?imported=skill-imported");
+  });
+
   it("does not ask when nothing has been typed", async () => {
     mockOrganization(true);
     renderPage();
@@ -508,6 +552,9 @@ describe("NewSkillPage as the first skill's page", () => {
   it("counts a skill served by an MCP server as a skill that exists", () => {
     mockOrganization(true);
     mockNoSkillsAtAll();
+    vi.mocked(useFeature).mockImplementation(
+      (name) => name === "mcpGatewaySkillsEnabled",
+    );
     vi.mocked(useExternalMcpSkills).mockReturnValue({
       data: [{ id: "external-1" }],
       isPending: false,
@@ -519,9 +566,21 @@ describe("NewSkillPage as the first skill's page", () => {
     expect(screen.queryByText("Teach your agent")).toBeNull();
   });
 
+  it("does not ask for skills from MCP servers while that feature is off", () => {
+    mockOrganization(true);
+    mockNoSkillsAtAll();
+    renderPage();
+
+    expect(useExternalMcpSkills).toHaveBeenCalledWith({ enabled: false });
+    expect(screen.getByText("Teach your agent")).toBeVisible();
+  });
+
   it("still introduces skills to someone whose MCP skill list was refused", () => {
     mockOrganization(true);
     mockNoSkillsAtAll();
+    vi.mocked(useFeature).mockImplementation(
+      (name) => name === "mcpGatewaySkillsEnabled",
+    );
     // Answered with a refusal: no data, and not in flight any more.
     vi.mocked(useExternalMcpSkills).mockReturnValue({
       data: undefined,

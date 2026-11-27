@@ -130,11 +130,13 @@ export function ImportMarketplaceDialog({
     null,
   );
   // A scan ends without plugins in two different ways. `failed`: the
-  // repository could not be read. `nothing-found`: it was read, and holds
-  // nothing to import, so its access is not the thing to change.
+  // repository could not be read. `nothing-to-import`: it was read, and what
+  // it holds cannot be imported (no plugins, or a manifest that is not valid),
+  // so its access is not the thing to change. The API says which, and its
+  // sentence is shown as it is.
   const [discoverError, setDiscoverError] = useState<
     | { kind: "failed"; failure: RepositoryReadFailure }
-    | { kind: "nothing-found" }
+    | { kind: "nothing-to-import"; reason: string }
     | null
   >(null);
   const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
@@ -246,7 +248,7 @@ export function ImportMarketplaceDialog({
           failure: { code: errorCode, message: errorMessage },
         });
       } else if (data?.reason) {
-        setDiscoverError({ kind: "nothing-found" });
+        setDiscoverError({ kind: "nothing-to-import", reason: data.reason });
       }
     }
   };
@@ -782,11 +784,11 @@ export function ImportMarketplaceDialog({
         <div className="space-y-5">
           <GitSourceStepBody source={source} lastLabel="Plugins" />
           {discoverError && source.step === "repo" ? (
-            discoverError.kind === "nothing-found" ? (
+            discoverError.kind === "nothing-to-import" ? (
               <InlineNotice>
                 <AlertTriangle />
                 <span className="font-medium">
-                  No plugins found in the repository.
+                  {asSentence(discoverError.reason)}
                 </span>
               </InlineNotice>
             ) : (
@@ -1024,4 +1026,10 @@ function toSelectionSet(selection: RowSelectionState): Set<string> {
       .filter(([, selected]) => selected)
       .map(([id]) => id),
   );
+}
+
+/** The API's reason with a full stop, as the dialog's other notices end. */
+function asSentence(reason: string): string {
+  const trimmed = reason.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }

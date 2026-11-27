@@ -46,15 +46,12 @@ describe("plugin content", () => {
     mode: "100644" as const,
   });
 
-  test("rejects a plugin whose files are all blank", () => {
+  test("accepts a plugin whose files are all blank, as this release line always has", () => {
     const result = CreatePluginSchema.safeParse({
       ...base,
       files: [file("hooks/hooks.json", ""), file("README.md", "  \n")],
     });
-    expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message).toBe(
-      "At least one file must have content",
-    );
+    expect(result.success).toBe(true);
   });
 
   test("accepts a blank file beside one that has content", () => {

@@ -192,7 +192,9 @@ function NewPluginWizard() {
   const openImport = () => setImportState({ repoUrl: "", autoDiscover: false });
   const importPopular = (repoUrl: string) =>
     setImportState({ repoUrl, autoDiscover: true });
-  const goToPlugins = () => router.push("/plugins");
+  // Through the guard, like every other way off the page: an import started
+  // from the source step leaves a draft typed before it behind.
+  const goToPlugins = () => requestNavigate("/plugins");
 
   const filteredMarketplaces = useMemo(() => {
     const q = search.trim().toLowerCase();

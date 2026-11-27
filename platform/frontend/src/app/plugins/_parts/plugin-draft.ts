@@ -133,9 +133,8 @@ export function isPluginDraftDirty(draft: PluginDraft, seed: PluginDraft) {
  * What still stops the draft from being saved, as a sentence for the person
  * filling it in; null once it can be saved.
  *
- * A file that exists but is empty installs nothing, so a manual plugin needs
- * content in at least one of its files. A Git plugin's files are the
- * repository's, and are not this form's to judge.
+ * A plugin needs a name and at least one file; a Git plugin needs its
+ * repository.
  */
 export function pluginDraftGap(params: {
   draft: PluginDraft;
@@ -149,9 +148,6 @@ export function pluginDraftGap(params: {
     return draft.githubRepoUrl.trim().length > 0
       ? null
       : "Enter the repository URL.";
-  }
-  if (!draft.files.some((file) => file.content.trim().length > 0)) {
-    return "Add content to at least one file.";
   }
   return null;
 }

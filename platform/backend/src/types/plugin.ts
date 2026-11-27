@@ -264,15 +264,6 @@ export function validateFileSet(
     }
     totalBytes += byteLength;
   }
-  // A plugin whose files are all blank installs nothing: it would sit in the
-  // list and hand every installer an empty folder.
-  if (files.length > 0 && files.every((file) => file.content.trim() === "")) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["files"],
-      message: "At least one file must have content",
-    });
-  }
   if (totalBytes > PLUGIN_MAX_TOTAL_BYTES) {
     ctx.addIssue({
       code: "custom",

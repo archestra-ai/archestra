@@ -2,6 +2,7 @@ import {
   useHasPermissions,
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useExternalMcpSkills,
   usePluginSkills,
@@ -43,12 +44,15 @@ export function useNoVisibleSkills(): {
     { limit: 1, offset: 0, includeContent: false },
     { toastOnError: false },
   );
-  const external = useExternalMcpSkills();
+  // Asked only where skills from MCP servers are switched on, as the Skills
+  // list does: with the feature off there are none to see.
+  const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
+  const external = useExternalMcpSkills({ enabled: mcpSkillsEnabled });
   const plugin = usePluginSkills({ enabled: pluginSkillsEnabled });
 
   const isPending =
     isFirstLoad(standalone) ||
-    isFirstLoad(external) ||
+    (mcpSkillsEnabled && isFirstLoad(external)) ||
     isPluginSkillsUndecided ||
     (pluginSkillsEnabled && isFirstLoad(plugin));
   return {
@@ -59,7 +63,7 @@ export function useNoVisibleSkills(): {
       // A list that was refused or failed shows the viewer none of its
       // skills, so it counts as empty here; only the viewer's own list has to
       // have answered.
-      (external.data?.length ?? 0) === 0 &&
+      (!mcpSkillsEnabled || (external.data?.length ?? 0) === 0) &&
       (!pluginSkillsEnabled || (plugin.data?.length ?? 0) === 0),
   };
 }

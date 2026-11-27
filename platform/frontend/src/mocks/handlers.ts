@@ -60,6 +60,7 @@ import {
 } from "./data/skill-usage";
 import {
   catalogSkillSeed,
+  DEMO_SKILL_IDS,
   githubDiscoverSeed,
   githubPreviewSeed,
   makeImportedSkill,
@@ -973,7 +974,7 @@ const USAGE_STATISTICS_BY_SKILL: Record<
   string,
   typeof skillUsageStatisticsSeed
 > = {
-  "skill-jira-task": skillUsageStatisticsSeed,
-  "skill-release-checklist": skillUsageStatisticsQuietSeed,
-  "skill-incident-postmortem": skillUsageStatisticsEmptySeed,
+  [DEMO_SKILL_IDS.jiraTask]: skillUsageStatisticsSeed,
+  [DEMO_SKILL_IDS.releaseChecklist]: skillUsageStatisticsQuietSeed,
+  [DEMO_SKILL_IDS.incidentPostmortem]: skillUsageStatisticsEmptySeed,
 };

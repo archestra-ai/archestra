@@ -334,6 +334,20 @@ runs:
       run: |
         PIDS=()
 
+        # load_image <image>: with an in-cluster pull the Kind node pulls the
+        # image itself from the public registry. `kind load` streams the
+        # host's copy into containerd with --all-platforms, which fails
+        # ("content digest ... not found") when the host Docker uses the
+        # containerd image store (GCE runners, Docker 29): it keeps only the
+        # host platform's layers of a multi-platform image.
+        load_image() {
+          if [ "${IN_CLUSTER_PULL}" = "true" ]; then
+            docker exec "${KIND_CLUSTER_NAME}-control-plane" crictl pull "$1" >/dev/null
+          else
+            kind load docker-image "$1" --name "${KIND_CLUSTER_NAME}"
+          fi
+        }
+
         if [ "${IN_CLUSTER_PULL}" = "true" ]; then
           # The Kind node pulls the platform image straight from the public
           # registry when the pod schedules — no host copy to stream into
@@ -347,7 +361,7 @@ runs:
 
         if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
           echo "Loading MCP server base image into Kind..."
-          kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+          load_image "${MCP_SERVER_BASE_IMAGE_TAG}" &
           PIDS+=($!)
         fi
 
@@ -359,15 +373,15 @@ runs:
           MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
 
           echo "Loading MCP example OAuth server image into Kind..."
-          kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          load_image "${MCP_OAUTH_IMAGE}" &
           PIDS+=($!)
 
           echo "Loading MCP JWKS server image into Kind..."
-          kind load docker-image "${MCP_JWKS_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          load_image "${MCP_JWKS_IMAGE}" &
           PIDS+=($!)
 
           echo "Loading MCP ID-JAG server image into Kind..."
-          kind load docker-image "${MCP_ID_JAG_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          load_image "${MCP_ID_JAG_IMAGE}" &
           PIDS+=($!)
         fi
 

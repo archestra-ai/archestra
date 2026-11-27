@@ -282,13 +282,19 @@ describe("PluginDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("deletes a manual plugin from a button, since a menu would hold nothing else", () => {
+  it("offers a manual plugin's version history and its delete from one menu", async () => {
+    const user = userEvent.setup();
     renderPage(BASE_PLUGIN);
 
-    expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
+    // Two actions on the plugin as a whole, so they share a menu.
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(
-      screen.queryByRole("button", { name: "More actions" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("menuitem", { name: "Version history" }),
+    ).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+    // A manual plugin has no repository to take updates from.
+    expect(screen.queryByRole("menuitem", { name: "Updates" })).toBeNull();
   });
 
   it("shows permissions from the page-header URL", () => {

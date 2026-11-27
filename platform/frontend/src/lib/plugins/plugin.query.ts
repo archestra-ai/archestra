@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import {
   type QueryClient,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -28,6 +29,8 @@ const {
   discoverGithubPluginMarketplace,
   getPlugin,
   getPlugins,
+  getPluginVersion,
+  getPluginVersions,
   importGithubPlugin,
   importGithubPluginMarketplace,
   previewGithubPlugin,
@@ -40,6 +43,8 @@ const {
 export type PluginListItem =
   archestraApiTypes.GetPluginsResponses["200"][number];
 export type PluginDetail = archestraApiTypes.GetPluginResponses["200"];
+export type PluginVersionDetail =
+  archestraApiTypes.GetPluginVersionResponses["200"];
 export type CreatePluginBody = archestraApiTypes.CreatePluginData["body"];
 export type UpdatePluginBody = archestraApiTypes.UpdatePluginData["body"];
 export type GithubPluginSource =
@@ -98,6 +103,108 @@ export function usePlugin(id: string | null) {
       throwOnApiError(error, { allowNotFound: true, toastOnError: false });
       return data ?? null;
     },
+  });
+}
+
+/** How many versions the history loads per page. */
+const PLUGIN_VERSIONS_PAGE_SIZE = 50;
+
+/**
+ * A plugin's versions, newest first, a page at a time. Not held past
+ * staleness: the list grows at its head from outside this tab (a Git update
+ * applied by someone else, an edit over the API).
+ */
+export function usePluginVersions(id: string | null) {
+  return useInfiniteQuery({
+    queryKey: ["plugins", id, "versions"],
+    enabled: !!id,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await getPluginVersions({
+        path: { id: id as string },
+        query: { limit: PLUGIN_VERSIONS_PAGE_SIZE, offset: pageParam },
+      });
+      // The history dialog shows its own failure with a retry.
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage?.pagination.hasNext
+        ? allPages.reduce(
+            (loaded, page) => loaded + (page?.data.length ?? 0),
+            0,
+          )
+        : undefined,
+  });
+}
+
+/** One version of a plugin with its files. Null when it does not exist. */
+export function usePluginVersion(id: string | null, version: number | null) {
+  return useQuery({
+    // Outside the `["plugins", ...]` prefix on purpose: a version never
+    // changes, so no plugin write should make the app download it again.
+    queryKey: ["plugin-version", id, version],
+    enabled: !!id && version !== null && version > 0,
+    staleTime: Number.POSITIVE_INFINITY,
+    queryFn: async () => {
+      const { data, error } = await getPluginVersion({
+        path: { id: id as string, version: version as number },
+      });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
+/**
+ * Restore a plugin to an earlier version by saving that version's files to
+ * it. The restored files become a new version, so nothing in the history is
+ * rewritten. `baseContentHash` is the plugin's hash when the restore was
+ * confirmed: the save is refused if the files have changed since.
+ *
+ * Resolves to the plugin as saved, or null when the save was refused (the
+ * toast says why).
+ */
+export function useRestorePluginVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      pluginId: string;
+      version: number;
+      baseContentHash: string;
+    }) => {
+      const { data: snapshot, error: readError } = await getPluginVersion({
+        path: { id: params.pluginId, version: params.version },
+      });
+      if (readError || !snapshot) {
+        handleApiError(readError ?? new Error("Version not found"));
+        return null;
+      }
+      const { data, error } = await updatePlugin({
+        path: { id: params.pluginId },
+        body: {
+          files: snapshot.files.map(({ path, content, encoding, mode }) => ({
+            path,
+            content,
+            encoding,
+            mode,
+          })),
+          baseContentHash: params.baseContentHash,
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, params) => {
+      if (!data) return;
+      queryClient.setQueryData(["plugins", params.pluginId], data);
+      queryClient.invalidateQueries({ queryKey: ["plugins"] });
+      toast.success(`Restored version ${params.version}`);
+    },
+    onError: (error) => handleApiError(error),
   });
 }
 

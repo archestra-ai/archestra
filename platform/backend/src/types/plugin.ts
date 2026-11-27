@@ -148,6 +148,15 @@ export const UpdatePluginSchema = z
       .min(1)
       .max(PLUGIN_MAX_FILES)
       .optional(),
+    baseContentHash: z
+      .string()
+      .optional()
+      .describe(
+        "The plugin's `contentHash` when `files` was composed. When sent, " +
+          "the files are replaced only while the plugin still has that " +
+          "hash; otherwise the save is refused with 409. Omit to replace " +
+          "the files whatever they are now.",
+      ),
   })
   // Strict: the retired scope/teamIds/userIds fields are refused, not
   // silently dropped. Access is edited through the resource permissions API.

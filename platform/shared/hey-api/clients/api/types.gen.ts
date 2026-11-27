@@ -140044,6 +140044,10 @@ export type UpdatePluginData = {
             encoding?: 'utf8' | 'base64';
             mode?: '100644' | '100755';
         }>;
+        /**
+         * The plugin's `contentHash` when `files` was composed. When sent, the files are replaced only while the plugin still has that hash; otherwise the save is refused with 409. Omit to replace the files whatever they are now.
+         */
+        baseContentHash?: string;
     };
     path: {
         id: string;

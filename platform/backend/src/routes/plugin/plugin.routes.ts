@@ -963,13 +963,29 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           }
         : body;
+      // The hash guards the files, so it is only asked when files are sent.
+      const { baseContentHash, ...fields } = input;
       const plugin = await PluginModel.update({
         id: params.id,
         organizationId,
         userId: user.id,
-        input,
+        input: fields,
+        expectedContentHash: fields.files ? baseContentHash : undefined,
       });
-      if (!plugin) throw new ApiError(404, "Plugin not found");
+      if (!plugin) {
+        // The plugin was there a moment ago, so a guarded save that wrote
+        // nothing lost to another write, unless the plugin is gone.
+        const stillThere =
+          baseContentHash !== undefined &&
+          (await PluginModel.findById({ id: params.id, organizationId }));
+        if (stillThere) {
+          throw new ApiError(
+            409,
+            `Plugin "${existing.displayName}" changed since its files were read. Load it again and retry.`,
+          );
+        }
+        throw new ApiError(404, "Plugin not found");
+      }
       return reply.send(plugin);
     },
   );

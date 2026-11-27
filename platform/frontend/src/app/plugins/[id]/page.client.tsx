@@ -2,6 +2,7 @@
 
 import { GIT_PROVIDER_LABELS } from "@archestra/shared";
 import {
+  History,
   Info,
   Loader2,
   MoreHorizontal,
@@ -77,6 +78,7 @@ import {
   PluginPageLoading,
 } from "../_parts/plugin-page-shell";
 import { PluginSourceGlyph } from "../_parts/plugin-source-icon";
+import { PluginVersionHistoryDialog } from "../_parts/plugin-version-history-dialog";
 
 /**
  * `/plugins/[id]` — one plugin's page. Its metadata, payload and access are
@@ -287,6 +289,7 @@ function PluginDetailView({
   const [deleteRequested, setDeleteRequested] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   return (
     <PageLayout
       icon={
@@ -352,96 +355,86 @@ function PluginDetailView({
             <PackagePlus className="h-4 w-4" />
             {installAction.label}
           </PermissionButton>
-          {isGithubPlugin ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon-sm">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">More actions</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {isGithubPlugin && (
-                  <DropdownMenuItem
-                    aria-disabled={isReadOnly || undefined}
-                    aria-describedby={updateReason ? updateReasonId : undefined}
-                    className={
-                      isReadOnly ? "cursor-not-allowed opacity-50" : undefined
-                    }
-                    onSelect={(event) => {
-                      if (isReadOnly) event.preventDefault();
-                    }}
-                    onClick={(event) => {
-                      if (isReadOnly) {
-                        event.preventDefault();
-                        return;
-                      }
-                      setUpdatesOpen(true);
-                    }}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    {updatesAction.label}
-                    {updateReason && (
-                      <span
-                        id={updateReasonId}
-                        aria-hidden="true"
-                        className="sr-only"
-                      >
-                        {updateReason}
-                      </span>
-                    )}
-                  </DropdownMenuItem>
-                )}
-                {isGithubPlugin && <DropdownMenuSeparator />}
+          {/* The actions on the plugin as a whole. Two or more for every
+              plugin, so they share a menu. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon-sm">
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">More actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {isGithubPlugin && (
                 <DropdownMenuItem
-                  variant="destructive"
-                  aria-disabled={canDelete !== true || undefined}
-                  aria-describedby={deleteReason ? deleteReasonId : undefined}
+                  aria-disabled={isReadOnly || undefined}
+                  aria-describedby={updateReason ? updateReasonId : undefined}
                   className={
-                    canDelete === true
-                      ? undefined
-                      : "cursor-not-allowed opacity-50"
+                    isReadOnly ? "cursor-not-allowed opacity-50" : undefined
                   }
                   onSelect={(event) => {
-                    if (canDelete !== true) event.preventDefault();
+                    if (isReadOnly) event.preventDefault();
                   }}
                   onClick={(event) => {
-                    if (canDelete !== true) {
+                    if (isReadOnly) {
                       event.preventDefault();
                       return;
                     }
-                    setDeleteRequested(true);
+                    setUpdatesOpen(true);
                   }}
                 >
-                  <Trash2 className="h-4 w-4" />
-                  {deleteAction.label}
-                  {deleteReason && (
+                  <RefreshCw className="h-4 w-4" />
+                  {updatesAction.label}
+                  {updateReason && (
                     <span
-                      id={deleteReasonId}
+                      id={updateReasonId}
                       aria-hidden="true"
                       className="sr-only"
                     >
-                      {deleteReason}
+                      {updateReason}
                     </span>
                   )}
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            // A manual plugin has one whole-plugin action, so it is a button:
-            // a menu holding a single item only adds a click.
-            <PermissionButton
-              permissions={deleteAction.permissions}
-              permissionScope={deleteAction.permissionScope}
-              variant="outline"
-              size="icon-sm"
-              tooltip={deleteAction.label}
-              aria-label={deleteAction.label}
-              onClick={() => setDeleteRequested(true)}
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </PermissionButton>
-          )}
+              )}
+              <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
+                <History className="h-4 w-4" />
+                <span>Version history</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                aria-disabled={canDelete !== true || undefined}
+                aria-describedby={deleteReason ? deleteReasonId : undefined}
+                className={
+                  canDelete === true
+                    ? undefined
+                    : "cursor-not-allowed opacity-50"
+                }
+                onSelect={(event) => {
+                  if (canDelete !== true) event.preventDefault();
+                }}
+                onClick={(event) => {
+                  if (canDelete !== true) {
+                    event.preventDefault();
+                    return;
+                  }
+                  setDeleteRequested(true);
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+                {deleteAction.label}
+                {deleteReason && (
+                  <span
+                    id={deleteReasonId}
+                    aria-hidden="true"
+                    className="sr-only"
+                  >
+                    {deleteReason}
+                  </span>
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       }
     >
@@ -543,6 +536,13 @@ function PluginDetailView({
           plugin={plugin}
           open={updatesOpen}
           onOpenChange={setUpdatesOpen}
+        />
+      )}
+      {historyOpen && (
+        <PluginVersionHistoryDialog
+          pluginId={plugin.id}
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
         />
       )}
       {installOpen && (

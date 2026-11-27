@@ -177,6 +177,29 @@ describe("a plugin's version history", () => {
     expect(history.data[0].contentHash).toBe(history.data[2].contentHash);
   });
 
+  test("refuses a save based on files that have changed since, and writes no version", async () => {
+    const plugin = await create();
+    const staleHash = (await versions(plugin.id)).data[0].contentHash;
+    await save(plugin.id, { files: [file("README.md", "two")] });
+
+    const stale = await save(plugin.id, {
+      files: [file("README.md", "overwrites two")],
+      baseContentHash: staleHash,
+    });
+
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.message).toContain("changed since");
+    const history = await versions(plugin.id);
+    expect(history.data.map((entry) => entry.version)).toEqual([2, 1]);
+
+    // Based on the files as they are now, the same save goes through.
+    const current = await save(plugin.id, {
+      files: [file("README.md", "three")],
+      baseContentHash: history.data[0].contentHash,
+    });
+    expect(current.statusCode, current.body).toBe(200);
+  });
+
   test("pages the history", async () => {
     const plugin = await create();
     await save(plugin.id, { files: [file("README.md", "two")] });

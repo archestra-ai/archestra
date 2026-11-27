@@ -14,7 +14,7 @@ FROM dhi.io/node:24.22.3-debian13@sha256:4f76f8507955f0cd1700b532da30629030ef44c
 
 FROM ghcr.io/astral-sh/uv:0.13.8-python3.14-trixie-slim@sha256:81a1340fea1e72ad4a8e9a016128b0c61041cf182ea49fd788023e52842bc147 AS uv-bin
 
-FROM dhi.io/python:3.14.10-8-debian13-dev@sha256:405f74fad5143e4aedbcadf79acd7662f4613088beea3d3a08f103e478b96ade
+FROM dhi.io/python:3.14.10-9-debian13-dev@sha256:325d239e42b972d31d0dc0ac878591c2d86262222e43fbb6de90e7f12c6fca44
 COPY --from=uv-bin /usr/local/bin/uv /usr/local/bin/uv
 COPY --from=uv-bin /usr/local/bin/uvx /usr/local/bin/uvx
 RUN ln -s /usr/bin/python3 /usr/local/bin/python3

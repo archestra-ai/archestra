@@ -119,13 +119,12 @@ describe("maxOldSpaceSizeMib", () => {
 });
 
 describe("serverArguments", () => {
-  it("reports fatal errors into the diagnostics directory, with source maps and a heap limit", () => {
+  it("reports fatal errors into the diagnostics directory, with a heap limit and no source maps", () => {
     const { args, diagnosticDir, messages } = serverArguments({
       ARCHESTRA_NODE_MEMORY_LIMIT_MIB: "2048",
     });
     expect(diagnosticDir).toBe("/app/data/diagnostics");
     expect(args).toEqual([
-      "--enable-source-maps",
       "--report-on-fatalerror",
       "--report-uncaught-exception",
       "--diagnostic-dir=/app/data/diagnostics",
@@ -134,25 +133,30 @@ describe("serverArguments", () => {
     expect(messages).toEqual(["Configuring Node old-space limit: 1228 MiB"]);
   });
 
-  it("leaves source maps off in the quickstart unless asked for", () => {
+  it("turns source maps on only when asked for, in every deployment", () => {
+    for (const quickstart of ["true", "false", undefined]) {
+      expect(
+        serverArguments({ ARCHESTRA_QUICKSTART: quickstart }).args,
+      ).not.toContain("--enable-source-maps");
+      expect(
+        serverArguments({
+          ARCHESTRA_QUICKSTART: quickstart,
+          ARCHESTRA_NODE_SOURCE_MAPS: "true",
+        }).args,
+      ).toContain("--enable-source-maps");
+    }
     expect(
-      serverArguments({ ARCHESTRA_QUICKSTART: "true" }).args,
+      serverArguments({ ARCHESTRA_NODE_SOURCE_MAPS: "false" }).args,
     ).not.toContain("--enable-source-maps");
-    expect(
-      serverArguments({
-        ARCHESTRA_QUICKSTART: "true",
-        ARCHESTRA_NODE_SOURCE_MAPS: "true",
-      }).args,
-    ).toContain("--enable-source-maps");
   });
 
-  it("warns about an invalid source maps setting and keeps the default", () => {
+  it("warns about an invalid source maps setting and keeps them off", () => {
     const { args, messages } = serverArguments({
       ARCHESTRA_NODE_SOURCE_MAPS: "yes",
     });
-    expect(args).toContain("--enable-source-maps");
+    expect(args).not.toContain("--enable-source-maps");
     expect(messages).toEqual([
-      "WARNING: ARCHESTRA_NODE_SOURCE_MAPS must be true or false, using true",
+      "WARNING: ARCHESTRA_NODE_SOURCE_MAPS must be true or false, using false",
     ]);
   });
 

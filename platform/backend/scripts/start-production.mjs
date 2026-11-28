@@ -7,8 +7,10 @@
 //   diagnostic report on a fatal error or an uncaught exception, into
 //   --diagnostic-dir (ARCHESTRA_NODE_DIAGNOSTIC_DIR, or /app/data/diagnostics)
 // - --enable-source-maps puts TypeScript files and lines in logged stack
-//   traces; off in the quickstart, where nobody reads them and they cost about
-//   250 MB (ARCHESTRA_NODE_SOURCE_MAPS overrides)
+//   traces, only when ARCHESTRA_NODE_SOURCE_MAPS=true asks for it while
+//   debugging. Off by default: Node keeps a decoded map of every loaded chunk,
+//   about 155 MB of heap on an idle worker. Error reports don't need it; they
+//   are symbolicated from the maps uploaded at build time.
 // - --max-old-space-size from the container's memory (see maxOldSpaceSizeMib)
 // - --heapsnapshot-near-heap-limit only when
 //   ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT asks for it
@@ -76,15 +78,14 @@ export function serverArguments(env) {
   ];
   const messages = [];
 
-  const sourceMapsDefault = env.ARCHESTRA_QUICKSTART !== "true";
-  let sourceMaps = sourceMapsDefault;
+  let sourceMaps = false;
   const setting = env.ARCHESTRA_NODE_SOURCE_MAPS;
   if (setting === "true" || setting === "false") {
     sourceMaps = setting === "true";
   } else if (setting !== undefined) {
     messages.push(
       // The value itself is not echoed: environment values stay out of logs.
-      `WARNING: ARCHESTRA_NODE_SOURCE_MAPS must be true or false, using ${sourceMapsDefault}`,
+      "WARNING: ARCHESTRA_NODE_SOURCE_MAPS must be true or false, using false",
     );
   }
   if (sourceMaps) args.unshift("--enable-source-maps");

@@ -10,8 +10,9 @@
 //    unreachable from the backend's own dependencies are deleted, so a package
 //    a production dependency still reaches stays.
 // 2. Deletes third-party source maps and type declarations. Node never reads
-//    declarations. The server runs with --enable-source-maps, so it keeps its
-//    own dist/*.map; frames inside dependencies print compiled line numbers.
+//    declarations. The server keeps its own dist/*.map for when
+//    ARCHESTRA_NODE_SOURCE_MAPS=true turns on --enable-source-maps; frames
+//    inside dependencies print compiled line numbers.
 //
 // Fails, leaving the tree untouched, when the bundle in dist imports a package
 // this script cuts.

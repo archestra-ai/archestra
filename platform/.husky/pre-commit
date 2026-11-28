@@ -1,11 +1,9 @@
-# With the dev VM (ARCHESTRA_DEV_MODE=2, see platform/dev/vm/README.md) this
-# machine has no node_modules to check with: the check runs in the VM, on
-# what this commit stages.
-case "${ARCHESTRA_DEV_MODE:-0}" in
-  2)
-    exec platform/scripts/dev-vm-sync.py commit-check
-    ;;
-esac
+# With zona (IS_ZONA_USED=1, see zona/), this machine has no node_modules to
+# check with: the check runs in the zona VM, on what this commit stages. It
+# fails closed: a worktree zona hasn't started refuses the commit.
+if [ -n "${IS_ZONA_USED:-}" ]; then
+  exec zona commit-check
+fi
 cd platform
 if ! pnpm commit:check; then
   echo ""

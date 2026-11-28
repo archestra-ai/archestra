@@ -4,19 +4,17 @@ case "${1:-}" in
   0000000000000000000000000000000000000000) ;;
   *) exit 0 ;;
 esac
-# With the dev VM (ARCHESTRA_DEV_MODE=2, see platform/dev/vm/README.md)
-# dependencies are installed in the VM, never here. husky's hook folder
-# (platform/.husky/_) is made by husky, which needs them, so the new worktree
-# gets a copy of the one running this hook: its commits run the check too.
-case "${ARCHESTRA_DEV_MODE:-0}" in
-  2)
-    worktree_root="$(git rev-parse --show-toplevel 2>/dev/null)" && hooks="$(dirname "$0")/_" \
-      && [ -d "$hooks" ] && [ ! -e "$worktree_root/platform/.husky/_" ] \
-      && cp -R "$hooks" "$worktree_root/platform/.husky/_"
-    echo "Archestra worktree bootstrap skipped: ARCHESTRA_DEV_MODE=$ARCHESTRA_DEV_MODE, dependencies are installed in the dev VM (next: platform/scripts/dev-vm-sync.py start)" >&2
-    exit 0
-    ;;
-esac
+# With zona (IS_ZONA_USED=1, see zona/) dependencies are installed in the zona
+# VM, never here. husky's hook folder (platform/.husky/_) is made by husky,
+# which needs them, so the new worktree gets a copy of the one running this
+# hook: its commits run the check too.
+if [ -n "${IS_ZONA_USED:-}" ]; then
+  worktree_root="$(git rev-parse --show-toplevel 2>/dev/null)" && hooks="$(dirname "$0")/_" \
+    && [ -d "$hooks" ] && [ ! -e "$worktree_root/platform/.husky/_" ] \
+    && cp -R "$hooks" "$worktree_root/platform/.husky/_"
+  echo "Archestra worktree bootstrap skipped: IS_ZONA_USED is set, dependencies are installed in the zona VM (next: zona start)" >&2
+  exit 0
+fi
 worktree_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 bootstrap="$worktree_root/platform/scripts/worktree-bootstrap.sh"
 [ -x "$bootstrap" ] || exit 0

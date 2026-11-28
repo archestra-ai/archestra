@@ -1,7 +1,7 @@
 # Individual Preferences
 
 - Read `CLAUDE_LOCAL.md` in this directory if it exists (untracked individual preferences).
-- Before running pnpm, cargo, tilt, kubectl or tests, check `echo $ARCHESTRA_DEV_MODE`. If it is `2`, the stack runs in the dev VM: use the `archestra-dev-vm` skill instead of the commands below.
+- Before running pnpm, cargo, tilt, kubectl or tests, check `echo $IS_ZONA_USED`. If it is set, the stack runs in the zona VM: use the `zona` skill (from the archestra-ai/zona repo) and run the commands below through `zona run`, `zona pull` and `zona tilt` instead (see `zona/zona.json`).
 
 ## Working Directory
 

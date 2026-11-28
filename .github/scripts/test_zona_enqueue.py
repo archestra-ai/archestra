@@ -1,6 +1,6 @@
-"""Exercise dev-vm-enqueue.py's safeguards with real Git and fake process
-boundaries: gh, and dev-vm-sync.py for the preflight in the dev VM. A copy of
-test_enqueue.py's cases for the dev VM version of enqueue."""
+"""Exercise zona-enqueue.py's safeguards with real Git and fake process
+boundaries: gh, and zona for the preflight in the zona VM. A copy of
+test_enqueue.py's cases for the zona version of enqueue."""
 
 import json
 import os
@@ -36,8 +36,10 @@ def require(condition):
 
 host, owner, name = scenario.get('repository', 'github.com/fixture/repository').split('/')
 selector = '/'.join([host, owner, name])
-if command == 'dev-vm-sync.py':
-    require(args == ['run', 'pnpm preflight ' + scenario['head']])
+if command == 'zona':
+    head = scenario['head']
+    require(len(args) == 2 and args[0] == 'run' and args[1].endswith('; pnpm preflight ' + head)
+            and f'[ "$(git rev-parse HEAD)" = {head} ] && git diff --quiet HEAD -- ||' in args[1])
     change(scenario.get('during_preflight'))
     sys.exit(23 if scenario.get('preflight_failure') else 0)
 elif args[:2] == ['pr', 'view']:
@@ -82,7 +84,7 @@ else:
 '''
 
 
-class DevVmEnqueueTests(unittest.TestCase):
+class ZonaEnqueueTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -91,11 +93,7 @@ class DevVmEnqueueTests(unittest.TestCase):
         self.platform = self.repo / 'platform'
         scripts = self.platform / 'scripts'
         scripts.mkdir(parents=True)
-        shutil.copy(ROOT / 'platform/scripts/dev-vm-enqueue.py', scripts)
-        # The preflight runs in the VM through dev-vm-sync.py: a fake one here.
-        sync = scripts / 'dev-vm-sync.py'
-        sync.write_text(BOUNDARY)
-        sync.chmod(0o755)
+        shutil.copy(ROOT / 'platform/scripts/zona-enqueue.py', scripts)
         self.git('init', '-q')
         self.git('config', 'user.name', 'CI')
         self.git('config', 'user.email', 'ci@example.test')
@@ -107,7 +105,8 @@ class DevVmEnqueueTests(unittest.TestCase):
         self.marker = self.root / 'calls'
         binaries = self.root / 'bin'
         binaries.mkdir()
-        for name in ('gh',):
+        # The preflight runs in the VM through zona: a fake one here.
+        for name in ('gh', 'zona'):
             path = binaries / name
             path.write_text(BOUNDARY)
             path.chmod(0o755)
@@ -128,7 +127,7 @@ class DevVmEnqueueTests(unittest.TestCase):
         self.marker.unlink(missing_ok=True)
         self.scenario.write_text(json.dumps({'head': self.head} | scenario))
         return subprocess.run(
-            ['python3', str(self.platform / 'scripts/dev-vm-enqueue.py'), *args],
+            ['python3', str(self.platform / 'scripts/zona-enqueue.py'), *args],
             cwd=self.root, env=self.env, text=True, capture_output=True,
         )
 
@@ -147,9 +146,10 @@ class DevVmEnqueueTests(unittest.TestCase):
         result = self.enqueue('42')
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()
-        preflight = self.calls('dev-vm-sync.py')
+        preflight = self.calls('zona')
         self.assertEqual(len(preflight), 1)
-        self.assertEqual(preflight[0]['args'], ['run', 'pnpm preflight ' + self.head])
+        self.assertEqual(preflight[0]['args'][0], 'run')
+        self.assertTrue(preflight[0]['args'][1].endswith('; pnpm preflight ' + self.head))
         self.assertLess(calls.index(preflight[0]), calls.index(self.queue_requests()[0]))
         self.assertTrue(all(c['cwd'] == str(self.platform.resolve()) for c in calls))
         self.assertIn('Queued https://github.com/fixture/repository/pull/42', result.stdout)
@@ -186,7 +186,7 @@ class DevVmEnqueueTests(unittest.TestCase):
     def test_dirty_checkout_blocks_before_github_or_preflight(self):
         for staged in (False, True):
             with self.subTest(staged=staged):
-                source = self.platform / 'scripts/dev-vm-enqueue.py'
+                source = self.platform / 'scripts/zona-enqueue.py'
                 original = source.read_text()
                 source.write_text(original + '\n# modified\n')
                 if staged:
@@ -201,13 +201,13 @@ class DevVmEnqueueTests(unittest.TestCase):
 
     def test_wrong_pr_head_blocks_before_preflight(self):
         self.assert_blocked(self.enqueue('42', views=[{'headRefOid': '0' * 40}]))
-        self.assertEqual(self.calls('dev-vm-sync.py'), [])
+        self.assertEqual(self.calls('zona'), [])
 
     def test_closed_draft_and_conflicting_prs_block_before_preflight(self):
         for state in ({'state': 'CLOSED'}, {'state': 'MERGED'}, {'isDraft': True}, {'mergeable': 'CONFLICTING'}):
             with self.subTest(state=state):
                 self.assert_blocked(self.enqueue('42', views=[state]))
-                self.assertEqual(self.calls('dev-vm-sync.py'), [])
+                self.assertEqual(self.calls('zona'), [])
 
     def test_preflight_failure_cannot_enqueue(self):
         self.assert_blocked(self.enqueue('42', preflight_failure=True))
@@ -243,7 +243,7 @@ class DevVmEnqueueTests(unittest.TestCase):
 
     def test_wrong_pr_identity_is_rejected_before_preflight(self):
         self.assert_blocked(self.enqueue('42', views=[{'number': 43}]))
-        self.assertEqual(self.calls('dev-vm-sync.py'), [])
+        self.assertEqual(self.calls('zona'), [])
 
     def test_confirmed_merged_state_is_reported_as_complete(self):
         result = self.enqueue('42', queue_result={'state': 'MERGED', 'mergeQueueEntry': None})

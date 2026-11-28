@@ -44,3 +44,6 @@ ai-labs/**/.trajectory-analysis-*/
 # Local agent tool state
 .amp/
 .superpowers/
+
+# A person's own zona settings (the VM name); never committed.
+zona/zona.local.json

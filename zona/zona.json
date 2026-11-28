@@ -1,0 +1,51 @@
+{
+  "project": "archestra",
+  "dir": "platform",
+  "env_file": ".env",
+  "main": { "repo": "archestra-ai/archestra", "branch": "main" },
+  "ignore": ["platform/.husky/_"],
+  "hooks": {
+    "provision": "$ZONA_DIR/provision.sh",
+    "start": "$ZONA_DIR/start.sh",
+    "commit-check": "pnpm commit:check",
+    "cleanup": "$ZONA_DIR/cleanup.sh"
+  },
+  "commands": {
+    "tilt": {
+      "run": "tilt up --port $ZONA_PORT_10350",
+      "background": true,
+      "description": "The dev stack (Tilt): app, API, database, Agent Runtime"
+    },
+    "install": {
+      "run": "pnpm install --frozen-lockfile",
+      "description": "Install the dependencies in the VM copy"
+    }
+  },
+  "pull": [
+    "platform/*.ts",
+    "platform/*.tsx",
+    "platform/*.js",
+    "platform/*.jsx",
+    "platform/*.mjs",
+    "platform/*.cjs",
+    "platform/*.rs",
+    "platform/*.css",
+    "platform/*.sql",
+    "platform/backend/src/database/migrations/*",
+    "platform/*package.json",
+    "platform/*pnpm-lock.yaml",
+    "platform/*cargo.toml",
+    "platform/*cargo.lock",
+    "!platform/scripts/*",
+    "!platform/dev/*",
+    "platform/dev/grafana/dashboards/*.json",
+    "docs/openapi.json",
+    "docs/pages/reference/permissions.md",
+    "docs/pages/reference/archestra-mcp-server/*.md",
+    "platform/backend/src/skills/*.generated.md",
+    "platform/backend/src/archestra-mcp-server/search-texts.generated.json",
+    "!.*",
+    "!*/.*",
+    "!zona/*"
+  ]
+}

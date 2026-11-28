@@ -521,7 +521,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 # pnpm resolved for better-auth and drizzle-orm (Next.js with its SWC binary,
 # Vitest with msw/vite/TypeScript, PGlite), plus every third-party source map
 # and type declaration. The server keeps its own dist/*.map for
-# --enable-source-maps. About 700 MB of the 1.4 GB tree; the script fails the
+# ARCHESTRA_NODE_SOURCE_MAPS=true. About 700 MB of the 1.4 GB tree; the script fails the
 # build if the bundle ever imports a package it removes.
 COPY docker/scripts/prune-backend-deploy.mjs /tmp/prune-backend-deploy.mjs
 RUN node /tmp/prune-backend-deploy.mjs /prod/backend

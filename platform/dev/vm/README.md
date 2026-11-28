@@ -79,6 +79,24 @@ It checks, and prints a fix for each failure:
 - `ssh lima-archestra-dev` works, and this checkout is synced;
 - the VM holds no git, GitHub, Docker, SSH, AWS or gcloud credentials.
 
+## Vertex AI
+
+The VM can't use your gcloud login, and service account keys are blocked
+org-wide. `scripts/dev-vm-sync.py vertex` (on the Mac, signed in as
+@archestra.ai) puts a one-hour token of the `dev-vm-vertex` service account
+in the VM and sends a new one every 45 minutes. That account can call Vertex
+AI models and nothing else. A stand-in metadata server in the VM
+(`gcp-metadata-server.py`) hands the token to Application Default
+Credentials, so the backend needs no key file:
+
+1. `scripts/dev-vm-sync.py vertex`
+2. Add `GCE_METADATA_HOST=127.0.0.1:8970` to `platform/.env`, next to your
+   `ARCHESTRA_*_VERTEX_AI_*` settings.
+3. `scripts/dev-vm-sync.py run 'tilt trigger pnpm-dev-backend'`
+
+`vertex status` shows what is running; `vertex stop` ends it and deletes the
+VM's token.
+
 ## Daily use
 
 - Edit on the Mac, commit on the Mac. Don't run `pnpm` or `cargo` there.

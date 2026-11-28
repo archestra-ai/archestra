@@ -116,9 +116,9 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Requires the Docker socket mounted into the container. For evaluation only. See [Run Archestra](/docs/get-started#run-archestra).
 
 - **`ARCHESTRA_NODE_SOURCE_MAPS`** - Shows TypeScript files and lines in the stack traces the backend logs.
-  - Default: `true`, or `false` with [`ARCHESTRA_QUICKSTART`](/docs/admin/deployment/configuration#ARCHESTRA_QUICKSTART)
+  - Default: `false`
   - Values: `true`, `false`
-  - Costs about 250 MB of backend memory. Error reports show source lines either way.
+  - Turn it on to debug from logs. Costs about 250 MB of memory per backend process. Error reports show source lines either way.
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates the enterprise license.
   - Default: `false`

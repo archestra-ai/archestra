@@ -9,6 +9,8 @@ function makeConfidentialOAuthCatalog() {
     id: "confidential-oauth-credentials-test",
     name: "Confidential OAuth MCP",
     serverType: "remote",
+    instructions:
+      "Get the app credentials from [the provider](https://example.test/apps).",
     serverUrl,
     requiresAuth: true,
     multitenant: true,
@@ -28,6 +30,7 @@ function makeConfidentialOAuthCatalog() {
 test.describe("Add Remote MCP Server", () => {
   test("A configured client requires both app credentials before Test Connection and accepts a saved secret", async ({
     page,
+    context,
     mswControl,
   }) => {
     const catalog = makeConfidentialOAuthCatalog();
@@ -40,6 +43,27 @@ test.describe("Add Remote MCP Server", () => {
     const clientId = page.getByLabel(/Client ID/);
     const secret = page.getByLabel(/Client Secret/);
     await expect(clientId).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "the provider" }),
+    ).toHaveAttribute("href", "https://example.test/apps");
+    await expect(
+      page.getByText("App credentials", { exact: true }),
+    ).toBeVisible();
+    const callback = "https://demo.example.test/callback";
+    const callbackField = page.getByLabel(/MCP OAuth callback URIs/);
+    const originalCallback = await callbackField.inputValue();
+    await callbackField.fill(
+      `${callback}, https://example.test/second-callback`,
+    );
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page
+      .getByRole("button", { name: "Copy to clipboard", exact: true })
+      .click();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(callback);
+    await callbackField.fill(originalCallback);
+
     await page
       .getByRole("button", { name: "Test Connection", exact: true })
       .click();
@@ -107,6 +131,9 @@ test.describe("Add Remote MCP Server", () => {
       page.getByRole("button", { name: "Test Connection", exact: true }),
     ).toBeDisabled();
     await expect(page.getByLabel(/Client Secret/)).not.toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "the provider" }),
+    ).toBeVisible();
   });
 
   test("no-auth remote: create + install reports a working connection", async ({

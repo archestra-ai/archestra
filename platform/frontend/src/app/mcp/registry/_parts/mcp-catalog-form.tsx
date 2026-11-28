@@ -37,6 +37,7 @@ import {
 } from "@/components/agent-labels";
 import { BetaBadge } from "@/components/beta-badge";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
+import { CopyButton } from "@/components/copy-button";
 import { DesktopMcpTargetField } from "@/components/desktop-mcp-target-field";
 import {
   AddListItemButton,
@@ -127,6 +128,7 @@ import {
 } from "./mcp-catalog-form.types";
 import {
   emptyOauthFormConfig,
+  parseOAuthCallbackUris,
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
@@ -357,6 +359,10 @@ export function McpCatalogForm({
         ),
       },
     }).required;
+  const showCredentialHelp = requiresOAuthClientCredentials && !detailsOnly;
+  const callbackUri = parseOAuthCallbackUris(
+    form.watch("oauthConfig.redirect_uris"),
+  )[0];
   // A desktop MCP server runs on each user's own computer: none of the
   // connection, deployment or authentication sections apply to it.
   const isDesktopMcp = currentServerType === "desktop_mcp";
@@ -966,7 +972,7 @@ export function McpCatalogForm({
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-6 ${wizardPanel ? "-mx-1 px-1 pb-8" : embedded ? "px-6 pt-6 pb-0" : "px-6 py-6"}`}
           >
             {notice}
-            {instructions ? (
+            {instructions && !showCredentialHelp ? (
               <CatalogInstructions markdown={instructions} />
             ) : null}
             {catalogButton}
@@ -1768,6 +1774,24 @@ export function McpCatalogForm({
                                       )}
                                     />
                                   )}
+                                  {showCredentialHelp && (
+                                    <div className="space-y-1">
+                                      <p className="font-medium text-sm">
+                                        App credentials
+                                      </p>
+                                      {instructions ? (
+                                        <CatalogInstructions
+                                          markdown={instructions}
+                                          inline
+                                        />
+                                      ) : (
+                                        <p className="text-muted-foreground text-sm">
+                                          Enter the Client ID and Client Secret
+                                          from your OAuth app.
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
                                   <FormField
                                     control={form.control}
                                     name="oauthConfig.client_id"
@@ -1782,15 +1806,17 @@ export function McpCatalogForm({
                                             </span>
                                           )}
                                         </FormLabel>
-                                        <FormDescription>
-                                          <span>
-                                            {requiresOAuthClientCredentials
-                                              ? "Use the Client ID from the OAuth app you registered."
-                                              : "Leave empty if the server supports dynamic client registration"}
-                                          </span>
-                                        </FormDescription>
+                                        {!requiresOAuthClientCredentials && (
+                                          <FormDescription>
+                                            Leave empty if the server supports
+                                            dynamic client registration.
+                                          </FormDescription>
+                                        )}
                                         <FormControl>
                                           <Input
+                                            aria-required={
+                                              requiresOAuthClientCredentials
+                                            }
                                             placeholder={
                                               requiresOAuthClientCredentials
                                                 ? "your-client-id"
@@ -1821,6 +1847,9 @@ export function McpCatalogForm({
                                           </FormLabel>
                                           <FormControl>
                                             <SecretInput
+                                              aria-required={
+                                                requiresOAuthClientCredentials
+                                              }
                                               placeholder={
                                                 requiresOAuthClientCredentials
                                                   ? hasSavedClientSecret
@@ -1849,24 +1878,39 @@ export function McpCatalogForm({
                                           </span>
                                         </FormLabel>
                                         <FormDescription>
-                                          Use {appName}'s MCP install callback,
-                                          usually{" "}
-                                          <code>
-                                            {typeof window !== "undefined"
-                                              ? `${window.location.origin}/oauth-callback`
-                                              : "https://app.example.com/oauth-callback"}
-                                          </code>
-                                          . Do not use the SSO callback URL
-                                          under{" "}
+                                          {requiresOAuthClientCredentials ? (
+                                            <span>
+                                              Register the first URL below in
+                                              your provider’s redirect settings.
+                                            </span>
+                                          ) : (
+                                            <span>
+                                              Use {appName}'s MCP install
+                                              callback, usually{" "}
+                                              <code>
+                                                {typeof window !== "undefined"
+                                                  ? `${window.location.origin}/oauth-callback`
+                                                  : "https://app.example.com/oauth-callback"}
+                                              </code>
+                                              .
+                                            </span>
+                                          )}{" "}
+                                          Do not use the SSO callback URL under{" "}
                                           <code>/api/auth/sso/callback</code>.
                                         </FormDescription>
-                                        <FormControl>
-                                          <Input
-                                            placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
-                                            className="font-mono"
-                                            {...field}
-                                          />
-                                        </FormControl>
+                                        <div className="flex items-center gap-2">
+                                          <FormControl>
+                                            <Input
+                                              placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
+                                              className="font-mono"
+                                              {...field}
+                                            />
+                                          </FormControl>
+                                          {showCredentialHelp &&
+                                            callbackUri && (
+                                              <CopyButton text={callbackUri} />
+                                            )}
+                                        </div>
                                         <FormMessage />
                                       </FormItem>
                                     )}

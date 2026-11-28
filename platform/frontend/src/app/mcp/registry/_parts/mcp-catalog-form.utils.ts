@@ -55,6 +55,13 @@ export function emptyOauthFormConfig(): NonNullable<
   };
 }
 
+export function parseOAuthCallbackUris(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((uri) => uri.trim())
+    .filter(Boolean);
+}
+
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
@@ -169,10 +176,7 @@ export function transformFormToApiData(
       values.authMethod === "oauth_client_credentials";
     const redirectUrisList = isClientCredentials
       ? []
-      : (values.oauthConfig.redirect_uris ?? "")
-          .split(",")
-          .map((uri) => uri.trim())
-          .filter((uri) => uri.length > 0);
+      : parseOAuthCallbackUris(values.oauthConfig.redirect_uris);
     const scopesList = (values.oauthConfig.scopes ?? "")
       .split(",")
       .map((scope) => scope.trim())

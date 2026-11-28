@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.5.0-rc.47](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.46...platform-v1.5.0-rc.47) (2026-11-28)
+
+
+### Features
+
+* **dev-vm:** Vertex AI through ADC in the dev VM without keys ([#11337](https://github.com/archestra-ai/archestra/issues/11337)) ([c2fe35f](https://github.com/archestra-ai/archestra/commit/c2fe35fb6a92b9909f146387a0d129f922503b39))
+* **mcp-gateway:** accept files for Agent Runtime uploads via File Uploads ([#11280](https://github.com/archestra-ai/archestra/issues/11280)) ([5edf9bb](https://github.com/archestra-ai/archestra/commit/5edf9bb83de7ba878f401dc2f44120fdccbc2a2a))
+* **plugins:** version history, Deleted view and starter files, with Plugins and Skills fixes ([#11321](https://github.com/archestra-ai/archestra/issues/11321)) ([43c3445](https://github.com/archestra-ai/archestra/commit/43c34456f4a95cb5395b5422b9ae049633f34b92))
+
+
+### Bug Fixes
+
+* **openappa:** match remedies activity consults to rendered offer ids ([#11308](https://github.com/archestra-ai/archestra/issues/11308)) ([c7167a0](https://github.com/archestra-ai/archestra/commit/c7167a011c55492ec65d6a352a79fdc3607816a9))
+* **openappa:** refuse unattested built-in lookalike calls per call instead of failing the request ([#10818](https://github.com/archestra-ai/archestra/issues/10818)) ([c80c102](https://github.com/archestra-ai/archestra/commit/c80c102e61e43a094315d2965a7ab5260715750d))
+* **schedule-triggers:** hide hook output from non-admins in run transcripts ([#10819](https://github.com/archestra-ai/archestra/issues/10819)) ([2587df5](https://github.com/archestra-ai/archestra/commit/2587df5d3ae135f20a2c42942d13d46ed4351647))
+
+
+### Performance Improvements
+
+* **backend:** run Node without source maps by default in every deployment ([#11338](https://github.com/archestra-ai/archestra/issues/11338)) ([2574bb9](https://github.com/archestra-ai/archestra/commit/2574bb90eba5ba79c59386f008e6c570a557d1e0))
+
+
+### Dependencies
+
+* bump python from 3.14.10-8-debian13-dev to 3.14.10-9-debian13-dev in /platform/docker_images/sandbox_base in the sandbox-base-images group across 1 directory ([#11330](https://github.com/archestra-ai/archestra/issues/11330)) ([e4d6bf0](https://github.com/archestra-ai/archestra/commit/e4d6bf0ab063591ce4ff8668fd02546f443e000e))
+* bump the base-images group across 4 directories with 4 updates ([#11304](https://github.com/archestra-ai/archestra/issues/11304)) ([9dfd848](https://github.com/archestra-ai/archestra/commit/9dfd84855a19221017ce1d14a4024be4eb74cecd))
+* bump the sandbox-base-images group across 1 directory with 2 updates ([#11303](https://github.com/archestra-ai/archestra/issues/11303)) ([12aa116](https://github.com/archestra-ai/archestra/commit/12aa11639942a6f5ce57f567aaf0fbb056225c97))
+
+
+### Miscellaneous Chores
+
+* update agent runtime CLIs ([#11316](https://github.com/archestra-ai/archestra/issues/11316)) ([029d775](https://github.com/archestra-ai/archestra/commit/029d775079fc116fc6a0876d36e463fba78ee0e8))
+
 ## [1.5.0-rc.46](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.45...platform-v1.5.0-rc.46) (2026-11-26)
 
 

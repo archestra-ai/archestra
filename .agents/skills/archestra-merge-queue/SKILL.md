@@ -48,10 +48,10 @@ allow queue entry but do not validate the combined merge-group commit.
    separately before enqueue: the wrapper already runs it once. Builds, backend
    suites, Rust checks, browser suites and codegen stay in queue CI. Use the
    wrapper once on the finished revision, not on intermediate commits or pushes.
-   With the dev VM (`ARCHESTRA_DEV_MODE=2`), run
-   `platform/scripts/dev-vm-enqueue.py <PR-number> --repo <repository>` from the
-   checkout instead: the same guards, with the preflight run in the VM and `gh`
-   on the Mac.
+   With zona (`IS_ZONA_USED` set), run
+   `platform/scripts/zona-enqueue.py <PR-number> --repo <repository>` from the
+   checkout instead: the same guards, with the preflight run in the zona VM and
+   `gh` on the Mac.
    Fix failures and rerun after changes. Direct GitHub queueing can bypass this
    local command; GitHub does not enforce its preflight result for admission.
    Wait for required PR checks and reviews before invoking it; it stops if GitHub

@@ -45,11 +45,11 @@ place target/release/archestra "archestra-$system-$cpu"
 printf '{ "version": "%s-dev" }\n' "$version" > "$out/manifest.json"
 echo "archestra $version-dev for $system-$cpu is in $out"
 
-# In the dev VM (platform/dev/vm), Archestra runs on Linux but the browser and
-# the install command run on the Mac, so also build the program for macOS on
-# the VM's CPU. It needs the macOS SDK that `dev-vm.sh create` copies from the
-# Mac, clang, and lld. Without the SDK (any other Linux computer) this is
-# skipped.
+# In a Linux VM on a Mac, Archestra runs on Linux but the browser and the
+# install command run on the Mac, so also build the program for macOS on the
+# VM's CPU. It needs a macOS SDK at $SDKROOT or the path below, clang, and lld.
+# The zona VM has no SDK (the old dev VM copied one from the Mac), so there,
+# as on any other Linux computer, this is skipped.
 sdk="${SDKROOT:-$HOME/.local/share/macos-sdk/MacOSX.sdk}"
 if [ "$system" = linux ] && [ -d "$sdk" ]; then
   case "$cpu" in

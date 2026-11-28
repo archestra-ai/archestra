@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""pnpm enqueue (scripts/enqueue.mjs) for the dev VM setup: runs on the Mac
-without Node or pnpm.
+"""pnpm enqueue (scripts/enqueue.mjs) for zona (IS_ZONA_USED, see zona/): runs
+on the Mac without Node or pnpm.
 
-The preflight needs the dependencies, so it runs in the VM through
-dev-vm-sync.py run, on this checkout's VM copy. Everything that talks to
-GitHub runs here with your gh login, which never enters the VM. The guards
+The preflight needs the dependencies, so it runs in the zona VM through
+`zona run`, on this checkout's VM copy, after checking that the copy is the
+exact PR head with no change: zona only warns when its sync can't catch up.
+Everything that talks to GitHub runs here with your gh login, which never
+enters the VM. The guards
 are enqueue.mjs's: a clean, unchanged checkout of the exact PR head, an open
 and ready PR, a target branch that requires the merge queue, and a queue-only
 request for that revision.
 
 Usage, from inside the checkout:
-  platform/scripts/dev-vm-enqueue.py <PR-number> [--repo [HOST/]OWNER/REPO]
+  platform/scripts/zona-enqueue.py <PR-number> [--repo [HOST/]OWNER/REPO]
 """
 import json
 import os
@@ -20,7 +22,7 @@ import sys
 from urllib.parse import quote, urlparse
 
 PLATFORM = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-USAGE = "Usage: platform/scripts/dev-vm-enqueue.py <PR-number> [--repo [HOST/]OWNER/REPO]"
+USAGE = "Usage: platform/scripts/zona-enqueue.py <PR-number> [--repo [HOST/]OWNER/REPO]"
 
 
 class Refused(Exception):
@@ -43,11 +45,13 @@ def main(argv):
     assert_pull_request(pr, head)
     require_merge_queue(target, pr["baseRefName"])
 
-    print("Checking %s at %s before queue entry, in the dev VM." % (pr["url"], head), flush=True)
-    preflight = subprocess.run([os.path.join(PLATFORM, "scripts", "dev-vm-sync.py"), "run",
-                                "pnpm preflight %s" % head], cwd=PLATFORM)  # pnpm puts node_modules/.bin on PATH
+    print("Checking %s at %s before queue entry, in the zona VM." % (pr["url"], head), flush=True)
+    try:
+        preflight = subprocess.run(["zona", "run", preflight_command(head)], cwd=PLATFORM)
+    except OSError as error:
+        raise Refused("Cannot run zona (%s); nothing was queued." % error)
     if preflight.returncode != 0:
-        raise Refused("Preflight failed in the dev VM; nothing was queued.")
+        raise Refused("Preflight failed in the zona VM; nothing was queued.")
 
     refreshed = read_pull_request(target)
     assert_pull_request(refreshed, head)
@@ -81,6 +85,14 @@ def main(argv):
               % (pr["url"], head, queued["mergeQueueEntry"].get("position")))
     else:
         raise Refused("GitHub has not confirmed queue entry. Inspect %s before retrying." % pr["url"])
+
+
+def preflight_command(head):
+    """The command line for the VM copy: it must be the PR head, unchanged, or
+    the preflight would check other files. pnpm puts node_modules/.bin on PATH."""
+    return ('[ "$(git rev-parse HEAD)" = %s ] && git diff --quiet HEAD -- '
+            '|| { echo "The zona VM copy is not %s unchanged yet: zona status" >&2; exit 1; }; '
+            'pnpm preflight %s' % (head, head, head))
 
 
 def resolve_repository(explicit):

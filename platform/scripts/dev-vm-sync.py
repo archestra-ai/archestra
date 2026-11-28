@@ -44,6 +44,14 @@ Usage, from anywhere:
       VM copy and Kubernetes namespace (their database too). Also removes
       VM copies, tilt-* tmux sessions and archestra-dev-* namespaces that
       belong to no sync. Never the first stack's namespace, archestra-dev.
+  dev-vm-sync.py vertex [stop|status]
+      Vertex AI in the VM without a key: mints a one-hour token of the
+      dev-vm-vertex service account with your gcloud login, puts it in the
+      VM, and keeps a new one coming every 45 minutes from the background.
+      The VM's stand-in metadata server (dev/vm/gcp-metadata-server.py)
+      hands it to Application Default Credentials. Needs
+      GCE_METADATA_HOST=127.0.0.1:8970 in platform/.env. stop ends it and
+      deletes the VM's token.
 
 Env: ARCHESTRA_DEV_VM (VM name, default archestra-dev).
 """
@@ -95,6 +103,20 @@ GENERATED = (
     ("platform/backend/src/archestra-mcp-server/search-texts.generated.json", ""),
     ("platform/dev/grafana/dashboards/", ".json"),
 )
+# Vertex AI for the VM (`vertex`). The account can call Vertex AI models and
+# nothing else; every @archestra.ai account may mint its tokens
+# (archestra-ai/infra, gcp/dev-vm-vertex.tf). Keys are blocked organization-
+# wide, so the VM gets one-hour tokens instead.
+VERTEX_ACCOUNT = os.environ.get(
+    "ARCHESTRA_DEV_VM_VERTEX_ACCOUNT", "dev-vm-vertex@friendly-path-465518-r6.iam.gserviceaccount.com")
+VERTEX_PROJECT = VERTEX_ACCOUNT.split("@")[1].split(".")[0]
+VERTEX_TOKEN_SECONDS = 3600
+VERTEX_REFRESH_SECONDS = 45 * 60
+VERTEX_METADATA_HOST = "127.0.0.1:8970"
+VERTEX_FILES = os.path.expanduser("~/.lima/%s/vertex-refresh" % VM)
+METADATA_SERVER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dev", "vm",
+                               "gcp-metadata-server.py")
+
 # Never worth listing: git ignores them, and they are large.
 PRUNED = ["node_modules", ".next", "target", "dist", ".git"]
 
@@ -563,6 +585,111 @@ def is_allowed(path):
     return path.startswith(MIGRATIONS) or path.endswith(CODE) or parts[-1] in DEPENDENCY_FILES
 
 
+VERTEX_EXPIRY_PY = b"""import json, os, time
+token = json.load(open(os.path.expanduser("~/.archestra-gcp/token.json")))
+print(int((token["expires_at"] - time.time()) // 60))
+"""
+
+
+def vertex_server():
+    """Puts the stand-in metadata server in the VM and starts it in tmux
+    (gcp-metadata), restarting it when the script changed."""
+    with open(METADATA_SERVER, "rb") as source:
+        script = source.read()
+    ssh('umask 077 && mkdir -p ~/.archestra-gcp && cd ~/.archestra-gcp'
+        ' && cat > metadata-server.py.new'
+        ' && if cmp -s metadata-server.py.new metadata-server.py; then rm metadata-server.py.new;'
+        ' else mv metadata-server.py.new metadata-server.py; tmux kill-session -t gcp-metadata 2>/dev/null; fi;'
+        ' tmux has-session -t gcp-metadata 2>/dev/null'
+        ' || tmux new-session -d -s gcp-metadata "python3 -I $HOME/.archestra-gcp/metadata-server.py"',
+        data=script)
+
+
+def vertex_push():
+    """Mints a token with the Mac's gcloud login and puts it in the VM. It
+    goes over ssh's stdin, never on a command line or the Mac's disk."""
+    minted = subprocess.run(["gcloud", "auth", "print-access-token", "--quiet",
+                             "--impersonate-service-account=" + VERTEX_ACCOUNT],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    token = minted.stdout.strip()
+    if minted.returncode != 0 or not token:
+        lines = minted.stderr.strip().splitlines()
+        raise RuntimeError(lines[-1] if lines else "gcloud could not mint a token")
+    body = json.dumps({"access_token": token, "email": VERTEX_ACCOUNT, "project_id": VERTEX_PROJECT,
+                       # A little short of the hour, so it is never handed out spent.
+                       "expires_at": time.time() + VERTEX_TOKEN_SECONDS - 120})
+    ssh("umask 077 && mkdir -p ~/.archestra-gcp && cat > ~/.archestra-gcp/token.json.new"
+        " && mv ~/.archestra-gcp/token.json.new ~/.archestra-gcp/token.json", data=body.encode())
+
+
+def vertex_refresher():
+    """The process id of the background refresher, or None."""
+    try:
+        with open(VERTEX_FILES + ".pid") as source:
+            pid = int(source.read())
+    except (OSError, ValueError):
+        return None
+    ps = subprocess.run(["ps", "-p", str(pid), "-o", "command="], stdout=subprocess.PIPE, text=True)
+    return pid if "vertex --refresh-loop" in ps.stdout else None
+
+
+def vertex_refresh_loop():
+    """In the background: a new token every 45 minutes. Counts wall time, so a
+    Mac that slept past the hour sends one within a minute of waking."""
+    pushed = time.time()
+    while True:
+        time.sleep(60)
+        if time.time() - pushed < VERTEX_REFRESH_SECONDS:
+            continue
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            vertex_server()
+            vertex_push()
+            pushed = time.time()
+            print("%s pushed a new token" % stamp, flush=True)
+        except (RuntimeError, OSError, subprocess.CalledProcessError) as error:
+            # Try again in five minutes: gcloud may want a new login, the VM may be off.
+            pushed = time.time() - VERTEX_REFRESH_SECONDS + 300
+            print("%s no token: %s" % (stamp, error), flush=True)
+
+
+def vertex(action):
+    if action == "stop":
+        pid = vertex_refresher()
+        if pid:
+            os.kill(pid, 15)
+        if os.path.exists(VERTEX_FILES + ".pid"):
+            os.remove(VERTEX_FILES + ".pid")
+        ssh("rm -f ~/.archestra-gcp/token.json; tmux kill-session -t gcp-metadata 2>/dev/null; true")
+        print("Stopped. The VM's token is deleted.")
+        return
+    if action == "status":
+        pid = vertex_refresher()
+        print("refresher: %s" % ("running (process %d), log %s.log" % (pid, VERTEX_FILES) if pid else "not running"))
+        # Reads the expiry in the VM: the token itself never leaves it.
+        left = ssh("python3 -I - 2>/dev/null || echo none", data=VERTEX_EXPIRY_PY).decode().strip()
+        print("token in the VM: %s" % ("%s minutes left" % left if left.lstrip("-").isdigit() else "none"))
+        return
+    if not shutil.which("gcloud"):
+        die("install the gcloud CLI and sign in first: gcloud auth login")
+    vertex_server()
+    try:
+        vertex_push()
+    except RuntimeError as error:
+        die("could not mint a token for %s: %s\n  Signed in with your @archestra.ai account? gcloud auth login"
+            % (VERTEX_ACCOUNT, error))
+    if not vertex_refresher():
+        with open(VERTEX_FILES + ".log", "a") as log:
+            process = subprocess.Popen([sys.executable, os.path.abspath(__file__), "vertex", "--refresh-loop"],
+                                       stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                       start_new_session=True)
+        with open(VERTEX_FILES + ".pid", "w") as out:
+            out.write(str(process.pid))
+    print("Vertex AI token is in the VM; a new one follows every 45 minutes (stop: dev-vm-sync.py vertex stop).")
+    print("The backend needs GCE_METADATA_HOST=%s in platform/.env, then: dev-vm-sync.py run 'tilt trigger"
+          " pnpm-dev-backend'" % VERTEX_METADATA_HOST)
+
+
 def pull(command):
     marker = "/tmp/dev-vm-pull-%d" % os.getpid()
     prune = " -o ".join("-name " + name for name in PRUNED)
@@ -653,9 +780,17 @@ if __name__ == "__main__":
     if os.environ.get("GIT_INDEX_FILE"):
         os.environ["GIT_INDEX_FILE"] = os.path.abspath(os.environ["GIT_INDEX_FILE"])
     args = sys.argv[1:]
-    if not args or args[0] not in ("start", "run", "pull", "tilt", "commit-check", "status", "prune"):
+    if not args or args[0] not in ("start", "run", "pull", "tilt", "commit-check", "status", "prune", "vertex"):
         print(__doc__.strip())
         sys.exit(1 if args else 0)
+    if args[0] == "vertex":
+        # Of the VM, not of a checkout: runs from anywhere and needs no sync.
+        if args[1:] == ["--refresh-loop"]:
+            vertex_refresh_loop()
+        if args[1:] not in ([], ["stop"], ["status"]):
+            die("usage: dev-vm-sync.py vertex [stop|status]")
+        vertex(args[1] if args[1:] else "start")
+        sys.exit(0)
     if not shutil.which("mutagen"):
         die("install Mutagen first: brew install mutagen-io/mutagen/mutagen")
     if args[0] in ("status", "prune"):

@@ -448,8 +448,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.7.1)" kimi-code.tgz \
- && echo "0492b83030550fa31af30f132b829349c3bbd688f66a97f1a3f359d30dea46aa24a185d2056635dee5973071e9760f2f34ca22852b308c651253817143aebc4e  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.7.2)" kimi-code.tgz \
+ && echo "12aef9d76b2c407eb7d9383b0b52c82b5d02ca44e8a85da5a41764163275223495f3a7cc8c41e9c31b8aa28e9f8e1e57a426f0b4ac228c1d214d36f20d12ccf7  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \
